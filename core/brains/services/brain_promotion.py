@@ -48,6 +48,13 @@ class BrainPromotionDecision:
 class BrainPromotionThresholds:
     """Configurable thresholds for brain promotion/retirement decisions."""
 
+    # Universal minimum live execution samples before ANY lifecycle decision.
+    # Below this threshold the statistical confidence is too low — all
+    # promote/throttle/retire decisions are bypassed (STATUS_QUO).
+    # FIX-20260621-029: Single Source of Truth — this threshold applies to
+    # brain_performance.json (live execution outcomes), NOT all-time PnL.
+    min_live_samples: int = 50  # live execution records required for any decision
+
     # Minimum signals before any decision
     min_signals_candidate: int = 20  # signals needed to exit candidate
     min_signals_probation: int = 50  # signals needed to exit probation
@@ -142,6 +149,30 @@ class BrainPromotionEvaluator:
             "consecutive_losses": cons_losses,
             "recent_win_rate": round(recent_wr, 4),
         }
+
+        # ── FIX-20260621-029: Minimum Live Sample Gate ──
+        # Single Source of Truth: brain_performance.json (live execution outcomes).
+        # Below min_live_samples, statistical confidence is too low for ANY
+        # lifecycle decision.  Bypass ALL promote/throttle/retire/freeze —
+        # the brain stays in STATUS_QUO until sufficient live data accumulates.
+        #
+        # This gate eliminates the dual-track data-source conflict:
+        #   OLD: SSOT reconcile promoted on all-time PnL (thousands of trades),
+        #        evaluator throttled on live window (1-41 records) → oscillation.
+        #   NEW: Both paths see the same signal_count from brain_performance.
+        #        Below 50 → HOLD.  Above 50 → existing per-state logic applies.
+        if signal_count < t.min_live_samples:
+            return BrainPromotionDecision(
+                brain_id=brain_id,
+                current_status=status,
+                action="hold",
+                target_status=None,
+                approved=False,
+                reasons=[
+                    f"insufficient_live_samples({signal_count} < {t.min_live_samples})"
+                ],
+                metrics_snapshot=metrics_snapshot,
+            )
 
         # ── Universal retirement checks (apply in any state) ──
         # Protection: brains with < min_signals_active get graduated demotion, not direct retire

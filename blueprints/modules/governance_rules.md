@@ -75,6 +75,7 @@ Valid transitions:
 ## Fix History
 | Fix ID | Date | Summary | Root Cause |
 |--------|------|---------|------------|
+| FIX-20260621-029 | 2026-06-21 | Minimum Live Sample Gate (N=50): bypass ALL promote/throttle/retire for brains with <50 live execution records. Eliminates dual-track data-source conflict (governance_state all-time PnL vs brain_performance rolling window) causing 7-brain live↔probation oscillation every ~50min. Supersedes FIX-024 deferred hysteresis. | RC-12 |
 | FIX-20260617-001a | 2026-06-17 | add save() + auto-register to governance pipeline | RC-07 |
 | FIX-20260617-001 | 2026-06-17 | P0 data integrity — governance backtest purge | RC-03 |
 | FIX-20260611-017 | 2026-06-11 | auto_freeze_negative_sr: hard stop-loss for negative Sharpe | RC-07 |
