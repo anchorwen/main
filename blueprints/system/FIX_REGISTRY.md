@@ -4034,3 +4034,40 @@ if _meta_p_win is not None:
 - Architectural guard: any preemptive state flag that overrides a dependency's output MUST have a paired teardown that clears the flag when the dependency succeeds
 - Pattern registered: `COLD_EXPLORE_PREEMPTIVE_OVERRIDE` in ReB_PATTERN_INDEX
 - Future: consider a `@requires_teardown` decorator or lint rule for state flags with asymmetric lifecycle
+
+### FIX-20260621-044-bis
+
+- **Docket**: DQAF-20260621-044-bis
+- **Severity**: Sev 2 (输出偏差 — DQAF-044 修复不完整, 重启后仍 100% p_win=0.5)
+- **Module**: `core/execution/strategy_line.py`, `core/contracts/position_events.py`, `scripts/mt5_bridge_worker.py`
+- **Date**: 2026-06-21
+- **Root Cause Layer**: L2 (Logic Defect — 清除条件未覆盖所有 MetaFilter 返回状态)
+- **ReB Pattern**: `TEMPORAL_STATE_DECOUPLING` (BooleanStateDesync 升格)
+
+**Why DQAF-044 Failed**:
+`apply_meta_filter_gate()` 有三种返回状态:
+1. `(p_win, None)` — MetaFilter PASS (3.7%)
+2. `(None, rejection)` — MetaFilter REJECT (96.3%)
+3. `(None, None)` — 冷启动豁免/直通
+
+DQAF-044 的修复条件 `if _meta_p_win is not None` 仅覆盖状态 1。
+状态 2 时 `_meta_p_win=None` → 修复不触发 → `_is_cold_explore` 保持 True →
+MetaFilter 拒绝被 line 907 的冷启动护卫阻塞 → p_win 被 line 932 强制为 0.50。
+
+**Fix (IC Mandated — Tier 1 Vetoed, Tier 2+3 Executed)**:
+Tier 2: 将 `_is_cold_explore` 从"先设后清"改为"后置推导"——直接从 MetaFilter 的实际返回值推导状态:
+```python
+_is_cold_explore: bool = (
+    _meta_p_win is None
+    and _meta_reject is None  # 只有完全真空才冷启动
+    and confidence >= 0.35
+)
+```
+Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
+使每笔交易的 p_win 来源可审计。
+
+**Cross-Symbol Impact**: BTC + XAU Swing 策略共享 `strategy_line.py` — 单次修复同时治愈两个品种。
+
+**Poison Flushing Period**: ~50 trades (~5-7 days) 校准器 FIFO 自然排毒。严禁手动清空 history。
+**Verification**: 重启进程后观察 journal `p_win_source` 字段变化: cold_explore_neutral → rolling_wr_soft_bypass + meta_filter。
+
