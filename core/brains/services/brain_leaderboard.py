@@ -104,26 +104,101 @@ class BrainLeaderboard:
             except Exception:  # BLE001:FOG
                 with fail_open_guard("brain_leaderboard:__init__"):
                     pass
+    # ── DQAF-20260621-042: Required fields for schema validation ──
+    _REQUIRED_METRIC_FIELDS: tuple[str, ...] = (
+        "sharpe_ratio", "win_rate", "profit_factor",
+        "cumulative_pnl", "max_drawdown",
+    )
+    _REQUIRED_COUNT_FIELDS: tuple[str, ...] = ("sample_count",)
+
+    def _validate_metrics(
+        self, metrics_map: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Schema-validate all brain metrics before ranking.
+
+        Raises DataIntegrityError if any brain is missing required fields.
+        This is the POISON PILL: bad data → crash, don't produce broken output.
+        """
+        for brain_id, m in metrics_map.items():
+            if isinstance(m, dict):
+                for field in self._REQUIRED_METRIC_FIELDS:
+                    if field not in m or m[field] is None:
+                        from core.contracts.exceptions import DataIntegrityError
+                        raise DataIntegrityError(
+                            f"Brain '{brain_id}' missing required metric field "
+                            f"'{field}' in leaderboard input. "
+                            f"Available fields: {sorted(m.keys())}. "
+                            f"Source: live_journal_metrics or BrainPnLStore. "
+                            f"Fix: update the source to populate this field."
+                        )
+                for field in self._REQUIRED_COUNT_FIELDS:
+                    if field not in m or m[field] is None:
+                        from core.contracts.exceptions import DataIntegrityError
+                        raise DataIntegrityError(
+                            f"Brain '{brain_id}' missing required count field "
+                            f"'{field}' in leaderboard input."
+                        )
+            # Object types (BrainPnLMetrics) are trusted — they carry their
+            # own schema enforcement via Pydantic/dataclass.
+        return metrics_map
+
+    @staticmethod
+    def _normalize_metrics_map(
+        raw: dict[str, Any] | list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Accept both dict and list, normalize to dict keyed by brain_id.
+
+        DQAF-20260621-042: daily_ops was passing list(metrics.values())
+        instead of the dict itself. This normalizer provides backward
+        compatibility while logging the caller error for repair.
+        """
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, list):
+            # Rebuild dict from list items
+            result: dict[str, Any] = {}
+            for item in raw:
+                if isinstance(item, dict):
+                    bid = item.get("brain_id", "")
+                elif hasattr(item, "brain_id"):
+                    bid = item.brain_id
+                else:
+                    continue
+                if bid:
+                    result[bid] = item
+            return result
+        return {}
+
     def rank(
         self,
-        metrics_map: dict[str, Any],
+        metrics_map: dict[str, Any] | list[dict[str, Any]],
         governance_states: dict[str, dict[str, Any]] | None = None,
         vote_weights: dict[str, float] | None = None,
     ) -> list[BrainRanking]:
         """Produce ranked leaderboard from PnL metrics and governance state.
 
         Args:
-            metrics_map: {brain_id: BrainPnLMetrics} from BrainPnLStore.
+            metrics_map: {brain_id: BrainPnLMetrics} or list of metrics dicts.
             governance_states: {brain_id: state_dict} from GovernanceService.
             vote_weights: {brain_id: weight} from DynamicBrainWeighter (optional).
 
         Returns:
             List of BrainRanking sorted by score descending.
+
+        Raises:
+            DataIntegrityError: if required metric fields are missing (POISON PILL).
         """
         if governance_states is None:
             governance_states = {}
         if vote_weights is None:
             vote_weights = {}
+
+        # ── DQAF-20260621-042: Normalize input (accept both dict and list) ──
+        metrics_map = self._normalize_metrics_map(metrics_map)
+
+        # ── DQAF-20260621-042: POISON PILL — validate before ranking ──
+        if metrics_map:
+            self._validate_metrics(metrics_map)
 
         # FIX-20260610-007: Equal-weight fallback — prevent global
         # vote_weight=0 collapse when caller doesn't pass weights.

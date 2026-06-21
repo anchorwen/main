@@ -134,3 +134,26 @@ class ContractViolationError(DomainError):
                 "violations": [v.to_dict() if hasattr(v, "to_dict") else str(v) for v in violations]
             },
         )
+
+
+# --- Data Integrity layer (DQAF-20260621-042) ---
+
+
+class DataIntegrityError(DomainError):
+    """Raised when data fails schema validation — POISON PILL.
+
+    Per Iron Law IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION:
+    If a materialized view (leaderboard, governance) cannot be generated
+    with complete data, the system MUST halt rather than produce
+    silently-corrupted output that downstream consumers (trading, alerts)
+    would act upon.
+
+    This is a Fail-Closed poison pill: catch → log → terminate the cycle.
+    """
+
+    def __init__(self, message: str, source: str = "unknown"):
+        super().__init__(
+            message,
+            code="data_integrity_error",
+            detail={"source": source},
+        )

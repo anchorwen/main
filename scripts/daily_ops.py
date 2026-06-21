@@ -729,8 +729,13 @@ def _step_retraining_check(
                         with fail_open_guard("daily_ops:_step_retraining_check"):
                             pass
 
+                    # DQAF-20260621-042: POISON PILL — validate merged metrics
+                    # before passing to rank().  If required fields are missing,
+                    # this raises DataIntegrityError → FAIL-CLOSED halt.
+                    # We pass the dict (not list of values) so rank() can
+                    # associate each brain_id with its governance state.
                     rankings = lb.rank(
-                        list(_merged_metrics.values()),
+                        _merged_metrics,
                         governance_states=governance.get_all_states(),
                         vote_weights=_vote_weights,
                     )
@@ -758,9 +763,42 @@ def _step_retraining_check(
                             for i, r in enumerate(rankings)
                         ],
                     }
-            except Exception as _pnl_lb_exc:  # BLE001:FOG
-                with fail_open_guard("daily_ops:_step_retraining_check"):
-                    leaderboard["fallback_error"] = str(_pnl_lb_exc)[:200]
+
+                    # ── DQAF-20260621-042: POISON PILL ──
+                    # If the leaderboard was generated with zero decisions
+                    # despite having governance data, the data pipeline is
+                    # corrupted.  Halt immediately — do NOT write broken
+                    # state that downstream consumers would act upon.
+                    _gov_states = governance.get_all_states()
+                    if leaderboard.get("total_decisions", 0) == 0 and _gov_states:
+                        _brain_count = len(_gov_states)
+                        _journal_count = len(_journal_metrics)
+                        from core.contracts.exceptions import DataIntegrityError
+                        raise DataIntegrityError(
+                            f"POISON PILL: Leaderboard generated with 0 total_decisions "
+                            f"despite {_brain_count} brains in governance_state and "
+                            f"{_journal_count} brains with journal metrics. "
+                            f"This indicates a data pipeline corruption — the leaderboard "
+                            f"would silently report empty rankings, causing governance "
+                            f"to act on missing data (Fail-Open). "
+                            f"SYSTEM HALTED. Fix the data pipeline before restarting.",
+                            source="daily_ops:_step_retraining_check",
+                        )
+            except Exception as _pnl_lb_exc:
+                # DQAF-20260621-042: POISON PILL — do NOT swallow this exception.
+                # fail_open_guard would silently suppress it (Fail-Open anti-pattern),
+                # causing daily_ops to write a broken leaderboard that downstream
+                # consumers (governance, alerts) would act upon with corrupted data.
+                # Per IC Architectural Override: corrupted data → FATAL HALT.
+                from core.contracts.exceptions import DataIntegrityError
+
+                if isinstance(_pnl_lb_exc, DataIntegrityError):
+                    raise  # already a poison pill — propagate unchanged
+                _detail = str(_pnl_lb_exc)[:500]
+                raise DataIntegrityError(
+                    f"POISON PILL: Leaderboard generation failed — {_detail}",
+                    source="daily_ops:_step_retraining_check",
+                ) from _pnl_lb_exc
         result = detect_degradation(leaderboard, baseline)
 
         # Persist leaderboard for next run's comparison

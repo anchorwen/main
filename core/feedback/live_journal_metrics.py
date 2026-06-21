@@ -181,37 +181,39 @@ def compute_journal_brain_metrics(data_dir: str | Path) -> dict[str, dict[str, A
 
         # Recommendation
         if health == "insufficient_data":
-            rec = "observe"
+            recommendation = "observe"
         elif health == "critical":
-            rec = "retire" if n >= 20 else "freeze"
+            recommendation = "retire" if n >= 20 else "freeze"
         elif health == "degraded":
-            rec = "demote_to_probation"
+            recommendation = "demote_to_probation"
         elif health == "warning":
-            rec = "limit_exposure"
+            recommendation = "limit_exposure"
         elif health == "healthy" and n >= 50:
-            rec = "promote_to_live"
+            recommendation = "promote_to_live"
         else:
-            rec = "maintain"
+            recommendation = "maintain"
 
         result[bid] = {
             "brain_id": bid,
             "win_rate": wr,
             "profit_factor": pf,
-            "sharpe_ratio": sharpe,       # BrainLeaderboard.rank() expects 'sharpe_ratio'
-            "sample_count": n,             # BrainLeaderboard expects 'sample_count'
-            "cumulative_pnl": total_pnl,   # BrainLeaderboard expects 'cumulative_pnl'
+            "sharpe_ratio": sharpe,          # BrainLeaderboard.rank() expects 'sharpe_ratio'
+            "sample_count": n,                # BrainLeaderboard expects 'sample_count'
+            "trade_count": n,                 # Alias: downstream consumers use both names
+            "cumulative_pnl": total_pnl,      # BrainLeaderboard expects 'cumulative_pnl'
+            "pnl_r": total_pnl,               # Alias: downstream consumers use pnl_r
             "max_drawdown": max_dd,
             "avg_win": avg_win,
             "avg_loss": avg_loss,
-            "long_count": len(long_pnls),  # BrainLeaderboard expects 'long_count'
+            "long_count": len(long_pnls),     # BrainLeaderboard expects 'long_count'
             "short_count": len(short_pnls),
-            "long_win_rate": l_wr,          # BrainLeaderboard expects 'long_win_rate'
-            "short_win_rate": s_wr,         # BrainLeaderboard expects 'short_win_rate'
+            "long_win_rate": l_wr,            # BrainLeaderboard expects 'long_win_rate'
+            "short_win_rate": s_wr,           # BrainLeaderboard expects 'short_win_rate'
             "total_spread_cost": 0.0,
             "total_slippage_cost": 0.0,
             "exit_reasons": dict(brain_exits.get(bid, {})),
             "health_signal": health,
-            "recommendation": rec,
+            "recommendation": recommendation,
         }
 
     return result
