@@ -528,8 +528,20 @@ def _step_governance(
             "leaderboard_cross_check": cross_check,
         }
     except Exception as exc:  # BLE001:FOG
+        # FIX-20260621-043: Log the exception type so silent type errors
+        # (like AttributeError from dict-vs-dataclass mismatch) are visible
+        # in diagnostics, not swallowed without trace.
+        import logging as _diag_log
+        _diag_log.getLogger(__name__).exception(
+            "daily_ops:_step_governance failed — type=%s: %s",
+            type(exc).__name__, str(exc)[:300],
+        )
         with fail_open_guard("daily_ops:_step_governance"):
-            return {"step": "governance", "status": "error", "error": str(exc)[:500]}
+            return {
+                "step": "governance",
+                "status": "error",
+                "error": f"{type(exc).__name__}: {str(exc)[:400]}",
+            }
 def _cross_check_governance_with_leaderboard(
     base_dir: str, gov_report: dict[str, Any]
 ) -> list[dict[str, Any]]:

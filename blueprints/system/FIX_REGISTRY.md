@@ -3920,8 +3920,64 @@ FIX-YYYYMMDD-NNN
     Cross-reference table linking architecture principles to Iron Laws.
 
   **Remaining (Post-DQAF-042)**:
-  - P1-A: Unified label export `finalize_trade_label()` (close all exit paths)
-  - P1-B: Execute `purge_backtest_from_governance.py` on live data (script ready, dry-run verified)
+  - P1-A: Unified label export `finalize_trade_label()` (close all exit paths) — still deferred
+  - P1-B: Execute `purge_backtest_from_governance.py` on live data → **COMPLETED by DQAF-20260621-043**
+
+---
+
+### FIX-20260621-043
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: Institutional Architecture Committee — FATAL BLINDSPOT RESOLVED)
+- **Type**: fix (governance cycle silent crash + backtest contamination root cause)
+- **Module**: governance, feedback, daily_ops
+- **Files**:
+  - `scripts/training/governance_scheduler.py` (+76/-12: `_dict_to_pnl_metrics()` converter for journal dict→BrainPnLMetrics; `_data_source:"live_journal"` audit tag; post-augmentation type assertion to catch dict leaks)
+  - `scripts/daily_ops.py` (+6/-1: `_step_governance` error handler now logs `type(exc).__name__` for diagnostic visibility)
+  - `tests/engine/test_governance_scheduler.py` (+79: 3 contract tests — dict-to-dataclass conversion, missing-field defaults, full governance cycle with PnL store)
+- **Summary**: **DQAF-20260621-043 Type Mismatch Silent Governance Crash.**
+
+  **Root Cause (L2 Logic Defect)**:
+  FIX-20260621-032 added journal augmentation to `run_governance_cycle()`:
+  ```python
+  all_metrics[_bid] = _jm  # dict from compute_journal_brain_metrics()
+  ```
+  But `all_metrics` values are expected to be `BrainPnLMetrics` dataclass instances
+  (with attribute access: `.win_rate`, `.sharpe_ratio`). The raw dict replacement
+  caused `AttributeError` on every governance cycle. The error was silently swallowed
+  by `except Exception` in `_step_governance` → governance never updated → backtest
+  contamination persisted indefinitely (6+ days of silent failure).
+
+  **Root Cause (L3 Architecture Defect)**:
+  The IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION data pipeline lacked end-to-end
+  type constraints. Journal (SSOT) returns `dict`, governance scheduler expects
+  `BrainPnLMetrics` dataclass — no Schema validation or type conversion layer
+  existed at the module boundary.
+
+  **Fixes Delivered**:
+  1. `_dict_to_pnl_metrics()`: Explicit boundary type converter — journal dict → BrainPnLMetrics
+  2. Post-augmentation type assertion: Detects and auto-repairs any dict leaks
+  3. `_data_source: "live_journal"` tag on all journal-injected metrics — full audit trail
+  4. Error handler improvement: `type(exc).__name__` logged so future type errors are visible
+  5. 3 contract tests: dict→dataclass conversion, missing-field defaults, full cycle no-crash
+
+  **Data Cleanup (Executed)**:
+  - BTC: `purge_backtest_from_governance.py --base-dir data_btc` — V12_H1_Survival: 3140→41 trades
+  - XAU: `purge_backtest_from_governance.py --base-dir data` — 13 brains corrected
+
+  **Verification**:
+  - `_step_governance('data_btc')`: Status=error→ok, Brains assessed=14 (was crash)
+  - `_step_governance('data')`: Status=error→ok, Brains assessed=50 (was crash)
+  - mypy: PASS, ruff: PASS, 3/3 contract tests: PASSED
+
+  **ReB Pattern**: `BOUNDARY_TYPE_ENFORCEMENT_AND_EXPLICIT_CATCH` —
+  Cross-subsystem data handoff must use explicit type conversion layers.
+  Top-level `except Exception` must log exception type — distinguish
+  transient runtime errors from fatal type mismatches.
+
+  **Remaining (Post-DQAF-043 — to be filed as independent DQAF Dockets)**:
+  - Finding C: 32% Label Gap — MT5 ticket vs internal ticket namespace fragmentation (→ DQAF-044)
+  - Finding D: 50-82% Snapshot Coverage Gap (→ DQAF-045)
+  - Finding F: Calibrator Dead — 0 samples, no adaptive thresholds (→ DQAF-046)
 
   **ReB Pattern**: `IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION` — state files MUST be
   regenerable from the journal SSOT. Manual edits to state files are forbidden.

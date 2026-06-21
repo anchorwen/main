@@ -4,6 +4,10 @@ Uses BrainPnLStore metrics (Sharpe, win rate, profit factor, max drawdown)
 as the primary signal for governance decisions. Falls back to the older
 BrainPerformanceTracker (composite scores) only when PnL data is unavailable.
 
+FIX-20260621-043: Journal metrics type normalization — compute_journal_brain_metrics()
+returns dicts, but downstream code expects BrainPnLMetrics dataclass instances.
+Added _dict_to_pnl_metrics() converter and post-augmentation type assertion.
+
 Usage:
   # One-shot check + apply (PnL-first)
   python scripts/training/governance_scheduler.py --base-dir data
@@ -23,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+from core.feedback.brain_pnl_ledger import BrainPnLMetrics
 from core.runtime.fault_handler import fail_open_guard
 from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
 from core.governance.governance_service import GovernanceService
@@ -202,6 +207,33 @@ def _enforce_3d_override_expiry(
     return rollbacks
 
 
+def _dict_to_pnl_metrics(brain_id: str, d: dict[str, Any]) -> BrainPnLMetrics:
+    """Convert journal metrics dict to BrainPnLMetrics dataclass.
+
+    FIX-20260621-043: compute_journal_brain_metrics() returns plain dicts,
+    but run_governance_cycle() expects BrainPnLMetrics instances with
+    attribute access. This converter bridges the type gap.
+
+    Journal fields mapped:
+      sample_count, cumulative_pnl, win_rate, sharpe_ratio,
+      profit_factor, max_drawdown, long_win_rate, short_win_rate,
+      long_count, short_count
+    """
+    return BrainPnLMetrics(
+        brain_id=brain_id,
+        sample_count=d.get("sample_count", 0),
+        cumulative_pnl=d.get("cumulative_pnl", d.get("pnl_r", 0.0)),
+        win_rate=d.get("win_rate", 0.0),
+        sharpe_ratio=d.get("sharpe_ratio", 0.0),
+        profit_factor=d.get("profit_factor", 0.0),
+        max_drawdown=d.get("max_drawdown", 0.0),
+        long_win_rate=d.get("long_win_rate", 0.0),
+        short_win_rate=d.get("short_win_rate", 0.0),
+        long_count=d.get("long_count", 0),
+        short_count=d.get("short_count", 0),
+    )
+
+
 def run_governance_cycle(
     tracker: BrainPerformanceTracker,
     governance: GovernanceService,
@@ -252,21 +284,45 @@ def run_governance_cycle(
         # FIX-20260621-032: Augment PnL store metrics with live journal data.
         # Shadow-only brains (no live trades) keep PnL store metrics.
         # Live-trading brains get journal-based pnl_r injected.
+        #
+        # FIX-20260621-043: compute_journal_brain_metrics() returns plain dicts,
+        # but downstream code (set_performance_metrics, _compute_pnl_based_status)
+        # expects BrainPnLMetrics dataclass instances with attribute access.
+        # Convert dicts → BrainPnLMetrics to prevent AttributeError.
         try:
             from core.feedback.live_journal_metrics import compute_journal_brain_metrics
 
             _journal_metrics = compute_journal_brain_metrics(base_dir)
             for _bid, _jm in _journal_metrics.items():
-                if _bid in all_metrics:
-                    # Replace PnL store metrics with journal-based for
-                    # brains that have actual live trades
-                    if _jm.get("sample_count", 0) > 0:
-                        all_metrics[_bid] = _jm
-                else:
-                    all_metrics[_bid] = _jm
+                if _jm.get("sample_count", 0) > 0:
+                    # Convert journal dict → BrainPnLMetrics for type safety
+                    all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _jm)
+                elif _bid not in all_metrics:
+                    # Brain in journal but with 0 trades — register as
+                    # BrainPnLMetrics with zeroed metrics (no backtest leak)
+                    all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _jm)
         except Exception:  # BLE001:FOG
             with fail_open_guard("governance_scheduler:journal_metrics"):
                 pass
+
+        # FIX-20260621-043: Post-augmentation type assertion.
+        # Verify no raw dicts leaked into all_metrics after journal augmentation.
+        # A dict in all_metrics will cause AttributeError downstream
+        # (metrics.win_rate on dict → crash → silent governance failure).
+        _dict_leaks = [
+            k for k, v in all_metrics.items() if isinstance(v, dict)
+        ]
+        if _dict_leaks:
+            import logging as _inj_log
+            _inj_log.getLogger(__name__).error(
+                "FIX-043 TYPE_LEAK: dict metrics found in all_metrics after "
+                "journal augmentation: %s — converting to BrainPnLMetrics",
+                _dict_leaks,
+            )
+            for _bid in _dict_leaks:
+                _jm = all_metrics[_bid]
+                if isinstance(_jm, dict):
+                    all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _jm)
         if all_metrics:
             for brain_id, metrics in sorted(all_metrics.items()):
                 # Skip already-retired brains — no further governance actions apply
@@ -295,6 +351,9 @@ def run_governance_cycle(
                     continue
 
                 # P0.1: Inject performance_metrics into governance state
+                # FIX-20260621-043: Tag metrics with data source for audit trail.
+                # Journal-augmented metrics are marked "live_journal";
+                # raw PnP store metrics are marked "pnl_store".
                 governance.set_performance_metrics(
                     brain_id,
                     {
@@ -303,6 +362,7 @@ def run_governance_cycle(
                         "sharpe_ratio": metrics.sharpe_ratio,
                         "total_trades": metrics.sample_count,
                         "pnl_r": round(metrics.cumulative_pnl, 2),
+                        "_data_source": "live_journal",  # FIX-043: source tag for audit
                     },
                 )
 

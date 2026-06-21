@@ -20,6 +20,43 @@
 
 ---
 
+### ReB-20260621-043
+
+- **Pattern Signature**: `BOUNDARY_TYPE_ENFORCEMENT_AND_EXPLICIT_CATCH`
+- **Date Cataloged**: 2026-06-21
+- **Source Docket**: DQAF-20260621-043
+- **Related**: ReB-20260621-042 (`IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION`), ReB-20260612-004 (`SILENT_FALLBACK_ZERO_OBSERVABILITY`)
+
+**Definition**:
+跨核心子系统的数据交接中，生产者返回裸 `dict`（鸭子类型），消费者期望强类型 dataclass（属性访问）。类型不匹配在赋值时不报错，在下游消费时发生 `AttributeError` 延时崩溃。崩溃被顶层 `except Exception` 静默吞没 → 子系统多日无输出 → 状态文件数据持续腐烂。
+
+**Recurrence Indicators**:
+1. 代码审查: 数据管线中 `all_metrics[key] = raw_dict` 但集合元素类型声明为 dataclass
+2. 运行时: `except Exception` 不记录 `type(exc).__name__` — 无法区分 AttributeError vs 临时文件锁错误
+3. 测试: 缺少端到端治理周期合约测试 (输入 journal dict → 输出 governance metrics)
+
+**Prevention Strategies**:
+1. **边界类型洗脱**: 所有跨子系统数据交接必须通过显式转换函数 (如 `_dict_to_pnl_metrics()`)，禁止裸 dict 赋值给类型化集合
+2. **边界后类型断言**: 增强循环后必须遍历验证 `isinstance(v, BrainPnLMetrics)` — 任何 dict 漏过立即修复+日志错误
+3. **显式异常捕获**: 顶层调度器的 `except Exception` 必须记录 `type(exc).__name__` + 堆栈 — 区分"预期的运行时文件锁错误"和"意外的类型错误"
+4. **合约测试**: 每个数据管线的关键转换点需要单元测试 (dict→dataclass 转换 + 缺字段默认值 + 完整周期不崩溃)
+5. **数据溯源标签**: 所有注入 governance 的 metrics 必须携带 `_data_source` 字段 (`"live_journal"` / `"pnl_store"` / `"backtest"`)
+
+**Detection Methods**:
+1. `_step_governance` 返回 `{"status": "error"}` 时应触发告警 (当前静默)
+2. `grep "except Exception"` 检查是否有 `type(exc).__name__` 日志
+3. Pytest 合约测试: governance cycle with journal-augmented metrics
+4. 检查 `governance_state.json` 中各 brain 的 `_data_source` 标签
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260621-043 | 2026-06-21 | governance_scheduler | Sev 1 (6+ 天静默崩溃) |
+
+**Cross-References**: FIX-20260621-043, CCT-20260621-043, ReB-20260621-042
+
+---
+
 ### ReB-20260621-042
 - **Pattern Signature**: `IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION` (不可变账本与物化视图架构模式)
 - **描述**: 系统物理设计遵循 Event Sourcing 架构——append-only journal (ledger_events.jsonl / live_trade_journal.jsonl / position_snapshots.jsonl / golden_master.jsonl) 是不可变的唯一真理源 (SSOT)；所有 `.json` state 文件 (leaderboard.json / governance_state.json / execution_state.json 等) 是物化视图 (Materialized View)，由 generator code (daily_ops.py / brain_leaderboard.py / live_journal_metrics.py) 从 ledger 动态重建。当运维人员直接修改 state JSON 时，live 进程在下一 cycle 从 ledger 重新生成覆盖修复——人工修复与实盘进程形成互斥覆写竞态。本质是混淆了 "append-only immutable journal" 与 "regenerated ephemeral view" 两个本体论范畴。必须配套 **Poison Pill (DataIntegrityError)** 阻断机制——当 generator 产出损坏投影时，系统 Fail-Closed (停止产出) 而非 Fail-Open (产出坏数据并静默传播至下游)。

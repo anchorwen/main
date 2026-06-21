@@ -144,6 +144,98 @@ def test_maintain_observe_skipped():
     assert report["actions_flagged"] == []
 
 
+# ── FIX-20260621-043: Journal metrics type normalization tests ──
+
+def test_journal_dict_converted_to_brain_pnl_metrics():
+    """Journal dicts must be converted to BrainPnLMetrics before use.
+
+    Regression test for FIX-043: compute_journal_brain_metrics() returns
+    plain dicts, but run_governance_cycle() expects BrainPnLMetrics
+    instances with attribute access. _dict_to_pnl_metrics() bridges this gap.
+    """
+    from scripts.training.governance_scheduler import _dict_to_pnl_metrics
+
+    journal_dict = {
+        "brain_id": "TestBrain",
+        "sample_count": 42,
+        "cumulative_pnl": 15.5,
+        "pnl_r": 15.5,
+        "win_rate": 0.55,
+        "profit_factor": 1.8,
+        "sharpe_ratio": 1.2,
+        "max_drawdown": 5.0,
+        "long_win_rate": 0.60,
+        "short_win_rate": 0.50,
+        "long_count": 25,
+        "short_count": 17,
+    }
+
+    result = _dict_to_pnl_metrics("TestBrain", journal_dict)
+
+    # Must be a BrainPnLMetrics instance (not a dict)
+    assert not isinstance(result, dict), "Must NOT be dict — would cause AttributeError downstream"
+    from core.feedback.brain_pnl_ledger import BrainPnLMetrics
+    assert isinstance(result, BrainPnLMetrics), "Must be BrainPnLMetrics dataclass"
+
+    # Verify field mapping
+    assert result.brain_id == "TestBrain"
+    assert result.sample_count == 42
+    assert result.cumulative_pnl == 15.5
+    assert result.win_rate == 0.55
+    assert result.sharpe_ratio == 1.2
+    assert result.profit_factor == 1.8
+    assert result.max_drawdown == 5.0
+    assert result.long_win_rate == 0.60
+    assert result.short_win_rate == 0.50
+    assert result.long_count == 25
+    assert result.short_count == 17
+
+
+def test_dict_to_pnl_metrics_handles_missing_fields():
+    """Missing optional fields default to 0 without error."""
+    from scripts.training.governance_scheduler import _dict_to_pnl_metrics
+
+    minimal_dict = {"brain_id": "Minimal", "sample_count": 5, "win_rate": 0.4}
+    result = _dict_to_pnl_metrics("Minimal", minimal_dict)
+
+    assert result.sample_count == 5
+    assert result.win_rate == 0.4
+    assert result.cumulative_pnl == 0.0  # default
+    assert result.sharpe_ratio == 0.0  # default
+    assert result.profit_factor == 0.0  # default
+
+
+def test_governance_cycle_with_pnl_store_no_dict_crash():
+    """Full governance cycle with PnL store must not crash on type mismatch.
+
+    Simulates what happens when pnl_store returns BrainPnLMetrics.
+    The journal augmentation path is tested indirectly — this test
+    verifies the non-journal path still works after FIX-043 changes.
+    """
+    from scripts.training.governance_scheduler import run_governance_cycle
+
+    tracker = BrainPerformanceTracker()
+    gov = GovernanceService()
+
+    gov.register_brain("Brain_J", "candidate")
+
+    from core.feedback.brain_pnl_ledger import BrainPnLStore
+    store = BrainPnLStore()
+    # Populate PnP store via public API: record a signal + settle
+    store.record_signal(
+        brain_id="Brain_J",
+        symbol="XAUUSDc",
+        direction="long",
+        entry_price=4700.0,
+        confidence=0.6,
+    )
+    store.settle_all(close_price=4720.0)
+
+    # This must NOT raise AttributeError
+    report = run_governance_cycle(tracker, gov, dry_run=True, pnl_store=store)
+    assert report["brains_assessed"] >= 1
+
+
 # ── CLI smoke tests ──
 
 

@@ -48,6 +48,47 @@
 - **关联 ReB Pattern**: ReB-20260621-042 (`IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION`)
 - **关联 FIX**: FIX-20260621-042
 
+### CCT-20260621-043
+
+- **Docket**: DQAF-20260621-043
+- **Confidence**: confirmed (7 源交叉验证 × 实测复现)
+- **Refutation**: 否 — AR 反向假设 (purge 已运行后被覆盖) 经 `_step_governance` 实测推翻，确认治理周期从未成功执行
+
+**Layer 1 — 症状 (视图静默损坏)**:
+  - 治理状态含 14 brains 回测数据 (BTC V12: 3140 trades, Sharpe -16.66; XAU 13 brains >1000 trades)
+  - `_step_governance` 每次都返回 `{'status': 'error', 'error': "'dict' object has no attribute 'win_rate'"}`
+  - 证据: `data_btc/governance_state.json` — V12_H1 total_trades=3140; `daily_ops._step_governance('data_btc', dry_run=True)` 实测 crash
+  - 置信度: confirmed
+
+**Layer 2 — 中间异常 (类型管线的隐式断裂 + 静默吞没反模式)**:
+  - FIX-20260621-032 在 `governance_scheduler.py:264` 添加 `all_metrics[_bid] = _jm` — 将 journal dict 直接赋值给期望 BrainPnLMetrics dataclass 的集合
+  - `compute_journal_brain_metrics()` 返回 `dict[str, dict]` — 键访问 (`.get()`)
+  - `pnl_store.get_all_metrics()` 返回 `dict[str, BrainPnLMetrics]` — **dataclass 属性访问** (`.win_rate`)
+  - 下游 `metrics.win_rate` (line 301) 在 dict 上触发 `AttributeError`
+  - `daily_ops._step_governance` 的 `except Exception` (line 530) 静默吞没此错误 — 返回 `{"status": "error"}` 但无日志无告警
+  - 证据: `governance_scheduler.py:264` — 赋值语句; `daily_ops.py:530-532` — except Exception; 实测 dry_run crash 输出
+  - 置信度: confirmed
+
+**Layer 3 — 根因 (架构缺陷: 跨模块边界缺乏类型强制)**:
+  - L2 逻辑缺陷: 单一赋值语句的类型不匹配 (dict vs dataclass) 导致全治理周期静默崩溃
+  - L3 架构缺陷: IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION 的数据管道缺乏端到端类型约束 —
+    Journal (SSOT, dict) → governance_scheduler (期望 dataclass) → governance_state.json (projection)
+    中间没有任何 Schema 校验或类型转换层
+  - 反模式 (ReB-043): `BOUNDARY_TYPE_ENFORCEMENT_AND_EXPLICIT_CATCH` — 
+    跨核心子系统边界禁止原生 dict 裸奔; 顶层调度器禁止无类型断言的 `except Exception`
+  - 证据: 完整代码追踪 governance_scheduler.py:250-307 + daily_ops.py:493-532 + brain_pnl_ledger.py:BrainPnLMetrics dataclass
+  - 置信度: confirmed
+
+**修复验证**:
+  - `_step_governance('data_btc', dry_run=True)` → `Status: ok, Brains assessed: 14` (修复前: Status: error, crash)
+  - `_step_governance('data', dry_run=True)` → `Status: ok, Brains assessed: 50` (修复前: crash)
+  - 3/3 合约测试 PASSED
+  - purge: BTC 1 brain 修正 / XAU 13 brains 修正
+
+**交叉引用**: ReB-20260621-043 (`BOUNDARY_TYPE_ENFORCEMENT_AND_EXPLICIT_CATCH`), FIX-20260621-043, DQAF-20260621-042 (上游)
+
+---
+
 ### CCT-20260620-002
 - **Docket ID**: DQAF-20260620-002
 - **日期**: 2026-06-20
