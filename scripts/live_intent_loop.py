@@ -779,24 +779,88 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # ── Load open positions from journal ──
+    # DQAF-20260621-031: STALE_JOURNAL_HYDRA — blind bulk-load of all historical
+    # open entries floods reconciliation with MT5 history_deals_get() (~1.6s
+    # each).  Fix: two-pass — (1) collect closed tickets, (2) load only open
+    # entries that are ≤7 days old and have no matching close.  7-day cutoff
+    # aligns with MT5's practical history retention window (broker-dependent).
     _journal_path = Path(args.base_dir) / "live_trade_journal.jsonl"
     known_open_tickets: dict[int, dict[str, Any]] = {}
     from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
     if _journal_path.exists():
         with fail_open_guard("LiveIntentLoop:L861"):
-                for line in _journal_path.read_text(encoding="utf-8").splitlines():
+                _journal_lines = _journal_path.read_text(encoding="utf-8").splitlines()
+
+                # Pass 1: collect closed tickets (close-match filter)
+                _closed_tickets: set[int] = set()
+                for _line in _journal_lines:
+                    _line = _line.strip()
+                    if not _line:
+                        continue
+                    try:
+                        _rec = json.loads(_line)
+                    except json.JSONDecodeError:
+                        continue
+                    if _rec.get("action") == "close":
+                        _ct = _rec.get("position_ticket")
+                        if _ct is not None and isinstance(_ct, int) and _ct > 0:
+                            _closed_tickets.add(_ct)
+
+                # Pass 2: load open entries with age + close-match guards
+                _now = datetime.now(UTC)
+                _max_age_days = 7
+                _loaded_count = 0
+                _skipped_stale = 0
+                _skipped_closed = 0
+
+                for line in _journal_lines:
                     line = line.strip()
                     if not line:
                         continue
-                    rec = json.loads(line)
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
                     if rec.get("action") == "open" and rec.get("ack_status") == "accepted":
                         ticket = rec.get("position_ticket")
-                        if ticket is not None and isinstance(ticket, int) and ticket > 0:
-                            # Enrich with strategy name for management-phase lookup
-                            _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
-                            rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
-                            known_open_tickets[ticket] = rec
+                        if ticket is None or not isinstance(ticket, int) or ticket <= 0:
+                            continue
+                        # Guard 1: skip if already closed
+                        if ticket in _closed_tickets:
+                            _skipped_closed += 1
+                            continue
+                        # Guard 2: skip if >7 days old (MT5 history window)
+                        _ts_str = rec.get("recorded_at", "")
+                        if _ts_str:
+                            try:
+                                _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00"))
+                                if (_now - _ts).days > _max_age_days:
+                                    _skipped_stale += 1
+                                    continue
+                            except (ValueError, TypeError):
+                                pass
+                        # Enrich with strategy name for management-phase lookup
+                        _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
+                        rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
+                        known_open_tickets[ticket] = rec
+                        _loaded_count += 1
+
+                print(
+                    json.dumps(
+                        {
+                            "event": "journal_open_loaded",
+                            "time": _now.isoformat().replace("+00:00", "Z"),
+                            "loaded": _loaded_count,
+                            "skipped_stale_days_gt": _max_age_days,
+                            "skipped_stale": _skipped_stale,
+                            "skipped_closed": _skipped_closed,
+                            "total_journal_lines": len(_journal_lines),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
 
     # ── Initialize brain adapter(s) ──
     brains: list[dict[str, Any]] = []
