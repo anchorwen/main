@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260621-044 | 2026-06-21 | execution | **DQAF-044 P0 — Clear cold_explore when MetaFilter produces valid p_win**: commit 0240641f 将 _is_cold_explore 前置到 MetaFilter 之前但忘记添加解除机制。MetaFilter 成功产出真实 p_win (0.06-0.67, 76 unique) 后, _is_cold_explore 仍为 True → line 924 无条件覆写 _meta_p_win=0.50 → BTC/XAU 校准器 p_win 塌缩为精确 0.5。5行修复: MetaFilter 返回有效 p_win 后清除 _is_cold_explore=False。ReB: COLD_EXPLORE_PREEMPTIVE_OVERRIDE。 | RC-04 (state-leak — flag set but never cleared after dependency success) |
 | FIX-20260621-032 | 2026-06-21 | governance, metrics, scripts | **Leaderboard度量衡修复 + V4擢升/V10_M15退役**: 全量实盘审计(analyze_live_brain_performance.py)发现Leaderboard将pnl_per_unit(账户货币)误标为pnl_r(风险单位)→V6/V7/V8显示-1146R实为+10.3R。修复: (1) daily_ops.py+governance_scheduler.py上游改用live_journal_metrics.py(基于实盘journal的pnl_r),废弃BrainPnLStore.pnl_per_unit, (2) BTC_Swing_V4 probation→live(172笔+92.1R), (3) BTC_Swing_V10_M15_Survival frozen→retired(-16.4R,全联盟有毒)。新模块core/feedback/live_journal_metrics.py。 | RC-06 (contract-violation: pnl_per_unit≠pnl_r field label mismatch) + RC-03 (dual-source: journal vs ledger split SSOT) |
 | **FIX-20260621-042** | 2026-06-21 | data, observability, feedback | **DQAF-042 机构级实盘数据方向普查 — P0 毒丸阻断 + IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION**: 4路并行审计代理+70 commits逐条对账+12蓝图交叉引用→10项发现对账确认8项坐实。根因: 系统陷入"人工修复→自动化覆写"死循环(leaderboard手动修正被daily_ops覆盖)。修复: (1) live_journal_metrics.py补全pnl_r/trade_count字段, (2) BrainLeaderboard.rank()入参Schema强校验+DataIntegrityError毒丸, (3) daily_ops.py毒丸阻断(total_decisions==0→Fatal Halt), (4) exceptions.py新建DataIntegrityError Fail-Closed异常, (5) .gitignore明确IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION原则, (6) purge_backtest_from_governance.py清理V12_H1的3140笔回测数据。ReB: IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION。 | RC-07 (missing-validation: rank()入参无校验→静默损坏) + RC-03 (state-leak: backtest数据残存governance) + RC-06 (contract-violation: list传入rank()期望dict) |
 | FIX-20260621-031 | 2026-06-21 | deployment-lifecycle, scripts | **Market-session-aware stale file checks**: system_trust_report.py now calls detect_session() per symbol. When risk_tier="off" (weekend/market-closed), stale file checks are bypassed with [BYPASSED: MARKET_OFF] marker instead of false-positive WARN. BTC (24/7) serves as control group — confirms pipeline health while XAU weekend stales are correctly suppressed. Same class as FIX-028c (audit weekend false-positives). | RC-06 (data-contamination — naive probe without business-hours calendar) |
@@ -3988,3 +3989,48 @@ FIX-YYYYMMDD-NNN
 - **Prevention**: (1) State verification before any close execution — MT5 is the ground-truth oracle; (2) Persisted dedup watermark survives restarts; (3) Exponential backoff + near-real-time overflow merge makes journal writes resilient without blocking the hot path; (4) The recovered `"closed"` status flows through existing journal/label pipelines without special-casing.
 - **ReB Pattern**: `IDEMPOTENT_STATE_VERIFICATION_GATEWAY` — before any irreversible external I/O, query the external system's current state.  If the desired state already exists, recover the outcome from history instead of re-executing.  Crash window = state verification gap; close it with the external system as oracle.
 - **Dependents Checked**: `_send_to_mt5()` (route dispatch — `"closed"` status handled by existing `_derive_label` → falls through to `"close_accepted"`), `process_one()` (file-mode — journal record written for all ack_status values), `_write_zmq_journal_entry()` (ZMQ-mode — same), `reconciliation.py` (MIA detection — Phase 2 recovery writes journal BEFORE reconciliation runs, preventing MIA), `position_close_adapter.py` (unaffected — consumes journal entries regardless of source).  Zero API changes.  Zero new dependencies.
+
+### FIX-20260621-044
+
+- **Docket**: DQAF-20260621-044
+- **Severity**: Sev 2 (输出偏差、信号退化、实盘质量下降)
+- **Module**: `core/execution/strategy_line.py`
+- **Date**: 2026-06-21
+- **Root Cause Layer**: L2 (Logic Defect)
+- **ReB Pattern**: `COLD_EXPLORE_PREEMPTIVE_OVERRIDE`
+
+**Symptoms**:
+BTC ConformalCalibrator p_win 自 2026-06-10T08:37Z 塌缩为精确 0.5000 (永久)。6月3-9日 p_win 在 0.45-0.88 健康波动 (3-6 unique/day)，6月10日08:55起 unique=1/day 至今 (6/21)。XAU swing 策略 6/18 同步沦陷。
+
+**Evidence Chain (ECoL)**:
+1. Calibrator state: p_win daily averages — June 9: 0.465 (4 unique), June 10 before 08:55: 0.866-0.878 (healthy), June 10 08:55 onward: 0.50000000 (flatline)
+2. Journal accepted entries: last real p_win=0.8776 at 05:30, first p_win=0.5 at 08:37
+3. MetaFilter pred_history (control group): 109 entries, 76 unique values, range [0.0591, 0.6740], **ZERO** exact 0.5 predictions
+4. Git blame: commit `0240641f` (2026-06-10 08:36 UTC) — "cold_explore前置到MetaFilter之前"
+
+**Root Cause**:
+Commit `0240641f` moved `_is_cold_explore` determination BEFORE `apply_meta_filter_gate()` call to fix "BTC连续5小时零开单" (MetaFilter rejection → early return → cold_explore never activated). However, the fix introduced a State Leakage: `_is_cold_explore` was set to `True` when `_meta_p_win is None` (always true pre-MetaFilter) but was NEVER cleared when MetaFilter subsequently produced a valid p_win. Line 924 unconditionally overrode the real MetaFilter output with `_meta_p_win = 0.50`.
+
+The cold_explore flag's lifecycle was incomplete: activation (line 860-868) had no corresponding teardown mechanism on MetaFilter success.
+
+**Fix (5 lines)**:
+After `apply_meta_filter_gate()` returns, if `_meta_p_win is not None` (MetaFilter produced valid p_win), clear `_is_cold_explore = False`. This preserves cold_explore for genuine MetaFilter unavailability/rejection while preventing preemptive override of real model output.
+
+```python
+# After apply_meta_filter_gate() call:
+if _meta_p_win is not None:
+    _is_cold_explore = False
+```
+
+**Cross-Symbol Impact**:
+- BTC: `btc_swing` strategy (604 trades affected since June 10)
+- XAU: `m30_swing`, `h1_swing`, `m15_swing`, `h4_swing` strategies (affected since June 18)
+- Both symbols share `strategy_line.py` — single fix cures both
+
+**Poison Flushing Period**:
+~50 trades needed for ConformalCalibrator's 500-entry rolling window to naturally regain real variance. **ABSOLUTELY DO NOT manually purge calibrator history.** Let live data restore the distribution.
+
+**Prevention**:
+- Architectural guard: any preemptive state flag that overrides a dependency's output MUST have a paired teardown that clears the flag when the dependency succeeds
+- Pattern registered: `COLD_EXPLORE_PREEMPTIVE_OVERRIDE` in ReB_PATTERN_INDEX
+- Future: consider a `@requires_teardown` decorator or lint rule for state flags with asymmetric lifecycle
