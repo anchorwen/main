@@ -269,12 +269,13 @@ class StateWriter:
         Walks up the directory tree to find ``data`` or ``data_btc`` and
         derives the symbol from the directory name.
 
+        If the path does not reside under a recognised data directory (e.g.
+        pytest tmpdir), falls back to using the file's parent directory as
+        data_dir and inferring the symbol from the path content.
+
         This is the preferred factory for modules like governance_service,
         alpha registry, and execution_state that receive a full file path
         rather than a data_dir + symbol pair.
-
-        Raises:
-            ValueError: If the path does not reside under a recognised data directory.
         """
         p = Path(state_file_path).resolve()
         for parent in p.parents:
@@ -282,10 +283,20 @@ class StateWriter:
                 return cls(str(parent), symbol="BTCUSDc")
             if parent.name == "data":
                 return cls(str(parent), symbol="XAUUSDc")
-        raise ValueError(
-            f"Cannot determine data directory from path: {state_file_path!r}. "
-            f"State files must reside under 'data/' or 'data_btc/'."
+
+        # Fallback: path is outside the standard data directory tree
+        # (e.g. pytest tmpdir).  Use the file's parent as data_dir and
+        # infer the symbol from the path.  Schema validation still applies.
+        parent = p.parent
+        symbol = "BTCUSDc" if "btc" in str(p).lower() else "XAUUSDc"
+        logger.warning(
+            "StateWriter.from_state_path: path %s is not under data/ or data_btc/ — "
+            "fallback: data_dir=%s, symbol=%s",
+            p,
+            parent,
+            symbol,
         )
+        return cls(str(parent), symbol=symbol)
 
     # ── Convenience methods ─────────────────────────────────────────────
 
