@@ -106,6 +106,8 @@ class PositionOpened:
     brain_votes: tuple = ()
     confidence: float = 0.0
     p_win: float = 0.5
+    p_win_source: str = "unknown"
+    p_win_degraded: bool = False
     kelly_mult: float = 1.0
     entry_context: dict | None = None
     message_id: str = ""
@@ -135,6 +137,8 @@ class PositionOpened:
             "brain_votes": list(self.brain_votes) if self.brain_votes else None,
             "confidence": self.confidence,
             "p_win": self.p_win,
+            "p_win_source": self.p_win_source,
+            "p_win_degraded": self.p_win_degraded,
             "kelly_mult": self.kelly_mult,
             "entry_context": self.entry_context,
             "effective_volume_hint": self.volume,

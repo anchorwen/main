@@ -853,22 +853,6 @@ class StrategyLine:
             self._last_ou_result = _ou_result
             if _ou_blocked is not None:
                 return _ou_blocked
-        # ── FIX-20260610-007-C: Cold explore bypasses MetaFilter ──
-        # When MetaFilter is in learning phase (COLD calibrator, few samples),
-        # bounded-volume explore trades bypass the filter to collect PIT data.
-        # Moved BEFORE MetaFilter gate so cold_explore isn't blocked by rejection.
-        _is_cold_explore: bool = False
-        _needs_exploration = (
-            _meta_p_win is None  # MetaFilter didn't produce p_win yet
-            and confidence >= 0.35  # brain has minimum conviction
-        )
-        if _needs_exploration and (
-            "statarb" in name or "ou" in name.lower() or "swing" in name or "btc" in name
-        ):
-            _is_cold_explore = True
-            _p_win = 0.50
-            _p_win_source = "cold_explore_neutral"
-
         # ── 4ab. MetaFilter gate (Strangler Fig #12: meta_filter_routing.py) ──
 
         # FIX-20260610-007: Direction-specific MetaFilter routing.
@@ -895,15 +879,35 @@ class StrategyLine:
             meta_filter_long=_mf_long,
             meta_filter_short=_mf_short,
         )
-        # ── FIX-20260621-044 (DQAF-044): Clear cold_explore when MetaFilter succeeds ──
-        # _is_cold_explore was set True before MetaFilter ran (because _meta_p_win
-        # started as None).  If MetaFilter subsequently produced a valid p_win,
-        # the cold-explore rationale no longer holds — the model IS producing
-        # predictions.  Without this teardown, line 924 unconditionally overrides
-        # the real MetaFilter output with 0.50, collapsing the calibrator's entire
-        # p_win distribution to a constant.  (COLD_EXPLORE_PREEMPTIVE_OVERRIDE)
-        if _meta_p_win is not None:
-            _is_cold_explore = False
+        # ── FIX-20260621-044-bis (DQAF-044-bis): Temporal State Decoupling ──
+        # _is_cold_explore is DERIVED from MetaFilter's actual return values,
+        # never pre-set.  Only (None, None) — MetaFilter vacuum (cold bypass,
+        # passthrough, or not-routed) — triggers bounded exploration.
+        #
+        # This eliminates the "set-then-clear" race window that made DQAF-044's
+        # original fix incomplete: the old teardown only cleared the flag when
+        # _meta_p_win was not None, missing the _meta_reject case.  Now both
+        # PASS (p_win, None) and REJECT (None, rejection) naturally suppress
+        # cold_explore because at least one return value is non-None.
+        #
+        # ReB Pattern: TEMPORAL_STATE_DECOUPLING
+        # State MUST be derived from execution results, never pre-set before
+        # the I/O boundary and cleared after.  This instance of BooleanStateDesync
+        # (Ω Phase 2 audit family) is now structurally eliminated.
+        _is_cold_explore: bool = (
+            _meta_p_win is None
+            and _meta_reject is None
+            and confidence >= 0.35
+            and (
+                "statarb" in name
+                or "ou" in name.lower()
+                or "swing" in name
+                or "btc" in name
+            )
+        )
+        if _is_cold_explore:
+            _p_win = 0.50
+            _p_win_source = "cold_explore_neutral"
         if _meta_reject is not None and not _is_cold_explore:
             # ── FIX-20260611-001: Swing MetaFilter routing excision ──
             # Swing strategies routed through Conformal OU gate get a garbage

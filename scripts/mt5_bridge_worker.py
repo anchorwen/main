@@ -989,6 +989,8 @@ def process_one(
         "brain_votes": msg_payload.get("brain_votes"),
         "confidence": msg_payload.get("confidence"),
         "p_win": msg_payload.get("p_win"),
+        "p_win_source": msg_payload.get("p_win_source", "unknown"),
+        "p_win_degraded": msg_payload.get("p_win_degraded", False),
         "kelly_mult": msg_payload.get("kelly_mult"),
         "entry_context": msg_payload.get("entry_context"),
     }
@@ -1370,6 +1372,8 @@ def _write_zmq_journal_entry(
         "brain_votes": msg_payload.get("brain_votes"),
         "confidence": msg_payload.get("confidence"),
         "p_win": msg_payload.get("p_win"),
+        "p_win_source": msg_payload.get("p_win_source", "unknown"),
+        "p_win_degraded": msg_payload.get("p_win_degraded", False),
         "kelly_mult": msg_payload.get("kelly_mult"),
         "entry_context": msg_payload.get("entry_context"),
     }
