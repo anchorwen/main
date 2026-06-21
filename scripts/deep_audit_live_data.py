@@ -22,12 +22,13 @@ import json
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 # -- Helpers --------------------------------------------------------------
 
-def load_jsonl(path: Path) -> list[dict]:
+def load_jsonl(path: Path) -> list[dict[str, Any]]:
     """Load JSONL file, skipping empty/malformed lines."""
-    records = []
+    records: list[dict[str, Any]] = []
     if not path.exists():
         print(f"  [WARN] File not found: {path}")
         return records
@@ -122,7 +123,7 @@ def audit_journal(data_dir: Path, label: str) -> dict:
             print(f"      ticket={t}: {count} close records")
 
     # Trade stats
-    trades = []
+    trades: list[dict[str, Any]] = []
     for ticket in matched_tickets:
         o = open_by_ticket[ticket]
         c = close_by_ticket[ticket]
@@ -181,15 +182,17 @@ def audit_journal(data_dir: Path, label: str) -> dict:
 
     # Brain performance
     print("\n  -- Brain Performance --")
-    brain_stats: dict[str, dict] = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0, "bes": 0})
-    for t in trades:
-        for bid in t["brain_ids"]:
+    brain_stats: dict[str, dict[str, Any]] = {}
+    for trade in trades:
+        for bid in trade["brain_ids"]:
+            if bid not in brain_stats:
+                brain_stats[bid] = {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0, "bes": 0}
             bs = brain_stats[bid]
             bs["count"] += 1
-            bs["pnl"] += t["pnl"]
-            if t["pnl"] > 0:
+            bs["pnl"] += trade["pnl"]
+            if trade["pnl"] > 0:
                 bs["wins"] += 1
-            elif t["pnl"] < 0:
+            elif trade["pnl"] < 0:
                 bs["losses"] += 1
             else:
                 bs["bes"] += 1
@@ -201,14 +204,17 @@ def audit_journal(data_dir: Path, label: str) -> dict:
 
     # Side distribution
     print("\n  -- Side Distribution --")
-    side_stats = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0})
-    for t in trades:
-        s = side_stats[t["side"]]
+    side_stats: dict[str, dict[str, Any]] = {}
+    for trade in trades:
+        side_key: str = str(trade.get("side", "unknown"))
+        if side_key not in side_stats:
+            side_stats[side_key] = {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0}
+        s = side_stats[side_key]
         s["count"] += 1
-        s["pnl"] += t["pnl"]
-        if t["pnl"] > 0:
+        s["pnl"] += trade["pnl"]
+        if trade["pnl"] > 0:
             s["wins"] += 1
-        elif t["pnl"] < 0:
+        elif trade["pnl"] < 0:
             s["losses"] += 1
     for side, s in sorted(side_stats.items()):
         swr = s["wins"] / (s["wins"] + s["losses"]) * 100 if (s["wins"] + s["losses"]) > 0 else 0
@@ -430,8 +436,8 @@ def audit_golden_master(data_dir: Path, label: str) -> dict:
     # and XAU format (flat "label"/"target" field)
     labels = []
     for r in records:
-        label = r.get("label") or r.get("target")
-        if label is None and "outputs" in r:
+        row_label: Any = r.get("label") or r.get("target")
+        if row_label is None and "outputs" in r:
             # BTC format: outputs = {"btc_swing": {"direction": "short", "confidence": 0.586, ...}}
             outputs = r.get("outputs", {})
             if isinstance(outputs, dict):
@@ -440,8 +446,8 @@ def audit_golden_master(data_dir: Path, label: str) -> dict:
                         direction = sdata.get("direction", "")
                         conf = sdata.get("confidence", "")
                         should = sdata.get("should_trade", "")
-                        label = f"{strategy}:{direction}:conf={conf:.2f}:trade={should}" if conf else f"{strategy}:{direction}"
-        labels.append(str(label) if label else "")
+                        row_label = f"{strategy}:{direction}:conf={conf:.2f}:trade={should}" if conf else f"{strategy}:{direction}"
+        labels.append(str(row_label) if row_label else "")
 
     label_counts = Counter(str(l) for l in labels)
     print("\n  -- Label Distribution --")
@@ -473,8 +479,8 @@ def audit_governance(data_dir: Path, label: str) -> dict:
 
     gov_path = data_dir / "governance_state.json"
     gov = load_json(gov_path)
-    if gov is None:
-        print("  [WARN] governance_state.json not found!")
+    if gov is None or not isinstance(gov, dict):
+        print("  [WARN] governance_state.json not found or not a dict!")
         return {}
 
     # Brain inventory — handle both "brain_states" (BTC) and "brains" (XAU)
@@ -696,7 +702,7 @@ def audit_dqaf042_regression(data_dir: Path, journal_stats: dict, gov_stats: dic
     lb_path = data_dir / "reports" / "leaderboard.json"
     if lb_path.exists():
         lb = load_json(lb_path)
-        if lb and lb.get("brains"):
+        if isinstance(lb, dict) and lb.get("brains"):
             passes.append("#1 Leaderboard: present with brains")
         else:
             regressions.append("#1 Leaderboard: present but empty/missing brains")
@@ -774,8 +780,8 @@ def audit_data_health(data_dir: Path, label: str) -> dict:
 
     dh_path = data_dir / "state" / "data_health_state.json"
     dh = load_json(dh_path)
-    if dh is None:
-        print("  [WARN] data_health_state.json not found!")
+    if dh is None or not isinstance(dh, dict):
+        print("  [WARN] data_health_state.json not found or not a dict!")
         return {}
 
     # Check for PASS/FAIL/WARN counts

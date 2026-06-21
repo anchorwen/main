@@ -9,10 +9,11 @@ import contextlib
 import json
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 
-def load_jsonl(path: Path) -> list[dict]:
-    records = []
+def load_jsonl(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     if not path.exists():
         return records
     with open(path, encoding="utf-8") as f:
@@ -44,8 +45,16 @@ def probe_close_only_gap(data_dir: Path, label: str):
     opens = [r for r in records if r.get("action") == "open"]
     closes = [r for r in records if r.get("action") == "close"]
 
-    open_tickets = {r.get("position_ticket") for r in opens if r.get("position_ticket")}
-    close_tickets = {r.get("position_ticket") for r in closes if r.get("position_ticket")}
+    open_tickets: set[int] = set()
+    close_tickets: set[int] = set()
+    for r in opens:
+        t = r.get("position_ticket")
+        if isinstance(t, int):
+            open_tickets.add(t)
+    for r in closes:
+        t = r.get("position_ticket")
+        if isinstance(t, int):
+            close_tickets.add(t)
 
     close_only_tickets = close_tickets - open_tickets
     open_only_tickets = open_tickets - close_tickets
@@ -91,7 +100,7 @@ def probe_close_only_gap(data_dir: Path, label: str):
             print(f"    reason='{d}': {cnt}")
 
     # Check deal_reason on close-only records
-    deal_reasons = Counter()
+    deal_reasons: Counter[str] = Counter()
     for r in close_only_records:
         dr = r.get("deal_reason") or r.get("mt5_deal_reason") or (r.get("detail", {}).get("deal_reason") if isinstance(r.get("detail"), dict) else None)
         if dr:
