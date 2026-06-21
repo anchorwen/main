@@ -856,22 +856,20 @@ def _icon(v: str) -> str:
     return "[SKIP]"
 
 
-def print_report(contract_id: str, stage_results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Print readiness report and return machine-readable summary."""
+def print_report(report: dict[str, Any]) -> None:
+    """Print human-readable readiness report from a report dict (display only, no return)."""
+    contract_id = report["contract_id"]
+    stage_results = report["stages"]
+    overall = report["overall_verdict"]
+
     print(f"{'='*70}")
     print(f"  Training Readiness Report: {contract_id}")
-    print(f"  Generated at: {datetime.now(UTC).isoformat()}")
+    print(f"  Generated at: {report['generated_at']}")
     print(f"{'='*70}")
 
-    overall = StageVerdict.PASS
     for sr in stage_results:
         verdict = sr["verdict"]
         stage = sr["stage"]
-        if verdict == StageVerdict.FAIL:
-            overall = StageVerdict.FAIL
-        elif verdict == StageVerdict.WARN and overall == StageVerdict.PASS:
-            overall = StageVerdict.WARN
-
         print(f"\n── {stage} {_icon(verdict)}")
         for r in sr.get("results", []):
             icon = _icon(r["verdict"])
@@ -886,6 +884,47 @@ def print_report(contract_id: str, stage_results: list[dict[str, Any]]) -> dict[
     else:
         print("  Pipeline has warnings — training possible but suboptimal.")
     print(f"{'='*70}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Pure-function entry point (Plan B — DQAF-20260622-047)
+# ══════════════════════════════════════════════════════════════════════════
+
+def evaluate_training_readiness(
+    contract_path: str | Path, data_dir: str
+) -> dict[str, Any]:
+    """Evaluate a single training pipeline contract — pure function, no I/O beyond reads.
+
+    This is the integration entry point for automated pipelines (daily_ops).
+    It returns a machine-readable report dict; the caller is responsible for
+    all write-side I/O through the StateWriter gate.
+
+    Args:
+        contract_path: Path to a training pipeline contract JSON file.
+        data_dir: Symbol data directory (e.g. ``"data_btc"``).
+
+    Returns:
+        Dict with ``contract_id``, ``generated_at``, ``overall_verdict``,
+        and ``stages`` keys.
+    """
+    cp = Path(contract_path)
+    contract = load_contract(str(cp))
+    contract_id = contract["contract_id"]
+
+    stage_results = [
+        validate_stage_1_feature_store(contract, data_dir),
+        validate_stage_2_journal(contract, data_dir),
+        validate_stage_3_dataset_builder(contract, data_dir),
+        validate_stage_4_model(contract, data_dir),
+    ]
+
+    overall = StageVerdict.PASS
+    for sr in stage_results:
+        verdict = sr["verdict"]
+        if verdict == StageVerdict.FAIL:
+            overall = StageVerdict.FAIL
+        elif verdict == StageVerdict.WARN and overall == StageVerdict.PASS:
+            overall = StageVerdict.WARN
 
     return {
         "contract_id": contract_id,
@@ -937,28 +976,32 @@ def main() -> int:
             exit_code = 1
             continue
 
-        contract = load_contract(str(cp))
-        contract_id = contract["contract_id"]
-
-        stage_results = [
-            validate_stage_1_feature_store(contract, args.data_dir),
-            validate_stage_2_journal(contract, args.data_dir),
-            validate_stage_3_dataset_builder(contract, args.data_dir),
-            validate_stage_4_model(contract, args.data_dir),
-        ]
-
-        report = print_report(contract_id, stage_results)
+        report = evaluate_training_readiness(str(cp), args.data_dir)
+        # Print human-readable summary
+        print_report(report)
         all_reports.append(report)
 
         if report["overall_verdict"] == StageVerdict.FAIL:
             exit_code = 1
 
-    # ── Write machine-readable report ──
+    # ── Write machine-readable report through StateWriter gate ──
     output_path = args.output or f"{args.data_dir}/reports/training_readiness.json"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(all_reports if args.all else all_reports[0], f, indent=2, ensure_ascii=False)
-    print(f"\nReport saved to: {output_path}")
+
+    final_payload = all_reports[0] if len(all_reports) == 1 else {"contracts": all_reports}
+    try:
+        from core.state.catalog import lookup
+        from core.state.writer import StateWriter
+
+        writer = StateWriter.from_state_path(output_path)
+        writer.write_artifact(lookup("TRAINING_READINESS"), writer._symbol, final_payload)
+        print(f"\nReport saved to: {output_path} (via StateWriter gate)")
+    except Exception:
+        # Fallback: direct write if StateWriter is unavailable (e.g. standalone CLI use
+        # without the full core package on PYTHONPATH)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(final_payload, f, indent=2, ensure_ascii=False)
+        print(f"\nReport saved to: {output_path} (direct — StateWriter unavailable)")
 
     return exit_code
 

@@ -76,7 +76,7 @@ def probe_feature_store() -> dict[str, Any]:
                     "M5_RSI_14",
                     "M5_MACD",
                 ],
-                vec[:5],
+                vec[:5], strict=False,
             )
         )
     }
@@ -209,7 +209,7 @@ def render_report(
     lines.append(sep)
 
     # ── Section 1: Feature Store ──
-    lines.append(f"\n  [1] FEATURE STORE")
+    lines.append("\n  [1] FEATURE STORE")
     lines.append(f"      Status:   {feature_result['status']}")
     lines.append(f"      Source:   {feature_result['feature_source']}")
     lines.append(f"      Dim:      {feature_result['feature_dim']}")
@@ -248,7 +248,7 @@ def render_report(
         for r in brain_results
         if "build_error" not in r
     )
-    lines.append(f"\n      Direction distribution (via broken _run_single_brain API):")
+    lines.append("\n      Direction distribution (via broken _run_single_brain API):")
     for d, c in extracted_dirs.most_common():
         lines.append(f"        {d}: {c} brains")
 
@@ -258,7 +258,7 @@ def render_report(
         for r in brain_results
         if "build_error" not in r
     )
-    lines.append(f"\n      Direction distribution (via correct signal.direction API):")
+    lines.append("\n      Direction distribution (via correct signal.direction API):")
     for d, c in actual_dirs.most_common():
         lines.append(f"        {d}: {c} brains")
 
@@ -277,33 +277,33 @@ def render_report(
             )
 
     # ── Section 3: Decision File History ──
-    lines.append(f"\n  [3] DECISION FILE HISTORY")
+    lines.append("\n  [3] DECISION FILE HISTORY")
     lines.append(f"      Records analyzed: {decision_result['records']}")
-    lines.append(f"      Consensus distribution:")
+    lines.append("      Consensus distribution:")
     for consensus, count in decision_result["consensus_dist"].most_common():
         pct = count / decision_result["records"] * 100 if decision_result["records"] else 0
         lines.append(f"        {consensus:10s}: {count:4d}  ({pct:.1f}%)")
 
     # ── Section 4: Root Cause Verdict ──
-    lines.append(f"\n  [4] ROOT CAUSE VERDICT")
+    lines.append("\n  [4] ROOT CAUSE VERDICT")
     lines.append(f"{'─' * 72}")
 
     if api_broken > 0:
-        lines.append(f"")
-        lines.append(f"  🔴 ROOT CAUSE 1 (PRIMARY — L1 Logic Defect):")
-        lines.append(f"     File:  scripts/live_shadow_ensemble.py:106")
-        lines.append(f"     Bug:   signal.prediction — BrainSignal has NO .prediction attr")
-        lines.append(f"     Fix:   Use signal.direction (Direction Literal) directly")
+        lines.append("")
+        lines.append("  🔴 ROOT CAUSE 1 (PRIMARY — L1 Logic Defect):")
+        lines.append("     File:  scripts/live_shadow_ensemble.py:106")
+        lines.append("     Bug:   signal.prediction — BrainSignal has NO .prediction attr")
+        lines.append("     Fix:   Use signal.direction (Direction Literal) directly")
         lines.append(f"     Impact: {api_broken}/{len(brain_results)} brains' direction discarded")
-        lines.append(f"")
+        lines.append("")
 
     if dim_mismatch:
-        lines.append(f"  🟡 ROOT CAUSE 2 (SECONDARY — L2 Logic Defect):")
-        lines.append(f"     File:  core/brains/adapters/xgboost_brain_adapter.py:215-227")
-        lines.append(f"     Bug:   No recovery path for 35-dim model ← 40-dim input")
-        lines.append(f"     Fix:   Add 35←40 feature mapping (swing_enhanced_35 ⊂ v9_institutional_40)")
+        lines.append("  🟡 ROOT CAUSE 2 (SECONDARY — L2 Logic Defect):")
+        lines.append("     File:  core/brains/adapters/xgboost_brain_adapter.py:215-227")
+        lines.append("     Bug:   No recovery path for 35-dim model ← 40-dim input")
+        lines.append("     Fix:   Add 35←40 feature mapping (swing_enhanced_35 ⊂ v9_institutional_40)")
         lines.append(f"     Impact: {len(dim_mismatch)}/{len(brain_results)} brains use fallback zero-score")
-        lines.append(f"")
+        lines.append("")
 
     lines.append(f"  After L1 fix: {len(real_brains)} brains produce real signal")
     lines.append(f"  After L1+L2 fix: all {len(brain_results)} brains produce real signal")

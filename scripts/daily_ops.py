@@ -908,6 +908,85 @@ def _log_retraining_event(
         )
 
 
+def _step_training_readiness(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Run training pipeline readiness checks for contracts matching this symbol.
+
+    DQAF-20260622-047: Wires the previously-orphaned check_training_readiness.py
+    pure-function engine into the automated daily ops pipeline.  Uses strict
+    symbol-isolation (prefix match on contract filename) to prevent cross-symbol
+    contamination.
+
+    I/O is routed through the StateWriter gate (Plan B Layer 2).
+    """
+    import logging
+
+    from core.runtime.fault_handler import fail_open_guard
+    from core.state.catalog import lookup
+    from core.state.writer import StateWriter
+    from scripts.check_training_readiness import evaluate_training_readiness
+
+    logger = logging.getLogger("daily_ops")
+    resolved = Path(base_dir).resolve()
+    contracts_dir = Path("configs/contracts")
+
+    # Symbol isolation: only match contracts with the correct prefix
+    symbol_prefix = "btc" if "btc" in str(resolved).lower() else "xau"
+    symbol_full = "BTCUSDc" if symbol_prefix == "btc" else "XAUUSDc"
+
+    contract_pattern = f"training_pipeline_{symbol_prefix}*.json"
+    matching = sorted(contracts_dir.glob(contract_pattern))
+
+    if not matching:
+        logger.warning(
+            "[%s] No training pipeline contracts found (pattern=%s). Skipping readiness check.",
+            symbol_full,
+            contract_pattern,
+        )
+        return {
+            "step": "training_readiness",
+            "status": "skipped",
+            "reason": "no_contracts",
+            "symbol": symbol_full,
+        }
+
+    reports: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for cp in matching:
+        logger.info("[%s] Evaluating training contract: %s", symbol_full, cp.name)
+        with fail_open_guard("daily_ops:_step_training_readiness"):
+            try:
+                report = evaluate_training_readiness(str(cp), str(resolved))
+                reports.append(report)
+            except Exception as exc:
+                errors.append(f"{cp.name}: {type(exc).__name__}: {exc}")
+                logger.exception(
+                    "[%s] Training readiness check failed for %s", symbol_full, cp.name
+                )
+
+    if not reports:
+        return {
+            "step": "training_readiness",
+            "status": "error",
+            "errors": errors,
+            "symbol": symbol_full,
+        }
+
+    # Write through StateWriter gate (fail-closed: raise on bad data)
+    writer = StateWriter(str(resolved), symbol=symbol_full)
+    final_payload = reports[0] if len(reports) == 1 else {"contracts": reports}
+    writer.write_artifact(lookup("TRAINING_READINESS"), symbol_full, final_payload)
+
+    overall = reports[0].get("overall_verdict", "UNKNOWN") if len(reports) == 1 else "MULTI"
+    return {
+        "step": "training_readiness",
+        "status": "ok",
+        "symbol": symbol_full,
+        "contracts_checked": len(reports),
+        "contracts": [r["contract_id"] for r in reports],
+        "overall_verdict": overall,
+    }
+
+
 def _step_param_optimization(
     base_dir: str, retraining_result: dict[str, Any], *, dry_run: bool = False
 ) -> dict[str, Any]:
@@ -1384,6 +1463,7 @@ def run_daily_ops(
     skip_paper_simulation: bool = False,
     skip_fs_maintenance: bool = False,
     skip_data_health: bool = False,
+    skip_training_readiness: bool = False,
     dry_run: bool = False,
     mt5_terminal_path: str | None = None,
     symbol: str = "XAUUSDc",  # FIX-20260601-033: per-symbol feedback
@@ -1559,6 +1639,12 @@ def run_daily_ops(
     if not skip_retraining:
         steps.append(_step_retraining_check(base_dir, dry_run=dry_run, auto_execute=not dry_run))
 
+    # Training readiness: validate pipeline contracts for this symbol.
+    # Runs after retraining_check so we can cross-reference degradation signals
+    # against actual data readiness.  DQAF-20260622-047.
+    if not skip_training_readiness:
+        steps.append(_step_training_readiness(base_dir, dry_run=dry_run))
+
     # ── FIX-20260610-005: DataHealthService FULL mode ──
     if not skip_data_health:
         steps.append(_step_data_health(base_dir, symbol=symbol, dry_run=dry_run))
@@ -1631,6 +1717,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-fs-maintenance", action="store_true", help="Skip feature store maintenance"
     )
     p.add_argument("--skip-data-health", action="store_true", help="Skip data health monitoring")
+    p.add_argument(
+        "--skip-training-readiness",
+        action="store_true",
+        help="Skip training pipeline readiness check",
+    )
     p.add_argument("--output", type=Path, default=None, help="Write combined report JSON to file")
     p.add_argument(
         "--mt5-terminal-path", default=None, help="MT5 terminal64.exe path for P&L snapshot"
@@ -1660,6 +1751,7 @@ def main(argv: list[str] | None = None) -> int:
         skip_paper_simulation=args.skip_paper_simulation,
         skip_fs_maintenance=args.skip_fs_maintenance,
         skip_data_health=args.skip_data_health,
+        skip_training_readiness=args.skip_training_readiness,
         dry_run=args.dry_run,
         symbol=args.symbol,
         mt5_terminal_path=args.mt5_terminal_path,
