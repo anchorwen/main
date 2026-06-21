@@ -291,13 +291,13 @@ class DataHealthService(HealthCheckMethods):
             },
         }
 
-        # Atomic write (Iron Law #2)
+        # Atomic write via StateWriter gate (DQAF-046 Plan B)
         try:
-            tmp_path = path + ".tmp"
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(state, f, ensure_ascii=False, default=str)
-            os.replace(tmp_path, path)
+            from core.state.catalog import lookup
+            from core.state.writer import StateWriter
+
+            writer = StateWriter(self._base_dir, symbol=self._symbol)
+            writer.write_artifact(lookup("DATA_HEALTH_STATE"), self._symbol, state)
         except OSError:
             pass  # Iron Law #1: persistence failure must not crash
 

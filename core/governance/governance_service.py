@@ -1,5 +1,4 @@
 import json
-import os
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -77,20 +76,19 @@ class GovernanceService:
 
         try:
             with self._lock:
-                out = Path(path)
-                out.parent.mkdir(parents=True, exist_ok=True)
                 payload = {
                     "schema_version": GOVERNANCE_STATE_SCHEMA,
                     "brain_states": dict(self._brain_states),
                     "transition_log": list(self._transition_log),
                 }
-                tmp = Path(str(out) + ".tmp")
-                tmp.write_text(
-                    json.dumps(payload, indent=2, ensure_ascii=False, default=str),
-                    encoding="utf-8",
-                )
-                os.replace(str(tmp), str(out))
-                return out
+                # DQAF-046 Plan B: delegate to StateWriter for schema
+                # validation + atomic write (tmp → fsync → os.replace).
+                from core.state.catalog import lookup
+                from core.state.writer import StateWriter
+
+                writer = StateWriter.from_state_path(path)
+                writer.write_artifact(lookup("GOVERNANCE_STATE"), writer._symbol, payload)
+                return Path(path)
         finally:
             lock.release()
 

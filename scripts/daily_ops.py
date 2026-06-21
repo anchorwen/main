@@ -813,18 +813,16 @@ def _step_retraining_check(
                 ) from _pnl_lb_exc
         result = detect_degradation(leaderboard, baseline)
 
-        # Persist leaderboard for next run's comparison
-        reports_dir = base / "reports"
+        # Persist leaderboard via StateWriter gate (DQAF-046 Plan B)
         if not dry_run:
-            reports_dir.mkdir(parents=True, exist_ok=True)
-            (reports_dir / "leaderboard.json").write_text(
-                json.dumps(leaderboard, indent=2, ensure_ascii=False, default=str),
-                encoding="utf-8",
-            )
-            (reports_dir / "leaderboard_prev.json").write_text(
-                json.dumps(leaderboard, indent=2, ensure_ascii=False, default=str),
-                encoding="utf-8",
-            )
+            from core.state.catalog import lookup
+            from core.state.writer import StateWriter
+
+            _sym = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
+            _writer = StateWriter(str(base_dir), symbol=_sym)
+            _writer.write_artifact(lookup("LEADERBOARD"), _sym, leaderboard)
+            # Backup copy for next-run comparison
+            _writer.write_artifact(lookup("LEADERBOARD_PREV"), _sym, leaderboard)
 
         # ── Auto-execute retraining (with safety gates) ──
         execution_result = None
@@ -875,11 +873,12 @@ def _load_prev_critical_ids(base: Path) -> set[str]:
 
 def _save_prev_signal(base: Path, result: dict[str, Any]) -> None:
     """Save current retraining signal for next day's persistence check."""
-    sig_path = base / "reports" / "retraining_signal_prev.json"
-    sig_path.write_text(
-        json.dumps(result, indent=2, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
+    from core.state.catalog import lookup
+    from core.state.writer import StateWriter
+
+    symbol = "BTCUSDc" if "btc" in str(base).lower() else "XAUUSDc"
+    writer = StateWriter(str(base), symbol=symbol)
+    writer.write_artifact(lookup("RETRAINING_SIGNAL_PREV"), symbol, result)
 
 
 def _log_retraining_event(
@@ -1122,14 +1121,20 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     with fail_open_guard("daily_ops:_step_alpha_feed"):
                         continue
             with fail_open_guard("AlphaFeed:save_state"):
-                state_path.write_text(
-                    json.dumps({
+                from core.state.catalog import lookup
+                from core.state.writer import StateWriter
+
+                symbol = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
+                writer = StateWriter(base_dir, symbol=symbol)
+                writer.write_artifact(
+                    lookup("ALPHA_FEED_STATE"),
+                    symbol,
+                    {
                         "last_recorded_at": _last_ts,
                         "last_message_id": _last_mid,
                         "last_line": len(lines),
                         "updated_utc": now_utc,
-                    }),
-                    encoding="utf-8",
+                    },
                 )
 
         return {
@@ -1221,21 +1226,21 @@ def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str,
         allocator = AlphaPortfolioAllocator(registry, perf_store, policy=AlphaAllocationPolicy())
         allocation = allocator.allocate()
 
-        # Persist allocation report
-        out_dir = Path(base_dir) / "reports"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / "alpha_allocation.json"
+        # Persist allocation report via StateWriter gate (DQAF-046 Plan B)
         if not dry_run:
-            out_path.write_text(
-                json.dumps(allocation, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
+            from core.state.catalog import lookup
+            from core.state.writer import StateWriter
+
+            symbol = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
+            writer = StateWriter(base_dir, symbol=symbol)
+            writer.write_artifact(lookup("ALPHA_ALLOCATION"), symbol, allocation)
 
         return {
             "step": "alpha_allocation",
             "status": "ok",
             "alpha_count": allocation.get("alpha_count", 0),
             "allocatable_count": allocation.get("allocatable_count", 0),
-            "output": str(out_path) if not dry_run else None,
+            "output": str(Path(base_dir) / "reports" / "alpha_allocation.json") if not dry_run else None,
         }
     except Exception as exc:  # BLE001:FOG
         with fail_open_guard("daily_ops:_step_alpha_allocation"):

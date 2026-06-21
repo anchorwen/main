@@ -721,3 +721,38 @@
 - **关联 ReB Pattern**: `STATE_INITIALIZATION_DEADLOCK` — 状态机冷启动默认值 (0.0) 与下游激活门槛 (>0) 形成逻辑互斥
 - **关联 FIX**: FIX-20260621-037 (deployed)
 - **部署后验证**: 下次系统重启后, 所有 V3 恢复仓位应在首个管理周期从 MT5 同步真实 SL, snapshot 不再抛弃 SL 未初始化仓位
+
+---
+
+### CCT-20260621-046
+
+- **Docket ID**: DQAF-20260621-046
+- **日期**: 2026-06-21
+- **置信度**: confirmed (双源: probe script stdout + code audit × 16 brain configs)
+
+**Layer 1 — 症状 (信号真空)**:
+  - XAU live_shadow_ensemble 连续 45 天产出空决策文件 — 41/41 brains 返回 `neutral`/`ABSTAIN`, 0 条方向信号
+  - 证据: `scripts/probe_xau_signal_generation.py` stdout — decision file history: 45 files, 0 nonempty; per-brain inference: 16/21 fallback (dim_mismatch), 5/21 real (weak), 41/41 neutral
+  - 置信度: confirmed
+
+**Layer 2 — 中间异常 (双根因)**:
+  - **2a. BrainSignal API fracture**: `signal.prediction` dict 被替换为 `signal.direction: Direction` Literal + `signal.confidence: float` + `signal.raw_score: float` frozen dataclass。live_shadow_ensemble `_run_single_brain()` line ~106 仍使用旧接口 `signal.prediction.get("direction_bias", "neutral")` → 所有脑返回 neutral
+  - **2b. Feature dimension mismatch**: 16 个 swing/barrier/trend brains (35-dim swing_enhanced_35 schema) 收到 40-dim institutional v9 特征 → 完全不同特征空间 → `dim_mismatch` fallback → 5 个 institution brains 信号极弱 (confidence < 0.52)
+  - 证据: `scripts/live_shadow_ensemble.py:_run_single_brain()` — dict access on frozen dataclass; `core/features/schemas/swing_enhanced_schema.py` vs `v9_institutional_schema.py` — 35 vs 40 dim, different feature definitions
+  - 置信度: confirmed
+
+**Layer 3 — 根因 (L2 逻辑缺陷: 特征流水线无 schema 路由)**:
+  - 特征生产层 (feature store/computers) 与特征消费层 (brain inference) 之间缺少 **schema routing contract**。brain config 中虽已有 `feature_schema_id` 字段, 但未在 feature resolution 路径中消费——特征路由器未实现 → 所有 brain 默认收到 v9 40-dim vector
+  - 反模式: (1) BrainSignal 接口无向后兼容层——consumer 在不知情的情况下被破坏, (2) 特征维度无运行时校验——35-dim model 静默接收 40-dim input → model.predict() 内部 pandas/numpy 列对齐可能产生无警告截断或错误广播
+  - 证据: `core/features/schemas/registry.py` — schema registry exists but not consumed; 16 brain configs — `feature_schema_id` field present but routing code missing
+  - 置信度: confirmed
+
+**证据引用**:
+  - Source 1: `scripts/probe_xau_signal_generation.py` stdout — 完整诊断输出 (Iron Law #11 compliant)
+  - Source 2: `scripts/live_shadow_ensemble.py` line 106 — `signal.prediction.get("direction_bias", "neutral")` 旧接口
+  - Source 3: 16 brain configs `configs/brains/*.json` — `feature_schema_id: "swing_enhanced_35"`
+  - Source 4 (cross-symbol): BTC ensemble 未受影响 — BTC brain 全部使用 institution schema
+- **是否被推翻**: 否 — AR 反向假设 (单点配置错误) 被推翻: 16/21 brains dim_mismatch 证明是系统性 schema 路由缺失
+- **关联 ReB Pattern**: `FEATURE_SCHEMA_ROUTING_AND_BRAIN_API_CONTRACT`
+- **关联 FIX**: FIX-20260622-003 (XAU dual-track), FIX-20260622-001 (Plan B State Governance Protocol)
+- **状态**: **CLOSED** — Dual-track feature pipeline deployed: 35-dim swing resolver (DailyFeatureComputer 24 daily + 9 micro + 2 TF) + feature router (feature_schema_id) + BrainSignal API fix (direction/confidence/raw_score). 0/21→11/21 non-neutral. Plan B 同步交付防止复发

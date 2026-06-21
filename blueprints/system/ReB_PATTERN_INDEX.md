@@ -558,3 +558,78 @@
 - **Signature**: governance 标记 brain 为 live，但 registry 仍为 retired/frozen，strategy_builder 使用 registry 状态过滤→governance 的 live 标记无效
 - **Detection**: 检查 governance_state live brains ∩ brain registry entries → 交集为空时告警
 - **Prevention**: strategy_builder 过滤时应同时检查 governance_state（如在 governance 中为 live，覆盖 registry retired）。参考 FIX-20260610-001 → FIX-20260612-006 根因链。
+
+---
+
+### ReB-20260621-046
+
+- **Pattern Signature**: `FEATURE_SCHEMA_ROUTING_AND_BRAIN_API_CONTRACT`
+- **Date Cataloged**: 2026-06-21
+- **Source Docket**: DQAF-20260621-046
+- **Related**: ReB-20260612-004 (`SILENT_FALLBACK_ZERO_OBSERVABILITY`)
+
+**Definition**:
+特征生产层 (feature store/computers) 与特征消费层 (brain inference) 之间缺少 schema routing contract。Brain config 中存在 `feature_schema_id` 字段但未被 routing code 消费 → 所有 brain 默认接收同一特征格式 → 维度不匹配时静默 fallback 到 neutral。BrainSignal 接口变更 (dict→frozen dataclass) 无向后兼容层 → consumer 代码 `signal.prediction.get()` 静默返回 None → neutral fallback。双重静默: (1) 特征维度不匹配被 `dim_mismatch` fallback 吞没, (2) API fracture 被 `.get()` 默认值吞没。
+
+**Recurrence Indicators**:
+1. 代码审查: brain config 中的 `feature_schema_id` 字段存在但未被任何 router 消费
+2. 运行时: ensemble report 中 `dim_mismatch` 计数 > 0 但无对应的告警
+3. 监控: 品种信号产出连续 N 天为 0 (freshness guard 应触发)
+4. 编译期: `signal.prediction.get()` — dict 方法调用在 frozen dataclass 上应在 mypy 中报错
+
+**Prevention Strategies**:
+1. **Schema Router**: 特征解析路径必须根据 `feature_schema_id` 路由到正确的 assembler
+2. **BrainSignal 向后兼容层**: 接口变更时保留 `signal.prediction` 属性作为 deprecated wrapper
+3. **Mypy 类型检查**: 禁止在 dataclass 实例上调用 `dict.get()` — mypy `check_untyped_defs` 可捕获
+4. **Freshness Guard**: TTL 监控信号文件 — 24h 无产出立即告警 (Plan B Phase 4)
+5. **特征维度运行时校验**: model.predict() 前断言 `len(features) == model.n_features_in_`
+
+**Detection Methods**:
+1. `grep "signal.prediction.get"` — 检查是否有 dict 方法调用在 dataclass 上
+2. `grep "dim_mismatch"` — 非零计数必须触发告警而非静默 fallback
+3. Freshness Guard (Plan B) TTL 检查 — 45 天空文件不可再次发生
+4. Brain config audit: 验证 `feature_schema_id` 对应的 schema 确实存在于 registry 中
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260621-046 | 2026-06-21 | live_shadow_ensemble, brain configs | Sev 2 (45 天信号真空) |
+
+**Cross-References**: FIX-20260622-003, CCT-20260621-046, ReB-20260621-046
+
+---
+
+### ReB-20260622-001
+
+- **Pattern Signature**: `WILD_STATE_WRITE_POISONING` (野生状态写入中毒)
+- **Date Cataloged**: 2026-06-22
+- **Source**: Plan B — State Governance Protocol (Phase 1-4)
+- **Related**: ReB-20260621-042 (`IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION`), ReB-20260612-004 (`SILENT_FALLBACK_ZERO_OBSERVABILITY`)
+
+**Definition**:
+系统中 16 个独立的 `json.dump()` / `write_text()` 调用点各自直接写入状态文件，无统一 Schema 校验、无原子性保证、无跨品种污染检测、无新鲜度监控。每次写入是独立的不受监管行为 — 任何一个调用点的数据缺陷都会产生脏文件，下游静默消费脏数据，发现时已传导数层。
+
+**Recurrence Indicators**:
+1. 代码审查: grep `json.dump` 或 `write_text(json.dumps` 写入 `.json` 路径
+2. 运行时: 状态文件 0 字节 (原子写入失败), schema 关键字段缺失, 跨品种 ID 泄漏
+3. 监控: 状态文件 mtime 超过 TTL 无更新 (freshness guard)
+
+**Prevention Strategies**:
+1. **Write Gate**: 所有状态写入必须通过单一闸门 (StateWriter) — 4 道检查 (required fields + schema + cross-symbol + atomic)
+2. **Data Catalog**: 每个状态文件必须注册为 StateArtifact — 声明 TTL + validator + generator + cross_symbol_guard
+3. **Freshness Guard**: 定时扫描所有 artifact 的 mtime — 超过 TTL 立即 CRITICAL 告警
+4. **CI Enforcement**: 新增 `json.dump` 到 `.json` 路径必须触发 blueprint compliance gate
+5. **物理隔离**: ephemeral state files 全部在 `.gitignore` — 只有 generator code + ledger 进入版本控制
+
+**Detection Methods**:
+1. `grep -rn "json\.dump\|\.write_text.*json" core/ scripts/ | grep -v test_` — 检测野生写入
+2. `python core/state/freshness_guard.py` — 新鲜度扫描
+3. `python scripts/audit_state_of_system.py` — 跨品种污染检测
+4. CI: 新状态文件未注册到 CATALOG → build failure
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260621-046 | 2026-06-22 | 7 modules, 16 write sites | Sev 2 (系统性架构缺陷) |
+
+**Cross-References**: FIX-20260622-001, CCT-20260621-046

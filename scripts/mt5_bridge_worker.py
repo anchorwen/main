@@ -1176,7 +1176,7 @@ def run_worker(args: argparse.Namespace) -> int:
                 _merge_overflow_files(journal_path)
                 _last_overflow_merge = _now
 
-            # ── Periodic health heartbeat ──
+            # ── Periodic health heartbeat (StateWriter gate, DQAF-046 Plan B) ──
             if _now - _last_health_write > 30:
                 _hb = {
                     "last_heartbeat_utc": datetime.now(UTC).replace(tzinfo=None).isoformat(),
@@ -1185,7 +1185,11 @@ def run_worker(args: argparse.Namespace) -> int:
                     "outbox_pending": len(_list_pending(outbox_dir)),
                 }
                 try:
-                    health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+                    from core.state.catalog import lookup
+                    from core.state.writer import StateWriter
+
+                    _w = StateWriter.from_state_path(health_path)
+                    _w.write_artifact(lookup("MT5_BRIDGE_HEALTH"), _w._symbol, _hb)
                 except OSError as _he:
                     print(
                         json.dumps(
@@ -1292,7 +1296,11 @@ def _write_zmq_health(
         "order_endpoint": order_endpoint,
     }
     try:
-        health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+        from core.state.catalog import lookup
+        from core.state.writer import StateWriter
+
+        _w = StateWriter.from_state_path(health_path)
+        _w.write_artifact(lookup("MT5_BRIDGE_HEALTH"), _w._symbol, _hb)
     except OSError:
         pass  # health file is best-effort; main loop continues
 
@@ -1679,7 +1687,11 @@ def run_zmq_worker(
                     "wal_processed_path": str(_wal_processed_path),
                 }
                 try:
-                    health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+                    from core.state.catalog import lookup
+                    from core.state.writer import StateWriter
+
+                    _w = StateWriter.from_state_path(health_path)
+                    _w.write_artifact(lookup("MT5_BRIDGE_HEALTH"), _w._symbol, _hb)
                 except OSError:
                     pass
                 _last_health_write = _now

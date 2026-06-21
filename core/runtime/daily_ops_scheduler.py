@@ -26,20 +26,23 @@ from core.runtime.time_utils import _utc_iso  # consolidated
 
 
 def _save_daily_ops_state(base_dir: str, ts: float) -> None:
-    """Persist last daily_ops timestamp to disk."""
+    """Persist last daily_ops timestamp to disk — via StateWriter gate."""
     try:
-        state_dir = os.path.join(base_dir, "state")
-        os.makedirs(state_dir, exist_ok=True)
-        state_path = os.path.join(state_dir, "daily_ops_state.json")
-        with open(state_path, "w") as f:
-            json.dump({"last_daily_ops_utc": ts}, f)
+        from core.state.catalog import lookup
+        from core.state.writer import StateWriter
+
+        symbol = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
+        writer = StateWriter(base_dir, symbol=symbol)
+        writer.write_artifact(
+            lookup("DAILY_OPS_STATE"), symbol, {"last_daily_ops_utc": ts}
+        )
     except Exception as _exc:  # BLE001:FOG_WRAPPED
         with fail_open_guard("DailyOps:SaveState"):
             raise
         import logging as _logging
 
         _logging.getLogger(__name__).warning(
-            "Failed to save daily_ops_state: %s", _exc, exc_info=True
+            "Failed to save daily_ops_state via StateWriter: %s", _exc, exc_info=True
         )
 
 

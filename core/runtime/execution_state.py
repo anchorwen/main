@@ -15,7 +15,6 @@ defense-in-depth gate state.
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -121,11 +120,13 @@ def save_execution_state(
             flush=True,
         )
 
-    # ── Atomic write ──
+    # ── Atomic write via StateWriter gate (DQAF-046 Plan B) ──
     try:
-        tmp = p.with_suffix(p.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, p)
+        from core.state.catalog import lookup
+        from core.state.writer import StateWriter
+
+        writer = StateWriter.from_state_path(save_path)
+        writer.write_artifact(lookup("EXECUTION_STATE"), writer._symbol, payload)
     except OSError:
         pass  # Disk write failure is non-fatal
 

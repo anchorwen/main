@@ -91,6 +91,23 @@ def _build_brain(entry: dict[str, Any]) -> tuple[Any | None, str | None]:
                 flush=True,
             )
             return None, err_msg
+def _route_feature_vector(
+    schema_id: str,
+    default_vector: np.ndarray,
+    micro_vector: np.ndarray,
+    swing35_vector: np.ndarray,
+) -> np.ndarray:
+    """Route the correct feature vector to a brain based on its schema.
+
+    DQAF-046 Phase 3: Feature routing dispatcher.
+    """
+    if "microstructure" in schema_id:
+        return micro_vector
+    if schema_id == "swing_enhanced_35":
+        return swing35_vector
+    return default_vector
+
+
 def _run_single_brain(
     adapter: Any,
     brain_id: str,
@@ -103,16 +120,28 @@ def _run_single_brain(
         raw = adapter.infer(feature_vector)
         signal = adapter.get_signal(raw)
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-        pred = signal.prediction if hasattr(signal, "prediction") else {}
+        # DQAF-046: BrainSignal direction/confidence are direct attributes,
+        # NOT nested in .prediction dict.  Derive up/down probs from signal.
+        direction = getattr(signal, "direction", "neutral")
+        confidence = getattr(signal, "confidence", 0.0)
+        if direction == "long":
+            up_prob = round(0.5 + float(confidence) / 2.0, 6)
+            down_prob = round(1.0 - up_prob, 6)
+        elif direction == "short":
+            down_prob = round(0.5 + float(confidence) / 2.0, 6)
+            up_prob = round(1.0 - down_prob, 6)
+        else:
+            up_prob = 0.5
+            down_prob = 0.5
         return {
             "brain_id": brain_id,
             "brain_type": brain_type,
             "status": "ok",
             "runtime_ms": elapsed_ms,
-            "direction_bias": pred.get("direction_bias", "neutral"),
-            "up_probability": round(float(pred.get("up_probability", 0.5)), 6),
-            "down_probability": round(float(pred.get("down_probability", 0.5)), 6),
-            "confidence": round(float(pred.get("confidence", 0.0)), 6),
+            "direction_bias": direction,
+            "up_probability": up_prob,
+            "down_probability": down_prob,
+            "confidence": round(float(confidence), 6),
             "backend": adapter.describe().get("backend", "unknown")
             if hasattr(adapter, "describe")
             else "unknown",
@@ -216,6 +245,95 @@ def _resolve_feature_vector(
     return np.zeros(feature_dim, dtype=np.float64), "stub"
 
 
+# ── DQAF-046: Dual-Track Feature Pipeline ─────────────────────────────
+# swing_enhanced_35 features for legacy 35-dim brains that were trained on
+# the D1-barrier + micro + TF schema before the v9_institutional_40 migration.
+
+# CSV paths for XAU swing_enhanced_35 daily feature computation
+_XAU_D1_CSV = PROJECT_ROOT / "data" / "raw" / "xauusdc_d1_merged.csv"
+_XAU_H4_CSV = PROJECT_ROOT / "data" / "raw" / "xauusdc_h4_merged.csv"
+_XAU_CROSS_CSVS = {
+    "XAGUSDc": PROJECT_ROOT / "data" / "raw" / "xagusdc_d1_merged.csv",
+    "EURUSDc": PROJECT_ROOT / "data" / "raw" / "eurusdc_d1_merged.csv",
+}
+
+
+def _resolve_swing35_feature_vector(
+    micro_feature_vector: np.ndarray,
+    v9_40_vector: np.ndarray,
+    feature_store_dir: Path | str | None = None,
+    symbol: str = "XAUUSDc",
+) -> tuple[np.ndarray, str]:
+    """Compute swing_enhanced_35 feature vector (24 daily + 9 micro + 2 TF).
+
+    Uses DailyFeatureComputer for the 24 D1-barrier features (from CSV),
+    the existing micro feature vector for 9 microstructure features, and
+    extracts M5 OU Theta + M5 Hurst from the v9 40-dim vector for TF features.
+
+    Returns (vector, source) where source is "csv+daily" or "stub".
+    """
+    store_dir = Path(feature_store_dir) if feature_store_dir else None
+
+    # ── D1-barrier 24 features via DailyFeatureComputer ──
+    daily_features: list[float] = []
+    if _XAU_D1_CSV.exists() and _XAU_H4_CSV.exists():
+        try:
+            from core.features.computers.daily_computer import DailyFeatureComputer
+
+            cross_assets = {
+                name: str(p)
+                for name, p in _XAU_CROSS_CSVS.items()
+                if p.exists()
+            }
+            comp = DailyFeatureComputer(
+                d1_csv=str(_XAU_D1_CSV),
+                h4_csv=str(_XAU_H4_CSV),
+                cross_assets=cross_assets if cross_assets else None,
+            )
+            # Get the latest (most recent) row
+            features_arr, _ = comp.compute_all()
+            if len(features_arr) > 0:
+                daily_features = [float(v) for v in features_arr[-1]]
+        except Exception:
+            with fail_open_guard("live_shadow_ensemble:_resolve_swing35_daily"):
+                pass
+
+    if len(daily_features) != 24:
+        # fallback: zero out D1-barrier portion
+        daily_features = [0.0] * 24
+
+    # ── Micro 9 features from existing micro vector ──
+    if micro_feature_vector is not None and len(micro_feature_vector) == 9:
+        micro_features = [float(v) for v in micro_feature_vector]
+        micro_source = "store"
+    else:
+        micro_features = [0.0] * 9
+        micro_source = "stub"
+
+    # ── TF-specific 2 features from v9 40-dim vector ──
+    # The 40-dim vector has: ... M5_OU_Theta (idx 34), M5_Hurst (idx 38)
+    # Slicing by position is fragile; extract by known index.
+    tf_ou = 0.0
+    tf_hurst = 0.5
+    if v9_40_vector is not None and len(v9_40_vector) >= 40:
+        try:
+            # M5_OU_Theta is at position 34, M5_Hurst at 38
+            tf_ou = float(v9_40_vector[34])
+            tf_hurst = float(v9_40_vector[38])
+        except (IndexError, TypeError, ValueError):
+            pass
+
+    # ── Assemble: 24 DAILY + 9 MICRO + 2 TF = 35 ──
+    vec = np.array(daily_features + micro_features + [tf_ou, tf_hurst], dtype=np.float64)
+    source = f"csv+daily,micro={micro_source},tf=v9_40"
+
+    # Zero-vector guard
+    if np.max(np.abs(vec)) < 1e-10:
+        return vec, "stub:all_zero"
+
+    return vec, source
+
+
 def _resolve_micro_feature_vector(
     feature_store_dir: Path | str | None = None,
     symbol: str = "XAUUSDc",
@@ -275,6 +393,14 @@ def build_report(
         symbol=symbol,
     )
 
+    # DQAF-046: Dual-track — compute swing_enhanced_35 for legacy 35-dim brains
+    swing35_feature_vector, swing35_source = _resolve_swing35_feature_vector(
+        micro_feature_vector=micro_feature_vector,
+        v9_40_vector=feature_vector,
+        feature_store_dir=feature_store_dir,
+        symbol=symbol,
+    )
+
     # Build adapters
     adapters: dict[str, Any] = {}
     load_errors: list[dict[str, Any]] = []
@@ -295,13 +421,17 @@ def build_report(
         with ThreadPoolExecutor(max_workers=min(len(adapters), 4)) as executor:
             futures = {}
             for bid, (adapter, btype, schema_id) in adapters.items():
-                fv = micro_feature_vector if "microstructure" in schema_id else feature_vector
+                fv = _route_feature_vector(
+                    schema_id, feature_vector, micro_feature_vector, swing35_feature_vector
+                )
                 futures[executor.submit(_run_single_brain, adapter, bid, fv, btype)] = bid
             for future in as_completed(futures):
                 results.append(future.result())
     else:
         for bid, (adapter, btype, schema_id) in adapters.items():
-            fv = micro_feature_vector if "microstructure" in schema_id else feature_vector
+            fv = _route_feature_vector(
+                schema_id, feature_vector, micro_feature_vector, swing35_feature_vector
+            )
             results.append(_run_single_brain(adapter, bid, fv, btype))
 
     # Add load errors
@@ -317,6 +447,8 @@ def build_report(
         "brains_dir": str(brains),
         "feature_dim": feature_dim,
         "feature_source": feature_source,
+        "micro_source": micro_source,
+        "swing35_source": swing35_source,
         "total_brains": len(entries),
         "parallel": parallel and len(adapters) > 1,
         "comparison": comparison,

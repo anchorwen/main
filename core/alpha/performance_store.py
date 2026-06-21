@@ -169,13 +169,13 @@ class AlphaPerformanceStore:
     # ── persistence ──
 
     def save(self, path: str | Path) -> Path:
-        out = Path(path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(
-            json.dumps(self.to_dict(), indent=2, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
-        return out
+        # DQAF-046 Plan B: route through StateWriter gate.
+        from core.state.catalog import lookup
+        from core.state.writer import StateWriter
+
+        writer = StateWriter.from_state_path(path)
+        writer.write_artifact(lookup("ALPHA_PERFORMANCE"), writer._symbol, self.to_dict())
+        return Path(path)
 
     @classmethod
     def load(cls, path: str | Path) -> "AlphaPerformanceStore":
