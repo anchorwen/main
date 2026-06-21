@@ -33,25 +33,107 @@ from core.runtime.fault_handler import fail_open_guard
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# On Windows, subprocess defaults to the system ANSI code-page (e.g. GBK).
+# Ruff / mypy output may contain Unicode characters that the ANSI code-page
+# cannot represent, causing UnicodeDecodeError in the reader thread.
+# Use UTF-8 everywhere — this hook mirrors CI, and CI runs with PYTHONUTF8=1.
+_SUBPROCESS_KWARGS: dict = {"encoding": "utf-8", "errors": "replace"}
+
+
 # ---------------------------------------------------------------------------
 # Check 1: Ruff full-codebase lint (mirrors CI)
 # ---------------------------------------------------------------------------
-def check_ruff() -> bool:
-    """Run ruff check on core/ apps/ scripts/ — same as CI."""
-    print("\n" + "=" * 60)
-    print("[pre-push] Ruff check (core/ apps/ scripts/)")
-    print("=" * 60)
+def _git_tracked_py_files() -> list[str] | None:
+    """Return list of git-tracked .py files under core/ apps/ scripts/.
 
-    result = subprocess.run(
-        [
-            sys.executable, "-m", "ruff", "check",
-            "core/", "apps/", "scripts/",
-        ],
+    Returns None if git ls-files fails (e.g. not a git repo).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--", "core/", "apps/", "scripts/"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            return None
+        raw = result.stdout.replace(b"\r\n", b"\n")  # normalize CRLF on Windows
+        files = [f.decode("utf-8") for f in raw.split(b"\0") if f.endswith(b".py")]
+        return files or None
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def _run_ruff_on_paths(paths: list[str]) -> subprocess.CompletedProcess:
+    """Run ruff on a list of file paths, respecting Windows cmdline limits."""
+    return subprocess.run(
+        [sys.executable, "-m", "ruff", "check", *paths],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         timeout=120,
+        **_SUBPROCESS_KWARGS,
     )
+
+
+def check_ruff() -> bool:
+    """Run ruff check on git-tracked Python files — same surface as CI.
+
+    CI runs on a clean checkout (only tracked files exist), so we mirror
+    that by running ruff only against ``git ls-files`` output.  Untracked
+    ad-hoc scripts are skipped — they don't land on CI and must not block
+    the pre-push gate.
+    """
+    tracked = _git_tracked_py_files()
+
+    if tracked is None:
+        # Fallback: git ls-files failed — run on directories like CI does
+        print("\n" + "=" * 60)
+        print("[pre-push] Ruff check (core/ apps/ scripts/ — directory fallback)")
+        print("=" * 60)
+        result = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", "core/", "apps/", "scripts/"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            timeout=120,
+            **_SUBPROCESS_KWARGS,
+        )
+    else:
+        print(f"\n{'='*60}")
+        print(
+            f"[pre-push] Ruff check ({len(tracked)} git-tracked .py files in core/ apps/ scripts/)"
+        )
+        print("=" * 60)
+        if not tracked:
+            print("[pre-push] Ruff: SKIPPED (no tracked .py files)")
+            return True
+
+        # Batch to fit within Windows ~32K cmdline limit
+        BATCH_SIZE = 400
+        all_stdout: list[str] = []
+        all_stderr: list[str] = []
+        failed = False
+
+        for i in range(0, len(tracked), BATCH_SIZE):
+            batch = tracked[i : i + BATCH_SIZE]
+            # ruff-check each batch; aggregate output on failure
+            result = _run_ruff_on_paths(batch)
+            if result.returncode != 0:
+                failed = True
+                if result.stdout:
+                    all_stdout.append(result.stdout)
+                if result.stderr:
+                    all_stderr.append(result.stderr)
+
+        if not failed:
+            print("[pre-push] Ruff: PASSED")
+            return True
+
+        print("[pre-push] Ruff: FAILED")
+        for out in all_stdout:
+            print(out)
+        for err in all_stderr:
+            print(err)
+        return False
 
     if result.returncode == 0:
         print("[pre-push] Ruff: PASSED")
@@ -77,8 +159,8 @@ def check_mypy() -> bool:
         [sys.executable, "scripts/pre_commit_mypy.py"],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         timeout=120,
+        **_SUBPROCESS_KWARGS,
     )
 
     if result.returncode == 0:
@@ -106,33 +188,43 @@ def check_omega() -> bool:
         result = subprocess.run(
             ["git", "log", "--format=%B", "@{u}..HEAD"],
             cwd=REPO_ROOT,
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            timeout=30,
+            **_SUBPROCESS_KWARGS,
         )
-        if result.returncode != 0 or not (result.stdout or "").strip():
-            # Fallback: check only the latest commit
+        if result.returncode != 0:
+            # No upstream configured — check only the latest commit
             result = subprocess.run(
                 ["git", "log", "--format=%B", "-1", "HEAD"],
                 cwd=REPO_ROOT,
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                timeout=10,
+                **_SUBPROCESS_KWARGS,
             )
 
-        all_commits = result.stdout or ""
-        if not all_commits.strip():
-            print("[pre-push] Omega: no commits to check — SKIPPED")
+        all_commits = (result.stdout or "").strip()
+        if not all_commits:
+            # No un-pushed commits — nothing to verify
+            print("[pre-push] Omega: no unpushed commits — SKIPPED")
             return True
 
         # Check each commit for omega signature (split by commit delimiter or use whole)
         raw = all_commits.strip()
-        commits = [raw] if "\n\n-- \n" not in raw else [
-            c.strip() for c in raw.split("\n\n-- \n") if c.strip()
-        ]
+        commits = (
+            [raw]
+            if "\n\n-- \n" not in raw
+            else [c.strip() for c in raw.split("\n\n-- \n") if c.strip()]
+        )
         missing = 0
         for i, commit in enumerate(commits):
             first_line = commit.strip().split("\n")[0] if commit else ""
-            has_sig = bool(re.search(
-                r"\[[OΩ].*Routing:\s*Scene\s+[A-G]",
-                commit, re.IGNORECASE,
-            ))
+            has_sig = bool(
+                re.search(
+                    r"\[[OΩ].*Routing:\s*Scene\s+[A-G]",
+                    commit,
+                    re.IGNORECASE,
+                )
+            )
             if not has_sig:
                 print(f"[pre-push] Commit {i+1} missing Ω signature: {first_line[:80]}")
                 missing += 1
@@ -148,10 +240,12 @@ def check_omega() -> bool:
     except subprocess.TimeoutExpired:
         print("[pre-push] Omega: TIMEOUT (>30s)")
         return False
-    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("hook_pre_push:check_omega"):
             print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
             return False
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -173,7 +267,7 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             print(f"[pre-push] {name}: TIMEOUT (>120s)")
             failures.append(name)
-        except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+        except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
             with fail_open_guard("hook_pre_push:main"):
                 print(f"[pre-push] {name}: INTERNAL ERROR — {exc}")
                 failures.append(name)

@@ -52,9 +52,11 @@ def _run_git(args: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
     except subprocess.TimeoutExpired:
         # Return a dummy result with non-zero rc
         return subprocess.CompletedProcess(args, -1, stdout="", stderr="timeout")
-    except Exception:  # BLE001:FOG
+    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("check_blueprint_compliance:_run_git"):
             return subprocess.CompletedProcess(args, -1, stdout="", stderr="error")
+
+
 # ── Module → source directory/file mapping ──
 # Each value is a list of directory prefixes or specific file paths.
 # Directories end with "/" and match any file under that tree.
@@ -280,7 +282,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/ble001_phase3c_fog_wrap.py",
         "scripts/ble001_phase3b_migrate_hotpath.py",
     ],
-    "runtime_state": ["core/state/"],
+    "runtime_state": ["core/state/", "scripts/hook_pre_push.py"],
     "training": [
         "core/training/",
         "core/backtest/strategy_adapter.py",
@@ -378,7 +380,7 @@ def classify_diff(file_path: str, *, cached_only: bool = False) -> str:
         )
         if result.returncode != 0:
             return "substantive"
-    except Exception:  # BLE001:FOG
+    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("check_blueprint_compliance:classify_diff"):
             return "substantive"
     diff_lines = result.stdout.split("\n")
@@ -538,7 +540,7 @@ def stamp_module(module: str) -> int:
 
                     h = hashlib.sha256(Path(f).read_bytes()).hexdigest()[:16]
                     file_hashes[rel] = h
-                except Exception:  # BLE001:FOG
+                except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                     with fail_open_guard("check_blueprint_compliance:stamp_module"):
                         pass
         else:
