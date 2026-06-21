@@ -706,6 +706,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260621-036 | 2026-06-21 | contracts, runtime, execution-orders | **DQAF-033 P1: position_identifier 注入两路径对账主键。** PositionClosed 新增 position_identifier 字段，PCA 从 MT5 deal.position_id 捕获，bridge worker detail + journal record 同步注入。0 行路由/资金逻辑变更。 | RC-08 |
 | FIX-20260621-037 | 2026-06-21 | execution, runtime, contracts | **DQAF-034 HOTFIX: STATE_INITIALIZATION_DEADLOCK 三刀斩断。** V3 恢复 sync_position_from_mt5() 从 MT5 直读 SL + snapshot 守卫 force_init 替代 SKIP + fallback_unmanaged 兜底空白策略。Δ PnL 挽回潜力 +282R。 | RC-08, RC-09 |
 | FIX-20260621-038 | 2026-06-21 | execution | **DQAF-034 Addendum — V3 strategy 恢复 + entry_price 不可变锁。** (追加刀#1) V3 save/restore 补全 strategy_name 等 4 字段 — 仓位不再丢失策略归属。(追加刀#2) ActivePosition.entry_price 加装 __setattr__ 不可变锁 — 开仓价是全部风险计量原点，变异=保本/移动止损基准错乱。live_intent V3 恢复改用 _recover_entry_price()。 | RC-06, RC-02 |
+| FIX-20260621-039 | 2026-06-21 | execution, runtime | **DQAF-034 L3 Architecture Convergence — 消除 per-cycle SL sync 冗余。** live_intent_loop recovery 已无条件同步 SL(L1164-1166)，management_phase per-cycle sync_position_from_mt5() 是永不触发的死代码安全网。替换为 CRITICAL 告警 — recovery 失败必须可见，不得静默掩盖。sync_position_from_mt5() 保留为实用方法(非热路径)。 | RC-08 (incomplete-cleanup — dead safety net masking recovery failures) |
 
 ---
 ## Fix Details by Year
@@ -3761,3 +3762,30 @@ FIX-YYYYMMDD-NNN
 - **Prevention**: (1) entry_price 后构建写入物理阻断 — 任何直接赋值 `pos.entry_price = X` 触发 AttributeError; (2) V3 恢复仓位完整继承策略归属 — fallback_unmanaged 仅对新注册仓位生效, V3 恢复仓位从序列化状态直接获得 strategy; (3) strategy_name/supporting_brain_ids/entry_consensus/model_horizons 跨越冷启动持久化
 - **ReB Pattern**: `SERIALIZATION_ATTRIBUTION_GAP` — 序列化格式与内存模型字段不对称导致冷启动后策略标识丢失; `MUTABLE_RISK_ORIGIN` — 可变风险基准 (entry_price) 缺少物理级写入保护
 - **Dependents Checked**: `management_phase.py` (reads `pos.entry_price` and `pos.strategy_name` — no change), `trail_dispatch.py` (reads `pos.entry_price` — no change), `position_registration.py` (constructs new ActivePosition — `_frozen` guards post-init, unaffected), `trail_stop_engine.py` (reads `pos.entry_price`/`pos.highest_high` — no change)
+
+### FIX-20260621-039
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: DQAF-20260621-034 L3 Architecture Convergence)
+- **Type**: refactor (Architecture Convergence — 消除冗余安全网, 使 recovery 失败可见)
+- **Module**: execution, runtime
+- **Files**:
+  - `core/runtime/management_phase.py` (removed: per-cycle `sync_position_from_mt5()` call; added: `critical_sl_uninitialized` CRITICAL alert when position enters management with SL≤0)
+  - `core/execution/position_manager.py` (docstring update: `sync_position_from_mt5()` marked as utility method, no longer hot-path)
+- **Summary**: **DQAF-034 L3 Architecture Convergence — 消除 per-cycle SL sync 冗余.**
+
+  **架构债诊断**: FIX-037 刀#1 (`sync_position_from_mt5()` per-cycle) 是 L2 止血补丁。它正确地阻断了 SL=0 死锁，但冗余于 `live_intent_loop.py` recovery (L1164-1166) 的无条件 SL 同步。Recovery 之后到 management_phase 之间，没有任何代码路径将 `current_sl` 重新置零 → per-cycle sync 是永不触发的死代码安全网。
+
+  **L3 架构级收敛**:
+  1. **移除冗余**: 删除 management_phase 中的 per-cycle `sync_position_from_mt5()` 调用 — 消除每个仓位每个周期一次的无意义 MT5 IPC
+  2. **显式告警**: `current_sl <= 0` 现在是 CRITICAL 异常 — recovery 应该已保证 SL 有效。如果出现 = recovery 失败 → 必须可见, 不得静默掩盖
+  3. **安全网保留**: `sync_position_from_mt5()` 方法保留为实用工具（调试/恢复脚本），`trail_dispatch` force_init_snapshot 继续保护极端边缘情况
+
+  **架构意义**:
+  - Recovery 职责完整收敛到 `live_intent_loop.py`（一次性恢复）→ management_phase 只做管理（不复原）
+  - 死代码安全网移除 → 不再掩盖 recovery 失败 → 系统自诊断能力提升
+  - MT5 IPC 减少: 每个仓位每周期省 1 次 `positions_get` 调用
+
+- **Root Cause**: RC-08 (incomplete-cleanup — FIX-037 热补丁遗留的冗余安全网, 本应在 recovery 路径修复后退役)
+- **Prevention**: (1) recovery 失败现在触发 CRITICAL 告警而非静默修补; (2) 热补丁投入时即标记 Deferred Architecture Fix → 触发条件达成后自动提醒架构收敛
+- **ReB Pattern**: `DEAD_SAFETY_NET_MASKING_RECOVERY_FAILURE` — 冗余安全网掩盖上游恢复失败, 使系统在降级状态静默运行
+- **Dependents Checked**: `live_intent_loop.py` (recovery — SL sync already unconditional, no change), `trail_dispatch.py` (force_init_snapshot — continues to protect edge case, no change), `position_registration.py` (fresh positions — current_sl=initial_sl always >0, unaffected)

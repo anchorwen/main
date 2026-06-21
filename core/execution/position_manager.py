@@ -572,17 +572,22 @@ class ActivePositionManager:
             self._primary_ticket = ticket
         return pos
 
-    # ── DQAF-20260621-034: V3 cold-start recovery — sync SL/TP from MT5 ──
+    # ── DQAF-20260621-034 L3 Architecture Fix: utility, not hot-path ──
+    # live_intent_loop.py recovery (L1164-1166) now unconditionally syncs
+    # current_sl/current_tp from MT5 for ALL restored positions — this
+    # method is no longer called in the management hot path.  Kept as a
+    # utility for recovery scripts and manual debugging.
 
     def sync_position_from_mt5(self, ticket: int, mt5_worker: Any) -> bool:
-        """Sync position SL/TP/side/volume from MT5 after V3 cold-start recovery.
+        """Utility: sync position SL/TP/side/volume from MT5.
 
-        V3 intent-state (``_build_position_v3``) only persists 4 fields + ticket.
-        Physical state (SL, TP, side, volume) must be restored from MT5 gateway
-        before the position enters trail management.
+        Not called in the management hot path — ``live_intent_loop.py``
+        recovery handles the one-time SL sync unconditionally for all
+        restored positions (L1164-1166).
 
-        Called during management phase when ``current_sl <= 0`` is detected,
-        and optionally after ``restore_state()`` if an MT5 connection is available.
+        Useful for recovery scripts, manual debugging, or future cold-start
+        scenarios where a position enters management without going through
+        the standard ``live_intent_loop`` recovery pipeline.
 
         Returns True if sync succeeded (SL now > 0).
         """

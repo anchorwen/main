@@ -646,10 +646,12 @@
   - [Layer 2 — 中间异常 B (FIX-038 追加发现)]: V3 恢复不设 strategy_name → 仓位脱离策略归属 → trail_policy 降级。entry_price 漂移 (64445.31↔64456.0) → 风险原点移动 → 保本/移动止损基准错乱
   - [Layer 3 — 根因]: RC-08 (V3 restore+snapshot guard mutual deadlock) + RC-06 (V3 序列化缺失策略归属字段) + RC-02 (可变 @dataclass entry_price 无保护)
 - **Fix Summary**:
-  - **FIX-037** (三刀): sync_position_from_mt5() + force_init_snapshot + fallback_unmanaged
-  - **FIX-038** (追加两刀): V3 strategy 字段序列化补全 + entry_price 不可变锁 (_recover_entry_price 受控门径)
-- **关联 ReB**: STATE_INITIALIZATION_DEADLOCK, SERIALIZATION_ATTRIBUTION_GAP, MUTABLE_RISK_ORIGIN
-- **关联 FIX**: FIX-20260621-037, FIX-20260621-038
+  - **FIX-037** (三刀热补丁): sync_position_from_mt5() + force_init_snapshot + fallback_unmanaged — 阻断死锁
+  - **FIX-038** (两刀架构修复): V3 strategy 序列化补全 + entry_price 不可变锁 — 消除数据模型缺口
+  - **FIX-039** (L3 架构收敛): 移除冗余 per-cycle sync → CRITICAL 告警替代 — recovery 失败可见
+- **关联 ReB**: STATE_INITIALIZATION_DEADLOCK, SERIALIZATION_ATTRIBUTION_GAP, MUTABLE_RISK_ORIGIN, DEAD_SAFETY_NET_MASKING_RECOVERY_FAILURE
+- **关联 FIX**: FIX-20260621-037, FIX-20260621-038, FIX-20260621-039
+- **状态**: **CLOSED** — 架构债清偿, 全链路收敛于 recovery-once + alert-on-failure
   - H2: `register_position()` 是否同步注册 snapshot listener？→ 检查 `position_manager.py` listener attachment
   - H3: 0-snapshot 仓位是否全部为微生命周期(< 5 bar)？→ 交叉验证 snapshot count vs bars_held
 - **是否被推翻**: 部分 — H1/H2 (竞态) 证伪: snapshot 在 management phase 内部执行, 与 registration 存在 happens-before。真正根因是 **STATE_INITIALIZATION_DEADLOCK**: (A) V3 恢复 `current_sl=0.0` 硬编码 → snapshot 守卫拒绝写入, (B) 31 仓位注册流水线断裂 (空白 strategy)

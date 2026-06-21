@@ -1065,19 +1065,38 @@ def execute_management_phase(
         m5_spread_points=_m5_spread,
     )
 
-    # ── DQAF-20260621-034: V3 cold-start recovery — sync SL from MT5 ──
-    # V3 intent-state sets current_sl=0.0 (physical state not persisted).
-    # Without live MT5 sync, the snapshot guard in trail_dispatch discards
-    # the position → trail never activates → STATE_INITIALIZATION_DEADLOCK.
-    if getattr(pos, "current_sl", 0) <= 0 and mt5_worker is not None:
-        _synced = pm.sync_position_from_mt5(pos.ticket, mt5_worker)
-        if _synced:
-            _emit(
-                "v3_sl_synced_from_mt5",
-                ticket=pos.ticket,
-                current_sl=getattr(pos, "current_sl", 0),
-                side=getattr(pos, "side", "?"),
-            )
+    # ── DQAF-20260621-034 L3 Architecture Fix ──
+    # live_intent_loop.py recovery (L1164-1166) unconditionally syncs
+    # current_sl/current_tp from MT5 for EVERY restored position.  After
+    # recovery, no code path sets current_sl back to ≤0.  Therefore a
+    # position reaching management phase with current_sl ≤ 0 signals a
+    # genuine recovery failure — NOT a condition to silently fix per-cycle.
+    #
+    # The old per-cycle sync_position_from_mt5() call was a dead safety
+    # net: it would only fire if recovery had already failed, and it
+    # masked the failure by silently patching the symptom every cycle.
+    # Replaced with a CRITICAL alert — recovery failures must be VISIBLE.
+    #
+    # Edge case handled downstream: trail_dispatch force_init_snapshot
+    # (FIX-037 blade #2) writes sl_uninitialized=true for SL≤0 positions,
+    # so the position is NOT abandoned even in the anomalous case.
+    if getattr(pos, "current_sl", 0) <= 0:
+        _emit(
+            "critical_sl_uninitialized",
+            ticket=pos.ticket,
+            current_sl=getattr(pos, "current_sl", 0),
+            side=getattr(pos, "side", "?"),
+            cycles_held=getattr(pos, "cycles_held", 0),
+            entry_price=getattr(pos, "entry_price", 0),
+            severity="CRITICAL",
+            detail=(
+                "Position entered management phase with uninitialized SL. "
+                "live_intent_loop recovery should have synced SL from MT5 "
+                "(L1164-1166). Check position_restored_from_state event "
+                "for this ticket — MT5 may have reported sl=0 or recovery "
+                "may have been skipped."
+            ),
+        )
 
     # ── 4-5.2: Trail SL, breakeven, trail TP ──
     # Strangler Fig #11: extracted to core/runtime/trail_dispatch.py
