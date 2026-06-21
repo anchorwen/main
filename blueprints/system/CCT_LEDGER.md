@@ -27,6 +27,27 @@
 
 ---
 
+### CCT-20260621-042
+- **Docket ID**: DQAF-20260621-042
+- **日期**: 2026-06-21
+- **置信度**: confirmed (10 项发现 × 8 项坐实 × 双源交叉验证: journal + state files + code audit)
+- **因果链**:
+  - [Layer 1 — 症状 (视图静默损坏)]: Leaderboard 崩溃 (Sev 1) — `brain_performance` 维度全部为空, `leaderboard.json` 产出空排行榜, `daily_ops` Poison Pill 阻断整个管线。Journal vs Labels 38% 缺口 (Sev 2) — 38% 的交易在 journal 中存在但在 label 导出中缺失。治理含 3140 笔回测数据 (Sev 2) — governance_state.json 被 backtest 时代的 V12_H1 历史数据污染。校准器 p_win 退化至 0.5 (Sev 2), Alpha 数据不一致 (Sev 2), 健康报告自相矛盾 (Sev 2), golden_master 未排序 (Sev 3)。**修复被实盘进程覆盖** (Sev 1 新发现) — 人工修复的 state JSON 被 live 进程在下一 cycle 覆写回损坏版本。
+    - 证据: `data_btc/reports/leaderboard.json` — brains=[]; `data_btc/reports/live_labels.jsonl` — 38% 缺口; `data_btc/governance_state.json` — V12_H1 3140 trades
+  - [Layer 2 — 中间异常 (生成器数据计算残缺 + 鸭子类型无防备)]: (A) `compute_journal_brain_metrics()` 产出缺少 `sharpe_ratio` / `cumulative_pnl` 等关键字段的字典 → `BrainLeaderboard._validate_metrics()` 在缺少字段时未抛异常（使用 `dict.get(key, default)` 贴纸）, 下游静默产出空排行榜。(B) `daily_ops.py` `_step_retraining_check()` 中 `leaderboard.get("total_decisions", 0) == 0 and _gov_states` → `DataIntegrityError` → 管线 Poison Pill 阻断 — 这是正确的 Fail-Closed 行为, 但暴露了上游 generator 数据不完整的事实。(C) governance_state.json 中 `total_trades` 字段包含 backtest 时期的 3140 笔交易 — governance_service 未按 `is_live` 字段过滤历史数据。(D) 人工直接修改 state JSON → live 进程在下一 cycle 从 ledger 重建时覆盖修复 — 两套写入器 (人工 + live 进程) 对同一物化视图的竞态覆写。
+    - 证据: `core/brain_leaderboard.py:_validate_metrics()` — 修复前 `dict.get(key, default)` 贴纸; `scripts/daily_ops.py:_step_retraining_check()` — Poison Pill 触发逻辑; `data_btc/governance_state.json` — V12_H1 is_live=false 但 total_trades=3140
+  - [Layer 3 — 根因 (架构坍塌 — 混淆不可变账本与物化视图)]: **RC-11 (architecture-violation)** — `IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION` 架构模式被系统性违反。系统的物理设计是 Event Sourcing (ledger → generator → view), 但日常运维中人工绕过生成器直接修改物化视图——混淆了 `append-only immutable journal` 与 `regenerated ephemeral view` 两个本体论范畴。这导致: (a) 人工修复与实盘进程的互斥覆写竞态, (b) 修复无法持久 (下一 cycle 被覆盖), (c) 根因从未被触及 (因为 generator code 中的 bug 被"直接修 JSON" 的运维惯性永久掩盖)。同类根因在 DQAF-20260615-011 (退役大脑幽灵霸占排行榜 — 视图未过滤活性)、DQAF-20260615-012 (orphan 合成条目污染告警 — 视图消费者未区分合成/真实) 中反复出现。
+    - 证据: `CLAUDE.md` 2. AGENT BEHAVIORAL RESTRICTIONS — 4 条 RED 禁令显式编码了正确的架构关系; `.gitignore` — 24 条 ephemeral state 模式物理隔离; `tests/test_state_reconstruction.py` — 26 契约测试强制 ledger→view 重建可复现性
+- **证据引用**:
+  - Source 1 (Journal): `data_btc/live_trade_journal.jsonl` — 385+ 条记录, 38% label 缺口
+  - Source 2 (State Files): `data_btc/reports/leaderboard.json` — brains=[]; `data_btc/governance_state.json` — 3140 backtest trades; `data_btc/calibrator_feed_state.json` — p_win=0.5
+  - Source 3 (Code Audit): `core/feedback/live_journal_metrics.py`, `core/brains/services/brain_leaderboard.py`, `scripts/daily_ops.py` — 完整 generator 链路追踪
+  - Source 4 (Git History): 5 commits (7d448ae → e8fe77c5) — 四防线全生命周期
+  - Source 5 (Cross-symbol): `data/live_trade_journal.jsonl` — XAU 同架构, 确认非品种特化
+- **是否被推翻**: 否 — AR 反向假设 (单文件损坏, 修复 JSON 即可) 被 10 项发现中 8 项坐实推翻: 问题是架构级而非数据级
+- **关联 ReB Pattern**: ReB-20260621-042 (`IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION`)
+- **关联 FIX**: FIX-20260621-042
+
 ### CCT-20260620-002
 - **Docket ID**: DQAF-20260620-002
 - **日期**: 2026-06-20

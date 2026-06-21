@@ -20,6 +20,24 @@
 
 ---
 
+### ReB-20260621-042
+- **Pattern Signature**: `IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION` (不可变账本与物化视图架构模式)
+- **描述**: 系统物理设计遵循 Event Sourcing 架构——append-only journal (ledger_events.jsonl / live_trade_journal.jsonl / position_snapshots.jsonl / golden_master.jsonl) 是不可变的唯一真理源 (SSOT)；所有 `.json` state 文件 (leaderboard.json / governance_state.json / execution_state.json 等) 是物化视图 (Materialized View)，由 generator code (daily_ops.py / brain_leaderboard.py / live_journal_metrics.py) 从 ledger 动态重建。当运维人员直接修改 state JSON 时，live 进程在下一 cycle 从 ledger 重新生成覆盖修复——人工修复与实盘进程形成互斥覆写竞态。本质是混淆了 "append-only immutable journal" 与 "regenerated ephemeral view" 两个本体论范畴。必须配套 **Poison Pill (DataIntegrityError)** 阻断机制——当 generator 产出损坏投影时，系统 Fail-Closed (停止产出) 而非 Fail-Open (产出坏数据并静默传播至下游)。
+- **关联 FIX IDs**: FIX-20260621-042
+- **关联 Docket IDs**: DQAF-20260621-042
+- **关联 CCT**: CCT-20260621-042
+- **预防策略**:
+  1. **物理隔离**: `.gitignore` 阻挡所有 ephemeral state `.json` 进入版本控制——Git 中只存在不可变账本和生成器代码
+  2. **AI Agent 禁区**: CLAUDE.md 顶部编码 4 条 RED 绝对禁令——NEVER 编辑 state JSON / NEVER git-add state JSON / NEVER dict.get() 贴纸 / ONLY 修 generator code
+  3. **契约测试**: `test_state_reconstruction.py` — Mock journal → 删除所有 state → 运行 generator → 断言精确输出。只有 ledger → view 可复现重建，系统才真正具备自我修复能力
+  4. **Poison Pill 强制 Fail-Closed**: `DataIntegrityError` 在 generator 产出不完整/损坏数据时阻断管线——宁可无输出，不可产出坏数据
+  5. **新 Feedback Loop 注册时**: 必须满足 (a) 写入 append-only journal, (b) generator 从 journal 重建投影, (c) 投影文件在 .gitignore 中, (d) 契约测试覆盖重建路径
+- **检测方法**:
+  1. `git status` — 不应出现 ephemeral state `.json` 文件在 staging area
+  2. `python -m pytest tests/test_state_reconstruction.py -q` — 26/26 通过
+  3. `grep -rn "dict\.get(" core/brains/services/brain_leaderboard.py` — 不应有静默 fallback
+  4. 新增 state 文件路径 → CI 检查 `.gitignore` 中是否存在对应 pattern
+
 ### ReB-20260620-002
 - **Pattern Signature**: `PNL_UNIT_MIXING` (PnL 量纲混合 — USD vs Decimal Percentage)
 - **描述**: `StrategyBudget.record_trade(pnl_pct: float, is_win: bool)` 的 `pnl_pct` 参数期望 decimal fraction (0.005 = 0.5% profit)，但多个调用点传入 raw USD 值 (-5.0 = -500% daily PnL)。`float` 类型在编译期不可区分 USD 与 percentage——量纲契约仅存在于变量名中。三条错误路径 + 一条正确路径表明: 没有类型级保护时，多调用点必然出现量纲漂移。本模式与 DQAF-20260615-011 (pnl_r ↔ pnl_per_unit 量纲混乱) 和 DQAF-20260607-007 (USD vs R-multiple 标签错位) 同属量纲安全缺失的家族缺陷。
