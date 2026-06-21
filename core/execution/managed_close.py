@@ -51,6 +51,30 @@ def dispatch_managed_close(
     from core.execution.reentry_guard import ExitRecord, ensure_reentry_state
     from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
 
+    # ── DQAF-033 P0: reason enforcement ──
+    # Empty reason = blind spot in journal detail.reason.  Default to a
+    # diagnostic label so every close is attributable.
+    if not reason:
+        reason = "managed_close:reason_missing"
+        print(
+            json.dumps(
+                {
+                    "event": "managed_close_reason_missing",
+                    "time": _utc_iso(),
+                    "ticket": getattr(pos, "ticket", 0),
+                    "strategy": strategy_name,
+                    "severity": "WARNING",
+                    "detail": (
+                        "dispatch_managed_close called with empty reason. "
+                        "Journal detail.reason will be 'managed_close:reason_missing'. "
+                        "Fix the caller to pass an explicit ExitReason-aligned string."
+                    ),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
     # Estimate PnL so the journal entry has it (reconciliation corrects it later)
     pnl = None
     entry_price = getattr(pos, "entry_price", None)

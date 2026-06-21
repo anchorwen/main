@@ -1023,6 +1023,24 @@ def execute_management_phase(
     # ── 1c. Alert evaluation (FIX-20260529-040) ──
     _build_and_dispatch_alert_context(config, state, pos, pm, pnl_ledger)
 
+    # ── DQAF-033 P2b: ExitWatchdog liveness probe ──
+    # FIX-20260621-040: Periodic heartbeat confirms the management-phase code
+    # path is alive.  If this log disappears from the event stream, the thread
+    # or coroutine is hung (silent exception / event-loop stall / dead lock).
+    _wd = getattr(state, "exit_watchdog", None)
+    if pos.cycles_held % 10 == 0 or pos.cycles_held <= 3:
+        _wd_status = "available" if _wd is not None else "MISSING"
+        _emit("watchdog_heartbeat",
+            ticket=pos.ticket,
+            cycles_held=pos.cycles_held,
+            watchdog_status=_wd_status,
+            side=getattr(pos, "side", "?"),
+            entry_price=getattr(pos, "entry_price", 0),
+            current_sl=getattr(pos, "current_sl", 0),
+            unrealized_r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 3)
+                          if mid is not None else 0.0,
+            status="management_phase_active")
+
 
     # ── 2. Update regime detector ──
     regime_info: dict[str, Any] = {}
@@ -1380,6 +1398,10 @@ def execute_management_phase(
                 current_supporting=_meta_sup,
                 ticket=pos.ticket,
             )
+            # ── DQAF-033 P2a: MetaExit liveness probe ──
+            # FIX-20260621-040: periodic heartbeat confirms the code path is alive
+            # and reveals score vs threshold relationship in production.
+            _meta_threshold = getattr(pm.meta_exit_engine, "threshold", "N/A")
             if evaluation is not None:
                 # ── FIX-20260608-XXX: MetaExit demoted to TELEMETRY ONLY ──
                 # The MetaExit ML model (data/models/meta_exit_model.txt) was
@@ -1393,7 +1415,21 @@ def execute_management_phase(
                 # dispatch a close.  Layer 1 (Trail SL) + Layer 2 (Brain Flip)
                 # handle exits.  TODO: re-enable when >=500 XAU trades with
                 # ExitFeatureSnapshot-level features are available for retraining.
-                _emit("meta_exit_shadow_telemetry", ticket=pos.ticket, exit_urgency=round(evaluation.exit_urgency, 3), p_win=evaluation.p_win, exit_reason=evaluation.exit_reason, factor_breakdown=evaluation.factor_breakdown, action="BLOCKED — telemetry only, close NOT dispatched")
+                _emit("meta_exit_shadow_telemetry",
+                    ticket=pos.ticket,
+                    exit_urgency=round(evaluation.exit_urgency, 3),
+                    threshold=_meta_threshold,
+                    p_win=evaluation.p_win,
+                    exit_reason=evaluation.exit_reason,
+                    factor_breakdown=evaluation.factor_breakdown,
+                    action="BLOCKED — telemetry only, close NOT dispatched")
+            elif pos.cycles_held % 20 == 0:
+                # Periodic heartbeat: MetaExit alive, assessed, no trigger
+                _emit("meta_exit_heartbeat",
+                    ticket=pos.ticket,
+                    cycles_held=pos.cycles_held,
+                    threshold=_meta_threshold,
+                    status="NO_TRIGGER — MetaExit engine alive, no exit signal")
 
         except Exception as exc:  # BLE001:FOG
             with fail_open_guard("management_phase:_ptp_dispatch_fn"):
