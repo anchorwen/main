@@ -55,6 +55,24 @@ class AlphaPerformanceStore:
         self._snapshots[alpha_id].sort(key=lambda item: item.captured_at)
         return snapshot
 
+    # ── DQAF-20260622-053: sanitization APIs ──
+
+    def remove_alpha(self, alpha_id: str) -> bool:
+        """Remove all snapshots for *alpha_id*.  Returns ``True`` if removed.
+
+        Idempotent — safe to call with an unknown *alpha_id*.
+        """
+        if alpha_id in self._snapshots:
+            del self._snapshots[alpha_id]
+            return True
+        return False
+
+    def list_ids(self) -> list[str]:
+        """Return every *alpha_id* that has at least one recorded snapshot."""
+        return sorted(self._snapshots.keys())
+
+    # ── query ──
+
     def history(self, alpha_id: str) -> list[AlphaPerformanceSnapshot]:
         return list(self._snapshots.get(alpha_id, []))
 

@@ -372,8 +372,10 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     except Exception as e:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_calibrator_feed"):
             return {"step": "calibrator_feed", "status": "error", "error": f"init: {e}"}
-    # Pass 1: build p_win lookup from accepted entries
+    # Pass 1: build p_win lookup + cold_explore blacklist from accepted entries
     p_win_by_msg_id: dict[str, float] = {}
+    cold_explore_msg_ids: set[str] = set()  # DQAF-053: defense-in-depth
+    skipped_cold_explore: int = 0
     for line in new_lines:
         try:
             entry = json.loads(line)
@@ -382,10 +384,20 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 continue
         if entry.get("ack_status") != "accepted":
             continue
+
+        # ── DQAF-053: detect cold_explore by p_win_source marker ──
+        pws = entry.get("p_win_source", "")
+        if not pws:
+            ctx = entry.get("entry_context", {})
+            if isinstance(ctx, dict):
+                pws = ctx.get("p_win_source", "")
+        mid = entry.get("message_id")
+        if pws == "cold_explore_neutral" and mid:
+            cold_explore_msg_ids.add(mid)
+
         pw = entry.get("p_win")
         if pw is None:
             continue
-        mid = entry.get("message_id")
         if mid:
             p_win_by_msg_id[mid] = float(pw)
 
@@ -410,6 +422,21 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             if open_mid:
                 p_win = p_win_by_msg_id.get(open_mid)
         if p_win is None:
+            continue
+
+        # ── DQAF-053: defense-in-depth — skip cold_explore p_win ──
+        # Cold-explore entries have p_win forced to 0.50 regardless of
+        # actual signal quality.  Feeding them into the ConformalCalibrator
+        # biases the Q10 threshold toward 0.50, degrading gate accuracy.
+        # Check both the closed entry's own p_win_source AND the JOIN-linked
+        # open entry's p_win_source to catch both serialisation paths.
+        _pws_closed = entry.get("p_win_source", "")
+        if _pws_closed == "cold_explore_neutral":
+            skipped_cold_explore += 1
+            continue
+        _open_mid = entry.get("open_message_id")
+        if _open_mid and _open_mid in cold_explore_msg_ids:
+            skipped_cold_explore += 1
             continue
 
         label = None
@@ -469,6 +496,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         "total_samples": diag.get("sample_count", 0),
         "is_warm": diag.get("is_warm", False),
         "threshold": diag.get("current_threshold"),
+        "skipped_cold_explore": skipped_cold_explore,  # DQAF-053
     }
 
 
@@ -1352,6 +1380,9 @@ def _infer_strategy_class(brain_id: str) -> str:
         return "online"
     if "microstructure" in bid_lower:
         return "microstructure"
+    # DQAF-053: substring fallback for prefixed ids like btc_swing, xau_swing
+    if "swing" in bid_lower:
+        return "swing"
     return "unknown"
 
 

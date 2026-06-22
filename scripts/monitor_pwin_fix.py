@@ -11,11 +11,17 @@ After restart, run this to verify:
 
 import argparse
 import contextlib
+import io
 import json
 import sys
 import time
 from collections import Counter
 from pathlib import Path
+
+# DQAF-053: harden stdout against UnicodeEncodeError on Windows GBK terminals
+if sys.platform == "win32":
+    with contextlib.suppress(Exception):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 
 def load_journal(data_dir: str) -> list[dict]:
@@ -62,26 +68,32 @@ def analyze(entries: list[dict], since_ts: str | None = None):
     print(f"{'='*60}\n")
 
     # Tier 2 check: any non-cold_explore p_win?
-    non_cold = [e for e in opens if e.get("p_win_source") not in ("cold_explore_neutral", "MISSING", None)]
+    non_cold = [
+        e for e in opens if e.get("p_win_source") not in ("cold_explore_neutral", "MISSING", None)
+    ]
     if non_cold:
-        print(f"✅ Tier 2 PASS: {len(non_cold)} opens with non-cold_explore p_win_source")
+        print(f"[PASS] Tier 2 PASS: {len(non_cold)} opens with non-cold_explore p_win_source")
         for e in non_cold[-3:]:
-            print(f"   {e['recorded_at'][:19]} p_win={e.get('p_win'):.3f} source={e.get('p_win_source')}")
+            print(
+                f"   {e['recorded_at'][:19]} p_win={e.get('p_win'):.3f} source={e.get('p_win_source')}"
+            )
     else:
-        print("⏳ Tier 2 PENDING: No non-cold_explore p_win yet (poison flush in progress)")
+        print("[PEND] Tier 2 PENDING: No non-cold_explore p_win yet (poison flush in progress)")
 
     # Tier 3 check: is p_win_source present?
     missing = sources.get("MISSING", 0)
     if missing == 0:
-        print("✅ Tier 3 PASS: All open entries have p_win_source field")
+        print("[PASS] Tier 3 PASS: All open entries have p_win_source field")
     else:
-        print(f"❌ Tier 3 FAIL: {missing}/{total} open entries MISSING p_win_source")
+        print(f"[FAIL] Tier 3 FAIL: {missing}/{total} open entries MISSING p_win_source")
 
     # Poison check
     cold_count = sources.get("cold_explore_neutral", 0)
     if cold_count > 0 and total > 0:
         cold_pct = cold_count / total * 100
-        print(f"🟡 Poison flush: {cold_count}/{total} ({cold_pct:.1f}%) still cold_explore_neutral")
+        print(
+            f"[WARN] Poison flush: {cold_count}/{total} ({cold_pct:.1f}%) still cold_explore_neutral"
+        )
         print("   Expected: 0% after ~50 trades (5-7 days)")
 
     return sources
@@ -107,7 +119,8 @@ def main():
         while True:
             entries = load_journal(args.data_dir)
             opens = [
-                e for e in entries
+                e
+                for e in entries
                 if e.get("action") == "open" and e.get("recorded_at", "") >= since
             ]
             if len(opens) > last_count:
@@ -133,13 +146,17 @@ def main():
             print("\n── Post-fix (new code) ──")
             analyze(post_fix, None)
         else:
-            print("\n⏳ No post-fix opens yet. Waiting for next BTC signal...")
+            print("\n[PEND] No post-fix opens yet. Waiting for next BTC signal...")
             print("   This is normal — BTC averages 2-8 opens/day on M5.")
             last_open = max(all_opens, key=lambda e: e.get("recorded_at", ""))
             print(f"   Last open: {last_open.get('recorded_at','?')[:19]}")
 
         # Also show last 5 modify_sltp to confirm Tier 3 bridge is working
-        modifies = [e for e in entries if e.get("action") == "modify_sltp" and e.get("recorded_at", "") >= since]
+        modifies = [
+            e
+            for e in entries
+            if e.get("action") == "modify_sltp" and e.get("recorded_at", "") >= since
+        ]
         if modifies:
             print("\n── Tier 3 bridge confirmation (modify_sltp since restart) ──")
             for e in modifies[-3:]:

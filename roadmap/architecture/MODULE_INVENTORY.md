@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T02:18:47Z
-> **扫描模块数**: 648
+> **自动生成**: 2026-06-22T02:55:15Z
+> **扫描模块数**: 649
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -41,7 +41,7 @@
 | `contracts.py` | ✅ active | AlphaLifecycleState, AlphaRecord, AlphaTransitionRecord | 4 | 83 | — | |
 | `lifecycle_service.py` | ✅ active | AlphaLifecycleService | 10 | 108 | — | |
 | `ou_optimizer.py` | ✅ active | KalmanHalfLifeFilter | 12 | 535 | — | |
-| `performance_store.py` | ✅ active | AlphaPerformanceSnapshot, AlphaPerformanceStore | 14 | 212 | — | |
+| `performance_store.py` | ✅ active | AlphaPerformanceSnapshot, AlphaPerformanceStore | 16 | 230 | — | |
 | `portfolio_allocator.py` | ✅ active | AlphaAllocationPolicy, AlphaAllocationRecommendation, AlphaPortfolioAllocator | 8 | 195 | — | |
 | `promotion_gate.py` | ✅ active | AlphaPromotionPolicy, AlphaPromotionDecision, AlphaPromotionGate | 16 | 261 | — | |
 | `registry.py` | ✅ active | AlphaRegistry | 10 | 89 | — | |
@@ -215,7 +215,7 @@
 | `brain_gates.py` | ✅ active | — | 3 | 92 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 468 | — | |
-| `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 10 | 420 | — | |
+| `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 11 | 437 | — | |
 | `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 828 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
@@ -646,7 +646,7 @@
 | `audit_phase_c_fix5.py` | ✅ active | — | 7 | 328 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
-| `audit_state_of_system.py` | ✅ active | — | 5 | 347 | — | |
+| `audit_state_of_system.py` | ✅ active | — | 5 | 319 | — | |
 | `audit_trade_quality.py` | ✅ active | — | 5 | 275 | — | |
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
@@ -664,7 +664,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 623 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 624 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -676,12 +676,12 @@
 | `clean_ledger_bloat.py` | ✅ active | — | 2 | 195 | — | |
 | `cleanup_claude_transcripts.py` | ✅ active | — | 2 | 100 | — | |
 | `commander_g2_metafilter_path.py` | ✅ active | — | 3 | 258 | — | |
-| `commander_g3_alpha_vacuum.py` | ✅ active | — | 4 | 153 | — | |
-| `commander_g4_g6_g7_coverage_xau.py` | ✅ active | — | 5 | 226 | — | |
-| `commander_guardrails_arch.py` | ✅ active | — | 7 | 314 | — | |
+| `commander_g3_alpha_vacuum.py` | ✅ active | — | 4 | 159 | — | |
+| `commander_g4_g6_g7_coverage_xau.py` | ✅ active | — | 5 | 218 | — | |
+| `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 32 | 2226 | — | |
+| `daily_ops.py` | ✅ active | — | 32 | 2257 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |
@@ -691,6 +691,7 @@
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
+| `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 567 | — | |
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
@@ -720,7 +721,7 @@
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
 | `monitor_feature_drift.py` | ✅ active | — | 4 | 287 | — | |
-| `monitor_pwin_fix.py` | ✅ active | — | 3 | 163 | — | |
+| `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
 | `mt5_bridge_worker.py` | ✅ active | — | 33 | 1806 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |

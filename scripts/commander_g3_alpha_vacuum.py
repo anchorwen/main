@@ -42,16 +42,22 @@ def check_alpha_pipeline(label: str, data_dir: Path) -> dict[str, Any]:
     result: dict[str, Any] = {"label": label}
 
     # A. alpha_allocation.json
-    alpha_path = data_dir / "alpha_allocation.json"
+    # DQAF-053: alpha_allocation.json lives in reports/ subdirectory
+    alpha_path = data_dir / "reports" / "alpha_allocation.json"
+    if not alpha_path.exists():
+        alpha_path = data_dir / "alpha_allocation.json"  # legacy fallback
     if alpha_path.exists():
         alpha = load_json(alpha_path)
         result["alpha_state_exists"] = True
         allocations = alpha.get("allocations", alpha.get("brain_allocations", {}))
         result["registered_brains"] = len(allocations) if isinstance(allocations, dict) else 0
-        result["brain_list"] = list(allocations.keys())[:20] if isinstance(allocations, dict) else []
+        result["brain_list"] = (
+            list(allocations.keys())[:20] if isinstance(allocations, dict) else []
+        )
         result["total_alpha"] = (
             sum(a.get("weight", 0) for a in allocations.values())
-            if isinstance(allocations, dict) else 0
+            if isinstance(allocations, dict)
+            else 0
         )
     else:
         result["alpha_state_exists"] = False
@@ -82,7 +88,10 @@ def check_alpha_pipeline(label: str, data_dir: Path) -> dict[str, Any]:
     result["both"] = sorted(alpha_brains & journal_brains)
 
     # D. Check execution_state for alpha feed wiring
-    exec_path = data_dir / "execution_state.json"
+    # DQAF-053: execution_state.json may live in reports/ subdirectory
+    exec_path = data_dir / "reports" / "execution_state.json"
+    if not exec_path.exists():
+        exec_path = data_dir / "execution_state.json"  # legacy fallback
     if exec_path.exists():
         es = load_json(exec_path)
         result["exec_state_exists"] = True

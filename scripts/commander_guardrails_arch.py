@@ -51,7 +51,10 @@ def compare_leaderboards() -> dict[str, Any]:
     """Compare BTC vs XAU leaderboards."""
     result: dict[str, Any] = {}
     for label, data_dir in [("BTC", Path("data_btc")), ("XAU", Path("data"))]:
-        lb_path = data_dir / "leaderboard.json"
+        # DQAF-053: leaderboard.json lives in reports/ subdirectory
+        lb_path = data_dir / "reports" / "leaderboard.json"
+        if not lb_path.exists():
+            lb_path = data_dir / "leaderboard.json"  # legacy location fallback
         if lb_path.exists():
             lb = load_json(lb_path)
             brains = lb.get("brains", lb.get("entries", []))
@@ -141,7 +144,10 @@ def check_registry_reflection() -> dict[str, Any]:
     for data_dir_name in ["data_btc", "data"]:
         data_dir = Path(data_dir_name)
         for state_file in ephemeral_states:
-            path = data_dir / state_file
+            # DQAF-053: check reports/ subdirectory first, then legacy root
+            path = data_dir / "reports" / state_file
+            if not path.exists():
+                path = data_dir / state_file
             key = f"{data_dir_name}/{state_file}"
             if path.exists():
                 gen = generators.get(state_file, "UNKNOWN")
@@ -179,7 +185,10 @@ def validate_state_schemas() -> dict[str, Any]:
     for data_dir_name in ["data_btc", "data"]:
         data_dir = Path(data_dir_name)
         for state_file, required in required_fields.items():
-            path = data_dir / state_file
+            # DQAF-053: check reports/ subdirectory first, then legacy root
+            path = data_dir / "reports" / state_file
+            if not path.exists():
+                path = data_dir / state_file
             key = f"{data_dir_name}/{state_file}"
             if not path.exists():
                 result[key] = {"valid": False, "error": "FILE_MISSING"}

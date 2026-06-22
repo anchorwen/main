@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-22T02:18:47Z
+> **自动生成**: 2026-06-22T02:55:15Z
 
 ## Package-Level Dependencies
 
@@ -607,6 +607,7 @@
 - `diagnose_data_health_failures.py` → (无内部依赖)
 - `diagnose_feature_drift.py` → (无内部依赖)
 - `diagnose_sl_performance.py` → (无内部依赖)
+- `dqaf053_phase1_sanitize.py` → `core.alpha.performance_store`, `core.alpha.registry`, `core.execution.conformal_calibrator`
 - `dqaf_collect.py` → `core.runtime.fault_handler`
 - `extract_health_checks.py` → (无内部依赖)
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`, `core.runtime.fault_handler`

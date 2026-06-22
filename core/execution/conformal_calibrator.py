@@ -96,6 +96,23 @@ class ConformalCalibrator:
     # Public API
     # ------------------------------------------------------------------
 
+    def reset_history(self) -> int:
+        """Clear rolling history and force cold-start on next load.
+
+        Returns the number of samples that were cleared.  Idempotent —
+        calling on an already-cold calibrator is a no-op (returns 0).
+
+        DQAF-20260622-053: Phase 1 sanitization API.
+        """
+        cleared = len(self._history)
+        self._history.clear()
+        self._cold_started = True
+        self._total_computations = 0
+        self._clamp_hits_upper = 0
+        self._clamp_hits_lower = 0
+        self._save_state()
+        return cleared
+
     def update(self, p_win: float, label: int, *, timestamp_utc: str = "") -> None:
         """Record a closed-trade (p_win, outcome) pair.
 
