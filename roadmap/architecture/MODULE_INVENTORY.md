@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T10:46:43Z
+> **自动生成**: 2026-06-22T14:47:48Z
 > **扫描模块数**: 654
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -251,7 +251,7 @@
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 535 | — | |
 | `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2087 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
-| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 390 | — | |
+| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 421 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 571 | — | |
@@ -263,7 +263,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 331 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 92 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1663 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1748 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 316 | — | |
@@ -534,7 +534,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 94 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 923 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 788 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 789 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |

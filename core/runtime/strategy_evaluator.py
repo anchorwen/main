@@ -306,6 +306,7 @@ def evaluate_strategy_lines(
             conformal_ou_gate=conformal_ou_gate,
             micro_feature_dict=micro_feature_dict,
             btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
+            governance_state=governance_state,  # DQAF-20260622-059: LIVE-brain filter
         )
 
         # ── Cut 1a: Regime Direction Gate (FIX-20260613-079 + FIX-20260613-083) ──

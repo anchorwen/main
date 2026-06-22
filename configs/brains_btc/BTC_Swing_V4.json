@@ -10,7 +10,7 @@
   "artifact_path": "data_btc/models/btc_37/BTC_Swing_V2_model.json",
   "model_version": "btc_swing_v4",
   "artifact_hash": "3d7071d2c1443aaa",
-  "status": "probation",
+  "status": "live",
   "vote_weight": 1.0,
   "magic": 90410,
   "brain_role": "alpha_brain",

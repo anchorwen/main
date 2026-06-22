@@ -824,9 +824,13 @@ strategy_lines:
     _monitoring:
       _comment_timeout_tracking: 'Track timeout PnL separately for ML training data collection'
 regime_gate:
+  # DQAF-20260622-059 (P0-3): ADX filter THERMALLY FUSED — thresholds set to
+  # unrealistically high values to disable counter-trend blocking.  The ADX
+  # gate was suffocating XAU short signals during strong downtrends.
+  # RESTORE: set trending_threshold back to 30, mild_trend_threshold to 20.
   adx:
-    trending_threshold: 30
-    mild_trend_threshold: 20
+    trending_threshold: 999
+    mild_trend_threshold: 999
   atr_percentile:
     high_vol_threshold: 80
     low_vol_threshold: 20

@@ -4089,3 +4089,27 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 **Poison Flushing Period**: ~50 trades (~5-7 days) 校准器 FIFO 自然排毒。严禁手动清空 history。
 **Verification**: 重启进程后观察 journal `p_win_source` 字段变化: cold_explore_neutral → rolling_wr_soft_bypass + meta_filter。
 
+
+### FIX-20260622-064 — DQAF-064 P0-1/2/3: LIVE-Brain Governance Gate + BTC_Swing_V4 Restoration + ADX Thermal Fuse
+
+**Date**: 2026-06-22
+**Scope**: execution (pwin_chain, strategy_line, strategy_evaluator), configs (live.yaml, live_btc.yaml, brains_btc), state (governance_state BTC)
+**Severity**: Sev 1 — 级联失效风险
+
+**Root Cause**: 
+- L3 (Architecture Defect): `resolve_p_win_from_brains()` had no governance alignment — retired/frozen brains with stale PnL data contaminated the active strategy's p_win estimate. BTC_Swing_V4 (179 trades +81.21R, 83% system PnL) wrongfully demoted to probation by governance scheduler's daily "pump-and-dump" cycle.
+- L2 (Logic Defect): ADX counter-trend filter active in both configs, suffocating XAU short signals during strong downtrends (`counter_trend_blocked_h1_adx_7.4_gte_0.55`).
+
+**Fix (IC Mandated — Three-Prong Fireline)**:
+
+**P0-1**: `resolve_p_win_from_brains()` now accepts `live_brain_ids: set[str] | None = None`. When provided, only brains whose `brain_id` is in the set participate in median WR calculation. Non-LIVE brains are physically excluded with diagnostic logging. `resolve_p_win()` and both `strategy_line.py` call sites (swing MetaFilter excision + 7-step resolver) pass through the filter. Governance state is loaded once per strategy in `evaluate()` and `live_brain_ids` extracted from `governance_state["brain_states"]` status=="live" entries.
+
+**P0-2**: `BTC_Swing_V4.json` status restored: `"probation"` → `"live"`. `data_btc/governance_state.json` updated with administrative reset entry (IC_MANDATE authority, FIX-20260622-064).
+
+**P0-3**: ADX thresholds hot-fused to 999 in both `configs/live.yaml` and `configs/live_btc.yaml`. Restoration comment left inline.
+
+**Cross-Symbol Impact**: XAU + BTC — single pwin_chain fix heals both. XAU ADX suffocation cleared (was blocking ALL counter-trend signals).
+
+**Poison Flushing Period**: Immediate effect on next cycle. BTC p_win will switch from zombie-retired median (~0.08) to LIVE-brain median.
+**Verification**: Golden master `p_win_source` transitions: `rolling_wr_fallback_rejected` → `cold_start_amnesty` or `rolling_wr_soft_bypass`; ADX blocks disappear from XAU decisions.
+

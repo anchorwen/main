@@ -269,9 +269,12 @@ reentry:
   sl_confidence_penalty: 0.15
   sl_cooldown_seconds: 300
 regime_gate:
+  # DQAF-20260622-059 (P0-3): ADX filter THERMALLY FUSED — thresholds set to
+  # unrealistically high values to disable counter-trend blocking.
+  # RESTORE: set trending_threshold back to 30, mild_trend_threshold to 20.
   adx:
-    mild_trend_threshold: 20
-    trending_threshold: 30
+    mild_trend_threshold: 999
+    trending_threshold: 999
   atr_percentile:
     high_vol_threshold: 80
     low_vol_threshold: 20

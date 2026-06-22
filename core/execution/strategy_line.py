@@ -132,7 +132,6 @@ def trend_maturity_discount(
     return max(0.40, min(1.0, discount))
 
 
-
 def check_z_inflection(
     current_z: float,
     prev_z: float | None,
@@ -336,6 +335,7 @@ class StrategyLine:
         except Exception:  # BLE001:FOG
             with fail_open_guard("strategy_line:_compute_tf_ou_theta"):
                 return 0.0
+
     def _compute_tf_hurst(self, max_lag: int = 20) -> float:
         """Estimate Hurst exponent from recent close buffer (R/S method)."""
         buf = list(self._tf_close_buffer)
@@ -378,6 +378,7 @@ class StrategyLine:
         except Exception:  # BLE001:FOG
             with fail_open_guard("strategy_line:_compute_tf_hurst"):
                 return 0.5
+
     # ── Subclass overrides ──────────────────────────────────────────────
 
     def _run_inference(
@@ -461,7 +462,6 @@ class StrategyLine:
             gate_diag=gate_diag if gate_diag is not None else {},
         )
 
-
     # ── Main evaluation ─────────────────────────────────────────────────
     #
     # STRANGLER FIG TRIGGER (FIX-079): This function is 1293 lines with 8 logical phases:
@@ -506,6 +506,7 @@ class StrategyLine:
         conformal_ou_gate: Any = None,
         micro_feature_dict: dict[str, float] | None = None,
         btc_augment: Any = None,  # FIX-20260613-046: pre-computed 37-dim BTC vector
+        governance_state: dict[str, Any] | None = None,  # DQAF-20260622-059: LIVE-brain filter
     ) -> StrategyDecision:
         """Run the full strategy evaluation for one cycle.
 
@@ -526,6 +527,31 @@ class StrategyLine:
         name = self.config.name
         _meta_p_win: float | None = None  # P(TP|signal) — resolved by MetaFilter or downstream
 
+        # ── DQAF-20260622-059 (P0-1): Build LIVE-brain filter from governance state ──
+        # Only brains with status=="live" in governance_state are allowed to
+        # contribute to the p_win calculation.  Retired/frozen/archived brains
+        # carry stale or negative-alpha PnL data that contaminates the estimate.
+        _live_brain_ids: set[str] | None = None
+        if governance_state is not None:
+            _live_brain_ids = {
+                str(bid)
+                for bid, b_info in governance_state.items()
+                if isinstance(b_info, dict) and b_info.get("status") == "live"
+            }
+            if _live_brain_ids:
+                logger.debug(
+                    "[DQAF-059] %s: %d LIVE brain(s) from governance: %s",
+                    name,
+                    len(_live_brain_ids),
+                    sorted(_live_brain_ids),
+                )
+            else:
+                logger.warning(
+                    "[DQAF-059] %s: governance_state loaded but ZERO LIVE brains found. "
+                    "All p_win resolution will fall back to fail-closed 0.40.",
+                    name,
+                )
+
         # ── 1. Regime gate ──
         if regime_gate_mode == "off":
             return self._make_decision(
@@ -538,7 +564,7 @@ class StrategyLine:
                 hard_sl=0.0,
                 regime_mode="off",
                 venue="live",
-                reason="regime_gate_off"
+                reason="regime_gate_off",
             )
 
         # ── 1b. OU high-volatility gate (FIX-20260604-082) ──
@@ -560,7 +586,7 @@ class StrategyLine:
                     hard_sl=0.0,
                     regime_mode="high_vol_blocked",
                     venue="live",
-                    reason=f"ou_high_vol_blocked:{_detected_regime}"
+                    reason=f"ou_high_vol_blocked:{_detected_regime}",
                 )
 
         # ── 1c. Spread gate (FIX-20260529-038) ──
@@ -581,7 +607,7 @@ class StrategyLine:
                     hard_sl=0.0,
                     regime_mode="spread_gate_blocked",
                     venue="live",
-                    reason=f"spread_gate:{_current_spread:.1f}pts > {self.config.max_spread_points:.1f}pts"
+                    reason=f"spread_gate:{_current_spread:.1f}pts > {self.config.max_spread_points:.1f}pts",
                 )
 
         # ── 2. Budget check ──
@@ -595,7 +621,7 @@ class StrategyLine:
                 tp=0.0,
                 hard_sl=0.0,
                 regime_mode=regime_gate_mode,
-                reason="budget_paused"
+                reason="budget_paused",
             )
 
         # ── 3. Run brain inference ──
@@ -619,7 +645,7 @@ class StrategyLine:
                     tp=0.0,
                     hard_sl=0.0,
                     regime_mode=regime_gate_mode,
-                    reason="inference_error"
+                    reason="inference_error",
                 )
         if not proposals:
             return self._make_decision(
@@ -631,7 +657,7 @@ class StrategyLine:
                 tp=0.0,
                 hard_sl=0.0,
                 regime_mode=regime_gate_mode,
-                reason="no_proposals"
+                reason="no_proposals",
             )
 
         # ── 3a1. Huber BPS trapline (BEFORE any gate or consensus) ──
@@ -738,7 +764,7 @@ class StrategyLine:
                 tp=0.0,
                 hard_sl=0.0,
                 regime_mode=regime_gate_mode,
-                reason=f"insufficient_voters_{_valid_voters}_lt_{self.config.min_valid_brains}"
+                reason=f"insufficient_voters_{_valid_voters}_lt_{self.config.min_valid_brains}",
             )
 
         # ── 4. Group consensus ──
@@ -751,7 +777,6 @@ class StrategyLine:
         # gate sees.  Runs for every cycle so individual brain behaviour
         # can be tracked regardless of whether the consensus passes gates.
         try:
-
             _status_map: dict[str, str] = {
                 str(b.get("brain_id", "")): str(b.get("status", "unknown")) for b in self.brains
             }
@@ -898,12 +923,7 @@ class StrategyLine:
             _meta_p_win is None
             and _meta_reject is None
             and confidence >= 0.35
-            and (
-                "statarb" in name
-                or "ou" in name.lower()
-                or "swing" in name
-                or "btc" in name
-            )
+            and ("statarb" in name or "ou" in name.lower() or "swing" in name or "btc" in name)
         )
         if _is_cold_explore:
             _p_win = 0.50
@@ -919,7 +939,12 @@ class StrategyLine:
             if _is_swing and pnl_store is not None:
                 from core.execution.kelly_sizer import resolve_p_win_from_brains
 
-                _rolling = resolve_p_win_from_brains(self.brains, pnl_store, direction)
+                _rolling = resolve_p_win_from_brains(
+                    self.brains,
+                    pnl_store,
+                    direction,
+                    live_brain_ids=_live_brain_ids,
+                )
                 # DQAF-063: Cold-start Pathfinder Exemption.
                 # Two triggers:
                 # 1. Newly-live brains: sample_count < 10 → no PnL history yet.
@@ -928,12 +953,24 @@ class StrategyLine:
                 #    brain cannot have 0% WR over 800+ trades — this is a sentinel
                 #    for "labels not backfilled".  Once labels are present and
                 #    win_rate > 0, amnesty auto-expires.
+                # DQAF-20260622-059 (P0-1): amnesty check ONLY consults LIVE brains.
+                # Zombie/retired brains with stale PnL data must not block the
+                # cold-start amnesty for a newly-live strategy.
                 _amnesty_applied = False
                 if _rolling < 0.50:
                     _all_need_amnesty = True
                     for _b in self.brains:
-                        _bid = _b.get("brain_id") if isinstance(_b, dict) else getattr(_b, "brain_id", None)
-                        if _bid and pnl_store is not None:
+                        _bid = (
+                            _b.get("brain_id")
+                            if isinstance(_b, dict)
+                            else getattr(_b, "brain_id", None)
+                        )
+                        if not _bid:
+                            continue
+                        # DQAF-059: skip non-LIVE brains in amnesty assessment
+                        if _live_brain_ids is not None and _bid not in _live_brain_ids:
+                            continue
+                        if pnl_store is not None:
                             try:
                                 _m = pnl_store.get_metrics(str(_bid), window=100)
                             except Exception:
@@ -945,20 +982,33 @@ class StrategyLine:
                                 if _sc >= 10 and _wr > 0:
                                     _all_need_amnesty = False
                                     break
+                    _live_count = sum(
+                        1
+                        for _b in self.brains
+                        if _live_brain_ids is None
+                        or (
+                            _b.get("brain_id")
+                            if isinstance(_b, dict)
+                            else getattr(_b, "brain_id", None)
+                        )
+                        in _live_brain_ids
+                    )
                     if _all_need_amnesty:
                         _rolling = 0.51
                         _amnesty_applied = True
                         logger.info(
                             "[DQAF-063] Cold-start amnesty granted for %s: "
-                            "%d brain(s), rolling WR fallback overridden → 0.51",
+                            "%d LIVE brain(s), rolling WR fallback overridden → 0.51",
                             name,
-                            len(self.brains),
+                            _live_count,
                         )
                 # Soft-bypass: if rolling WR >= 0.50, allow with p_win=0.55
                 # and let the V9 brains decide.  Below 0.50 → reject.
                 if _rolling >= 0.50:
                     _meta_p_win = 0.55
-                    _p_win_source = "cold_start_amnesty" if _amnesty_applied else "rolling_wr_soft_bypass"
+                    _p_win_source = (
+                        "cold_start_amnesty" if _amnesty_applied else "rolling_wr_soft_bypass"
+                    )
                     _meta_reject = None  # clear rejection
                 else:
                     _meta_reject.reason = (
@@ -1037,7 +1087,7 @@ class StrategyLine:
                 supporting_count=support_count,
                 total_count=total_count,
                 regime_mode=regime_gate_mode,
-                reason="invalid_entry_price"
+                reason="invalid_entry_price",
             )
         levels = compute_sl_tp_levels(
             direction,
@@ -1056,21 +1106,21 @@ class StrategyLine:
         if regime_gate_mode != "shadow" and not check_minimum_rr(
             entry_price, levels["stop_loss"], levels["take_profit"], min_rr_ratio=_min_rr
         ):
-                return self._make_decision(
-                    should_trade=False,
-                    direction=direction,
-                    confidence=confidence,
-                    volume=0.0,
-                    sl=levels["stop_loss"],
-                    tp=levels["take_profit"],
-                    hard_sl=levels["hard_sl"],
-                    brain_ids=brain_ids,
-                    supporting_count=support_count,
-                    total_count=total_count,
-                    regime_mode=regime_gate_mode,
-                    venue="live",
-                    reason="rr_below_minimum"
-                )
+            return self._make_decision(
+                should_trade=False,
+                direction=direction,
+                confidence=confidence,
+                volume=0.0,
+                sl=levels["stop_loss"],
+                tp=levels["take_profit"],
+                hard_sl=levels["hard_sl"],
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                venue="live",
+                reason="rr_below_minimum",
+            )
 
         # ── 6. Volume ──
         # FIX-20260620-017: p_win resolution chain extracted to pwin_chain.resolve_p_win()
@@ -1086,6 +1136,7 @@ class StrategyLine:
             min_p_win=self.config.min_p_win,
             regime_info=regime_info,
             entry_z_score=entry_z_score,
+            live_brain_ids=_live_brain_ids,
         )
         _p_win = _p_res.p_win
         _p_win_source = _p_res.p_win_source
@@ -1142,7 +1193,7 @@ class StrategyLine:
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,
-                kelly_mult=0.0
+                kelly_mult=0.0,
             )
 
         # RR ratio from SL/TP levels (already computed in step 5)
@@ -1190,7 +1241,7 @@ class StrategyLine:
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,
-                kelly_mult=0.0
+                kelly_mult=0.0,
             )
         # ── FIX-20260609-002b: low-RR fail-safe floor ──
         # For low-RR strategies where Kelly veto is normally skipped
@@ -1219,7 +1270,7 @@ class StrategyLine:
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,
-                kelly_mult=0.0
+                kelly_mult=0.0,
             )
         _kelly_mult = kelly_result.fractional_mult
 
@@ -1349,7 +1400,7 @@ class StrategyLine:
             p_win_source=_p_win_source,
             p_win_degraded=_p_win_degraded,
             kelly_mult=kelly_result.fractional_mult,
-            cold_explore=_is_cold_explore
+            cold_explore=_is_cold_explore,
         )
 
     # ── Consensus computation ───────────────────────────────────────────

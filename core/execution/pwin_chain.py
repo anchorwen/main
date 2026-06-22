@@ -38,6 +38,7 @@ def resolve_p_win_from_brains(
     brains: list[Any],
     pnl_store: Any | None,
     direction: str = "long",
+    live_brain_ids: set[str] | None = None,
 ) -> float:
     """Resolve dynamic p_win for a strategy that does NOT use MetaFilter.
 
@@ -49,6 +50,14 @@ def resolve_p_win_from_brains(
     insufficient.  With min_p_win=0.45 (statarb) or 0.50 (barrier),
     0.40 < both → trades rejected when system lacks evidence.
 
+    DQAF-20260622-059 (P0-1): **Governance-aligned brain filtering**.
+    When *live_brain_ids* is provided, only brains whose ``brain_id`` is
+    in that set participate in the median calculation.  Retired / frozen /
+    archived brains are physically excluded — their historical PnL data
+    must not contaminate the active strategy's p_win estimate.
+    If no LIVE brains pass the filter, returns fail-closed 0.40 with a
+    clear diagnostic log (governance-gated fallback).
+
     Trap 3 fix: Static historical win rate is a fixed multiplier in disguise.
     Rolling PnL win rate is dynamic and reflects current model performance.
     Alpha decays, regimes shift — all-time WR drags stale history into today.
@@ -57,6 +66,8 @@ def resolve_p_win_from_brains(
         brains: List of brain info dicts with "brain_id" key.
         pnl_store: BrainPnLStore instance or None.
         direction: "long" or "short" — for directional win rate lookup.
+        live_brain_ids: Optional set of brain_ids whose governance status
+            is ``"live"``.  When provided, non-LIVE brains are skipped.
     """
     if pnl_store is None:
         logger.warning(
@@ -67,10 +78,16 @@ def resolve_p_win_from_brains(
         )
         return 0.40
 
+    # ── DQAF-20260622-059 (P0-1): governance-gated brain filter ──
+    _filtered_out: int = 0
     valid_rates: list[float] = []
     for b in brains:
         brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
         if not brain_id:
+            continue
+        # ── DQAF-20260622-059: LIVE-only gate ──
+        if live_brain_ids is not None and brain_id not in live_brain_ids:
+            _filtered_out += 1
             continue
         try:
             m = pnl_store.get_metrics(str(brain_id), window=100)
@@ -88,6 +105,14 @@ def resolve_p_win_from_brains(
         if wr > 0:
             valid_rates.append(float(wr))
 
+    if live_brain_ids is not None and _filtered_out > 0:
+        logger.info(
+            "[pwin_chain:DQAF-059] Governance gate: %d non-LIVE brain(s) excluded "
+            "from p_win calculation. %d LIVE brain(s) produced valid rates.",
+            _filtered_out,
+            len(valid_rates),
+        )
+
     if valid_rates:
         _median = float(statistics.median(valid_rates))
         logger.debug(
@@ -99,11 +124,20 @@ def resolve_p_win_from_brains(
 
     # ── FALLBACK PATH 3: no brain produced a valid win rate ──
     # Distinguish: (a) no brains registered vs (b) all brains below threshold
+    # vs (c) all brains filtered out by governance gate (DQAF-059)
     _brain_count = len(brains)
+    _live_count = _brain_count - _filtered_out if live_brain_ids is not None else _brain_count
     if _brain_count == 0:
         logger.warning(
             "[pwin_chain:FALLBACK_PATH_3a] No brains provided — "
             "returning fail-closed 0.40. p_win_degraded=True."
+        )
+    elif live_brain_ids is not None and _live_count == 0:
+        logger.warning(
+            "[pwin_chain:FALLBACK_PATH_3c — DQAF-059] All %d brain(s) filtered out "
+            "by governance gate (none are LIVE). Returning fail-closed 0.40. "
+            "p_win_degraded=True.",
+            _brain_count,
         )
     else:
         logger.warning(
@@ -256,6 +290,7 @@ def resolve_p_win(
     min_p_win: float,
     regime_info: dict[str, Any] | None,
     entry_z_score: float,
+    live_brain_ids: set[str] | None = None,
 ) -> PWinResolution:
     """Run the 7-step p_win resolution chain for Tier 2 Kelly sizing.
 
@@ -305,7 +340,9 @@ def resolve_p_win(
         p_win_source = "meta_filter"
     elif pnl_store is not None:
         # ── Step 3: Rolling WR from PnL ledger ──
-        p_win = resolve_p_win_from_brains(brains, pnl_store, direction)
+        p_win = resolve_p_win_from_brains(
+            brains, pnl_store, direction, live_brain_ids=live_brain_ids
+        )
         p_win_source = "rolling_wr"
 
     # ── Step 4: Brain confidence → p_win monotonic fallback ──
@@ -347,9 +384,7 @@ def resolve_p_win(
     # When rolling_wr is between 0.40 and min_p_win, lift it with a
     # confidence-based bonus to avoid unnecessarily blocking trades.
     if not meta_filter_absent:
-        _elastic_trigger = (
-            p_win_source == "rolling_wr" and 0.40 < p_win < min_p_win
-        )
+        _elastic_trigger = p_win_source == "rolling_wr" and 0.40 < p_win < min_p_win
         if _elastic_trigger:
             _conf = max(0.0, min(1.0, confidence))
             _elastic_p_win = min_p_win - 0.05 + _conf * 0.10
@@ -360,9 +395,7 @@ def resolve_p_win(
     # FIX-20260526-030: In trending regimes, high |z_score| is momentum
     # ignition, not mean reversion.  Discount p_win to prevent Kelly from
     # sizing into anti-informative high-confidence OU signals.
-    p_win = adjust_p_win_for_regime(
-        p_win, strategy_name, regime_info, entry_z_score, direction
-    )
+    p_win = adjust_p_win_for_regime(p_win, strategy_name, regime_info, entry_z_score, direction)
 
     # ── Step 7b: Weak-Z penalty for OU strategies ──
     # DQAF-20260608-003: When |z| < 1.0, the OU reversion force is absent.
@@ -377,9 +410,7 @@ def resolve_p_win(
     p_win_degraded = p_win_source in (
         "neutral_default",
         "brain_confidence",
-    ) or (
-        p_win_source in ("rolling_wr", "rolling_wr_no_metafilter") and p_win <= 0.40
-    )
+    ) or (p_win_source in ("rolling_wr", "rolling_wr_no_metafilter") and p_win <= 0.40)
 
     return PWinResolution(
         p_win=round(p_win, 4),
