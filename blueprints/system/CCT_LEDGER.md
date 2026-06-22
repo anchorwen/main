@@ -27,6 +27,25 @@
 
 ---
 
+### CCT-20260622-057
+- **Docket ID**: DQAF-20260622-057
+- **日期**: 2026-06-22
+- **置信度**: confirmed (Layer 1-2: confirmed by code review + ledger data; Layer 3: confirmed by DQAF-033/034 external-close evidence)
+- **因果链**:
+  - [Layer 1 — 症状]: Label coverage 从 85%→65% (XAU), 67%→40% (BTC)。Timestamp inversions 从 336→365 (XAU), 22→52 (BTC)。Evidence: `audit_data_exhaustive.py:216-222`, `live_labels.jsonl` per-symbol counts。
+  - [Layer 2 — 中间异常]: (A) `build_trade_records()` 依赖 close_price 计算 PnL — 当 close_price 缺失时 PnL=None → label="unlabeled"。无 label_contract defense layer 可回退至 SL/TP barrier 分类。(B) `live_cycle.py:1338` 使用 `.locks` 锁目录而所有其他 writer 使用 `locks` — 跨进程 FileLock 协调失效。(C) `_merge_overflow_files` 零锁写入共享 journal。
+  - [Layer 3 — 根因]: (A) DEAL_REASON_SIGNAL 外部平仓比例 66% (DQAF-033/034) → journal ingestion 盲区。(B) 多进程 journal 写入架构 + 锁命名空间碎裂 (L3 architecture defect)。(C) label pipeline 无 defense layer (L2 logic defect with L3 contributory)。
+- **证据引用**:
+  - Source 1: `label_builder.py:176-307` — `build_trade_records()` matching logic, `_classify_label(pnl)` vs `_classify_barrier_label()`
+  - Source 2: `live_cycle.py:1338` — `.locks` lock directory (active bug)
+  - Source 3: `mt5_bridge_worker.py:220` — `_merge_overflow_files` zero-lock write
+  - Source 4: `daily_ops.py:2049` — `_step_label_builder` called without `contract_path`
+  - Source 5: DQAF-20260621-033/034 — 66% external close evidence
+  - Source 6: `audit_data_exhaustive.py:216-222` — coverage computation logic (LONG-only denominator)
+  - Cross-symbol: Both XAU and BTC affected — rules out symbol-specific code asymmetry
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260622-LABEL_COVERAGE_DEGRADATION, ReB-20260613-JOURNAL_LOCK_NAMESPACE_FRAGMENTATION
+
 ### CCT-20260621-042
 - **Docket ID**: DQAF-20260621-042
 - **日期**: 2026-06-21

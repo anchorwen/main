@@ -20,6 +20,23 @@
 
 ---
 
+### ReB-20260622-LABEL_COVERAGE_DEGRADATION
+
+- **Pattern Signature**: `EXTERNAL_CLOSE_PRICE_MISSING × LABEL_PIPELINE_NO_DEFENSE_LAYER`
+- **Date Cataloged**: 2026-06-22
+- **Source Docket**: DQAF-20260622-057
+- **Related**: ReB-20260621-033 (`EXTERNAL_CLOSE_DEAL_REASON_SIGNAL`), ReB-20260613-JOURNAL_LOCK_NAMESPACE_FRAGMENTATION
+
+**Definition**: Label coverage degradation driven by two interacting failures: (1) positions closed outside system control (DEAL_REASON_SIGNAL) produce journal close records missing `close_price`, so PnL-based label classification returns `unlabeled`; (2) the label pipeline has no defense layer — `_step_label_builder` is called without `contract_path`, so barrier-based SL/TP classification (`_classify_barrier_label()`) never activates as fallback.
+
+**Prevention Strategy**:
+1. **Defense Layer**: Always pass `contract_path` to `_step_label_builder` — barrier-based classification serves as fallback when PnL is uncomputable.
+2. **Journal Completeness**: Backfill `close_price` from MT5 deal history for positions closed via DEAL_REASON_SIGNAL (Phase 2).
+3. **Monitoring**: Add `label_coverage_pct` metric to `daily_ops` output with <80% alert threshold.
+4. **Gate**: `verify.py` should WARN when `contract_path` is None for `_step_label_builder` calls in production paths.
+
+**Detection Method**: `audit_data_exhaustive.py` Section 3b label coverage check. Run `python scripts/audit_data_exhaustive.py` and verify XAU coverage >80%, BTC coverage >60%.
+
 ### ReB-20260621-043
 
 - **Pattern Signature**: `BOUNDARY_TYPE_ENFORCEMENT_AND_EXPLICIT_CATCH`
