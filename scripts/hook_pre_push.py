@@ -220,7 +220,7 @@ def check_omega() -> bool:
             first_line = commit.strip().split("\n")[0] if commit else ""
             has_sig = bool(
                 re.search(
-                    r"\[[OΩ].*Routing:\s*Scene\s+[A-G]",
+                    r"\[[OΩ].*Routing:\s*Scene\s+[A-H]",
                     commit,
                     re.IGNORECASE,
                 )
