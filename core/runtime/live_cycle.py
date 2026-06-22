@@ -583,7 +583,6 @@ def _execute_management_phase(
     )
 
 
-
 # ── Exit config keys expected across all strategy definitions ──
 _EXPECTED_EXIT_KEYS = {
     "flip_exit_enabled",
@@ -712,6 +711,8 @@ def _enrich_mia_from_deals(
 ) -> None:
     """Strangler Fig #20: delegation wrapper — implementation in mia_close.py."""
     enrich_mia_from_deals(mia_entry, deals)
+
+
 def _compute_contract_group_consensus(
     raw_proposals: list[Any],
     brains: list[dict[str, Any]],
@@ -1156,6 +1157,7 @@ def execute_live_cycle(
                 _MT5_TIMEOUT_SENTINEL,
                 mt5_call_with_timeout,
             )
+
             # ── DQAF-20260616-101/P1.3: BLE001 → fail_open_guard ──
             with fail_open_guard("CircuitBreakerCloseAll"):
                 _open_positions = mt5_call_with_timeout(
@@ -1333,9 +1335,14 @@ def execute_live_cycle(
                             FileLock,
                         )
 
+                        # FIX-20260622-057 P0-1: ".locks"→"locks" — namespace unification
+                        # with mt5_bridge_worker, position_close_adapter, and all
+                        # other journal writers.  The dot-prefix was a legacy
+                        # Windows hidden-directory convention that was never
+                        # aligned when the rest of the system migrated to "locks".
                         _jlock = FileLock(
                             "live_trade_journal",
-                            lock_dir=str(journal_path.parent / ".locks"),
+                            lock_dir=str(journal_path.parent / "locks"),
                             ttl_seconds=10,
                         )
                         _jacquired = _jlock.acquire(blocking=True, timeout_seconds=5)
@@ -2338,7 +2345,17 @@ def execute_live_cycle(
                     with log_and_continue(component="MIA_Close:clear_position"):
                         state.position_manager.clear_position(int(_mia_ticket))
                         # SF #26 FIX: _emit extracted to management_phase.py — inline here
-                        print(json.dumps({"event": "mia_position_cleared", "time": _utc_iso(), "ticket": _mia_ticket}, ensure_ascii=False), flush=True)
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "mia_position_cleared",
+                                    "time": _utc_iso(),
+                                    "ticket": _mia_ticket,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
                 # ── FIX-20260610-002: Record budget for MIA close (F3) ──────
                 # Budget was never updated for MIA-detected closes — daily
                 # PnL, consecutive loss counters, and all cumulative circuit
@@ -2356,7 +2373,11 @@ def execute_live_cycle(
                     try:
                         if mt5_worker is not None:
                             _acc = mt5_worker.account_info()
-                            _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
+                            _eq = (
+                                float(getattr(_acc, "equity", 1000.0))
+                                if _acc is not None
+                                else 1000.0
+                            )
                     except Exception:  # BLE001:FOG (Sev 4, Phase 3b — MT5 account_info fallback)
                         with fail_open_guard("live_cycle:_emit_close_notification"):
                             pass  # graceful fallback — keep _eq at 1000.0
@@ -2440,9 +2461,7 @@ def execute_live_cycle(
             #     zero-overwrite that was silently killing micro features on
             #     every successful computation.
             micro_feature_dict = {}
-            micro_feature_vector = np.zeros(
-                _schema_dim("v4.3_microstructure_9"), dtype=np.float64
-            )
+            micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
             with FaultTolerantContext(
                 level=FaultLevel.DEGRADE,
                 component="FeatureCompute:micro_features",
@@ -2924,7 +2943,6 @@ def execute_live_cycle(
             _log_cycle_end(state.loop_iteration)
             return state, True  # skip cycle
 
-
         # ── Cut 1 + 2: Initialize cooldown registry & family entry tracker ──
         if state._cooldown_registry is None:
             from core.execution.pre_trade_guards import CooldownRegistry
@@ -2941,6 +2959,7 @@ def execute_live_cycle(
         if state.loop_iteration == 1 and state._cooldown_registry is not None:
             with fail_open_guard("LiveCycle:RestoreExecutionState"):
                 from core.runtime.execution_state import restore_execution_state
+
                 restore_execution_state(state, strategies, data_dir=config.base_dir)
 
         # ── FIX-20260613-090: disk fallback for _recent_mid_prices ──
@@ -3429,7 +3448,6 @@ def execute_live_cycle(
 
         check_reentry_block_streaks(eval_summary=eval_summary, state=state)
 
-
         # Flush execution queue → dispatch to MT5
         if exec_queue.queue_size > 0 and not config.no_mt5:
             from core.execution.live_order_sender import dispatch_live_open_order
@@ -3543,7 +3561,9 @@ def execute_live_cycle(
                 from core.runtime.trade_notify import notify_dispatched_trades
 
                 notify_dispatched_trades(
-                    dispatch_results=dispatch_results, state=state, symbol=config.symbol,
+                    dispatch_results=dispatch_results,
+                    state=state,
+                    symbol=config.symbol,
                     _emit_close_notification=_emit_close_notification,
                 )
 
@@ -3727,7 +3747,9 @@ def execute_live_cycle(
                                                 flush=True,
                                             )
                                         except Exception as _fc_exc:  # BLE001:FOG
-                                            with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
+                                            with fail_open_guard(
+                                                "live_cycle:_net_out_close_dispatch_fn"
+                                            ):
                                                 print(
                                                     json.dumps(
                                                         {
@@ -3905,8 +3927,13 @@ def execute_live_cycle(
     from core.runtime.pnl_recording import record_counterfactual_signals
 
     record_counterfactual_signals(
-        config=config, pnl_ledger=pnl_ledger, raw_proposals=raw_proposals,
-        proposal=proposal, mid_price=mid_price, bid=_bid, ask=_ask,
+        config=config,
+        pnl_ledger=pnl_ledger,
+        raw_proposals=raw_proposals,
+        proposal=proposal,
+        mid_price=mid_price,
+        bid=_bid,
+        ask=_ask,
     )
 
     # ── Regime-aware direction bias (legacy path) ──
@@ -3983,7 +4010,9 @@ def execute_live_cycle(
         if config.multi_brain:
             skip_event["mode"] = "multi_brain"
             skip_event.update(consensus_extra)
-            _record_brain_outcomes(proposals, direction, "consensus_skip", tracker, symbol=config.symbol)
+            _record_brain_outcomes(
+                proposals, direction, "consensus_skip", tracker, symbol=config.symbol
+            )
         else:
             skip_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
             skip_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)

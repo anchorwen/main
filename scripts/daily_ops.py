@@ -1261,7 +1261,12 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
             pnl = entry.get("pnl")
             if pnl is None:
                 continue
-            strategy = entry.get("strategy", "btc_swing")
+            strategy = entry.get("strategy", "") or "btc_swing"
+            # DQAF-053 (Op Clear Sight): "" is falsy but not None,
+            # so .get("strategy", "btc_swing") would pass through the
+            # empty string.  ``or`` catches both None and "".
+            if not strategy.strip():
+                strategy = "btc_swing"
             alpha_pnls.setdefault(strategy, []).append(float(pnl))
             alpha_trades[strategy] = alpha_trades.get(strategy, 0) + 1
             if float(pnl) > 0:
@@ -2040,8 +2045,21 @@ def run_daily_ops(
 
     # Label builder: generate fresh training labels from journals.
     # Runs BEFORE feedback_loop so tracker sees the latest labels.
+    # FIX-20260622-057 P0-3: Activate label_contract defense layer.
+    # When close_price is missing from the journal (66% of positions close
+    # outside system control via DEAL_REASON_SIGNAL), the barrier-based
+    # classifier provides a fallback label from SL/TP levels that PnL-based
+    # classification cannot compute.  Contract selected by symbol:
+    #   XAU → label-survival-barrier-1.0.0  (SL=2.0/TP=3.5 — exact match)
+    #   BTC → label-micro-barrier-1.0.0      (SL=1.5/TP=2.5 — TP matches live config)
     if not skip_label_builder:
-        steps.append(_step_label_builder(base_dir, dry_run=dry_run))
+        _is_btc = "btc" in str(base_dir).lower()
+        _contract_path = (
+            Path("blueprints/contracts/label-micro-barrier-1.0.0.json")
+            if _is_btc
+            else Path("blueprints/contracts/label-survival-barrier-1.0.0.json")
+        )
+        steps.append(_step_label_builder(base_dir, dry_run=dry_run, contract_path=_contract_path))
 
     # Feedback loop: resolve pending dispatch outcomes → real P&L scores
     # Runs before governance/champion so they see the latest data

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T05:09:47Z
+> **自动生成**: 2026-06-22T05:58:42Z
 > **扫描模块数**: 650
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -507,7 +507,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 147 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4033 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4062 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 376 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1497 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
@@ -681,7 +681,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 32 | 2257 | — | |
+| `daily_ops.py` | ✅ active | — | 32 | 2275 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |
@@ -724,7 +724,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 4 | 287 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 33 | 1806 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 33 | 1897 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 180 | — | |

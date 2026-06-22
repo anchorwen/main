@@ -40,7 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-volume", type=float, default=0.01)
     parser.add_argument("--deviation", type=int, default=20)
     parser.add_argument("--magic", type=int, default=90001)
-    parser.add_argument("--default-symbol", default="XAUUSDc", help="Trading symbol for reconnect symbol_select")
+    parser.add_argument(
+        "--default-symbol", default="XAUUSDc", help="Trading symbol for reconnect symbol_select"
+    )
     parser.add_argument("--poll-seconds", type=float, default=1.0)
     parser.add_argument("--journal-path", default="data/live_trade_journal.jsonl")
     parser.add_argument("--protection-flag-path", default="data/live_dispatch_block.flag")
@@ -76,12 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _utc_now() -> str:
-    return (
-        datetime.now(UTC)
-        .replace(tzinfo=None)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    return datetime.now(UTC).replace(tzinfo=None).isoformat().replace("+00:00", "Z")
 
 
 def _list_pending(outbox_dir: Path) -> list[Path]:
@@ -132,9 +129,7 @@ def _persist_processed_id(path: Path, msg_id: str) -> None:
     for the current session.
     """
     try:
-        rec = json.dumps(
-            {"msg_id": msg_id, "processed_at": _utc_now()}, ensure_ascii=False
-        )
+        rec = json.dumps({"msg_id": msg_id, "processed_at": _utc_now()}, ensure_ascii=False)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(rec + "\n")
@@ -193,8 +188,15 @@ def _merge_overflow_files(journal_path: Path) -> int:
     """Merge all ``journal_overflow_*.jsonl`` files into the main journal.
 
     Reads each overflow file line-by-line, appends to the main journal
-    (no lock needed — only the Bridge writes to its own overflow files),
+    under advisory FileLock protection to serialise with concurrent writers
+    (live_cycle reconciliation, position_close_adapter, backfill scripts),
     then removes the overflow file.  Returns the number of entries merged.
+
+    FIX-20260622-057 P0-2: Added FileLock — the original "no lock needed"
+    comment was incorrect because the overflow merge writes to the SAME
+    shared journal file as every other writer.  Without a lock, overflow
+    entries and concurrent live_cycle reconciliation closes produce
+    timestamp inversions and/or interleaved corruption.
     """
     import glob as _glob
 
@@ -203,28 +205,42 @@ def _merge_overflow_files(journal_path: Path) -> int:
     if not _overflow_files:
         return 0
 
-    _merged = 0
-    for _of_path in _overflow_files:
-        _of = Path(_of_path)
-        try:
-            _lines = _of.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        if not _lines:
+    from core.infrastructure.distributed_lock import FileLock
+
+    _merge_lock = FileLock(
+        "live_trade_journal",
+        lock_dir=str(journal_path.parent / "locks"),
+        ttl_seconds=10,
+    )
+    _merge_acquired = _merge_lock.acquire(blocking=True, timeout_seconds=5)
+    if not _merge_acquired.acquired:
+        return 0  # retry on next tick — another writer holds the lock
+
+    try:
+        _merged = 0
+        for _of_path in _overflow_files:
+            _of = Path(_of_path)
             try:
+                _lines = _of.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            if not _lines:
+                try:
+                    _of.unlink()
+                except OSError:
+                    pass
+                continue
+            try:
+                with journal_path.open("a", encoding="utf-8") as _main:
+                    for _line in _lines:
+                        if _line.strip():
+                            _main.write(_line.strip() + "\n")
+                            _merged += 1
                 _of.unlink()
             except OSError:
-                pass
-            continue
-        try:
-            with journal_path.open("a", encoding="utf-8") as _main:
-                for _line in _lines:
-                    if _line.strip():
-                        _main.write(_line.strip() + "\n")
-                        _merged += 1
-            _of.unlink()
-        except OSError:
-            pass  # retry on next tick
+                pass  # retry on next tick
+    finally:
+        _merge_lock.release()
     if _merged:
         print(
             json.dumps(
@@ -282,10 +298,12 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
         _ctx = record.get("entry_context")
         if isinstance(_ctx, dict) and not _ctx.get("vector"):
             import logging as _logging
+
             _logging.getLogger("BridgeJournal").error(
                 "REJECTED: open entry missing entry_context.vector — "
                 "ticket=%s message_id=%s. See DLR-001.",
-                record.get("position_ticket"), record.get("message_id"),
+                record.get("position_ticket"),
+                record.get("message_id"),
             )
             return
 
@@ -491,7 +509,13 @@ def _mt5_market_open(
 
     # ── FIX-20260531-016: Dedup guard — prevent duplicate orders within 2s ──
     _now = time.time()
-    _fingerprint = (symbol, side, round(volume, 4), round(stop_loss or 0, 2), round(take_profit or 0, 2))
+    _fingerprint = (
+        symbol,
+        side,
+        round(volume, 4),
+        round(stop_loss or 0, 2),
+        round(take_profit or 0, 2),
+    )
     _last = _DEDUP_CACHE.get(_fingerprint, 0.0)
     if _now - _last < 2.0:
         return "rejected", {
@@ -695,15 +719,23 @@ def _mt5_close_position(
         # When this succeeds, reconciliation can skip writing a duplicate close.
         try:
             import time as _time
+
             _deal_start = _time.time()
             deals = mt5.history_deals_get(position=ticket)
             _deal_elapsed = _time.time() - _deal_start
             if _deal_elapsed > 0.5:
-                print(json.dumps({
-                    "event": "bridge_deal_history_slow",
-                    "ticket": ticket, "elapsed_s": round(_deal_elapsed, 3),
-                    "time": _utc_now(),
-                }, ensure_ascii=False), flush=True)
+                print(
+                    json.dumps(
+                        {
+                            "event": "bridge_deal_history_slow",
+                            "ticket": ticket,
+                            "elapsed_s": round(_deal_elapsed, 3),
+                            "time": _utc_now(),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
             if deals:
                 exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
                 if exit_deals:
@@ -978,7 +1010,9 @@ def process_one(
         "strategy": _strategy,
         "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
         "position_ticket": position_ticket,
-        "position_identifier": detail.get("position_identifier", position_ticket) if isinstance(detail, dict) else position_ticket,
+        "position_identifier": detail.get("position_identifier", position_ticket)
+        if isinstance(detail, dict)
+        else position_ticket,
         "execution_payload_schema": msg_payload.get("execution_payload_schema"),
         "sl": msg_payload.get("sl", msg_payload.get("stop_loss")),
         "tp": msg_payload.get("tp", msg_payload.get("take_profit")),
@@ -1022,6 +1056,8 @@ def _check_mt5_heartbeat(mt5: Any) -> bool:
     except Exception:  # BLE001:FOG
         with fail_open_guard("mt5_bridge_worker:_check_mt5_heartbeat"):
             return False
+
+
 def _reconnect_mt5(mt5_module: Any, terminal_path: str, *, symbol: str = "XAUUSDc") -> bool:
     """Reconnect to MT5 with exponential backoff.  Returns True on success.
 
@@ -1283,9 +1319,7 @@ def run_worker(args: argparse.Namespace) -> int:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _write_zmq_health(
-    health_path: Path, mt5: Any, order_endpoint: str
-) -> None:
+def _write_zmq_health(health_path: Path, mt5: Any, order_endpoint: str) -> None:
     """Write bridge health heartbeat indicating ZMQ transport mode."""
     _hb = {
         "last_heartbeat_utc": _utc_now(),
@@ -1303,7 +1337,6 @@ def _write_zmq_health(
         _w.write_artifact(lookup("MT5_BRIDGE_HEALTH"), _w._symbol, _hb)
     except OSError:
         pass  # health file is best-effort; main loop continues
-
 
 
 def _zmq_send_ack(pub: Any, message_id: str, ack: dict[str, Any]) -> None:
@@ -1331,6 +1364,7 @@ def _write_zmq_journal_entry(
     _magic = msg_payload.get("magic")
     if isinstance(_magic, int):
         from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2S
+
         _strategy = _M2S.get(_magic, "")
     else:
         _strategy = ""
@@ -1340,6 +1374,7 @@ def _write_zmq_journal_entry(
     position_ticket = coerce_position_ticket(msg_payload)
     if position_ticket is None and isinstance(detail, dict):
         import contextlib
+
         _order_ticket = detail.get("order")
         if _order_ticket is not None:
             with contextlib.suppress(TypeError, ValueError):
@@ -1369,7 +1404,9 @@ def _write_zmq_journal_entry(
         "strategy": _strategy,
         "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
         "position_ticket": position_ticket,
-        "position_identifier": detail.get("position_identifier", position_ticket) if isinstance(detail, dict) else position_ticket,
+        "position_identifier": detail.get("position_identifier", position_ticket)
+        if isinstance(detail, dict)
+        else position_ticket,
         "execution_payload_schema": msg_payload.get("execution_payload_schema"),
         "sl": msg_payload.get("sl", msg_payload.get("stop_loss")),
         "tp": msg_payload.get("tp", msg_payload.get("take_profit")),
@@ -1464,6 +1501,7 @@ def run_zmq_worker(
         import threading as _thr3
 
         from core.features.ofi_collector import OFICollector
+
         _ofi_collector_zmq = OFICollector()
 
         def _ofi_poller_zmq() -> None:
@@ -1518,16 +1556,24 @@ def run_zmq_worker(
                     # ── Guard: MT5 must be initialized ──
                     if mt5 is None:
                         _zmq_send_ack(
-                            pub, msg_id,
+                            pub,
+                            msg_id,
                             {
                                 "ack_status": "rejected",
-                                "detail": {"reason": "MT5 not initialized — pass --mt5-terminal-path"},
+                                "detail": {
+                                    "reason": "MT5 not initialized — pass --mt5-terminal-path"
+                                },
                                 "received_at": _utc_now(),
                             },
                         )
                         print(
                             json.dumps(
-                                {"zmq_error": {"message_id": msg_id, "error": "MT5 not initialized"}},
+                                {
+                                    "zmq_error": {
+                                        "message_id": msg_id,
+                                        "error": "MT5 not initialized",
+                                    }
+                                },
                                 ensure_ascii=False,
                             ),
                             flush=True,
@@ -1539,7 +1585,8 @@ def run_zmq_worker(
                         try:
                             action = normalize_action(msg_payload.get("action"))
                             ack_status, detail = _send_to_mt5(
-                                mt5, payload,
+                                mt5,
+                                payload,
                                 default_volume=default_volume,
                                 deviation=deviation,
                                 magic=magic,
@@ -1555,12 +1602,23 @@ def run_zmq_worker(
                                 target="exec_bridge",
                             )
                             _zmq_send_ack(
-                                pub, msg_id,
-                                {"ack_status": ack_status, "detail": detail, "received_at": _utc_now()},
+                                pub,
+                                msg_id,
+                                {
+                                    "ack_status": ack_status,
+                                    "detail": detail,
+                                    "received_at": _utc_now(),
+                                },
                             )
                             print(
                                 json.dumps(
-                                    {"zmq_processed": {"message_id": msg_id, "ack_status": ack_status, "detail": detail}},
+                                    {
+                                        "zmq_processed": {
+                                            "message_id": msg_id,
+                                            "ack_status": ack_status,
+                                            "detail": detail,
+                                        }
+                                    },
                                     ensure_ascii=False,
                                 ),
                                 flush=True,
@@ -1571,16 +1629,24 @@ def run_zmq_worker(
                         except Exception as exc:  # BLE001:FOG
                             with fail_open_guard("mt5_bridge_worker:_ofi_poller_zmq"):
                                 _zmq_send_ack(
-                                    pub, msg_id,
+                                    pub,
+                                    msg_id,
                                     {
                                         "ack_status": "error",
-                                        "detail": {"reason": f"{type(exc).__name__}: {str(exc)[:200]}"},
+                                        "detail": {
+                                            "reason": f"{type(exc).__name__}: {str(exc)[:200]}"
+                                        },
                                         "received_at": _utc_now(),
                                     },
                                 )
                                 print(
                                     json.dumps(
-                                        {"zmq_error": {"message_id": msg_id, "error": str(exc)[:200]}},
+                                        {
+                                            "zmq_error": {
+                                                "message_id": msg_id,
+                                                "error": str(exc)[:200],
+                                            }
+                                        },
                                         ensure_ascii=False,
                                     ),
                                     flush=True,
@@ -1604,13 +1670,22 @@ def run_zmq_worker(
                         except OSError:
                             _file_age = 0.0
                         if _file_age > _MAX_FILE_AGE_SEC:
-                            _rel = _path.relative_to(outbox_dir) if outbox_dir in _path.parents else Path(_path.name)
+                            _rel = (
+                                _path.relative_to(outbox_dir)
+                                if outbox_dir in _path.parents
+                                else Path(_path.name)
+                            )
                             _arc = archive_dir / _rel
                             _arc.parent.mkdir(parents=True, exist_ok=True)
                             _safe_move(_path, _arc)
                             print(
                                 json.dumps(
-                                    {"file_fallback_stale_archived": {"path": str(_path), "age_hours": round(_file_age / 3600, 1)}},
+                                    {
+                                        "file_fallback_stale_archived": {
+                                            "path": str(_path),
+                                            "age_hours": round(_file_age / 3600, 1),
+                                        }
+                                    },
                                     ensure_ascii=False,
                                 ),
                                 flush=True,
@@ -1624,7 +1699,11 @@ def run_zmq_worker(
                         # Dedup: skip if already processed via ZMQ
                         if _f_msg_id in _processed_ids:
                             # File is orphaned duplicate — archive it
-                            _rel = _path.relative_to(outbox_dir) if outbox_dir in _path.parents else Path(_path.name)
+                            _rel = (
+                                _path.relative_to(outbox_dir)
+                                if outbox_dir in _path.parents
+                                else Path(_path.name)
+                            )
                             _arc = archive_dir / _rel
                             _arc.parent.mkdir(parents=True, exist_ok=True)
                             _safe_move(_path, _arc)
@@ -1649,7 +1728,12 @@ def run_zmq_worker(
                             _persist_processed_id(_wal_processed_path, _f_msg_id)
                             print(
                                 json.dumps(
-                                    {"file_fallback_processed": {"message_id": _f_msg_id, "path": str(_path)}},
+                                    {
+                                        "file_fallback_processed": {
+                                            "message_id": _f_msg_id,
+                                            "path": str(_path),
+                                        }
+                                    },
                                     ensure_ascii=False,
                                 ),
                                 flush=True,
@@ -1658,7 +1742,12 @@ def run_zmq_worker(
                             with fail_open_guard("mt5_bridge_worker:_ofi_poller_zmq"):
                                 print(
                                     json.dumps(
-                                        {"file_fallback_error": {"message_id": _f_msg_id, "error": str(_f_exc)[:200]}},
+                                        {
+                                            "file_fallback_error": {
+                                                "message_id": _f_msg_id,
+                                                "error": str(_f_exc)[:200],
+                                            }
+                                        },
                                         ensure_ascii=False,
                                     ),
                                     flush=True,
@@ -1701,7 +1790,9 @@ def run_zmq_worker(
                         _ofi_data = _ofi_collector_zmq.settle_m5_bar()
                         if _ofi_data:
                             _ofi_tmp = _ofi_path_zmq.with_suffix(".tmp")
-                            _ofi_tmp.write_text(json.dumps(_ofi_data, ensure_ascii=False), encoding="utf-8")
+                            _ofi_tmp.write_text(
+                                json.dumps(_ofi_data, ensure_ascii=False), encoding="utf-8"
+                            )
                             os.replace(str(_ofi_tmp), str(_ofi_path_zmq))
                     except OSError:
                         pass
