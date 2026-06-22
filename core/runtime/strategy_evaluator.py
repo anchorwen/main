@@ -683,6 +683,28 @@ def evaluate_strategy_lines(
             )
             continue
 
+        # ── DQAF-20260622-059 / P2: UnattributedOrderRejected self-protection ──
+        # If a strategy previously triggered UnattributedOrderRejected (sentinel
+        # magic 90401), it is PERMANENTLY BLOCKED until system restart.  Do NOT
+        # enqueue further orders — they would fail with the same fatal error.
+        if execution_queue.is_unattributed_blocked(sname):
+            strategy_results[-1]["should_trade"] = False
+            strategy_results[-1]["reason"] = "blocked_unattributed_magic_90401"
+            print(
+                json.dumps(
+                    {
+                        "event": "unattributed_blocked_strategy_skipped",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "direction": decision.direction,
+                        "reason": "strategy_permanently_blocked_due_to_sentinel_magic_90401",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            continue
+
         # ── P4-2: Cross-strategy coordinator ──────────────────────────
         # Block if another strategy already holds an opposing position.
         # Opposing positions cancel each other's edge while paying

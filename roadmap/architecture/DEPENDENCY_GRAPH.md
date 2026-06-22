@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-22T15:38:54Z
+> **自动生成**: 2026-06-22T15:51:29Z
 
 ## Package-Level Dependencies
 
@@ -189,7 +189,7 @@
 - `cross_strategy_coordinator.py` → (无内部依赖)
 - `dynamic_sl_tp.py` → (无内部依赖)
 - `execution_manager.py` → `core.contracts.exceptions`, `core.observability.metric_names`
-- `execution_queue.py` → `core.execution.live_order_sender`, `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
+- `execution_queue.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`, `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
 - `exit_reason.py` → (无内部依赖)
 - `exit_watchdog.py` → `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
 - `fill_simulator.py` → `core.contracts.ids`, `core.execution.gateway_contracts`
@@ -200,7 +200,7 @@
 - `gateway_contracts.py` → (无内部依赖)
 - `kelly_sizer.py` → `core.execution.pwin_chain`
 - `limit_order_monitor.py` → (无内部依赖)
-- `live_order_sender.py` → `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.execution.broker_adapter`, `core.execution.mt5_broker_adapter`, `core.execution.mt5_worker`, `core.protocol.live_execution_contract`, `core.protocol.schema_versions`, `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
+- `live_order_sender.py` → `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.contracts.strategy_magic`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.execution.broker_adapter`, `core.execution.mt5_broker_adapter`, `core.execution.mt5_worker`, `core.protocol.live_execution_contract`, `core.protocol.schema_versions`, `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
 - `managed_close.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`, `core.execution.reentry_guard`, `core.runtime.fault_handler`
 - `market_efficiency.py` → (无内部依赖)
 - `market_impact.py` → (无内部依赖)

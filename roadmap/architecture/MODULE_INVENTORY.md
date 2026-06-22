@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T15:38:54Z
+> **自动生成**: 2026-06-22T15:51:29Z
 > **扫描模块数**: 654
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -116,7 +116,7 @@
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 218 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 146 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
-| `strategy_magic.py` | ✅ active | — | 2 | 176 | — | |
+| `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
 | `validators.py` | ✅ active | ContractViolation, ContractValidator | 7 | 123 | — | |
 
 ## core/contracts/domain
@@ -221,7 +221,7 @@
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
-| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 8 | 495 | — | |
+| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 531 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 269 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 11 | 598 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
@@ -232,7 +232,7 @@
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 117 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 379 | — | |
+| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 397 | — | |
 | `managed_close.py` | ✅ active | — | 2 | 391 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
@@ -534,7 +534,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 94 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 923 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 789 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 811 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
@@ -727,7 +727,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 712 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 33 | 1966 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 33 | 1985 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 180 | — | |

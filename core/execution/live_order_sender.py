@@ -300,6 +300,23 @@ def dispatch_live_open_order(
             f"Check live.yaml for fat-finger errors."
         )
 
+    # ── DQAF-20260622-059 / P2: Fail-Fast sentinel magic guard ──────────
+    # Magic 90401 is the __UNATTRIBUTED_BRIDGE_DEFAULT__ sentinel.  It MUST
+    # NOT appear on any live OPEN order.  If it does, the upstream
+    # strategy→magic resolution pipeline is broken — reject immediately
+    # rather than silently polluting the journal with unattributed entries.
+    from core.contracts.strategy_magic import (
+        SENTINEL_UNATTRIBUTED_MAGIC,
+        UnattributedOrderRejected,
+    )
+
+    if magic is not None and int(magic) == SENTINEL_UNATTRIBUTED_MAGIC:
+        raise UnattributedOrderRejected(
+            magic=int(magic),
+            strategy_name=getattr(ctx, "strategy_name", ""),
+            intent_id=iid,
+        )
+
     execution_payload: dict[str, Any] = {
         "intent_id": iid,
         "action": "open",

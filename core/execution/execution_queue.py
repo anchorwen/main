@@ -17,6 +17,8 @@ import time as _time
 from dataclasses import dataclass
 from typing import Any
 
+# DQAF-20260622-059 / P2: sentinel magic guard
+from core.contracts.strategy_magic import UnattributedOrderRejected
 from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
@@ -93,6 +95,8 @@ class ExecutionQueue:
         self._pending_open: dict[str, float] = {}  # strategy_name → monotonic time
         self._open_attempt_count: dict[str, int] = {}  # cumulative attempts per strategy
         self._open_flood_locked: set[str] = set()  # permanent-locked strategies
+        # ── DQAF-20260622-059 / P2: UnattributedOrderRejected self-protection ──
+        self._unattributed_blocked: set[str] = set()  # strategies blocked due to sentinel magic 90401
 
     # ── Entry-in-flight API (Blind Spot 3) ──────────────────────────────
 
@@ -133,6 +137,18 @@ class ExecutionQueue:
         """Clear the entry-in-flight lock on confirmed dispatch or rejection."""
         self._pending_open.pop(strategy_name, None)
         self._open_attempt_count.pop(strategy_name, None)
+
+    # ── DQAF-20260622-059 / P2: UnattributedOrderRejected self-protection ──
+
+    def is_unattributed_blocked(self, strategy_name: str) -> bool:
+        """Check whether a strategy is blocked due to sentinel magic (90401).
+
+        Once blocked, the strategy MUST NOT send any more OPEN orders until
+        manual intervention clears the block (requires system restart).
+        """
+        return strategy_name in self._unattributed_blocked
+
+    # ── End unattributed-block API ────────────────────────────────────────
 
     # ── End entry-in-flight API ─────────────────────────────────────────
 
@@ -445,6 +461,23 @@ class ExecutionQueue:
                     )
                     _dispatched = True
                     break
+                except UnattributedOrderRejected as _sentinel_exc:  # DQAF-20260622-059 / P2
+                    # ── FAIL-FAST: sentinel magic 90401 detected on OPEN order ──
+                    # This is a NON-RECOVERABLE configuration error — the
+                    # strategy→magic resolution pipeline is broken upstream.
+                    # Retrying will produce the same error.  Block the strategy
+                    # permanently (until restart) to prevent infinite reject loops.
+                    self._unattributed_blocked.add(queued.strategy_name)
+                    _last_error = str(_sentinel_exc)
+                    logger.critical(
+                        "UNATTRIBUTED_ORDER_REJECTED: strategy=%s magic=%s intent_id=%s — "
+                        "strategy PERMANENTLY BLOCKED until system restart. "
+                        "Upstream strategy→magic resolution pipeline is broken.",
+                        queued.strategy_name,
+                        _sentinel_exc.magic,
+                        _sentinel_exc.intent_id,
+                    )
+                    break  # do NOT retry — fail-fast
                 except Exception as exc:  # BLE001:FOG (logged, Phase 3b)
                     with fail_open_guard("execution_queue:_flush_unsafe"):
                         _last_error = str(exc)

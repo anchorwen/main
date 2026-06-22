@@ -28,6 +28,35 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# ── Sentinel magic number ──
+SENTINEL_UNATTRIBUTED_MAGIC: int = 90401
+SENTINEL_UNATTRIBUTED_STRATEGY: str = "__UNATTRIBUTED_BRIDGE_DEFAULT__"
+
+
+class UnattributedOrderRejected(RuntimeError):
+    """Raised when an OPEN order is dispatched with the sentinel magic (90401).
+
+    Per DQAF-20260622-059 / P2 (Fail-Fast): the sentinel magic MUST NOT be
+    used for any real strategy order.  If it appears on an open request,
+    something is broken upstream (strategy→magic resolution).  This
+    exception should be caught by the strategy evaluator to trigger
+    strategy-level self-protection (stop sending orders, enter
+    close-only mode).
+    """
+
+    def __init__(self, magic: int, strategy_name: str = "", intent_id: str = "") -> None:
+        self.magic = magic
+        self.strategy_name = strategy_name
+        self.intent_id = intent_id
+        super().__init__(
+            f"Magic {magic} is the sentinel value "
+            f"'{SENTINEL_UNATTRIBUTED_STRATEGY}' and MUST NOT be used for "
+            f"live orders. strategy={strategy_name or '?'}, "
+            f"intent_id={intent_id or '?'}.  This is a FAIL-FAST guard — "
+            f"the upstream strategy→magic resolution pipeline is broken."
+        )
+
+
 # ── Module-level state (lazy-initialised singleton) ──
 _MAPPINGS_INITIALIZED: bool = False
 MAGIC_TO_STRATEGY: dict[int, str] = {}

@@ -25,10 +25,12 @@ from core.protocol.live_execution_contract import (
     normalize_action,
 )
 from core.runtime.fault_handler import (
+    _MT5_TIMEOUT_SENTINEL,
     FaultLevel,
     FaultTolerantContext,
     fail_open_guard,
     log_and_continue,
+    mt5_call_with_timeout,
 )
 
 
@@ -1389,30 +1391,47 @@ def _write_zmq_journal_entry(
     # If strategy is still empty after payload magic lookup, attempt
     # reverse-lookup from MT5.  Tier 1: positions_get (works for open/modify).
     # Tier 2: history_deals_get (works for recently-closed positions).
+    #
+    # DQAF-20260622-059 / P1: Both MT5 calls are wrapped with
+    # mt5_call_with_timeout (default 5s) to prevent the journal write path
+    # from blocking indefinitely on MT5 IPC hangs.  On timeout, the fallback
+    # is skipped — the journal entry is written with empty strategy, which
+    # is acceptable for this cold-backup path (Step 1 payload magic is the
+    # primary attribution mechanism).
+    _FALLBACK_TIMEOUT = 3.0  # seconds — shorter than default since this is a cold backup
     if not _strategy and mt5 is not None and position_ticket is not None:
         _fallback_magic: int | None = None
         with log_and_continue(component="DQAF058:mt5_magic_fallback"):
-            # Tier 1: live position lookup
-            try:
-                _live_positions = mt5.positions_get(ticket=position_ticket)
-                if _live_positions and len(_live_positions) > 0:
-                    _fb_magic = getattr(_live_positions[0], "magic", None)
-                    if _fb_magic is not None:
-                        _fallback_magic = int(_fb_magic)
-            except Exception:
-                pass
-            # Tier 2: deal history (position already closed)
-            if _fallback_magic is None:
+            # Tier 1: live position lookup (timeout-guarded)
+            _live_positions = mt5_call_with_timeout(
+                mt5.positions_get,
+                ticket=position_ticket,
+                timeout=_FALLBACK_TIMEOUT,
+            )
+            if _live_positions is not _MT5_TIMEOUT_SENTINEL and _live_positions:
                 try:
-                    _deals = mt5.history_deals_get(position=position_ticket)
-                    if _deals:
+                    if len(_live_positions) > 0:
+                        _fb_magic = getattr(_live_positions[0], "magic", None)
+                        if _fb_magic is not None:
+                            _fallback_magic = int(_fb_magic)
+                except Exception:
+                    pass
+            # Tier 2: deal history — position already closed (timeout-guarded)
+            if _fallback_magic is None:
+                _deals = mt5_call_with_timeout(
+                    mt5.history_deals_get,
+                    position=position_ticket,
+                    timeout=_FALLBACK_TIMEOUT,
+                )
+                if _deals is not _MT5_TIMEOUT_SENTINEL and _deals:
+                    try:
                         for _d in _deals:
                             _d_magic = getattr(_d, "magic", None)
                             if _d_magic is not None and int(_d_magic) != 0:
                                 _fallback_magic = int(_d_magic)
                                 break
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
             if _fallback_magic is not None:
                 _strategy = _M2S.get(_fallback_magic, "") if "_M2S" in dir() else ""
                 if not _strategy:
