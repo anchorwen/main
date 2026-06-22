@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T05:58:42Z
+> **自动生成**: 2026-06-22T07:45:26Z
 > **扫描模块数**: 650
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -169,7 +169,7 @@
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 13 | 226 | — | |
 | `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1291 | — | |
-| `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 18 | 371 | — | |
+| `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 22 | 502 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
 | `compliance_control_matrix.py` | ✅ active | ComplianceControlMatrixService | 11 | 424 | — | |
@@ -681,7 +681,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 32 | 2275 | — | |
+| `daily_ops.py` | ✅ active | — | 32 | 2326 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |
@@ -765,7 +765,7 @@
 | `validate_blueprints.py` | ✅ active | — | 7 | 300 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 397 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
-| `verify.py` | ✅ active | — | 15 | 966 | — | |
+| `verify.py` | ✅ active | — | 15 | 987 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 92 | — | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
@@ -852,7 +852,7 @@
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
 | `governance_scheduler.py` | ✅ active | — | 6 | 564 | — | |
-| `label_builder.py` | ✅ active | — | 14 | 698 | — | |
+| `label_builder.py` | ✅ active | — | 19 | 1032 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 424 | — | |
 | `optimize_ensemble_weights.py` | ✅ active | — | 4 | 166 | — | |

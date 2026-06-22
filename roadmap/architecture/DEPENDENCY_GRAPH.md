@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-22T05:58:42Z
+> **自动生成**: 2026-06-22T07:45:26Z
 
 ## Package-Level Dependencies
 
@@ -139,7 +139,7 @@
 - `brain_alert.py` → (无内部依赖)
 - `brain_config_validator.py` → `core.brains.adapters`, `core.features.schemas.registry`
 - `brain_lifecycle_manager.py` → `core.config.asset_registry`, `core.deployment.atomic_file_writer`, `core.deployment.path_defaults`, `core.features.feature_service`, `core.governance.governance_service`, `core.runtime.fault_handler`, `core.runtime.signal_pipeline`
-- `brain_registration_gate.py` → `core.brains.adapters`, `core.deployment.brain_config_validator`, `core.runtime.fault_handler`
+- `brain_registration_gate.py` → `core.brains.adapters`, `core.brains.services.brain_factory`, `core.deployment.brain_config_validator`, `core.runtime.fault_handler`
 - `capability_registry.py` → `core.contracts.domain_keys`
 - `compliance_audit.py` → `core.contracts.domain_keys`, `core.deployment.governance_summary`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
 - `compliance_control_matrix.py` → `core.contracts.domain_keys`, `core.deployment.governance_summary`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
@@ -754,7 +754,7 @@
 - `generate_batch_plan.py` → (无内部依赖)
 - `generate_brain_config.py` → `core.features.schemas.registry`, `core.runtime.fault_handler`
 - `governance_scheduler.py` → `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`, `core.runtime.fault_handler`, `core.training.utils`
-- `label_builder.py` → `core.contracts.training.label_contract`
+- `label_builder.py` → `core.contracts.training.label_contract`, `core.runtime.fault_handler`
 - `label_builder_d1.py` → `core.runtime.fault_handler`
 - `monitor_training.py` → `core.runtime.fault_handler`
 - `optimize_ensemble_weights.py` → `core.runtime.fault_handler`

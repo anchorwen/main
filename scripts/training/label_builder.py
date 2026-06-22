@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,7 @@ from typing import Any
 import numpy as np
 
 from core.contracts.training.label_contract import BarrierResult, LabelContract
+from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "training_label.v1"
 
@@ -173,6 +175,121 @@ def _classify_barrier_label(
     return "timeout"
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Phase 3a: Full barrier simulation for journal mode
+# ═══════════════════════════════════════════════════════════════════════
+
+_OHLC_CACHE: dict[tuple[str, str], tuple | None] = {}
+
+
+def _resolve_ohlc_path(
+    symbol: str,
+    timeframe: str,
+    data_dir: Path | None = None,
+) -> Path | None:
+    """Resolve OHLC CSV path for a given symbol and timeframe.
+
+    Tries multiple naming conventions:
+      - xauusd_m5_merged.csv  (lowercase, no 'c' suffix)
+      - xauusdc_m5_merged.csv (with 'c' suffix for cent accounts)
+    """
+    if data_dir is None:
+        data_dir = Path("data/raw")
+    sym = symbol.lower().rstrip("c")
+    tf = timeframe.lower()
+    for suffix in ("", "c"):
+        csv_path = data_dir / f"{sym}{suffix}_{tf}_merged.csv"
+        if csv_path.exists():
+            return csv_path
+    return None
+
+
+def _load_ohlc_cached(
+    symbol: str,
+    timeframe: str,
+    data_dir: Path | None = None,
+):
+    """Load OHLC arrays for *symbol* × *timeframe*, cached across calls.
+
+    Returns ``(opens, highs, lows, closes, timestamps)`` or ``None`` if no
+    CSV file can be resolved.  All arrays are float64 numpy; timestamps is a
+    plain ``list[str]``.
+    """
+    cache_key = (symbol.lower(), timeframe.lower())
+    if cache_key in _OHLC_CACHE:
+        return _OHLC_CACHE[cache_key]
+
+    csv_path = _resolve_ohlc_path(symbol, timeframe, data_dir)
+    if csv_path is None:
+        _OHLC_CACHE[cache_key] = None
+        return None
+
+    try:
+        opens, highs, lows, closes, timestamps = _load_price_csv(csv_path)
+        _OHLC_CACHE[cache_key] = (opens, highs, lows, closes, timestamps)
+        return _OHLC_CACHE[cache_key]
+    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
+        with fail_open_guard("label_builder:_load_ohlc_cached"):
+            _OHLC_CACHE[cache_key] = None
+            return None
+
+
+def _infer_symbol_from_journal_path(journal_path: Path) -> str:
+    """Guess the trading symbol from the journal path's parent directory.
+
+    ``data_btc/live_trade_journal.jsonl`` → ``"BTCUSD"``
+    ``data/live_trade_journal.jsonl``     → ``"XAUUSD"``
+    """
+    parent = journal_path.resolve().parent.name.lower()
+    if "btc" in parent:
+        return "BTCUSD"
+    return "XAUUSD"
+
+
+def _find_bar_index(
+    timestamps: list[str],
+    target_iso: str,
+) -> int | None:
+    """Locate the OHLC bar index whose timestamp is at-or-just-before *target_iso*.
+
+    *target_iso* is the journal ``recorded_at`` field (ISO-8601, e.g.
+    ``"2026-06-20T09:45:00Z"``).  CSV timestamps are ``"2025-01-14 01:45:00"``.
+    The function normalises both to naive ``datetime`` at minute resolution,
+    then returns the index of the **last** bar whose timestamp ≤ target.
+
+    Returns ``None`` when the entry time is before the first bar or the
+    timestamp list is empty.
+    """
+    if not timestamps:
+        return None
+
+    # Normalise target to a naive datetime at minute resolution
+    target = (
+        target_iso.replace("T", " ").replace("Z", "").replace("+00:00", "").replace("+0000", "")
+    )
+    if len(target) >= 16:
+        target = target[:16]  # "2026-06-20 09:45"
+
+    try:
+        target_dt = datetime.strptime(target, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+
+    best_idx: int | None = None
+    for i, ts in enumerate(timestamps):
+        ts_norm = ts[:16] if len(ts) >= 16 else ts
+        try:
+            ts_dt = datetime.strptime(ts_norm, "%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+        if ts_dt <= target_dt:
+            best_idx = i
+        else:
+            break  # timestamps are sorted; we've passed the target
+
+    return best_idx
+
+
 def resolve_brain_contracts(
     brains_dirs: list[Path] | None = None,
 ) -> dict[str, LabelContract]:
@@ -229,8 +346,9 @@ def resolve_brain_contracts(
                     try:
                         result[brain_id] = LabelContract.from_file(_contract_path)
                         continue
-                    except Exception:
-                        pass  # fall through to next priority
+                    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
+                        with fail_open_guard("label_builder:resolve_brain_contracts"):
+                            pass  # fall through to next priority
 
             # Priority 2: dict with inline sl_atr_mult / tp_atr_mult
             if isinstance(label_contract, dict):
@@ -239,9 +357,11 @@ def resolve_brain_contracts(
                 if _sl is not None and _tp is not None:
                     _raw_type = label_contract.get("contract_type", "survival_barrier")
                     # Normalise non-standard contract types (e.g. "barrier_12bar")
-                    _norm_type = _raw_type if _raw_type in (
-                        "survival_barrier", "regression", "binary_class"
-                    ) else "survival_barrier"
+                    _norm_type = (
+                        _raw_type
+                        if _raw_type in ("survival_barrier", "regression", "binary_class")
+                        else "survival_barrier"
+                    )
                     result[brain_id] = LabelContract(
                         schema_version="label_contract.v1",
                         contract_id=label_contract.get("contract_id", f"{brain_id}_inline"),
@@ -267,7 +387,11 @@ def resolve_brain_contracts(
                     contract_id=f"{brain_id}_training",
                     type="survival_barrier",
                     horizon_bars=training_params.get("horizon", 12),
-                    label_classes={"tp_hit_first": "win", "sl_hit_first": "loss", "timeout": "timeout"},
+                    label_classes={
+                        "tp_hit_first": "win",
+                        "sl_hit_first": "loss",
+                        "timeout": "timeout",
+                    },
                     sl_atr_mult=float(_tsl),
                     tp_atr_mult=float(_ttp),
                     bar_timeframe=training_params.get("timeframe", "M5"),
@@ -282,6 +406,7 @@ def build_trade_records(
     date_filter: str | None = None,
     contract: LabelContract | None = None,
     brain_contracts: dict[str, LabelContract] | None = None,
+    price_data_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Build trade records from journal entries by matching open/close pairs.
 
@@ -293,6 +418,14 @@ def build_trade_records(
     brain's specific training contract.  This enables per-brain contract-aware
     classification — e.g. Swing_V9 (SL=3.0/TP=1.5) and Brain_Rev (SL=2.5/TP=0.7)
     get different labels for the same trade.
+
+    When ``price_data_dir`` is provided and the active contract is a
+    survival_barrier, the builder runs a **full forward-walking barrier
+    simulation** against OHLC price data (via ``contract.build_barrier_labels()``)
+    instead of the proximity-based heuristic.  This yields correct ``tp_hit_first`` /
+    ``sl_hit_first`` / ``timeout`` labels even when the journal lacks an exit
+    price.  Falls back gracefully to proximity classification when OHLC data is
+    unavailable.
     """
     entries = _read_journal_entries(journal_path, date_filter=date_filter)
     if not entries:
@@ -355,8 +488,41 @@ def build_trade_records(
                         pnl = float(_journal_pnl)
                         label_source = "pnl_journal"
 
-                # Determine label classification
-                if _active_contract is not None and entry_price is not None:
+                # ── FIX-20260622-057 Phase 3a: barrier simulation ──
+                # When the active contract is a survival_barrier, we attempt a
+                # full forward-walking barrier simulation against real OHLC data
+                # before falling back to the proximity heuristic.
+                barrier_result = None
+                if (
+                    _active_contract is not None
+                    and _active_contract.type == "survival_barrier"
+                    and entry_price is not None
+                ):
+                    _open_time = open_rec.get("recorded_at") or open_rec.get("open_time")
+                    if _open_time:
+                        _symbol = str(open_rec.get("symbol", ""))
+                        if not _symbol:
+                            _symbol = _infer_symbol_from_journal_path(journal_path)
+                        _ohlc = _load_ohlc_cached(
+                            _symbol,
+                            _active_contract.bar_timeframe,
+                            price_data_dir,
+                        )
+                        if _ohlc is not None:
+                            _o, _h, _l, _c, _tss = _ohlc
+                            _entry_idx = _find_bar_index(_tss, str(_open_time))
+                            if _entry_idx is not None and _entry_idx < len(_c) - max(
+                                _active_contract.horizon_bars, 1
+                            ):
+                                with suppress(Exception):
+                                    barrier_result = _active_contract.build_barrier_labels(
+                                        _h, _l, _c, entry_idx=_entry_idx, side=side
+                                    )
+
+                if barrier_result is not None:
+                    label = barrier_result.label
+                    label_source = "barrier_simulation"
+                elif _active_contract is not None and entry_price is not None:
                     if exit_price is not None:
                         atr = open_rec.get("atr", 2.31)
                         label = _classify_barrier_label(
@@ -408,6 +574,23 @@ def build_trade_records(
                     trade["sl_atr_mult"] = _active_contract.sl_atr_mult
                     trade["tp_atr_mult"] = _active_contract.tp_atr_mult
                     trade["horizon_bars"] = _active_contract.horizon_bars
+
+                # Enrich with barrier simulation metadata
+                if barrier_result is not None:
+                    trade["barrier_method"] = "forward_simulation"
+                    trade["barrier_sl_price"] = round(barrier_result.sl_price, 6)
+                    trade["barrier_tp_price"] = round(barrier_result.tp_price, 6)
+                    trade["barrier_atr"] = barrier_result.atr_at_entry
+                    trade["barrier_hit_bar"] = barrier_result.hit_bar_index
+                    # Compute theoretical PnL from barrier simulation when
+                    # actual PnL is unavailable (e.g. no close_price in journal)
+                    if pnl is None and barrier_result.hit_price is not None:
+                        pnl = _compute_pnl(
+                            side,
+                            barrier_result.entry_price,
+                            barrier_result.hit_price,
+                            volume,
+                        )
 
                 trades.append(trade)
 
@@ -740,6 +923,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="ISO date filter for journal mode (UTC), e.g. 2026-05-04",
     )
     p.add_argument(
+        "--price-data-dir",
+        type=Path,
+        default=None,
+        help="Directory containing OHLC CSV files for barrier simulation "
+        "(journal mode, default: data/raw)",
+    )
+    p.add_argument(
         "--side",
         default="long,short",
         help="Trade sides for barrier mode (default: long,short)",
@@ -815,6 +1005,7 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.journal),
             date_filter=args.date,
             contract=contract,
+            price_data_dir=args.price_data_dir,
         )
 
     # ── Stats mode ──

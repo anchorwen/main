@@ -208,6 +208,10 @@ def _step_label_builder(
         # Falls back gracefully if resolve_brain_contracts() returns {}.
         _brain_contracts = resolve_brain_contracts()
 
+        # Resolve OHLC price data directory for barrier simulation
+        _price_data_raw = base / "raw"
+        _price_data_dir: Path | None = _price_data_raw if _price_data_raw.is_dir() else None
+
         # Process live journal
         live_records: list[dict[str, Any]] = []
         live_journal = base / "live_trade_journal.jsonl"
@@ -216,6 +220,7 @@ def _step_label_builder(
                 live_journal,
                 contract=contract,
                 brain_contracts=_brain_contracts,
+                price_data_dir=_price_data_dir,
             )
 
         # Process paper journal
@@ -226,6 +231,7 @@ def _step_label_builder(
                 paper_journal,
                 contract=contract,
                 brain_contracts=_brain_contracts,
+                price_data_dir=_price_data_dir,
             )
 
         all_records = live_records + paper_records
@@ -258,12 +264,9 @@ def _step_label_builder(
         _labeled_tickets = {
             r.get("position_ticket")
             for r in all_records
-            if r.get("position_ticket") is not None
-            and r.get("label") != "unlabeled"
+            if r.get("position_ticket") is not None and r.get("label") != "unlabeled"
         }
-        _coverage_pct = (
-            round(len(_labeled_tickets) / max(len(_journal_tickets), 1) * 100, 1)
-        )
+        _coverage_pct = round(len(_labeled_tickets) / max(len(_journal_tickets), 1) * 100, 1)
 
         return {
             "step": "label_builder",
