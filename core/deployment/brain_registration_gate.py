@@ -42,6 +42,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from core.brains.adapters import BRAIN_TYPE_MAP
 from core.deployment.brain_config_validator import (
     SCHEMA_ALIASES,
@@ -121,6 +123,7 @@ class BrainRegistrationGate:
         # Non-blocking warnings
         self._check_vote_weight(entry, result)
         self._check_contract_group(entry, result)
+        self._check_behavioral_diversity(entry, result)
 
         result.passed = len(result.failures) == 0
         if result.passed:
@@ -289,6 +292,134 @@ class BrainRegistrationGate:
             result.warnings.append(
                 f"contract_group='{cg}' not in live.yaml strategy_lines: {sorted(known)}"
             )
+
+    # ── FIX-20260622-057 Phase 2 B1: Behavioral Diversity Check ─────────
+    # Detects data saturation — when a new brain model produces near-identical
+    # raw_score predictions to an existing brain sharing the same feature schema.
+    # Correlation > 0.95 triggers a WARNING (not ERROR — this is advisory).
+    # Gracefully degrades if feature store or BrainFactory is unavailable.
+
+    _BEHAVIORAL_DIVERSITY_CORR_THRESHOLD = 0.95
+    _BEHAVIORAL_DIVERSITY_SAMPLE_LIMIT = 200
+
+    def _check_behavioral_diversity(self, entry: dict, result: GateResult) -> None:
+        brain_id = entry.get("brain_id", "")
+        schema_id = entry.get("feature_schema_id", "")
+        if not brain_id or not schema_id:
+            return
+
+        # Find comparable brains: same feature_schema_id, different brain_id
+        existing = self._scan_all_configs()
+        comparable = {
+            bid: cfg
+            for bid, cfg in existing.items()
+            if bid != brain_id and cfg.get("feature_schema_id") == schema_id
+        }
+        if len(comparable) < 1:
+            return  # nothing to compare against
+
+        # Load feature vectors from feature store
+        feature_vectors = self._load_feature_store_vectors(schema_id)
+        if not feature_vectors:
+            return  # feature store unavailable — skip silently
+
+        # Build adapter for the new brain
+        new_adapter = self._build_adapter_safe(entry)
+        if new_adapter is None:
+            return
+
+        # Run inference on the new brain
+        new_scores = self._collect_raw_scores(new_adapter, entry, feature_vectors)
+        if new_scores is None or len(new_scores) < 10:
+            return
+
+        # Compare against each comparable existing brain
+        for other_id, other_cfg in comparable.items():
+            other_adapter = self._build_adapter_safe(other_cfg)
+            if other_adapter is None:
+                continue
+            other_scores = self._collect_raw_scores(other_adapter, other_cfg, feature_vectors)
+            if other_scores is None or len(other_scores) < 10:
+                continue
+
+            # Pearson correlation of raw scores
+            try:
+                corr = float(np.corrcoef(new_scores, other_scores)[0, 1])
+            except (ValueError, IndexError):
+                continue
+            if np.isnan(corr):
+                continue
+
+            if corr >= self._BEHAVIORAL_DIVERSITY_CORR_THRESHOLD:
+                result.warnings.append(
+                    f"near-identical predictions to '{other_id}' "
+                    f"(raw_score r={corr:.3f}) — possible data saturation"
+                )
+
+    @staticmethod
+    def _load_feature_store_vectors(
+        schema_id: str,
+        limit: int | None = None,
+    ) -> list[dict[str, float]]:
+        """Load the last N feature records from the M5 feature store."""
+        if limit is None:
+            limit = BrainRegistrationGate._BEHAVIORAL_DIVERSITY_SAMPLE_LIMIT
+        store_path = Path("data/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl")
+        if not store_path.exists():
+            return []
+        records: list[dict[str, float]] = []
+        try:
+            with open(store_path, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                        vals = r.get("values", {})
+                        if isinstance(vals, dict) and len(vals) >= 10:
+                            records.append(vals)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+        except OSError:
+            return []
+        return records[-limit:]
+
+    @staticmethod
+    def _build_adapter_safe(entry: dict[str, Any]):
+        """Build a brain adapter, returning None on any failure."""
+        try:
+            from core.brains.services.brain_factory import BrainFactory
+
+            return BrainFactory().build(entry)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _collect_raw_scores(
+        adapter,
+        entry: dict[str, Any],
+        feature_vectors: list[dict[str, float]],
+    ) -> list[float] | None:
+        """Run inference on all feature vectors, collecting raw_score values."""
+        feature_names: list[str] = entry.get("features", [])
+        if not feature_names:
+            return None
+        scores: list[float] = []
+        for vec_dict in feature_vectors:
+            vec = np.zeros(len(feature_names), dtype=np.float32)
+            for i, name in enumerate(feature_names):
+                vec[i] = float(vec_dict.get(name, 0.0))
+            try:
+                raw = adapter.infer(vec)
+            except Exception:
+                continue
+            if isinstance(raw, dict):
+                score = raw.get("raw_score")
+            elif isinstance(raw, int | float):
+                score = float(raw)
+            else:
+                continue
+            if score is not None:
+                scores.append(float(score))
+        return scores if len(scores) >= 10 else None
 
     # ── helpers ──
 

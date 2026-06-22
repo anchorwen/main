@@ -479,6 +479,27 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
                             f"(DQAF-20260622-051)"
                         )
 
+    # ── Check 4: contract_path regression gate (WARN — DQAF-20260622-057 Phase 2) ──
+    # Verify daily_ops.py always passes contract_path to _step_label_builder().
+    # Post-Phase-1 the code is correct; this gate only fires if a future edit
+    # removes the contract_path parameter from a production call site.
+    _daily_ops_path = Path("scripts/daily_ops.py")
+    if _daily_ops_path.exists():
+        _dops_text = _daily_ops_path.read_text(encoding="utf-8")
+        import re
+        _builder_calls = list(re.finditer(
+            r'_step_label_builder\([^)]*\)', _dops_text
+        ))
+        for _match in _builder_calls:
+            _call_text = _match.group()
+            if 'contract_path' not in _call_text:
+                _lineno = _dops_text[:_match.start()].count('\n') + 1
+                warnings.append(
+                    f"daily_ops.py:{_lineno}: _step_label_builder() called "
+                    f"without contract_path — label barrier defense layer "
+                    f"inactive (DQAF-20260622-057)"
+                )
+
     # Print results
     if errors:
         print(f"\n[FAIL] Config Consistency: {len(errors)} error(s)")

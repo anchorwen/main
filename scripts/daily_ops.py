@@ -181,9 +181,15 @@ def _step_label_builder(
     Calls label_builder.build_trade_records() to produce live_labels.jsonl,
     which downstream steps (feedback_loop, retraining_check, leaderboard) depend on.
     Runs BEFORE feedback_loop so tracker sees fresh labels.
+
+    FIX-20260622-057 Phase 2: Now resolves per-brain training contracts via
+    resolve_brain_contracts() so each brain's label is classified using its
+    own SL/TP contract rather than a single symbol-wide contract.
+    Also computes label_coverage_pct — the percentage of journal position
+    tickets that received a non-"unlabeled" label.
     """
     try:
-        from scripts.training.label_builder import build_trade_records
+        from scripts.training.label_builder import build_trade_records, resolve_brain_contracts
 
         base = Path(base_dir)
         out_dir = base / "reports"
@@ -197,17 +203,30 @@ def _step_label_builder(
 
             contract = LabelContract.from_file(contract_path)
 
+        # FIX-20260622-057 Phase 2 A1: Resolve per-brain training contracts.
+        # Each brain's label is classified using its own SL/TP contract.
+        # Falls back gracefully if resolve_brain_contracts() returns {}.
+        _brain_contracts = resolve_brain_contracts()
+
         # Process live journal
         live_records: list[dict[str, Any]] = []
         live_journal = base / "live_trade_journal.jsonl"
         if live_journal.exists():
-            live_records = build_trade_records(live_journal, contract=contract)
+            live_records = build_trade_records(
+                live_journal,
+                contract=contract,
+                brain_contracts=_brain_contracts,
+            )
 
         # Process paper journal
         paper_records: list[dict[str, Any]] = []
         paper_journal = base / "paper_trade_journal.jsonl"
         if paper_journal.exists():
-            paper_records = build_trade_records(paper_journal, contract=contract)
+            paper_records = build_trade_records(
+                paper_journal,
+                contract=contract,
+                brain_contracts=_brain_contracts,
+            )
 
         all_records = live_records + paper_records
 
@@ -220,6 +239,32 @@ def _step_label_builder(
         wins = sum(1 for r in all_records if r["label"] in ("win", "tp_hit_first"))
         losses = sum(1 for r in all_records if r["label"] in ("loss", "sl_hit_first"))
 
+        # FIX-20260622-057 Phase 2 C1: label coverage metric.
+        # Coverage = |journal position_tickets ∩ label position_tickets| / |journal position_tickets|
+        _journal_path = base / "live_trade_journal.jsonl"
+        _journal_tickets: set[int] = set()
+        if _journal_path.exists():
+            for _line in _journal_path.read_text(encoding="utf-8").splitlines():
+                _line = _line.strip()
+                if not _line:
+                    continue
+                try:
+                    _r = json.loads(_line)
+                    _t = _r.get("position_ticket")
+                    if _t and isinstance(_t, int) and _r.get("action") == "open":
+                        _journal_tickets.add(_t)
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+        _labeled_tickets = {
+            r.get("position_ticket")
+            for r in all_records
+            if r.get("position_ticket") is not None
+            and r.get("label") != "unlabeled"
+        }
+        _coverage_pct = (
+            round(len(_labeled_tickets) / max(len(_journal_tickets), 1) * 100, 1)
+        )
+
         return {
             "step": "label_builder",
             "status": "ok",
@@ -231,6 +276,9 @@ def _step_label_builder(
             "open_trades": open_trades,
             "wins": wins,
             "losses": losses,
+            "label_coverage_pct": _coverage_pct,
+            "journal_tickets": len(_journal_tickets),
+            "labeled_tickets": len(_labeled_tickets),
             "output": str(out_path) if not dry_run else None,
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below

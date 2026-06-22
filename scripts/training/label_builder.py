@@ -173,16 +173,126 @@ def _classify_barrier_label(
     return "timeout"
 
 
+def resolve_brain_contracts(
+    brains_dirs: list[Path] | None = None,
+) -> dict[str, LabelContract]:
+    """Build a brain_id → LabelContract mapping from all brain configs.
+
+    Scans ``configs/brains/`` and ``configs/brains_btc/`` (or custom dirs)
+    for brain registry entries.  For each brain, extracts the training
+    SL/TP contract from one of three sources (in priority order):
+
+    1. label_contract string → loads the named contract from
+       ``blueprints/contracts/{contract_id}.json``
+    2. label_contract dict → constructs an inline LabelContract from the
+       inline ``sl_atr_mult`` / ``tp_atr_mult`` fields
+    3. training_params.sl_atr_mult / tp_atr_mult → constructs an inline
+       contract using those values + sensible defaults
+
+    Returns a ``dict[brain_id, LabelContract]`` that can be passed to
+    :func:`build_trade_records` via the ``brain_contracts`` parameter.
+    """
+    from core.contracts.training.label_contract import LabelContract
+
+    if brains_dirs is None:
+        _project = Path(__file__).resolve().parent.parent.parent
+        brains_dirs = [
+            _project / "configs" / "brains",
+            _project / "configs" / "brains_btc",
+        ]
+
+    contracts_dir = Path(__file__).resolve().parent.parent.parent / "blueprints" / "contracts"
+    result: dict[str, LabelContract] = {}
+
+    for brains_dir in brains_dirs:
+        if not brains_dir.is_dir():
+            continue
+        for cfg_path in sorted(brains_dir.glob("*.json")):
+            if "normalization" in cfg_path.name.lower():
+                continue
+            try:
+                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+
+            brain_id = cfg.get("brain_id")
+            if not brain_id:
+                continue
+
+            label_contract = cfg.get("label_contract")
+            training_params = cfg.get("training_params") or {}
+
+            # Priority 1: string contract_id → load from blueprints/contracts/
+            if isinstance(label_contract, str):
+                _contract_path = contracts_dir / f"{label_contract}.json"
+                if _contract_path.exists():
+                    try:
+                        result[brain_id] = LabelContract.from_file(_contract_path)
+                        continue
+                    except Exception:
+                        pass  # fall through to next priority
+
+            # Priority 2: dict with inline sl_atr_mult / tp_atr_mult
+            if isinstance(label_contract, dict):
+                _sl = label_contract.get("sl_atr_mult")
+                _tp = label_contract.get("tp_atr_mult")
+                if _sl is not None and _tp is not None:
+                    _raw_type = label_contract.get("contract_type", "survival_barrier")
+                    # Normalise non-standard contract types (e.g. "barrier_12bar")
+                    _norm_type = _raw_type if _raw_type in (
+                        "survival_barrier", "regression", "binary_class"
+                    ) else "survival_barrier"
+                    result[brain_id] = LabelContract(
+                        schema_version="label_contract.v1",
+                        contract_id=label_contract.get("contract_id", f"{brain_id}_inline"),
+                        type=_norm_type,
+                        horizon_bars=label_contract.get("horizon_bars", 12),
+                        label_classes=label_contract.get(
+                            "label_classes",
+                            {"tp_hit_first": "win", "sl_hit_first": "loss", "timeout": "timeout"},
+                        ),
+                        sl_atr_mult=float(_sl),
+                        tp_atr_mult=float(_tp),
+                        bar_timeframe=label_contract.get("bar_timeframe", "M5"),
+                        atr_period=label_contract.get("atr_period", 14),
+                    )
+                    continue
+
+            # Priority 3: training_params sl_atr_mult / tp_atr_mult
+            _tsl = training_params.get("sl_atr_mult")
+            _ttp = training_params.get("tp_atr_mult")
+            if _tsl is not None and _ttp is not None:
+                result[brain_id] = LabelContract(
+                    schema_version="label_contract.v1",
+                    contract_id=f"{brain_id}_training",
+                    type="survival_barrier",
+                    horizon_bars=training_params.get("horizon", 12),
+                    label_classes={"tp_hit_first": "win", "sl_hit_first": "loss", "timeout": "timeout"},
+                    sl_atr_mult=float(_tsl),
+                    tp_atr_mult=float(_ttp),
+                    bar_timeframe=training_params.get("timeframe", "M5"),
+                )
+
+    return result
+
+
 def build_trade_records(
     journal_path: Path,
     *,
     date_filter: str | None = None,
     contract: LabelContract | None = None,
+    brain_contracts: dict[str, LabelContract] | None = None,
 ) -> list[dict[str, Any]]:
     """Build trade records from journal entries by matching open/close pairs.
 
     When a LabelContract is provided, labels are classified using contract-defined
     SL/TP levels instead of simple P&L-based win/loss.
+
+    When ``brain_contracts`` is provided (brain_id → LabelContract mapping),
+    each trade produces one label record per participating brain, using that
+    brain's specific training contract.  This enables per-brain contract-aware
+    classification — e.g. Swing_V9 (SL=3.0/TP=1.5) and Brain_Rev (SL=2.5/TP=0.7)
+    get different labels for the same trade.
     """
     entries = _read_journal_entries(journal_path, date_filter=date_filter)
     if not entries:
@@ -206,9 +316,6 @@ def build_trade_records(
 
         for i, open_rec in enumerate(opens):
             # FIX-20260601-046: prefer close with valid close_price.
-            # Bridge close orders have detail={order,request,retcode} (no price).
-            # Reconciliation confirmations have detail={close_price,reason}.
-            # Taking closes[0] blindly picks the bridge order → pnl=None → unlabeled.
             close_rec = None
             for c in closes:
                 if _extract_exit_price(c.get("detail")) is not None:
@@ -222,52 +329,87 @@ def build_trade_records(
             exit_price = _extract_exit_price(close_rec.get("detail")) if close_rec else None
             volume = open_rec.get("effective_volume_hint") or open_rec.get("volume")
 
-            pnl = _compute_pnl(side, entry_price, exit_price, volume)
-
-            # Determine label classification
-            if contract is not None and entry_price is not None:
-                # Use journal's ATR field if available, otherwise use training mean
-                atr = open_rec.get("atr", 2.31)
-                label = _classify_barrier_label(
-                    side,
-                    entry_price,
-                    exit_price,
-                    contract.sl_atr_mult,
-                    contract.tp_atr_mult,
-                    atr,
-                )
+            # ── FIX-20260622-057 Phase 2 A1: per-brain contract resolution ──
+            # When brain_contracts is provided, generate one label record per
+            # brain that participated in this trade, using each brain's specific
+            # training SL/TP contract.  A single trade with 3 brains → 3 label
+            # records, each classified with the correct contract.
+            _brain_ids: list[str] = open_rec.get("brain_ids") or []
+            if brain_contracts and _brain_ids:
+                _contracts_to_apply: list[tuple[str, LabelContract | None]] = [
+                    (bid, brain_contracts.get(bid)) for bid in _brain_ids
+                ]
             else:
-                label = _classify_label(pnl)
+                _contracts_to_apply = [("__default__", contract)]
 
-            trade: dict[str, Any] = {
-                "schema_version": SCHEMA_VERSION,
-                "label_id": f"label_ticket_{ticket}_{i}",
-                "position_ticket": ticket,
-                "symbol": open_rec.get("symbol", ""),
-                "side": side,
-                "entry_price": entry_price,
-                "exit_price": exit_price,
-                "pnl": pnl,
-                "label": label,
-                "volume": volume,
-                "open_message_id": open_rec.get("message_id"),
-                "open_recorded_at": open_rec.get("recorded_at"),
-                "close_message_id": close_rec.get("message_id") if close_rec else None,
-                "close_recorded_at": close_rec.get("recorded_at") if close_rec else None,
-                "is_closed": close_rec is not None,
-                "open_ack_status": open_rec.get("ack_status"),
-                "sl": open_rec.get("sl"),
-                "tp": open_rec.get("tp"),
-            }
+            for _brain_id, _brain_contract in _contracts_to_apply:
+                _active_contract = _brain_contract if _brain_contract is not None else contract
 
-            # Enrich with contract metadata
-            if contract is not None:
-                trade["label_contract_id"] = contract.contract_id
-                trade["sl_atr_mult"] = contract.sl_atr_mult
-                trade["tp_atr_mult"] = contract.tp_atr_mult
-                trade["horizon_bars"] = contract.horizon_bars
+                pnl = _compute_pnl(side, entry_price, exit_price, volume)
+                label_source = "pnl_computed" if pnl is not None else "unlabeled"
 
-            trades.append(trade)
+                # FIX-20260622-057 Phase 2 A2: Journal PnL fallback.
+                if pnl is None and close_rec is not None:
+                    _journal_pnl = close_rec.get("pnl")
+                    if _journal_pnl is not None:
+                        pnl = float(_journal_pnl)
+                        label_source = "pnl_journal"
+
+                # Determine label classification
+                if _active_contract is not None and entry_price is not None:
+                    if exit_price is not None:
+                        atr = open_rec.get("atr", 2.31)
+                        label = _classify_barrier_label(
+                            side,
+                            entry_price,
+                            exit_price,
+                            _active_contract.sl_atr_mult,
+                            _active_contract.tp_atr_mult,
+                            atr,
+                        )
+                        if label != "timeout":
+                            label_source = "barrier_proximity"
+                    else:
+                        label = _classify_label(pnl)
+                else:
+                    label = _classify_label(pnl)
+
+                _suffix = f"_{_brain_id}" if _brain_id != "__default__" else ""
+                trade: dict[str, Any] = {
+                    "schema_version": SCHEMA_VERSION,
+                    "label_id": f"label_ticket_{ticket}_{i}{_suffix}",
+                    "position_ticket": ticket,
+                    "symbol": open_rec.get("symbol", ""),
+                    "side": side,
+                    "entry_price": entry_price,
+                    "exit_price": exit_price,
+                    "pnl": pnl,
+                    "label": label,
+                    "label_source": label_source,
+                    "volume": volume,
+                    "open_message_id": open_rec.get("message_id"),
+                    "open_recorded_at": open_rec.get("recorded_at"),
+                    "close_message_id": close_rec.get("message_id") if close_rec else None,
+                    "close_recorded_at": close_rec.get("recorded_at") if close_rec else None,
+                    "is_closed": close_rec is not None,
+                    "open_ack_status": open_rec.get("ack_status"),
+                    "sl": open_rec.get("sl"),
+                    "tp": open_rec.get("tp"),
+                }
+
+                # Tag with brain provenance when per-brain labeling is active
+                if _brain_id != "__default__":
+                    trade["brain_id"] = _brain_id
+                    trade["num_brains_in_trade"] = len(_brain_ids)
+
+                # Enrich with contract metadata
+                if _active_contract is not None:
+                    trade["label_contract_id"] = _active_contract.contract_id
+                    trade["sl_atr_mult"] = _active_contract.sl_atr_mult
+                    trade["tp_atr_mult"] = _active_contract.tp_atr_mult
+                    trade["horizon_bars"] = _active_contract.horizon_bars
+
+                trades.append(trade)
 
     # Add unlinked records as unlabeled
     for rec in unlinked:
@@ -287,6 +429,7 @@ def build_trade_records(
             "exit_price": None,
             "pnl": None,
             "label": "unlabeled",
+            "label_source": "unlabeled",
             "volume": volume,
             "open_message_id": rec.get("message_id"),
             "open_recorded_at": rec.get("recorded_at"),
