@@ -40,8 +40,16 @@ def check_snapshot_coverage(label: str, data_dir: Path) -> dict[str, Any]:
     journal = load_jsonl(data_dir / "live_trade_journal.jsonl")
     snaps = load_jsonl(data_dir / "position_snapshots.jsonl")
 
-    opens = {r.get("position_ticket"): r for r in journal if r.get("action") == "open" and isinstance(r.get("position_ticket"), int)}
-    closes = {r.get("position_ticket"): r for r in journal if r.get("action") == "close" and isinstance(r.get("position_ticket"), int)}
+    opens = {
+        r.get("position_ticket"): r
+        for r in journal
+        if r.get("action") == "open" and isinstance(r.get("position_ticket"), int)
+    }
+    closes = {
+        r.get("position_ticket"): r
+        for r in journal
+        if r.get("action") == "close" and isinstance(r.get("position_ticket"), int)
+    }
     matched = set(opens.keys()) & set(closes.keys())
 
     snap_tickets: set[int] = set()
@@ -127,9 +135,7 @@ def check_xau_governance(data_dir: Path) -> dict[str, Any]:
         brain_states = gov.get("brain_states", gov.get("brains", {}))
         if isinstance(brain_states, dict):
             result["gov_brains"] = len(brain_states)
-            statuses = Counter(
-                b.get("status", "unknown") for b in brain_states.values()
-            )
+            statuses = Counter(b.get("status", "unknown") for b in brain_states.values())
             result["gov_status_dist"] = dict(statuses)
         elif isinstance(brain_states, list):
             result["gov_brains"] = len(brain_states)
@@ -167,8 +173,10 @@ def main():
     print(f"{'─' * 70}")
 
     xau = check_xau_governance(Path("data"))
-    print(f"\n  XAU Leaderboard:        {xau['leaderboard_brains']} brains"
-          f"{' (MISSING FILE!)' if xau.get('leaderboard_missing') else ''}")
+    print(
+        f"\n  XAU Leaderboard:        {xau['leaderboard_brains']} brains"
+        f"{' (MISSING FILE!)' if xau.get('leaderboard_missing') else ''}"
+    )
     if xau["leaderboard_brains"] > 0:
         print(f"    Brain IDs:            {xau['leaderboard_brain_ids'][:10]}")
 

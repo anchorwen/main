@@ -27,6 +27,60 @@
 
 ---
 
+### CCT-20260622-060
+- **Docket ID**: DQAF-20260622-060
+- **日期**: 2026-06-22
+- **置信度**: confirmed (5 工程契约 × 双模 PSI × 实测验证)
+- **因果链**:
+  - [Layer 1 — 症状]: PSI 在 raw 特征空间 36/40 特征 Sev1 (mean_PSI=2.73, max_PSI=8.28)。归一化后降至 38/40 Sev1 (mean_PSI=3.42, max_PSI=12.43) — 不降反升确认真阳性 regime change。3 个独立 PSI 实现 (等频/等宽/合并分箱) 互不一致。
+  - [Layer 2 — 中间异常]: (A) `--compute-baseline` flag 定义但从未实现 — baseline 不可复现。(B) PSI 在 raw 特征空间计算, 树模型 (`normalize: false`) 对尺度变换不敏感 — PSI 高 ≠ 模型退化。(C) 阈值 0.10/0.25 从归一化场景校准, 在 raw 空间不适配。(D) 无 model-performance correlation 验证框架 — PSI 信号不可操作。
+  - [Layer 3 — 根因]: L3 架构缺陷 — PSI 监控缺乏 (1) 归一化策略 (训练 μ/σ vs 滚动 μ/σ), (2) 双模解耦 (regime vs anomaly), (3) 工程保护 (零方差/对数发散/窗口隔离/样本非对称)。`stability_monitor.compute_psi()` 使用等宽分箱 (合并数据), 而 `monitor_feature_drift._compute_psi()` 使用固定 baseline 分箱 — 两个"PSI"不可比。
+- **证据引用**:
+  - Source 1: `scripts/monitor_feature_drift.py:1-712` — 完整重写 (DQAF-060), 287→712 lines
+  - Source 2: `core/brains/services/stability_monitor.py:31-87` — `compute_psi()` @deprecated
+  - Source 3: `data/training/balanced_v1/feature_baseline_v9_normalized_20260622.json` — 新 baseline (160,138 samples, 40 features, norm μ/σ 内嵌)
+  - Source 4: CLI 实测 — Mode A: mean_PSI=3.42, Mode B: mean_PSI=9.0
+  - Cross-symbol: BTC confirmed regime-changed. XAU PSI pending empirical scaler.
+- **是否被推翻**: 否 — AR 假设 (归一化后 PSI 应降) 被实测推翻: PSI 反升 2.73→3.42, 证伪"raw 特征导致假阳性"假设, 确认"BTC 真的 regime-changed"
+- **关联 ReB Pattern**: ReB-20260622-060
+- **关联 FIX**: FIX-20260622-060
+
+### CCT-20260622-058-bis
+- **Docket ID**: DQAF-20260622-058-bis
+- **日期**: 2026-06-22
+- **置信度**: confirmed (code audit × 3 sites verified × runtime confirmation)
+- **因果链**:
+  - [Layer 1 — 症状]: DQAF-058 部署后 `micro_scaler_loaded: false` 持续。健康检查 `MICRO_SCALER_NOT_LOADED` 警告未消除。MetaFilter 仍然在 raw features 上运行。
+  - [Layer 2 — 中间异常]: DQAF-054 修复了 3 个 `MicrostructureFeatureAdapter` 实例化站点, DQAF-055 补齐了其余 2 个 — 但 `meta_signal_filter.py:135` 使用 `self._micro_scaler = joblib.load(micro_scaler_path)` 直接加载, 完全绕过 adapter 的 `_load_scaler_json()`。`live_intent_loop.py:1512` 和 `bootstrap_v9.py:91` 缺少 `resolve_scaler_path()` 回退。
+  - [Layer 3 — 根因]: L2 逻辑缺陷 — `MetaSignalFilter` 是 `MicrostructureFeatureAdapter` 的**消费者**而非子类, 其 scaler 加载是独立实现。DQAF-054 的模式搜索 (`grep joblib.load`) 遗漏了此站点因为此处不是 adapter 实例化而是**直接消费**。
+- **证据引用**:
+  - Source 1: `core/execution/meta_signal_filter.py:135` — `joblib.load(micro_scaler_path)` (修复前)
+  - Source 2: `scripts/live_intent_loop.py:1512-1520` — `resolve_scaler_path()` 回退 (新增)
+  - Source 3: `apps/engine/bootstrap_v9.py:91-99` — `resolve_scaler_path()` 回退 (新增)
+  - Cross-symbol: 仅 BTC 受影响 (XAU 尚无 MetaFilter 配置)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260622-058-bis
+- **关联 FIX**: FIX-20260622-058-bis
+
+### CCT-20260622-058
+- **Docket ID**: DQAF-20260622-058
+- **日期**: 2026-06-22
+- **置信度**: confirmed (6 源 ECoL + DA/AR 双轨 + 跨品种验证)
+- **因果链**:
+  - [Layer 1 — 症状]: BTC PSI 38/40 特征 Sev1, `micro_scaler_loaded: false` 持续 23 天。`MICRO_SCALER_NOT_LOADED` 警告从未触发（健康检查缺失此检查项）。
+  - [Layer 2 — 中间异常]: (A) `MicrostructureFeatureAdapter.resolve_scaler_path()` 硬编码 `btc_micro_scaler.json` → XAU 永远找不到 scaler。(B) `require_scaler=True` + 无 scaler → `DataIntegrityError` 阻断 XAU 启动。(C) 健康检查 `check_meta_filter_state` 不提取 `micro_scaler_loaded` → 运维盲区。
+  - [Layer 3 — 根因]: L3 架构缺陷 — DQAF-054 引入的 JSON scaler 加载替换了 joblib, 但部署激活是独立步骤: 需要 (1) 生成 JSON scaler 文件, (2) 配置 `micro_scaler_path`, (3) 健康检查验证。这三个步骤均缺失。冷启动路径 (无 Feature Store 的新品种/新环境) 从未被设计 — 系统要求 scaler 必须存在, 但没有"不存在时怎么办"的答案。
+- **证据引用**:
+  - Source 1: `core/features/adapters/microstructure_feature_adapter.py:resolve_scaler_path()` — 修复前硬编码 `btc_micro_scaler.json`
+  - Source 2: `core/observability/health_checks.py:check_meta_filter_state()` — 修复前不检查 `micro_scaler_loaded`
+  - Source 3: `scripts/generate_micro_scaler.py` — 新建多品种 scaler 生成脚本
+  - Source 4: `data_xau/models/xau_micro_scaler.json` — XAU 冷启动 identity scaler
+  - Source 5: `data_btc/models/btc_micro_scaler.json` — BTC 实证 scaler (前序 DQAF-054 产出)
+  - Cross-symbol: XAU 受阻断（启动熔断）, BTC 受静默退化（raw features）
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260622-058
+- **关联 FIX**: FIX-20260622-058
+
 ### CCT-20260622-057
 - **Docket ID**: DQAF-20260622-057
 - **日期**: 2026-06-22

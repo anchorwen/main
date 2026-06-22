@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T10:12:17Z
+> **自动生成**: 2026-06-22T10:29:14Z
 > **扫描模块数**: 654
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -95,7 +95,7 @@
 | `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 424 | — | |
 | `inference_guard.py` | ✅ active | InferenceGuard | 11 | 226 | — | |
 | `onnx_worker.py` | ✅ active | — | 1 | 81 | — | |
-| `stability_monitor.py` | ✅ active | StabilityReport | 4 | 195 | — | |
+| `stability_monitor.py` | ✅ active | StabilityReport | 4 | 201 | — | |
 
 ## core/config
 
@@ -646,7 +646,7 @@
 | `audit_phase_c_fix5.py` | ✅ active | — | 7 | 328 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
-| `audit_state_of_system.py` | ✅ active | — | 5 | 319 | — | |
+| `audit_state_of_system.py` | ✅ active | — | 5 | 347 | — | |
 | `audit_trade_quality.py` | ✅ active | — | 5 | 275 | — | |
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
@@ -678,7 +678,7 @@
 | `cleanup_claude_transcripts.py` | ✅ active | — | 2 | 100 | — | |
 | `commander_g2_metafilter_path.py` | ✅ active | — | 3 | 258 | — | |
 | `commander_g3_alpha_vacuum.py` | ✅ active | — | 4 | 159 | — | |
-| `commander_g4_g6_g7_coverage_xau.py` | ✅ active | — | 5 | 218 | — | |
+| `commander_g4_g6_g7_coverage_xau.py` | ✅ active | — | 5 | 226 | — | |
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
@@ -724,7 +724,7 @@
 | `live_shadow_intent_producer.py` | ✅ active | — | 7 | 264 | — | |
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
-| `monitor_feature_drift.py` | ✅ active | — | 4 | 287 | — | |
+| `monitor_feature_drift.py` | ✅ active | — | 11 | 712 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
 | `mt5_bridge_worker.py` | ✅ active | — | 33 | 1966 | — | |

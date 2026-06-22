@@ -20,6 +20,53 @@
 
 ---
 
+### ReB-20260622-060
+- **Pattern Signature**: `PSI_RAW_FEATURE_FALSE_POSITIVE_AND_DUAL_MODE_DECOUPLING`
+- **Date Cataloged**: 2026-06-22
+- **Source Docket**: DQAF-20260622-060
+- **Related**: ReB-20260622-058 (`SCALER_DEPLOYMENT_ACTIVATION_GAP`)
+
+**Definition**: PSI (Population Stability Index) 在 raw 特征空间计算时产生大量假阳性, 因为 tree-based 模型 (`normalize: false`) 对线性尺度变换不敏感。当 market regime 改变 (如 BTC ATR 4→34~95), raw-feature PSI 飙升但模型预测能力未退化 — 警报不可操作。此外, 系统中 3 个独立 PSI 实现使用不同分箱策略 (等频/等宽/合并数据), 同一数据产生不同 PSI 值 — 无 SSOT。修复: (1) 归一化空间 PSI (z-score with training μ/σ for regime, rolling μ/σ for anomaly), (2) 双模解耦 (Mode A: long-term regime detection → retrain trigger; Mode B: short-term anomaly detection → data bug alert), (3) 5 工程契约 (零方差熔断/对数发散保护/Mode B 自归一化/排他窗口隔离/样本非对称缓解), (4) 统一 SSOT PSI 实现 (deprecate `stability_monitor.compute_psi()`).
+
+**Prevention Strategy**:
+1. 任何监控指标必须先确认其计算空间与下游模型的特征空间一致
+2. 树模型用 raw features → PSI 应在归一化空间计算 (消除位置+尺度变化, 仅保留形状变化)
+3. 多个实现必须收敛为单一 SSOT — `@deprecated` 标注旧实现
+4. 所有分母必须 epsilon-floor 保护; 所有对数必须 epsilon-pad
+5. 滚动窗口 baseline 与 actual 必须排他隔离 (无数据泄漏)
+
+**Detection Method**: `python scripts/monitor_feature_drift.py --data-dir data_btc --mode both --normalize` — Mode A PSI > 0.25 确认 regime change, Mode B PSI > 0.25 确认 pipeline anomaly.
+
+### ReB-20260622-058-bis
+- **Pattern Signature**: `INCOMPLETE_PATTERN_SEARCH_CONSUMER_VS_SUBCLASS`
+- **Date Cataloged**: 2026-06-22
+- **Source Docket**: DQAF-20260622-058-bis
+- **Related**: ReB-20260622-058 (`SCALER_DEPLOYMENT_ACTIVATION_GAP`)
+
+**Definition**: 代码模式搜索 (`grep joblib.load`) 找到 N 个匹配项并全部修复, 但遗漏第 N+1 个站点 — 因为它使用相同的 API 但是作为**消费者**而非**子类**实例化。`meta_signal_filter.py:135` 的 `self._micro_scaler = joblib.load(path)` 与 `MicrostructureFeatureAdapter` 的 `joblib.load()` 是相同的反模式但在不同调用上下文 — grep 匹配但修复时因"不在 adapter 实例化路径中"被跳过。本质是模式搜索后缺少"相同 API 但不同角色"的二次审查。
+
+**Prevention Strategy**:
+1. 模式搜索后必须交叉验证: 对每个 `grep` 命中, 检查其**调用上下文**是否与修复范围重叠
+2. `joblib.load` → `json.load` 迁移应全局搜索, 不限于特定类/模块
+3. 新增 `resolve_scaler_path()` 后必须检查所有 scaler 加载点是否使用 (包括 config-driven 路径)
+
+**Detection Method**: `grep -rn "joblib.load\|pickle.load" core/ scripts/ apps/` — 应为 0 结果。
+
+### ReB-20260622-058
+- **Pattern Signature**: `SCALER_DEPLOYMENT_ACTIVATION_GAP`
+- **Date Cataloged**: 2026-06-22
+- **Source Docket**: DQAF-20260622-058
+- **Related**: ReB-20260622-060 (`PSI_RAW_FEATURE_FALSE_POSITIVE_AND_DUAL_MODE_DECOUPLING`)
+
+**Definition**: 代码修复 (DQAF-054/055: joblib→JSON scaler loader) 完成后, 部署激活是独立的三个步骤: (1) 生成 JSON scaler 文件, (2) 配置 `micro_scaler_path` 指向该文件, (3) 健康检查验证 `micro_scaler_loaded: true`。这三个步骤均缺失 — 修复在代码层面完成但从未在运行时激活。23 天后才通过 PSI 监控发现 `micro_scaler_loaded: false`。冷启动路径 (新环境/新品种, 无 Feature Store) 从未被设计 — `require_scaler=True` 要求 scaler 必须存在, 但没有 `generate_cold_start_scaler()` 兜底。
+
+**Prevention Strategy**:
+1. 任何依赖外部 artifact 的代码修复必须包含: (a) artifact 生成脚本, (b) 冷启动/缺失时的兜底路径, (c) 健康检查验证 artifact 已加载
+2. 部署后必须运行 `verify.py` + 健康检查确认新功能已激活 (不仅是通过)
+3. 品种迁移 (BTC→data_btc) 时必须审计所有 `models/` 路径引用
+
+**Detection Method**: `python scripts/verify.py --quick` + 检查 `meta_pipeline_wired` 事件中 `micro_scaler_loaded: true`。
+
 ### ReB-20260622-LABEL_COVERAGE_DEGRADATION
 
 - **Pattern Signature**: `EXTERNAL_CLOSE_PRICE_MISSING × LABEL_PIPELINE_NO_DEFENSE_LAYER`
