@@ -1321,6 +1321,40 @@ NOMINATION_MIN_SHARPE = 0.30  # MIN_SHARPE (audit_institutional_performance.py)
 NOMINATION_ELIGIBLE_STATUSES = {"live", "probation"}
 
 
+# ── DQAF-20260622-050: Strategy class inference from brain_id ──
+def _infer_strategy_class(brain_id: str) -> str:
+    """Infer strategy_class from brain_id naming convention.
+
+    DQAF-20260622-050: The nomination bridge constructs AlphaRecord without
+    strategy_class.  Infer it from the brain_id prefix/pattern so the
+    allocator and lifecycle have meaningful metadata.
+    """
+    bid_lower = brain_id.lower()
+    if bid_lower.startswith("swing"):
+        return "swing"
+    if bid_lower.startswith("ou_params"):
+        return "ou_params"
+    if "barrier" in bid_lower:
+        return "barrier"
+    if "trend" in bid_lower:
+        return "trend"
+    if "meta" in bid_lower:
+        return "meta"
+    if "rev" in bid_lower:
+        return "rev"
+    if "xgboost" in bid_lower or "xgb_" in bid_lower:
+        return "xgboost"
+    if "lightgbm" in bid_lower or "lgb_" in bid_lower:
+        return "lightgbm"
+    if "deep" in bid_lower or "mlp" in bid_lower:
+        return "deep"
+    if "online" in bid_lower:
+        return "online"
+    if "microstructure" in bid_lower:
+        return "microstructure"
+    return "unknown"
+
+
 def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Nominate qualifying brains from leaderboard into alpha_registry.
 
@@ -1368,6 +1402,31 @@ def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[st
             registry = AlphaRegistry.load(registry_path)
 
         existing_ids = {r.alpha_id for r in registry.list_records()}
+
+        # ── Symbol resolution (DQAF-050: needed for assets field) ──
+        symbol_assets = ["BTCUSDc"] if "btc" in str(base_dir).lower() else ["XAUUSDc"]
+
+        # ── DQAF-050: Ghost record cleanup ──
+        # Remove registry entries whose alpha_id has no matching brain in
+        # leaderboard AND no performance snapshots (truly orphaned records).
+        brain_ids = {b.get("brain_id", "") for b in brains}
+        ghosts: list[str] = []
+        for rec_id in sorted(existing_ids):
+            if rec_id not in brain_ids:
+                # Check if it has performance history — if so, preserve it
+                try:
+                    perf_path = base / "alpha_performance.json"
+                    if perf_path.exists():
+                        from core.alpha.performance_store import AlphaPerformanceStore
+
+                        ps = AlphaPerformanceStore.load(perf_path)
+                        if ps.latest(rec_id) is not None:
+                            continue  # has performance data — don't remove
+                except (OSError, ValueError, ImportError, KeyError):
+                    continue  # can't verify — conservatively preserve record
+                ghosts.append(rec_id)
+                registry.remove(rec_id)
+                existing_ids.discard(rec_id)
 
         # ── Load governance as secondary data source ──
         # Decision-based leaderboard (brain_leaderboard.v1) has signal_count
@@ -1439,6 +1498,8 @@ def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[st
                 version="1.0.0",
                 state=AlphaLifecycleState.CANDIDATE,
                 strategy_id=alpha_id,
+                strategy_class=_infer_strategy_class(brain_id),  # DQAF-050
+                assets=list(symbol_assets),  # DQAF-050
             )
             registry.register(record)
             nominated.append(alpha_id)
@@ -1455,6 +1516,7 @@ def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[st
             "skipped_count": len(skipped),
             "skipped_reasons": skipped[:10],  # top 10 for diagnostics
             "existing_count": len(existing_ids),
+            "ghosts_removed": len(ghosts),  # DQAF-050
             "total_after": len(existing_ids) + len(nominated),
         }
 
@@ -1470,15 +1532,26 @@ def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[st
 
 
 def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
-    """Run alpha lifecycle evaluation: promotion gate on all registered alphas."""
+    """Run alpha lifecycle evaluation: governance fast-track + promotion gate.
+
+    DQAF-20260622-050: Adds a governance fast-track that lets brains already
+    certified as ``live`` or ``probation`` by the governance pipeline skip
+    the cold-start barrier (candidate → probation_live or paper_trading).
+    Also backfills a cold-start AlphaPerformanceSnapshot so the allocator's
+    PnL fallback path has data to work with.
+    """
     try:
+        from core.alpha.contracts import AlphaLifecycleState  # DQAF-050
         from core.alpha.lifecycle_service import AlphaLifecycleService
         from core.alpha.performance_store import AlphaPerformanceStore
         from core.alpha.promotion_gate import AlphaPromotionGate, AlphaPromotionPolicy
         from core.alpha.registry import AlphaRegistry
 
-        registry_path = Path(base_dir) / "alpha_registry.json"
-        perf_path = Path(base_dir) / "alpha_performance.json"
+        base = Path(base_dir)
+        registry_path = base / "alpha_registry.json"
+        perf_path = base / "alpha_performance.json"
+        lb_path = base / "reports" / "leaderboard.json"
+        gov_path = base / "governance_state.json"
 
         if registry_path.exists():
             registry = AlphaRegistry.load(registry_path)
@@ -1491,8 +1564,111 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         lifecycle = AlphaLifecycleService(registry)
         gate = AlphaPromotionGate(perf_store, policy=AlphaPromotionPolicy())
 
+        # ── DQAF-050: Load governance for fast-track lookup ──
+        gov_status_map: dict[str, str] = {}
+        gov_raw: dict[str, Any] = {}
+        if gov_path.exists():
+            try:
+                gov_raw = json.loads(gov_path.read_text(encoding="utf-8"))
+                for bid, bd in (gov_raw.get("brain_states") or {}).items():
+                    gov_status_map[bid] = bd.get("status", "")
+            except Exception:  # noqa: BLE001 — best-effort secondary source
+                pass
+
+        # ── DQAF-050: Load leaderboard for fast-track verification + cold-start metrics ──
+        lb_brains: list[dict[str, Any]] = []
+        if lb_path.exists():
+            try:
+                lb_data = json.loads(lb_path.read_text(encoding="utf-8"))
+                lb_brains = lb_data.get("leaderboard") or lb_data.get("brains") or []
+            except Exception:  # noqa: BLE001 — best-effort
+                pass
+        lb_lookup: dict[str, dict[str, Any]] = {
+            b.get("brain_id", ""): b for b in lb_brains if b.get("brain_id")
+        }
+
+        # ── Fast-track criteria (aligned with governance thresholds) ──
+        # DQAF-050: Federated Trust — governance certifies, leaderboard verifies
+        FT_MIN_TRADES = 50  # MIN_TRADES_FOR_LIVE
+        FT_MIN_WIN_RATE = 0.45  # WR_PROBATION_THRESHOLD
+
         decisions: list[dict[str, Any]] = []
+        fast_tracked: int = 0
+        cold_start_snapshots: int = 0
+
         for record in registry.list_records():
+            alpha_id = record.alpha_id
+
+            # ── DQAF-050: Governance Fast-Track (before gate evaluation) ──
+            gov_status = gov_status_map.get(alpha_id, "")
+            if record.state_value == "candidate" and gov_status in ("live", "probation"):
+                lb_entry = lb_lookup.get(alpha_id, {})
+                tp = lb_entry.get("trade_performance") or {}
+                ft_trades = lb_entry.get("trade_count") or lb_entry.get("signal_count") or 0
+                ft_wr = lb_entry.get("win_rate") or tp.get("win_rate") or 0.0
+
+                if ft_trades >= FT_MIN_TRADES and ft_wr >= FT_MIN_WIN_RATE:
+                    # live → PROBATION_LIVE; probation → PAPER_TRADING
+                    if gov_status == "live":
+                        target = AlphaLifecycleState.PROBATION_LIVE.value
+                        reason = "governance_fast_track:governance_live→alpha_probation_live"
+                    else:
+                        target = AlphaLifecycleState.PAPER_TRADING.value
+                        reason = "governance_fast_track:governance_probation→alpha_paper_trading"
+
+                    if not dry_run:
+                        try:
+                            lifecycle.transition(alpha_id, target, reason)
+                            decisions.append(
+                                {
+                                    "alpha_id": alpha_id,
+                                    "approved": True,
+                                    "action": "fast_track",
+                                    "target_state": target,
+                                    "reason": reason,
+                                }
+                            )
+                            fast_tracked += 1
+
+                            # ── DQAF-050: Cold-start snapshot backfill ──
+                            gb = (gov_raw.get("brain_states") or {}).get(alpha_id, {})
+                            gov_pm = gb.get("performance_metrics") or {}
+                            perf_store.record_snapshot(
+                                alpha_id=alpha_id,
+                                metrics={
+                                    "trade_count": ft_trades,
+                                    "win_rate": ft_wr,
+                                    "profit_factor": gov_pm.get("profit_factor", 0.0),
+                                    "sharpe_ratio": gov_pm.get("sharpe_ratio", 0.0),
+                                    "total_pnl": tp.get("total_pnl", 0.0),
+                                    "source": "cold_start_snapshot",
+                                },
+                                source="governance_fast_track_cold_start",
+                                window="initial",
+                            )
+                            cold_start_snapshots += 1
+                        except ValueError as exc:
+                            decisions.append(
+                                {
+                                    "alpha_id": alpha_id,
+                                    "approved": False,
+                                    "reason": f"fast_track_transition_failed:{exc}",
+                                }
+                            )
+                    else:
+                        decisions.append(
+                            {
+                                "alpha_id": alpha_id,
+                                "approved": True,
+                                "action": "fast_track",
+                                "target_state": target,
+                                "reason": reason,
+                            }
+                        )
+                        fast_tracked += 1
+                    continue  # skip normal gate evaluation
+
+            # ── Normal gate evaluation (existing path) ──
             decision = gate.evaluate(record)
             decisions.append(decision.to_dict())
             if decision.approved and decision.target_state and not dry_run:
@@ -1523,6 +1699,8 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             "alphas_assessed": len(decisions),
             "actions_applied": len(applied) if not dry_run else 0,
             "actions_flagged": len(applied) if dry_run else len(applied),
+            "fast_tracked": fast_tracked,  # DQAF-050
+            "cold_start_snapshots": cold_start_snapshots,  # DQAF-050
             "details": applied,
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below

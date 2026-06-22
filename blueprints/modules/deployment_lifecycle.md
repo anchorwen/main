@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260622-050 | 2026-06-22 | cursor-agent | — | **MODULE_SOURCE_MAP: core/alpha/lifecycle_service.py → execution_guards**. New alpha lifecycle service file registered (previously unmapped → orphan FATAL). Part of DQAF-050 Cold-Start Double Deadlock fix. | RC-09 |
 | FIX-20260622-049 | 2026-06-22 | cursor-agent | — | **MODULE_SOURCE_MAP: core/alpha/contracts.py + core/alpha/registry.py → execution_guards**. Two new alpha subsystem files registered (previously unmapped → orphan FATAL). | RC-09 |
 | FIX-20260622-005 | 2026-06-22 | cursor-agent | — | **MODULE_SOURCE_MAP: hook_pre_push.py → runtime_state + BLE001 noqa (3 sites)**. Pre-push CI-mirror gate was unmapped → orphan compliance FATAL. Also added noqa annotations to 3 pre-existing reviewed bare excepts (already wrapped with fail_open_guard). | RC-09 |
 | FIX-20260621-031 | 2026-06-21 | cursor-agent | — | **Market-session-aware stale file checks**: system_trust_report.py now calls detect_session() per symbol (XAU→forex_24_5, BTC→crypto_24_7). When risk_tier="off" (weekend), stale file checks bypassed with [BYPASSED: MARKET_OFF] marker. BTC (24/7, 0 stale) serves as control group. MODULE_SOURCE_MAP updated. | RC-06 |

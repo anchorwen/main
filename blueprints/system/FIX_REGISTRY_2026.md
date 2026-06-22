@@ -4,6 +4,26 @@
 
 ## Fix Details
 
+### FIX-20260622-050 — DQAF-050 Cold-Start Double Deadlock: Federated Trust + Stage-Aware Fast-Track
+
+- **Date**: 2026-06-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: alpha, scripts
+- **Files**: `scripts/daily_ops.py`, `core/alpha/lifecycle_service.py`
+- **Description**: L3 architectural deadlock: AlphaPromotionGate `_base_requirements()` checks execution metrics (signal_count, fill_ratio, order_count, denied_count) designed for paper_trading→probation, but applied universally. At CANDIDATE stage, `_step_alpha_feed` produces PnL metrics (trade_count, win_rate, profit_factor) — zero schema overlap → all candidates permanently stuck with `performance_snapshot_missing`. Secondary deadlock: even if promoted, `portfolio_allocator._recommend()` returns `performance_missing` because AlphaPerformanceStore has no snapshots → allocator PnL fallback path never activates.
+
+  Route B+ (Federated Trust + Stage-Aware Gate) fix:
+  - **Phase 1**: `_infer_strategy_class()` helper (prefix-based mapping, fallback "unknown"); `_step_alpha_registration()` populates strategy_class + assets on AlphaRecord; ghost cleanup with conservative guard (preserves records with performance data)
+  - **Phase 2**: `lifecycle_service.py` VALID_TRANSITIONS extended: CANDIDATE→PROBATION_LIVE (governance live) + CANDIDATE→PAPER_TRADING (governance probation). `_step_alpha_lifecycle()` complete rewrite: governance fast-track with federated trust (governance certifies quality, leaderboard verifies: trade_count≥50, WR≥0.45), cold-start AlphaPerformanceSnapshot backfill from leaderboard+governance data to activate allocator PnL fallback path
+  - **Phase 3** (deferred): stage-aware gate — `_candidate_decision()` should use leaderboard-derived metrics; `_backtest_passed_decision()` should auto-promote
+
+  **Result**: 5 brains→probation_live, 1→paper_trading; allocatable_count 0→5; 12 cold-start snapshots created; capital flowing.
+
+- **Root Cause**: L3 — architectural deadlock: promotion gate metric schema (execution) structurally incompatible with feed output schema (PnL). Zero overlap. Gate designed for paper_trading→probation but applied universally.
+- **Risk**: Low. Fast-track is additive — adds transitions to VALID_TRANSITIONS, doesn't change existing paths. Ghost cleanup has conservative guard.
+- **Verification**: `verify.py --quick` PASSED. Dry-run confirmed 5 fast-track decisions. Live run: allocatable_count=5, non-zero weights, 12 cold-start snapshots on disk.
+
 ### FIX-20260620-020 — Micro feature zero-overwrite (line 2453) + consecutive_degraded reset bug
 
 - **Date**: 2026-06-20

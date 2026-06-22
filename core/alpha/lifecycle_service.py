@@ -13,7 +13,9 @@ class AlphaLifecycleService:
 
     VALID_TRANSITIONS = {
         AlphaLifecycleState.CANDIDATE.value: {
-            AlphaLifecycleState.BACKTEST_PASSED.value,
+            AlphaLifecycleState.BACKTEST_PASSED.value,  # normal path
+            AlphaLifecycleState.PAPER_TRADING.value,  # DQAF-050 fast-track: governance probation
+            AlphaLifecycleState.PROBATION_LIVE.value,  # DQAF-050 fast-track: governance live
             AlphaLifecycleState.RETIRED.value,
         },
         AlphaLifecycleState.BACKTEST_PASSED.value: {

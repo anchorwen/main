@@ -92,6 +92,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/alpha/registry.py",
         "core/alpha/ou_optimizer.py",
         "core/alpha/performance_store.py",
+        "core/alpha/lifecycle_service.py",
         "core/execution/pwin_chain.py",
     ],
     "execution_orders": [

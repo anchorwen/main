@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-21T18:24:12Z
+> **自动生成**: 2026-06-22T01:02:05Z
 > **扫描模块数**: 648
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -39,7 +39,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `contracts.py` | ✅ active | AlphaLifecycleState, AlphaRecord, AlphaTransitionRecord | 4 | 83 | — | |
-| `lifecycle_service.py` | ✅ active | AlphaLifecycleService | 10 | 106 | — | |
+| `lifecycle_service.py` | ✅ active | AlphaLifecycleService | 10 | 108 | — | |
 | `ou_optimizer.py` | ✅ active | KalmanHalfLifeFilter | 12 | 535 | — | |
 | `performance_store.py` | ✅ active | AlphaPerformanceSnapshot, AlphaPerformanceStore | 14 | 212 | — | |
 | `portfolio_allocator.py` | ✅ active | AlphaAllocationPolicy, AlphaAllocationRecommendation, AlphaPortfolioAllocator | 8 | 195 | — | |
@@ -664,7 +664,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 611 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 612 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -681,7 +681,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 303 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 31 | 2048 | — | |
+| `daily_ops.py` | ✅ active | — | 32 | 2226 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |
