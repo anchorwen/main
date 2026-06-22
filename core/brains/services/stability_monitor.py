@@ -37,6 +37,12 @@ def compute_psi(
 ) -> float:
     """Population Stability Index between two 1-D distributions.
 
+    .. deprecated::
+        Prefer ``scripts/monitor_feature_drift._compute_psi()`` (DQAF-060)
+        which uses **fixed baseline bin edges** (equal-frequency deciles).
+        This function uses equal-width binning over the combined range,
+        which is less robust for drift detection with heavy-tailed features.
+
     PSI = Σ (actual_i - expected_i) * ln(actual_i / expected_i)
 
     Args:

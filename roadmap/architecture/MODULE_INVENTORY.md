@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T09:18:59Z
-> **扫描模块数**: 651
+> **自动生成**: 2026-06-22T10:12:17Z
+> **扫描模块数**: 654
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -10,7 +10,7 @@
 |------|------|----|------|------|------|------|
 | `backtest_runner.py` | ✅ active | BacktestRunner, BacktestResult | 6 | 154 | — | |
 | `batch_processor.py` | ✅ active | BatchProcessor | 3 | 78 | — | |
-| `bootstrap_v9.py` | ✅ active | — | 6 | 216 | — | |
+| `bootstrap_v9.py` | ✅ active | — | 6 | 226 | — | |
 | `cli.py` | ✅ active | — | 42 | 1559 | — | |
 | `communication_ops_cli.py` | ✅ active | — | 7 | 137 | — | |
 | `communication_summary_contract.py` | ✅ active | — | 1 | 71 | — | |
@@ -116,7 +116,7 @@
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 218 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 146 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
-| `strategy_magic.py` | 📄 config | — | 0 | 32 | — | |
+| `strategy_magic.py` | ✅ active | — | 2 | 176 | — | |
 | `validators.py` | ✅ active | ContractViolation, ContractValidator | 7 | 123 | — | |
 
 ## core/contracts/domain
@@ -240,7 +240,7 @@
 | `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 220 | — | |
 | `meta_filter_routing.py` | ✅ active | — | 1 | 241 | — | |
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 490 | — | |
-| `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 946 | — | |
+| `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 955 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 88 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 12 | 159 | — | |
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 407 | — | |
@@ -327,7 +327,7 @@
 | `decision_scorer.py` | ✅ active | DecisionScorer | 5 | 120 | — | |
 | `experience_replay.py` | ✅ active | ExperienceReplayBuffer | 10 | 246 | — | |
 | `feedback_loop.py` | ✅ active | FeedbackLoop | 4 | 110 | — | |
-| `live_journal_metrics.py` | ✅ active | — | 2 | 219 | — | |
+| `live_journal_metrics.py` | ✅ active | — | 2 | 225 | — | |
 | `online_feedback_hook.py` | ✅ active | OnlineFeedbackHook | 11 | 467 | — | |
 | `outcome_collector.py` | ✅ active | OutcomeCollector | 4 | 111 | — | |
 | `param_optimizer.py` | ✅ active | — | 5 | 283 | — | |
@@ -650,6 +650,7 @@
 | `audit_trade_quality.py` | ✅ active | — | 5 | 275 | — | |
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
+| `augment_journal_strategy.py` | ✅ active | — | 4 | 182 | — | |
 | `backfill_journal_pnl.py` | ✅ active | — | 7 | 349 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 275 | — | |
 | `backtest_structural_swing.py` | ✅ active | — | 5 | 340 | — | |
@@ -664,7 +665,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 628 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 636 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -690,6 +691,7 @@
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
+| `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 567 | — | |
@@ -713,7 +715,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 371 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2711 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2723 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 992 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 486 | — | |
@@ -725,7 +727,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 4 | 287 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 33 | 1897 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 33 | 1966 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 180 | — | |
@@ -766,6 +768,7 @@
 | `validate_blueprints.py` | ✅ active | — | 7 | 300 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 397 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
+| `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
 | `verify.py` | ✅ active | — | 15 | 987 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 92 | — | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
@@ -825,7 +828,7 @@
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 6 | 204 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 773 | — | |
-| `build_live_labeled_dataset.py` | ✅ active | — | 4 | 236 | — | |
+| `build_live_labeled_dataset.py` | ✅ active | — | 4 | 251 | — | |
 | `build_meta_features.py` | ✅ active | — | 7 | 801 | — | |
 | `build_meta_labeling_dataset.py` | ✅ active | — | 8 | 819 | — | |
 | `build_meta_labels.py` | ✅ active | — | 6 | 379 | — | |

@@ -22,9 +22,22 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def load_trade_labels(journal_path: Path) -> list[dict[str, Any]]:
-    """Extract labeled trades (SL-hit / TP-hit) from the live journal."""
+    """Extract labeled trades (SL-hit / TP-hit) from the live journal.
+
+    DQAF-20260622-059: Filters out entries with sentinel strategy values
+    (``__UNATTRIBUTED_BRIDGE_DEFAULT__``) to prevent training label poisoning.
+    """
     with open(journal_path, encoding="utf-8") as f:
         lines = [json.loads(l) for l in f if l.strip()]
+
+    # ── DQAF-059 sentinel filter ──
+    _before = len(lines)
+    lines = [e for e in lines if not str(e.get("strategy", "")).startswith("__UNATTRIBUTED")]
+    if len(lines) < _before:
+        print(
+            f"  [DQAF-059] Filtered {_before - len(lines)} sentinel entries "
+            f"(__UNATTRIBUTED_BRIDGE_DEFAULT__) from training data"
+        )
 
     opens = {e.get("message_id"): e for e in lines if e.get("action") == "open"}
     closes = [e for e in lines if e.get("action") == "close" and e.get("open_message_id")]
@@ -205,7 +218,9 @@ def main():
     args = p.parse_args()
 
     root = PROJECT_ROOT
-    journal_path = root / args.journal
+    # DQAF-20260622-059: Prefer augmented view when available
+    _aug_path = root / str(args.journal).replace(".jsonl", ".augmented.jsonl")
+    journal_path = _aug_path if _aug_path.exists() else root / args.journal
     feature_path = root / args.feature_store
     output_dir = root / args.output_dir
 

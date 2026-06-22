@@ -146,6 +146,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "feedback_pnl": [
         "core/feedback/brain_pnl_ledger.py",
+        "core/feedback/live_journal_metrics.py",
         "scripts/live_shadow_ensemble.py",
         "scripts/shadow_pnl_loop.py",
         "scripts/paper_trade_simulator.py",
@@ -165,7 +166,11 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/validators/journal_validator.py",
     ],
     "contracts_domain": ["core/contracts/domain/", "core/schemas/", "core/contracts/events.py"],
-    "contracts_ids": ["core/contracts/ids.py", "core/contracts/serialization/"],
+    "contracts_ids": [
+        "core/contracts/ids.py",
+        "core/contracts/serialization/",
+        "core/contracts/strategy_magic.py",
+    ],
     "contracts_training": ["core/contracts/training/"],
     "data_infrastructure": [
         "core/data/",
@@ -212,6 +217,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/generate_micro_scaler.py",  # DQAF-058 multi-asset scaler
         "scripts/brain.py",
         "scripts/training/register_brain.py",
+        "scripts/validate_magic_sync.py",
         "scripts/system_trust_report.py",
     ],
     "features_rolling": [
@@ -239,6 +245,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/deployment/feature_update_producer.py",
         "scripts/features/feature_store_warmer.py",
         "scripts/feature_store_maintenance.py",
+        "scripts/augment_journal_strategy.py",
     ],
     "market_mtf": [
         "core/market/mtf_price_service.py",
@@ -261,6 +268,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/verify_dqaf_002_fix.py",
         "scripts/run_data_health.py",
         "scripts/send_data_health_alert.py",
+        "scripts/diagnose_journal_mt5_sev2.py",
         # ── Iron Law #11 Institutional Audit Portfolio (FIX-20260622-052 S.E.A.L.) ──
         "scripts/audit_full_pipeline.py",
         "scripts/audit_state_of_system.py",

@@ -11,6 +11,7 @@
   "scripts/audit_phase_c_fix5.py": 2,
   "scripts/ble001_annotate_scripts.py": 1,
   "scripts/clean_ledger_bloat.py": 5,
+  "scripts/monitor_feature_drift.py": 6,
   "scripts/reconcile_fix_registry.py": 4,
   "scripts/training/train.py": 2,
   "scripts/tuning/tune_btc_kalman_h4.py": 3,

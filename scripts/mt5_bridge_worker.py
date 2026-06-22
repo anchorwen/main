@@ -1355,11 +1355,16 @@ def _write_zmq_journal_entry(
     detail: Any,
     default_volume: float = 0.01,
     target: str = "exec_bridge",
+    mt5: Any = None,
 ) -> None:
     """Build and write a journal entry for a ZMQ-processed order.
 
     FIX-20260613-062: The ZMQ worker path was missing journal writes entirely.
     This function builds the same journal record as the file-mode path.
+
+    DQAF-20260622-059 / P1-a: When *mt5* is provided and strategy resolution
+    from the payload fails, this function falls back to querying MT5 for the
+    position's original magic number (via positions_get or history_deals_get).
     """
     _magic = msg_payload.get("magic")
     if isinstance(_magic, int):
@@ -1379,6 +1384,56 @@ def _write_zmq_journal_entry(
         if _order_ticket is not None:
             with contextlib.suppress(TypeError, ValueError):
                 position_ticket = int(_order_ticket)
+
+    # ── DQAF-20260622-059 / P1-a: MT5 position magic fallback ──
+    # If strategy is still empty after payload magic lookup, attempt
+    # reverse-lookup from MT5.  Tier 1: positions_get (works for open/modify).
+    # Tier 2: history_deals_get (works for recently-closed positions).
+    if not _strategy and mt5 is not None and position_ticket is not None:
+        _fallback_magic: int | None = None
+        with log_and_continue(component="DQAF058:mt5_magic_fallback"):
+            # Tier 1: live position lookup
+            try:
+                _live_positions = mt5.positions_get(ticket=position_ticket)
+                if _live_positions and len(_live_positions) > 0:
+                    _fb_magic = getattr(_live_positions[0], "magic", None)
+                    if _fb_magic is not None:
+                        _fallback_magic = int(_fb_magic)
+            except Exception:
+                pass
+            # Tier 2: deal history (position already closed)
+            if _fallback_magic is None:
+                try:
+                    _deals = mt5.history_deals_get(position=position_ticket)
+                    if _deals:
+                        for _d in _deals:
+                            _d_magic = getattr(_d, "magic", None)
+                            if _d_magic is not None and int(_d_magic) != 0:
+                                _fallback_magic = int(_d_magic)
+                                break
+                except Exception:
+                    pass
+            if _fallback_magic is not None:
+                _strategy = _M2S.get(_fallback_magic, "") if "_M2S" in dir() else ""
+                if not _strategy:
+                    from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2S_FB
+
+                    _strategy = _M2S_FB.get(_fallback_magic, "")
+                if _strategy:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "strategy_resolved_via_mt5_fallback",
+                                "time": _utc_now(),
+                                "ticket": position_ticket,
+                                "fallback_magic": _fallback_magic,
+                                "resolved_strategy": _strategy,
+                                "source": "DQAF-20260622-059/P1-a",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
     _label = _derive_label(action, msg_payload, detail) if detail else None
     _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
     _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
@@ -1600,6 +1655,7 @@ def run_zmq_worker(
                                 detail=detail,
                                 default_volume=default_volume,
                                 target="exec_bridge",
+                                mt5=mt5,
                             )
                             _zmq_send_ack(
                                 pub,
@@ -1847,6 +1903,19 @@ def run_zmq_worker(
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    # ── DQAF-20260622-059 / P1: Bootstrap magic↔strategy mappings from YAML ──
+    _cfg_guess = (
+        "configs/live_btc.yaml"
+        if args.journal_path and "btc" in str(args.journal_path)
+        else "configs/live.yaml"
+    )
+    try:
+        from core.contracts.strategy_magic import init_magic_mappings
+
+        init_magic_mappings(_cfg_guess)
+    except Exception:
+        pass  # hardcoded fallback already loaded on import
 
     if args.zmq:
         # ── Initialize MT5 once ──

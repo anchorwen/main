@@ -39,8 +39,13 @@ def _classify_exit(label: str | None, detail: dict | None) -> str:
         return "sl_hit"
     if reason in ("mia_close", "mt5_deal_reason_3"):
         return "mia_close"
-    if reason in ("unknown_close", "client_close", "position_not_found",
-                  "auto_orphan_rejected", "auto_orphan_stale"):
+    if reason in (
+        "unknown_close",
+        "client_close",
+        "position_not_found",
+        "auto_orphan_rejected",
+        "auto_orphan_stale",
+    ):
         return "unknown_close"
     if label in ("win",):
         return "tp_hit"
@@ -62,7 +67,10 @@ def compute_journal_brain_metrics(data_dir: str | Path) -> dict[str, dict[str, A
     All PnL values are in R-units (risk-normalized), sourced from the
     close event's "pnl" field.
     """
-    journal_path = Path(data_dir) / "live_trade_journal.jsonl"
+    # DQAF-20260622-059: Prefer augmented view when available
+    _augmented = Path(data_dir) / "live_trade_journal.augmented.jsonl"
+    _original = Path(data_dir) / "live_trade_journal.jsonl"
+    journal_path = _augmented if _augmented.exists() else _original
     if not journal_path.exists():
         return {}
 
@@ -99,9 +107,7 @@ def compute_journal_brain_metrics(data_dir: str | Path) -> dict[str, dict[str, A
     # Accumulate per-brain
     brain_pnls: dict[str, list[float]] = defaultdict(list)
     brain_sides: dict[str, list[str]] = defaultdict(list)
-    brain_exits: dict[str, defaultdict[str, int]] = defaultdict(
-        lambda: defaultdict(int)
-    )
+    brain_exits: dict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     for _ticket, td in trades.items():
         open_rec = td["open"]
@@ -197,18 +203,18 @@ def compute_journal_brain_metrics(data_dir: str | Path) -> dict[str, dict[str, A
             "brain_id": bid,
             "win_rate": wr,
             "profit_factor": pf,
-            "sharpe_ratio": sharpe,          # BrainLeaderboard.rank() expects 'sharpe_ratio'
-            "sample_count": n,                # BrainLeaderboard expects 'sample_count'
-            "trade_count": n,                 # Alias: downstream consumers use both names
-            "cumulative_pnl": total_pnl,      # BrainLeaderboard expects 'cumulative_pnl'
-            "pnl_r": total_pnl,               # Alias: downstream consumers use pnl_r
+            "sharpe_ratio": sharpe,  # BrainLeaderboard.rank() expects 'sharpe_ratio'
+            "sample_count": n,  # BrainLeaderboard expects 'sample_count'
+            "trade_count": n,  # Alias: downstream consumers use both names
+            "cumulative_pnl": total_pnl,  # BrainLeaderboard expects 'cumulative_pnl'
+            "pnl_r": total_pnl,  # Alias: downstream consumers use pnl_r
             "max_drawdown": max_dd,
             "avg_win": avg_win,
             "avg_loss": avg_loss,
-            "long_count": len(long_pnls),     # BrainLeaderboard expects 'long_count'
+            "long_count": len(long_pnls),  # BrainLeaderboard expects 'long_count'
             "short_count": len(short_pnls),
-            "long_win_rate": l_wr,            # BrainLeaderboard expects 'long_win_rate'
-            "short_win_rate": s_wr,           # BrainLeaderboard expects 'short_win_rate'
+            "long_win_rate": l_wr,  # BrainLeaderboard expects 'long_win_rate'
+            "short_win_rate": s_wr,  # BrainLeaderboard expects 'short_win_rate'
             "total_spread_cost": 0.0,
             "total_slippage_cost": 0.0,
             "exit_reasons": dict(brain_exits.get(bid, {})),
