@@ -19,9 +19,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+
+if TYPE_CHECKING:
+    from sklearn.preprocessing import StandardScaler
 
 from core.contracts.exceptions import DataIntegrityError
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
@@ -92,9 +95,14 @@ class MicrostructureFeatureAdapter:
         ``scale_``, ``var_``, ``n_features_in_``, ``feature_names_in_``.
         This replaces the broken ``joblib.load()`` path that failed on
         JSON-format scaler files.
+
+        sklearn is imported lazily — this module must be importable in
+        environments (CI, shadow fixtures) where sklearn is absent.
         """
+        from sklearn.preprocessing import StandardScaler as _StandardScaler
+
         data = json.loads(path.read_text(encoding="utf-8"))
-        scaler = StandardScaler()
+        scaler = _StandardScaler()
         scaler.mean_ = np.asarray(data["mean_"], dtype=np.float64)
         scaler.scale_ = np.asarray(data["scale_"], dtype=np.float64)
         scaler.var_ = np.asarray(data.get("var_", []), dtype=np.float64)

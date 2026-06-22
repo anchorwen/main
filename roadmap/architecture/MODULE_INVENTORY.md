@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T04:55:35Z
+> **自动生成**: 2026-06-22T05:09:47Z
 > **扫描模块数**: 650
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -291,7 +291,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 11 | 205 | — | |
+| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 11 | 213 | — | |
 | `v9_feature_adapter.py` | ✅ active | V9FeatureAdapter | 6 | 103 | — | |
 
 ## core/features/computers
