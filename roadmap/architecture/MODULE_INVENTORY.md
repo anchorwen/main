@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T02:03:37Z
+> **自动生成**: 2026-06-22T02:18:47Z
 > **扫描模块数**: 648
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -639,14 +639,14 @@
 | `audit_data_module.py` | ✅ active | — | 3 | 358 | — | |
 | `audit_deep_fullstack.py` | ✅ active | — | 4 | 436 | — | |
 | `audit_entry_spread.py` | ✅ active | — | 2 | 108 | — | |
-| `audit_full_pipeline.py` | ✅ active | — | 12 | 603 | — | |
+| `audit_full_pipeline.py` | ✅ active | — | 12 | 648 | — | |
 | `audit_institutional_performance.py` | ✅ active | — | 10 | 604 | — | |
 | `audit_live_brains.py` | ✅ active | — | 1 | 231 | — | |
 | `audit_live_health.py` | ✅ active | — | 3 | 201 | — | |
 | `audit_phase_c_fix5.py` | ✅ active | — | 7 | 328 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
-| `audit_state_of_system.py` | ✅ active | — | 5 | 319 | — | |
+| `audit_state_of_system.py` | ✅ active | — | 5 | 347 | — | |
 | `audit_trade_quality.py` | ✅ active | — | 5 | 275 | — | |
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
@@ -664,7 +664,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 614 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 623 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -675,10 +675,10 @@
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
 | `clean_ledger_bloat.py` | ✅ active | — | 2 | 195 | — | |
 | `cleanup_claude_transcripts.py` | ✅ active | — | 2 | 100 | — | |
-| `commander_g2_metafilter_path.py` | ✅ active | — | 3 | 248 | — | |
-| `commander_g3_alpha_vacuum.py` | ✅ active | — | 4 | 150 | — | |
-| `commander_g4_g6_g7_coverage_xau.py` | ✅ active | — | 5 | 218 | — | |
-| `commander_guardrails_arch.py` | ✅ active | — | 7 | 303 | — | |
+| `commander_g2_metafilter_path.py` | ✅ active | — | 3 | 258 | — | |
+| `commander_g3_alpha_vacuum.py` | ✅ active | — | 4 | 153 | — | |
+| `commander_g4_g6_g7_coverage_xau.py` | ✅ active | — | 5 | 226 | — | |
+| `commander_guardrails_arch.py` | ✅ active | — | 7 | 314 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 32 | 2226 | — | |
@@ -720,7 +720,7 @@
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
 | `monitor_feature_drift.py` | ✅ active | — | 4 | 287 | — | |
-| `monitor_pwin_fix.py` | ✅ active | — | 3 | 154 | — | |
+| `monitor_pwin_fix.py` | ✅ active | — | 3 | 163 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
 | `mt5_bridge_worker.py` | ✅ active | — | 33 | 1806 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
@@ -765,7 +765,7 @@
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
 | `verify.py` | ✅ active | — | 15 | 966 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 92 | — | |
-| `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 304 | — | |
+| `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 | `verify_event_stream.py` | ✅ active | — | 3 | 202 | — | |
 | `verify_health_check_coverage.py` | ✅ active | — | 2 | 143 | — | |

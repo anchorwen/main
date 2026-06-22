@@ -256,6 +256,15 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/verify_dqaf_002_fix.py",
         "scripts/run_data_health.py",
         "scripts/send_data_health_alert.py",
+        # ── Iron Law #11 Institutional Audit Portfolio (FIX-20260622-052 S.E.A.L.) ──
+        "scripts/audit_full_pipeline.py",
+        "scripts/audit_state_of_system.py",
+        "scripts/commander_g2_metafilter_path.py",
+        "scripts/commander_g3_alpha_vacuum.py",
+        "scripts/commander_g4_g6_g7_coverage_xau.py",
+        "scripts/commander_guardrails_arch.py",
+        "scripts/monitor_pwin_fix.py",
+        "scripts/verify_dqaf044_fix_effect.py",
     ],
     "runtime_live": [
         "main.py",
