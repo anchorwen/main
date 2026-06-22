@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T02:55:15Z
-> **扫描模块数**: 649
+> **自动生成**: 2026-06-22T04:28:52Z
+> **扫描模块数**: 650
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -291,7 +291,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 9 | 107 | — | |
+| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 10 | 180 | — | |
 | `v9_feature_adapter.py` | ✅ active | V9FeatureAdapter | 6 | 103 | — | |
 
 ## core/features/computers
@@ -506,7 +506,7 @@
 | `golden_master.py` | ✅ active | — | 8 | 249 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
-| `live_bootstrap.py` | ✅ active | — | 1 | 138 | — | |
+| `live_bootstrap.py` | ✅ active | — | 2 | 171 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4033 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 376 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1497 | — | |
@@ -664,7 +664,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 624 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 625 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -696,6 +696,7 @@
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
+| `generate_btc_empirical_scaler.py` | ✅ active | — | 3 | 221 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
 | `guard_git_stash.py` | ✅ active | — | 3 | 113 | — | |
 | `hook_architecture_gate.py` | ✅ active | — | 6 | 397 | — | |

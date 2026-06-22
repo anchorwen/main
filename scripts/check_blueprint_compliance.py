@@ -207,6 +207,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/hook_architecture_gate.py",
         "scripts/omega_gate.py",
         "scripts/dqaf053_phase1_sanitize.py",  # DQAF-053 migration script
+        "scripts/generate_btc_empirical_scaler.py",  # DQAF-054 BTC scaler
         "scripts/brain.py",
         "scripts/training/register_brain.py",
         "scripts/system_trust_report.py",

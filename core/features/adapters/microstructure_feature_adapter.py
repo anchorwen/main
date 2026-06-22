@@ -6,14 +6,24 @@ Handles three input formats:
   3. Flattened (n_bars*9,) → (1, 288) for XGBoost
 
 All outputs are StandardScaler-normalised when a scaler is configured.
+
+DQAF-20260622-054: replaced ``joblib.load()`` (broken on JSON scalers) with
+``_load_scaler_json()`` that reconstructs an sklearn StandardScaler from the
+training pipeline's JSON format.  Added ``require_scaler`` flag for fail-closed
+safe-loading — when ``True``, missing scaler raises ``DataIntegrityError``
+instead of silently degrading to raw features.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 
+from core.contracts.exceptions import DataIntegrityError
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
 
 _logger = logging.getLogger(__name__)
@@ -23,18 +33,81 @@ DEFAULT_SEQ_LEN = 32
 class MicrostructureFeatureAdapter:
     """Extracts and normalises microstructure features for model input.
 
-    When a scaler_path is provided, loads a sklearn StandardScaler
-    that was fit on per-bar features during training.
+    When a *scaler_path* is provided, loads a JSON-format StandardScaler
+    that was fit on per-bar features during training and reconstructs it
+    in memory (DQAF-054: replaces broken ``joblib.load()``).
+
+    Parameters
+    ----------
+    scaler_path:
+        Path to a JSON scaler file with ``mean_`` / ``scale_`` / ``var_`` /
+        ``n_features_in_`` / ``feature_names_in_`` keys.
+    require_scaler:
+        If ``True`` (live mode), missing or unreadable scaler raises
+        ``DataIntegrityError``.  If ``False`` (shadow/testing), degrades
+        gracefully to raw features with a warning.
     """
 
-    def __init__(self, scaler_path: str | None = None):
-        self._scaler = None
-        self._scaler_path = scaler_path
+    def __init__(
+        self,
+        scaler_path: str | Path | None = None,
+        *,
+        require_scaler: bool = False,
+    ):
+        self._scaler: StandardScaler | None = None
+        self._scaler_path = Path(scaler_path) if scaler_path else None
         self._scaler_warned: bool = False
-        if scaler_path:
-            import joblib
+        self._require_scaler = require_scaler
 
-            self._scaler = joblib.load(scaler_path)
+        if self._scaler_path is not None:
+            if not self._scaler_path.exists():
+                if require_scaler:
+                    raise DataIntegrityError(
+                        f"CRITICAL SKEW PREVENTED: Scaler missing at "
+                        f"{self._scaler_path} under require_scaler=True. "
+                        f"PROCESS HALTED.",
+                        source="adapter:microstructure:init",
+                    )
+                _logger.warning(
+                    "DEGRADE: Scaler file not found at %s. "
+                    "Falling back to RAW features. Monitor for drift!",
+                    self._scaler_path,
+                )
+            else:
+                self._scaler = self._load_scaler_json(self._scaler_path)
+        elif require_scaler:
+            raise DataIntegrityError(
+                "CRITICAL SKEW PREVENTED: scaler_path is None under "
+                "require_scaler=True. PROCESS HALTED.",
+                source="adapter:microstructure:init",
+            )
+
+    # ── Scaler loading (DQAF-054) ──────────────────────────────────────
+
+    @staticmethod
+    def _load_scaler_json(path: Path) -> StandardScaler:
+        """Reconstruct a StandardScaler from a JSON file.
+
+        Training pipelines save scalers as JSON with keys ``mean_``,
+        ``scale_``, ``var_``, ``n_features_in_``, ``feature_names_in_``.
+        This replaces the broken ``joblib.load()`` path that failed on
+        JSON-format scaler files.
+        """
+        data = json.loads(path.read_text(encoding="utf-8"))
+        scaler = StandardScaler()
+        scaler.mean_ = np.asarray(data["mean_"], dtype=np.float64)
+        scaler.scale_ = np.asarray(data["scale_"], dtype=np.float64)
+        scaler.var_ = np.asarray(data.get("var_", []), dtype=np.float64)
+        scaler.n_features_in_ = int(data.get("n_features_in_", len(data["mean_"])))
+        scaler.feature_names_in_ = np.asarray(data.get("feature_names_in_", []), dtype=str)
+        _logger.info(
+            "MicrostructureFeatureAdapter: scaler loaded from %s (%d features)",
+            path,
+            scaler.n_features_in_,
+        )
+        return scaler
+
+    # ── Properties ─────────────────────────────────────────────────────
 
     @property
     def is_warmed_up(self) -> bool:

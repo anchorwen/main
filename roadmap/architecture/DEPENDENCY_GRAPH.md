@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-22T02:55:15Z
+> **自动生成**: 2026-06-22T04:28:52Z
 
 ## Package-Level Dependencies
 
@@ -255,7 +255,7 @@
 
 ### `core/features/adapters/`
 
-- `microstructure_feature_adapter.py` → `core.features.schemas.microstructure_schema`
+- `microstructure_feature_adapter.py` → `core.contracts.exceptions`, `core.features.schemas.microstructure_schema`
 - `v9_feature_adapter.py` → `core.features.schemas.v9_institutional_schema`
 
 ### `core/features/computers/`
@@ -612,6 +612,7 @@
 - `extract_health_checks.py` → (无内部依赖)
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`, `core.runtime.fault_handler`
 - `feedback_loop.py` → `core.feedback.brain_performance_tracker`
+- `generate_btc_empirical_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `governance_promote_m15.py` → (无内部依赖)
 - `guard_git_stash.py` → `core.runtime.fault_handler`
 - `hook_architecture_gate.py` → `core.runtime.fault_handler`
