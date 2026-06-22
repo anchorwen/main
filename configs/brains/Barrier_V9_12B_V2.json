@@ -76,5 +76,11 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
+  },
+  "label_contract": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 1.5,
+    "contract_type": "barrier_12bar",
+    "aligned_with": "configs/live.yaml"
   }
 }

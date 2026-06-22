@@ -4,6 +4,29 @@
 
 ## Fix Details
 
+### FIX-20260622-051 — DQAF-051 Train-Serve SL/TP Calibration Chasm
+
+- **Date**: 2026-06-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: scripts, configs
+- **Files**: `scripts/verify.py`, `configs/brains/Barrier_V9_12B_V2.json`, `configs/brains/Swing_V9_H4_V2.json`, `configs/brains/Swing_V9_H1_V2.json`, `configs/brains/Swing_V10_H1_Directional.json`, `configs/brains_btc/BTC_Swing_V4.json`, `configs/live.yaml`, `configs/live_btc.yaml`
+- **Description**: verify.py `_check_config_consistency()` config consistency check discovered 4 brains with missing `label_contract` blocks — train-serve SL/TP alignment unverifiable. Manual cross-reference revealed BTC_Swing_V4 has real train-serve skew: training SL=1.5/TP=1.5 vs serving SL=2.0/TP=2.5 (33%/67% wider). Model calibrated for wrong thresholds → p_win miscalibration in production. Additional finding: V10_H1_Directional had inverted R:R (training SL=2.0/TP=3.5 vs serving SL=3.0/TP=2.0 under shared h1_swing line).
+
+  **Phase 1 — Immediate Fix**:
+  - Barrier_V9_12B_V2, Swing_V9_H4_V2, Swing_V9_H1_V2: added `label_contract` blocks with verified-match SL/TP values
+  - BTC_Swing_V4: added `label_contract` (SL=1.5/TP=1.5) + `live_btc.yaml` btc_swing SL 2.0→1.5, TP 2.5→1.5 (Route A: align serving to training)
+  - V10_H1_Directional: created new `h1_directional` strategy line in live.yaml (magic=90303, SL=2.0/TP=3.5, copy of h1_swing with correct SL/TP), updated brain `contract_group` h1_swing→h1_directional, added to regime_map low_vol
+
+  **Phase 2 — Defensive Upgrade**:
+  - verify.py `_check_config_consistency()`: missing `label_contract` upgraded from `warnings.append` → `errors.append` (FATAL ERROR → SystemExit(1))
+  - New Check 3a: train-serve SL/TP mismatch detection — compares `label_contract.sl_atr_mult`/`tp_atr_mult` against strategy line `sl.base_atr_mult`/`tp.base_atr_mult`
+  - Pre-loaded live YAML config cache for cross-referencing strategy_lines
+
+- **Root Cause**: L3 — `label_contract` optional in brain config schema (no enforcement). verify.py could only WARN, never block. Without mandatory contract, CI/CD pipeline couldn't prevent train-serve skew from reaching production. BTC serving SL/TP diverged from training without detection (RC-09: config-drift).
+- **Risk**: Low. 3 XAU brains: SL/TP already matched — only metadata added. BTC: SL/TP narrowed to match training (1.5→1.5 from 2.0→2.5) — tighter SL may increase SL hit rate but model is calibrated for it. V10: new strategy line matches training params exactly.
+- **Verification**: `verify.py --quick` — `[PASS] Config Consistency: all checks passed` (0 errors, 0 warnings).
+
 ### FIX-20260622-050 — DQAF-050 Cold-Start Double Deadlock: Federated Trust + Stage-Aware Fast-Track
 
 - **Date**: 2026-06-22

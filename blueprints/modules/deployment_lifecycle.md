@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260622-051 | 2026-06-22 | cursor-agent | — | **verify.py: config consistency WARN→FATAL + train-serve SL/TP mismatch detection (DQAF-051)**. `_check_config_consistency()`: missing `label_contract` upgraded from warning→fatal error (SystemExit(1)). New Check 3a: cross-references label_contract SL/TP against strategy line serve values. Pre-loads live YAML configs for strategy_lines lookup. Part of DQAF-051 Train-Serve Calibration Chasm — prevents silent config drift from reaching production. | L3 — label_contract was optional (no enforcement) + RC-09 |
 | FIX-20260622-050 | 2026-06-22 | cursor-agent | — | **MODULE_SOURCE_MAP: core/alpha/lifecycle_service.py → execution_guards**. New alpha lifecycle service file registered (previously unmapped → orphan FATAL). Part of DQAF-050 Cold-Start Double Deadlock fix. | RC-09 |
 | FIX-20260622-049 | 2026-06-22 | cursor-agent | — | **MODULE_SOURCE_MAP: core/alpha/contracts.py + core/alpha/registry.py → execution_guards**. Two new alpha subsystem files registered (previously unmapped → orphan FATAL). | RC-09 |
 | FIX-20260622-005 | 2026-06-22 | cursor-agent | — | **MODULE_SOURCE_MAP: hook_pre_push.py → runtime_state + BLE001 noqa (3 sites)**. Pre-push CI-mirror gate was unmapped → orphan compliance FATAL. Also added noqa annotations to 3 pre-existing reviewed bare excepts (already wrapped with fail_open_guard). | RC-09 |

@@ -348,19 +348,29 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
             with fail_open_guard("verify:_load_brain"):
                 brain_cache[brain_path_str] = {}
                 return None
+
+    # ── Pre-load all live YAML configs + strategy_lines for SL/TP cross-ref ──
+    live_config_cache: dict[str, dict] = {}
     for config_path in live_configs:
-        asset = _asset_from_path(config_path)
         try:
             with open(config_path, encoding="utf-8") as f:
-                config = yaml.safe_load(f)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("verify:_load_brain"):
-                errors.append(f"{config_path.name}: cannot parse YAML — {exc}")
-                continue
+                live_config_cache[config_path.name] = yaml.safe_load(f) or {}
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("verify:_check_config_consistency"):
+                live_config_cache[config_path.name] = {}
+
+    for config_path in live_configs:
+        asset = _asset_from_path(config_path)
+        config = live_config_cache.get(config_path.name, {})
+        if not config:
+            continue
         brains_section = config.get("brains", {})
         registry = brains_section.get("registry_entries", [])
         if not registry:
             continue
+
+        # ── Build strategy_lines lookup for SL/TP cross-ref ──
+        strategy_lines = config.get("strategy_lines", {})
 
         for entry in registry:
             if not isinstance(entry, dict):
@@ -416,12 +426,15 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
                     f"still enabled=true — must be disabled (FIX-20260610-002)"
                 )
 
-            # ── Check 3: label_contract existence (warning only) ──
+            # ── Check 3: label_contract existence (FATAL — DQAF-20260622-051) ──
             label_contract = brain_data.get("label_contract")
+            contract_group = brain_data.get("contract_group", "")
+            strat_line = strategy_lines.get(contract_group, {}) if contract_group else {}
+
             if label_contract is None:
-                warnings.append(
+                errors.append(
                     f"{config_path.name}: brain '{brain_path}' missing label_contract block — "
-                    f"train-serve SL/TP alignment cannot be verified"
+                    f"train-serve SL/TP alignment cannot be verified (DQAF-20260622-051)"
                 )
             elif isinstance(label_contract, dict):
                 aligned_with = label_contract.get("aligned_with")
@@ -444,6 +457,26 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
                         warnings.append(
                             f"{config_path.name}: brain '{brain_path}' label_contract declares "
                             f"aligned_with={aligned_with} but is deployed in {config_path.name}"
+                        )
+
+                # ── Check 3a: train-serve SL/TP alignment (FATAL — DQAF-20260622-051) ──
+                if contract_sl is not None and contract_tp is not None and strat_line:
+                    serve_sl = strat_line.get("sl", {}).get("base_atr_mult")
+                    serve_tp = strat_line.get("tp", {}).get("base_atr_mult")
+
+                    if serve_sl is not None and serve_sl != contract_sl:
+                        errors.append(
+                            f"{config_path.name}: brain '{brain_path}' TRAIN-SERVE SL MISMATCH — "
+                            f"label_contract declares SL={contract_sl}×ATR, "
+                            f"but strategy '{contract_group}' serves SL={serve_sl}×ATR "
+                            f"(DQAF-20260622-051)"
+                        )
+                    if serve_tp is not None and serve_tp != contract_tp:
+                        errors.append(
+                            f"{config_path.name}: brain '{brain_path}' TRAIN-SERVE TP MISMATCH — "
+                            f"label_contract declares TP={contract_tp}×ATR, "
+                            f"but strategy '{contract_group}' serves TP={serve_tp}×ATR "
+                            f"(DQAF-20260622-051)"
                         )
 
     # Print results

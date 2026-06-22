@@ -83,5 +83,11 @@
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
-  "last_retrained": "2026-06-17T09:12:36.518370+00:00"
+  "last_retrained": "2026-06-17T09:12:36.518370+00:00",
+  "label_contract": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 1.5,
+    "contract_type": "btc_swing",
+    "aligned_with": "configs/live_btc.yaml"
+  }
 }

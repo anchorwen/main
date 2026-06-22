@@ -697,6 +697,49 @@ strategy_lines:
       max_consecutive_losses: 3
     direction_balance:
       long_bias_discount: 0.0
+  h1_directional:
+    enabled: true
+    timeframe: H1
+    magic: 90303
+    brain_types:
+    - xgboost_v9
+    base_volume: 0.01
+    max_volume: 0.02
+    confidence_threshold: 0.45
+    min_p_win: 0.3
+    spread_points: 30
+    max_spread_points: 70
+    sl:
+      base_atr_mult: 2.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+      min_rr_ratio: 0.5
+    tp:
+      base_atr_mult: 3.5
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 2.0
+      ofi_partial_tp_threshold: 2.5
+      ofi_partial_tp_r_mult: 0.5
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.5
+      trail_atr_mult_low: 2.0
+      trail_atr_mult_high: 3.5
+      breakeven_threshold_atr: 1.5
+      flip_exit_enabled: true
+      flip_threshold: 0.4
+      time_exit_cycles: 288
+      confidence_decay_exit: true
+      min_r_for_hold: 0.0
+      hesitation_cycles: 3
+      trail_activation_atr: 0.7
+      _comment_trail_activation: 'DQAF-051: V10 directional — trained SL=2.0/TP=3.5, symmetric to training contract'
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 3
+    direction_balance:
+      long_bias_discount: 0.0
   h4_swing:
     enabled: true
     timeframe: H4
@@ -831,6 +874,7 @@ regime_gate:
       m15_swing: reduced
       m30_swing: reduced
       h1_swing: reduced
+      h1_directional: reduced
       h4_swing: reduced
       daily_swing: false
     normal:

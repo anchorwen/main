@@ -364,7 +364,7 @@ strategy_lines:
     min_valid_brains: 1
     mode: probation  # FIX-20260613-090-deploy: V9/V10 probation — observe before full capital
     sl:
-      base_atr_mult: 2.0
+      base_atr_mult: 1.5
       dynamic: true
       hard_sl_ratio: 1.5
       min_rr_ratio: 0.85
@@ -373,7 +373,7 @@ strategy_lines:
     strategy_family: trend_following
     timeframe: M5
     tp:
-      base_atr_mult: 2.5
+      base_atr_mult: 1.5
       partial_tp_enabled: true
       partial_tp_r: 1.0
       partial_tp_ratio: 0.5
