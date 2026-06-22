@@ -10,11 +10,14 @@ Related: Strangler Fig #9 (live_startup.py — brain/config init functions)
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso
+
+_logger = logging.getLogger(__name__)
 
 # ── Initialisation ───────────────────────────────────────────────────
 
@@ -70,10 +73,22 @@ def init_feature_services(
     result["micro_feature_computer"] = MicrostructureFeatureComputer(
         mt5, symbol, mt5_worker=mt5_worker
     )
-    # DQAF-054/055: mandatory scaler safe-loading — discover per-symbol micro scaler
-    _micro_scaler_path = MicrostructureFeatureAdapter.resolve_scaler_path(
-        Path(feature_store_dir).parent, symbol
-    )
+    # DQAF-054/055/058: mandatory scaler safe-loading — discover per-symbol micro scaler
+    _base_dir = Path(feature_store_dir).parent
+    _micro_scaler_path = MicrostructureFeatureAdapter.resolve_scaler_path(_base_dir, symbol)
+    # DQAF-058: Cold-start self-healing — auto-generate identity scaler
+    # when no empirical scaler exists (e.g. XAU with 0 feature-store records).
+    # This closes the deployment gap between the generate_cold_start_scaler()
+    # factory and the live bootstrap path.
+    if _micro_scaler_path is None:
+        _fallback_path = _base_dir / "models" / f"{symbol.lower()[:3]}_micro_scaler.json"
+        _logger.warning(
+            "No micro scaler found for %s. Auto-generating cold-start identity scaler at %s",
+            symbol,
+            _fallback_path,
+        )
+        MicrostructureFeatureAdapter.generate_cold_start_scaler(_fallback_path)
+        _micro_scaler_path = _fallback_path
     result["micro_feature_adapter"] = MicrostructureFeatureAdapter(
         scaler_path=_micro_scaler_path,
         require_scaler=True,
