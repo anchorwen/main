@@ -81,7 +81,7 @@ def _derive_mappings_from_yaml(config_path: str) -> dict[int, str]:
     try:
         with open(cfg_path, encoding="utf-8") as fh:
             cfg: dict[str, Any] = yaml.safe_load(fh) or {}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("strategy_magic: failed to parse %s — %s", cfg_path, exc)
         return {}
 
