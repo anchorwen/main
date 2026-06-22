@@ -921,14 +921,16 @@ class StrategyLine:
 
                 _rolling = resolve_p_win_from_brains(self.brains, pnl_store, direction)
                 # DQAF-063: Cold-start Pathfinder Exemption.
-                # Post-outage cold-start: newly-live brains have <10 settled
-                # trades → rolling WR fallback returns ≤0.40 → all strategies
-                # locked.  Temporarily set p_win=0.51 so brains can accumulate
-                # PnL history.  Exemption auto-expires when any brain in the
-                # strategy reaches ≥10 settled trades.
+                # Two triggers:
+                # 1. Newly-live brains: sample_count < 10 → no PnL history yet.
+                # 2. Zero-win-rate brains: sample_count ≥ 10 but win_rate == 0.0
+                #    → labels missing from PnL ledger (data quality gap).  A real
+                #    brain cannot have 0% WR over 800+ trades — this is a sentinel
+                #    for "labels not backfilled".  Once labels are present and
+                #    win_rate > 0, amnesty auto-expires.
                 _amnesty_applied = False
                 if _rolling < 0.50:
-                    _all_under_threshold = True
+                    _all_need_amnesty = True
                     for _b in self.brains:
                         _bid = _b.get("brain_id") if isinstance(_b, dict) else getattr(_b, "brain_id", None)
                         if _bid and pnl_store is not None:
@@ -936,10 +938,14 @@ class StrategyLine:
                                 _m = pnl_store.get_metrics(str(_bid), window=100)
                             except Exception:
                                 _m = None
-                            if _m is not None and getattr(_m, "sample_count", 0) >= 10:
-                                _all_under_threshold = False
-                                break
-                    if _all_under_threshold:
+                            if _m is not None:
+                                _sc = getattr(_m, "sample_count", 0)
+                                _wr = getattr(_m, "win_rate", 0.0)
+                                # Brain has reliable data: ≥10 labelled trades with non-zero WR
+                                if _sc >= 10 and _wr > 0:
+                                    _all_need_amnesty = False
+                                    break
+                    if _all_need_amnesty:
                         _rolling = 0.51
                         _amnesty_applied = True
                         logger.info(
