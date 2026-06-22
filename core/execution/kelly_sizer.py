@@ -102,12 +102,16 @@ def resolve_p_win_from_brains(
     brains: list[Any],
     pnl_store: Any | None,
     direction: str = "long",
+    live_brain_ids: set[str] | None = None,
 ) -> float:
     """Resolve dynamic p_win for a strategy that does NOT use MetaFilter.
 
     Delegates to :func:`core.execution.pwin_chain.resolve_p_win_from_brains`
     (S3 — Functional Core extraction).
+
+    DQAF-20260622-064 (P0-1): *live_brain_ids* forwarded to pwin_chain
+    implementation for governance-gated brain filtering.
     """
     from core.execution.pwin_chain import resolve_p_win_from_brains as _impl
 
-    return _impl(brains, pnl_store, direction)
+    return _impl(brains, pnl_store, direction, live_brain_ids=live_brain_ids)

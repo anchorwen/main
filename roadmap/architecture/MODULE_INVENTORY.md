@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T14:47:48Z
+> **自动生成**: 2026-06-22T15:25:15Z
 > **扫描模块数**: 654
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -230,7 +230,7 @@
 | `fix_gateway_adapter.py` | ✅ active | FixGatewayAdapter | 12 | 136 | — | |
 | `fix_message_builder.py` | ✅ active | FixMessageBuilder | 5 | 57 | — | |
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
-| `kelly_sizer.py` | ✅ active | KellyResult | 2 | 113 | — | |
+| `kelly_sizer.py` | ✅ active | KellyResult | 2 | 117 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
 | `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 379 | — | |
 | `managed_close.py` | ✅ active | — | 2 | 391 | — | |
