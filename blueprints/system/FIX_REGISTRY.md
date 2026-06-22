@@ -4113,3 +4113,29 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 **Poison Flushing Period**: Immediate effect on next cycle. BTC p_win will switch from zombie-retired median (~0.08) to LIVE-brain median.
 **Verification**: Golden master `p_win_source` transitions: `rolling_wr_fallback_rejected` → `cold_start_amnesty` or `rolling_wr_soft_bypass`; ADX blocks disappear from XAU decisions.
 
+### FIX-20260622-064b — DQAF-064 P0-1 Hotfix: kelly_sizer Wrapper Missing live_brain_ids Passthrough
+
+**Date**: 2026-06-22
+**Scope**: execution (kelly_sizer)
+**Severity**: Sev 1 — every strategy evaluation crashed with TypeError
+
+**Root Cause**: `strategy_line.py` calls `resolve_p_win_from_brains()` from `kelly_sizer.py` wrapper (not directly from `pwin_chain`). The wrapper only forwarded `(brains, pnl_store, direction)`, missing the new `live_brain_ids` parameter added in 064 P0-1. Result: `TypeError: resolve_p_win_from_brains() got an unexpected keyword argument 'live_brain_ids'` on every cycle for both XAU and BTC.
+
+**Fix**: Added `live_brain_ids: set[str] | None = None` parameter to `kelly_sizer.resolve_p_win_from_brains()` wrapper and forwarded it to `pwin_chain` implementation.
+
+**Cross-Symbol Impact**: XAU + BTC — both use the same kelly_sizer path.
+**Verification**: cycle_error count dropped to 0; BTC p_win=0.55 confirmed working.
+
+### FIX-20260622-064c — DQAF-064 P0-1 Hotfix: RuleEngineStrategyWrapper Missing governance_state Parameter
+
+**Date**: 2026-06-22
+**Scope**: execution (rule_engine_strategy)
+**Severity**: Sev 1 — structural_swing_v1 strategy crashed every cycle with TypeError
+
+**Root Cause**: Same pattern as 064b. `strategy_evaluator.py` passes `governance_state=governance_state` to ALL strategy evaluate() calls (per 064 P0-1). `RuleEngineStrategyWrapper.evaluate()` signature did not include this parameter. Result: `TypeError: RuleEngineStrategyWrapper.evaluate() got an unexpected keyword argument 'governance_state'` — `consecutive_cycle_errors: 2`.
+
+**Fix**: Added `governance_state: dict[str, Any] | None = None` to `RuleEngineStrategyWrapper.evaluate()` signature. Rule-based strategies use no brains — parameter is accepted and ignored for interface uniformity.
+
+**Cross-Symbol Impact**: XAU only — BTC has no rule_engine strategies.
+**Verification**: verify.py --quick PASS. Next cycle must show 0 cycle_error for structural_swing_v1.
+

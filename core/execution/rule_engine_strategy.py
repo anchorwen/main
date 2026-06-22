@@ -98,6 +98,8 @@ class RuleEngineStrategyWrapper:
         conformal_ou_gate: Any = None,
         micro_feature_dict: dict[str, float] | None = None,
         btc_augment: Any = None,
+        governance_state: dict[str, Any]
+        | None = None,  # DQAF-20260622-064c: accepted for interface uniformity; rule engines use no brains
     ) -> StrategyDecision:
         """Evaluate one cycle. Returns StrategyDecision with should_trade flag.
 
