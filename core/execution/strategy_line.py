@@ -920,11 +920,39 @@ class StrategyLine:
                 from core.execution.kelly_sizer import resolve_p_win_from_brains
 
                 _rolling = resolve_p_win_from_brains(self.brains, pnl_store, direction)
+                # DQAF-063: Cold-start Pathfinder Exemption.
+                # Post-outage cold-start: newly-live brains have <10 settled
+                # trades → rolling WR fallback returns ≤0.40 → all strategies
+                # locked.  Temporarily set p_win=0.51 so brains can accumulate
+                # PnL history.  Exemption auto-expires when any brain in the
+                # strategy reaches ≥10 settled trades.
+                _amnesty_applied = False
+                if _rolling < 0.50:
+                    _all_under_threshold = True
+                    for _b in self.brains:
+                        _bid = _b.get("brain_id") if isinstance(_b, dict) else getattr(_b, "brain_id", None)
+                        if _bid and pnl_store is not None:
+                            try:
+                                _m = pnl_store.get_metrics(str(_bid), window=100)
+                            except Exception:
+                                _m = None
+                            if _m is not None and getattr(_m, "sample_count", 0) >= 10:
+                                _all_under_threshold = False
+                                break
+                    if _all_under_threshold:
+                        _rolling = 0.51
+                        _amnesty_applied = True
+                        logger.info(
+                            "[DQAF-063] Cold-start amnesty granted for %s: "
+                            "%d brain(s), rolling WR fallback overridden → 0.51",
+                            name,
+                            len(self.brains),
+                        )
                 # Soft-bypass: if rolling WR >= 0.50, allow with p_win=0.55
                 # and let the V9 brains decide.  Below 0.50 → reject.
                 if _rolling >= 0.50:
                     _meta_p_win = 0.55
-                    _p_win_source = "rolling_wr_soft_bypass"
+                    _p_win_source = "cold_start_amnesty" if _amnesty_applied else "rolling_wr_soft_bypass"
                     _meta_reject = None  # clear rejection
                 else:
                     _meta_reject.reason = (
