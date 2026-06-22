@@ -54,7 +54,7 @@ HOT_PATH_FILES = {
 
 # ── Signature patterns ──
 SIGNATURE_RE = re.compile(
-    r"\[[OΩ].*Routing:\s*Scene\s+[A-G]\s*(?:→|->)\s*.*\]",
+    r"\[[OΩ].*Routing:\s*Scene\s+[A-H]\s*(?:→|->)\s*.*\]",
     re.IGNORECASE,
 )
 # Scene A (Bug fix) requires DQAF: #9
@@ -158,7 +158,7 @@ def main() -> int:
     # ── Check 2: Scene requires minimal iron law references (BLOCKING) ──
     # FIX-20260613-061: Upgraded from WARNING to hard fail.
     # IRON_LAW-13-S1: Enhanced with Root Cause Layer + Causal Chain depth (#8, #12).
-    scene_match = re.search(r"Scene\s+([A-G])", signature)
+    scene_match = re.search(r"Scene\s+([A-H])", signature)
     scene = scene_match.group(1).upper() if scene_match else ""
     if scene_match:
         required = SCENE_REQUIRES_IRON_LAW.get(scene, [])
