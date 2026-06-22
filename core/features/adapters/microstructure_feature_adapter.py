@@ -107,6 +107,31 @@ class MicrostructureFeatureAdapter:
         )
         return scaler
 
+    # ── Scaler auto-discovery (DQAF-20260622-055) ───────────────────────
+
+    @staticmethod
+    def resolve_scaler_path(base_dir: str | Path, symbol: str) -> Path | None:
+        """Discover the micro scaler for *symbol* under *base_dir*/models/.
+
+        Lookup order (first match wins):
+
+        1. ``{base_dir}/models/{symbol_lower}_micro_scaler.json``
+           e.g. ``data_btc/models/btcusdc_micro_scaler.json``
+        2. ``{base_dir}/models/btc_micro_scaler.json`` (BTC shorthand)
+
+        Returns the *Path* if found, ``None`` otherwise.
+        """
+        base = Path(base_dir)
+        symbol_lower = symbol.lower()
+        candidates = [
+            base / "models" / f"{symbol_lower}_micro_scaler.json",
+            base / "models" / "btc_micro_scaler.json",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return None
+
     # ── Properties ─────────────────────────────────────────────────────
 
     @property

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T04:28:52Z
+> **自动生成**: 2026-06-22T04:55:35Z
 > **扫描模块数**: 650
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -291,7 +291,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 10 | 180 | — | |
+| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 11 | 205 | — | |
 | `v9_feature_adapter.py` | ✅ active | V9FeatureAdapter | 6 | 103 | — | |
 
 ## core/features/computers
@@ -506,7 +506,7 @@
 | `golden_master.py` | ✅ active | — | 8 | 249 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
-| `live_bootstrap.py` | ✅ active | — | 2 | 171 | — | |
+| `live_bootstrap.py` | ✅ active | — | 1 | 147 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4033 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 376 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1497 | — | |
@@ -664,7 +664,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 625 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 626 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -717,7 +717,7 @@
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 486 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |
-| `live_shadow_ensemble.py` | ✅ active | — | 12 | 549 | — | |
+| `live_shadow_ensemble.py` | ✅ active | — | 12 | 556 | — | |
 | `live_shadow_intent_producer.py` | ✅ active | — | 7 | 264 | — | |
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
@@ -748,7 +748,7 @@
 | `send_live_order.py` | ✅ active | — | 4 | 148 | — | |
 | `shadow_decision_recorder.py` | ✅ active | — | 7 | 199 | — | |
 | `shadow_live_compare_report.py` | ✅ active | — | 9 | 218 | — | |
-| `shadow_pnl_loop.py` | ✅ active | — | 9 | 794 | — | |
+| `shadow_pnl_loop.py` | ✅ active | — | 9 | 807 | — | |
 | `shadow_rca.py` | ✅ active | — | 12 | 489 | — | |
 | `smoke_test_e2e.py` | ✅ active | — | 15 | 389 | — | |
 | `system_health.py` | ✅ active | — | 5 | 275 | — | |

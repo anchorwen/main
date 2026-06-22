@@ -146,6 +146,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "feedback_pnl": [
         "core/feedback/brain_pnl_ledger.py",
+        "scripts/live_shadow_ensemble.py",
         "scripts/shadow_pnl_loop.py",
         "scripts/paper_trade_simulator.py",
     ],

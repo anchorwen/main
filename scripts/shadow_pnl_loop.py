@@ -118,6 +118,8 @@ def _get_prices(mt5: Any, symbol: str) -> tuple[float, float, float, float] | No
     except Exception:  # BLE001:FOG
         with fail_open_guard("shadow_pnl_loop:_get_prices"):
             return None
+
+
 def _run_brain_inference(
     adapter: Any,
     brain_id: str,
@@ -151,6 +153,8 @@ def _run_brain_inference(
                 "runtime_ms": elapsed_ms,
                 "error": str(exc)[:500],
             }
+
+
 def _compare_directions(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Compute direction consensus across brains."""
     ok_results = [r for r in results if r["status"] == "ok"]
@@ -205,6 +209,8 @@ def _write_decision_records(
     except Exception as exc:  # BLE001:FOG
         with fail_open_guard("shadow_pnl_loop:_write_decision_records"):
             return {"written": False, "error": str(exc)[:500]}
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="shadow_pnl_loop",
@@ -258,8 +264,11 @@ def main(argv: list[str] | None = None) -> int:
     V9FeatureAdapter(normalization_config=norm_config)
 
     micro_computer = MicrostructureFeatureComputer(mt5, symbol)
+    # DQAF-055: auto-discover per-symbol micro scaler
+    _micro_scaler_path = MicrostructureFeatureAdapter.resolve_scaler_path(base_dir, symbol)
     micro_adapter = MicrostructureFeatureAdapter(
-        scaler_path=None,
+        scaler_path=_micro_scaler_path,
+        require_scaler=True,
     )
 
     # ── Feature store ──
@@ -573,7 +582,9 @@ def main(argv: list[str] | None = None) -> int:
                                     fallback_seq = np.zeros((32, 9), dtype=np.float32)
                                     try:
                                         prop = b["adapter"].run(None, fallback_seq)
-                                        pred = prop.prediction if hasattr(prop, "prediction") else {}
+                                        pred = (
+                                            prop.prediction if hasattr(prop, "prediction") else {}
+                                        )
                                         result = {
                                             "brain_id": b["brain_id"],
                                             "brain_type": btype,
@@ -590,7 +601,9 @@ def main(argv: list[str] | None = None) -> int:
                                             "down_probability": round(
                                                 float(pred.get("down_probability", 0.5)), 6
                                             ),
-                                            "confidence": round(float(pred.get("confidence", 0.0)), 6),
+                                            "confidence": round(
+                                                float(pred.get("confidence", 0.0)), 6
+                                            ),
                                         }
                                     except Exception:  # BLE001:FOG
                                         with fail_open_guard("shadow_pnl_loop:main"):

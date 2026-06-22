@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260622-055 | 2026-06-22 | cursor-agent | — | **DQAF-055: DQAF-054 Completion — Scaler Safe-Loading remaining sites**. Added `resolve_scaler_path()` static method to `MicrostructureFeatureAdapter`. Updated `live_shadow_ensemble.py:353` and `shadow_pnl_loop.py:261` (both hardcoded `scaler_path=None`) to auto-discover per-symbol scaler with `require_scaler=True`. `live_bootstrap.py` now delegates to the static method. | L2 — incomplete fix site sweep (DQAF-054 missed 2 of 3 instantiation sites) |
 | FIX-20260622-054 | 2026-06-22 | cursor-agent | — | **DQAF-054: `MicrostructureFeatureAdapter` JSON scaler loader + fail-closed mode**. Replaced broken `joblib.load()` (fails on JSON scalers) with `_load_scaler_json()` reconstructing sklearn StandardScaler. Added `require_scaler` flag for mandatory safe-loading. | L3 — format mismatch + hardcoded `None` |
 | FIX-20260616-099 | 2026-06-16 | cursor-agent | c41b0f8 | OFI IPC Bridge: TickPoller in bridge subprocess writes ofi_snapshot.json via atomic temp+rename every 30s. Feature Lake reads from file (graceful on missing). Removed in-process TickPoller from live_cycle. Zero coupling. | contract-violation |
 | FIX-20260616-098 | 2026-06-16 | cursor-agent | e460817 | OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min). | contract-violation |

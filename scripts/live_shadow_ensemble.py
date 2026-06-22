@@ -91,6 +91,8 @@ def _build_brain(entry: dict[str, Any]) -> tuple[Any | None, str | None]:
                 flush=True,
             )
             return None, err_msg
+
+
 def _route_feature_vector(
     schema_id: str,
     default_vector: np.ndarray,
@@ -162,6 +164,8 @@ def _run_single_brain(
                 "runtime_ms": elapsed_ms,
                 "error": err_str,
             }
+
+
 def _compare_directions(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Compare direction consensus across brains."""
     ok_results = [r for r in results if r["status"] == "ok"]
@@ -224,11 +228,13 @@ def _resolve_feature_vector(
                 from core.features.schemas.btc_macro_enhanced_schema import (
                     BTC_MACRO_ENHANCED_37_FEATURES,
                 )
+
                 _feature_names = BTC_MACRO_ENHANCED_37_FEATURES
             else:
                 from core.features.schemas.v9_institutional_schema import (
                     V9_INSTITUTIONAL_40_FEATURES,
                 )
+
                 _feature_names = V9_INSTITUTIONAL_40_FEATURES
 
             store = LocalFeatureStore(str(store_dir))
@@ -280,11 +286,7 @@ def _resolve_swing35_feature_vector(
         try:
             from core.features.computers.daily_computer import DailyFeatureComputer
 
-            cross_assets = {
-                name: str(p)
-                for name, p in _XAU_CROSS_CSVS.items()
-                if p.exists()
-            }
+            cross_assets = {name: str(p) for name, p in _XAU_CROSS_CSVS.items() if p.exists()}
             comp = DailyFeatureComputer(
                 d1_csv=str(_XAU_D1_CSV),
                 h4_csv=str(_XAU_H4_CSV),
@@ -350,8 +352,13 @@ def _resolve_micro_feature_vector(
             store = LocalFeatureStore(str(store_dir))
             record = store.latest(symbol, "M5", schema_name="v4.3_microstructure_9")
             if record is not None and record.values:
+                # DQAF-055: auto-discover per-symbol micro scaler
+                _scaler_path = MicrostructureFeatureAdapter.resolve_scaler_path(
+                    store_dir.parent, symbol
+                )
                 adapter = MicrostructureFeatureAdapter(
-                    scaler_path=None,
+                    scaler_path=_scaler_path,
+                    require_scaler=True,
                 )
                 vec = adapter.build_model_input(record.values).ravel()
                 return vec, "store"

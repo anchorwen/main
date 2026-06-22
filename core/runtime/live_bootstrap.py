@@ -16,32 +16,6 @@ from typing import Any
 from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso
 
-# ── DQAF-20260622-054: scaler auto-discovery ─────────────────────────
-
-
-def _resolve_scaler_path(feature_store_dir: str, symbol: str) -> Path | None:
-    """Discover the micro scaler for *symbol*.
-
-    Lookup order (first match wins):
-
-    1. ``{base_dir}/models/{symbol_lower}_micro_scaler.json``
-       e.g. ``data_btc/models/btcusdc_micro_scaler.json``
-    2. ``{base_dir}/models/btc_micro_scaler.json`` (BTC shorthand)
-
-    Returns the *Path* if found, ``None`` otherwise.
-    """
-    base_dir = Path(feature_store_dir).parent  # e.g. data_btc/feature_store → data_btc
-    symbol_lower = symbol.lower().replace("usdc", "usdc")  # normalise
-    candidates = [
-        base_dir / "models" / f"{symbol_lower}_micro_scaler.json",
-        base_dir / "models" / "btc_micro_scaler.json",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
-
-
 # ── Initialisation ───────────────────────────────────────────────────
 
 
@@ -96,8 +70,10 @@ def init_feature_services(
     result["micro_feature_computer"] = MicrostructureFeatureComputer(
         mt5, symbol, mt5_worker=mt5_worker
     )
-    # DQAF-054: mandatory scaler safe-loading — discover per-symbol micro scaler
-    _micro_scaler_path = _resolve_scaler_path(feature_store_dir, symbol)
+    # DQAF-054/055: mandatory scaler safe-loading — discover per-symbol micro scaler
+    _micro_scaler_path = MicrostructureFeatureAdapter.resolve_scaler_path(
+        Path(feature_store_dir).parent, symbol
+    )
     result["micro_feature_adapter"] = MicrostructureFeatureAdapter(
         scaler_path=_micro_scaler_path,
         require_scaler=True,
