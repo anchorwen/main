@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T01:02:05Z
+> **自动生成**: 2026-06-22T02:03:37Z
 > **扫描模块数**: 648
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -664,7 +664,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 612 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 614 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -697,7 +697,7 @@
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
 | `guard_git_stash.py` | ✅ active | — | 3 | 113 | — | |
-| `hook_architecture_gate.py` | ✅ active | — | 5 | 268 | — | |
+| `hook_architecture_gate.py` | ✅ active | — | 6 | 397 | — | |
 | `hook_blueprint_precheck.py` | ✅ active | — | 1 | 76 | — | |
 | `hook_mypy_check.py` | ✅ active | — | 1 | 101 | — | |
 | `hook_pre_push.py` | ✅ active | — | 6 | 285 | — | |
@@ -727,7 +727,7 @@
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 180 | — | |
 | `omega_crash_snapshot.py` | ✅ active | — | 4 | 156 | — | |
-| `omega_gate.py` | ✅ active | — | 3 | 446 | — | |
+| `omega_gate.py` | ✅ active | — | 4 | 562 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 784 | — | |
@@ -763,7 +763,7 @@
 | `validate_blueprints.py` | ✅ active | — | 7 | 300 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 397 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
-| `verify.py` | ✅ active | — | 15 | 933 | — | |
+| `verify.py` | ✅ active | — | 15 | 966 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 92 | — | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 304 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |

@@ -204,6 +204,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/check_blueprint_compliance.py",
         "scripts/hook_blueprint_precheck.py",
         "scripts/hook_mypy_check.py",
+        "scripts/hook_architecture_gate.py",
+        "scripts/omega_gate.py",
         "scripts/brain.py",
         "scripts/training/register_brain.py",
         "scripts/system_trust_report.py",

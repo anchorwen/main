@@ -4,6 +4,48 @@
 
 ## Fix Details
 
+### FIX-20260622-052 — S.E.A.L. Framework: Root Cause Layer Structural Enforcement
+
+- **Date**: 2026-06-22
+- **Author**: cursor-agent
+- **Module**: deployment_lifecycle
+- **Root Cause Layer**: L3 — architecture defect
+- **Root Cause**: Root Cause Layer annotation was enforced ONLY for Scene A (Bug fix) commits. Scene B (Code change) and Scene E (New file) — which account for 97.7% of FIX commits — were exempt. This meant the architecture gate's `hook_architecture_gate.py` could only count 10 annotated commits out of 439 FIX commits in 30 days, making the 3-patch limit (Iron Law #12 clause 4) structurally impossible to trigger. The gate was a paper tiger.
+- **Files Modified**:
+  - `.gitcommit-template` — NEW: institutional commit template with mandatory fields (Root Cause Layer, Ω-Routing, 4-D Quality Gate, 收口)
+  - `scripts/omega_gate.py` — upgraded: Root Cause Layer check added for Scene B/E (was Scene A only). Graduated enforcement: `ROOT_CAUSE_GATE_MODE=warn` (QUARANTINE, 7-day grace) → `live` (BLOCK). Plausibility heuristics: L1 on 200+ line/3+ file diff → WARN (not reject); L3 on <10 line/single file diff → WARN. Added `_staged_diff_stats()` helper.
+  - `scripts/hook_architecture_gate.py` — upgraded: added `--report` mode (`_generate_report()`) outputting JSON with annotation coverage, per-module L1/L2/L3 breakdown, `modules_at_risk_3plus_l1l2`, and `arch_gate_mode_live_ready` assessment. S.E.A.L. Layer L — longitudinal monitoring.
+  - `scripts/check_blueprint_compliance.py` — MODULE_SOURCE_MAP: `scripts/omega_gate.py` + `scripts/hook_architecture_gate.py` → `deployment_lifecycle` (previously unmapped orphan)
+  - `blueprints/modules/deployment_lifecycle.md` — updated Fix History
+  - `blueprints/system/FIX_REGISTRY.md` — updated Fix Index
+  - `blueprints/system/FIX_REGISTRY_2026.md` — this entry
+
+- **S.E.A.L. Framework**:
+  - **S (Structural Prevention)**: `.gitcommit-template` makes inclusion the path of least resistance — developer opens commit, template is already populated with mandatory sections
+  - **E (Enforcement Gate)**: omega_gate.py now checks Root Cause Layer for ALL FIX commits (not just Scene A). Plausibility heuristics prevent checkbox compliance (L1 claim on architecture rewrite → flagged)
+  - **A (Audit & Remediation)**: Phase 2 — `scripts/backfill_root_cause.py` to scan 429 unannotated commits, infer layer, human-confirm, `git notes` append. Executed during QUARANTINE observation window
+  - **L (Longitudinal Monitoring)**: `--report` mode tracks annotation coverage trend, module-level L1/L2 accumulation, readiness for ARCH_GATE_MODE=live
+
+- **Baseline Statistics** (from `--report`):
+  - 439 unique FIX commits touching .py files in 30-day window
+  - 10 annotated (2.3%): 1 L1, 4 L2, 5 L3
+  - 429 unannotated (97.7%)
+  - 12 modules at risk with ≥3 L1/L2
+  - ARCH_GATE_MODE=live: NOT READY
+
+- **Graduated Enforcement Timeline**:
+  - Phase 1 (NOW): QUARANTINE — `ROOT_CAUSE_GATE_MODE=warn`, missing annotation = WARN advisory
+  - Phase 2 (7 days): OBSERVATION — `ROOT_CAUSE_GATE_MODE=live`, missing = REJECT, implausible = WARN
+  - Phase 3 (14 days): LIVE — `ROOT_CAUSE_GATE_MODE=live`, `ARCH_GATE_MODE=live`, annotation coverage >70%
+
+- **Institutional Pattern**: Maker-Checker (4-Eyes Principle) applied to code changes. Every FIX commit = a "deal ticket" with mandatory Root Cause Layer field (FINRA Rule 4511 equivalent). Gate enforces the presence but not the correctness — irreducibly human judgment on root cause classification.
+
+- **4-D Quality Gate**:
+  - Stability: ↑ (additive — adds checks, doesn't change existing flow; WARN mode prevents disruption)
+  - Repairability: ↑ (Root Cause Layer annotations create searchable audit trail for future diagnostics)
+  - Decoupling: → (gate logic localized in omega_gate.py/hook_architecture_gate.py; no new inter-module dependencies)
+  - Iterability: ↑ (unified enforcement across Scene A/B/E; no new scattered enforcement points; `--report` reuses existing `_file_fix_history()`)
+
 ### FIX-20260622-051 — DQAF-051 Train-Serve SL/TP Calibration Chasm
 
 - **Date**: 2026-06-22

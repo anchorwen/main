@@ -6,6 +6,9 @@ Scans commit message for [Ω-Routing: Scene X -> ...] signature.
 If hot-path files are changed, requires #10 in the signature.
 Exit 1 = commit blocked.
 
+FIX-20260622-052: S.E.A.L. Framework — Root Cause Layer enforcement for
+Scene B/E with plausibility heuristics. Graduated enforcement: WARN→REJECT.
+
 Usage (via pre-commit hook)::
 
     - repo: local
@@ -20,6 +23,7 @@ Usage (via pre-commit hook)::
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -28,6 +32,17 @@ from pathlib import Path
 from core.runtime.fault_handler import fail_open_guard
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# ── S.E.A.L. Framework: Root Cause Layer gate mode ──────────────────────
+# "warn" = QUARANTINE (7-day adoption window — advisory only)
+# "live" = BLOCK (permanent enforcement)
+ROOT_CAUSE_GATE_MODE = os.environ.get("ROOT_CAUSE_GATE_MODE", "warn").lower()
+
+# Plausibility thresholds (institutional "smell test")
+L1_MAX_DIFF_LINES = 200  # L1 claims beyond this → implausible
+L1_MAX_DIFF_FILES = 3  # L1 claims across more files → implausible
+L3_MIN_DIFF_LINES = 10  # L3 claims below this → implausible
+L3_MIN_DIFF_FILES = 1  # L3 claims in fewer files → implausible
 
 # ── Hot-path files (require #10 in signature) ──
 HOT_PATH_FILES = {
@@ -78,10 +93,48 @@ def get_staged_files() -> set[str]:
     if result.returncode != 0:
         return set()
     return {
-        line.strip()
-        for line in result.stdout.strip().split("\n")
-        if line.strip().endswith(".py")
+        line.strip() for line in result.stdout.strip().split("\n") if line.strip().endswith(".py")
     }
+
+
+def _staged_diff_stats() -> dict[str, int]:
+    """Return {line_count, file_count} for staged .py files (excl. data/ tests/).
+
+    Used by plausibility heuristics to detect misclassified Root Cause Layers.
+    """
+    staged = get_staged_files()
+    py_files = [
+        f
+        for f in staged
+        if f.endswith(".py")
+        and not any(f.startswith(d) for d in ("data/", "data_btc/", "__pycache__/"))
+    ]
+    if not py_files:
+        return {"line_count": 0, "file_count": 0}
+
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--", *py_files],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(ROOT),
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {"line_count": 0, "file_count": len(py_files)}
+
+    if result.returncode != 0:
+        return {"line_count": 0, "file_count": len(py_files)}
+
+    # Count non-empty added/removed lines (exclude diff headers)
+    lines = [
+        l
+        for l in result.stdout.split("\n")
+        if l.startswith(("+", "-")) and not l.startswith(("+++", "---"))
+    ]
+    return {"line_count": len(lines), "file_count": len(py_files)}
 
 
 def main() -> int:
@@ -121,12 +174,10 @@ def main() -> int:
 
         # ── #8 / #12 depth verification for Scene A ──
         if scene == "A":
-            has_root_cause_layer = bool(re.search(
-                r"Root\s*Cause\s*Layer\s*:\s*(L[123])", commit_msg, re.IGNORECASE
-            ))
-            has_causal_chain = bool(re.search(
-                r"Causal\s*Chain.*:", commit_msg, re.IGNORECASE
-            ))
+            has_root_cause_layer = bool(
+                re.search(r"Root\s*Cause\s*Layer\s*:\s*(L[123])", commit_msg, re.IGNORECASE)
+            )
+            has_causal_chain = bool(re.search(r"Causal\s*Chain.*:", commit_msg, re.IGNORECASE))
             if not has_root_cause_layer:
                 print("=" * 60)
                 print("[Ω] COMMIT REJECTED: Scene A requires Root Cause Layer (#12).")
@@ -145,6 +196,77 @@ def main() -> int:
     else:
         print("[Ω] WARNING: Could not parse scene from signature.")
 
+    # ── Check 2.5: Pre-compute covered files + FIX/exemption status ─────
+    # Defined early so Root Cause Layer check (below) can reference them.
+    covered_staged = {
+        f
+        for f in staged
+        if f.endswith((".py", ".yaml", ".yml", ".json"))
+        and not any(f.startswith(d) for d in ("data/", "data_btc/", "__pycache__/", ".claude/"))
+    }
+    has_fix = bool(re.search(r"FIX-\d{8}-\d{3}", commit_msg))
+    has_dqaf = bool(re.search(r"DQAF-\d{8}-\d{3}", commit_msg))
+    is_exempt = bool(
+        re.search(
+            r"(?i)(?:pure.?mechanical|formatting|docs?.only|config.value|exempt|豁免|no.dqaf.needed)",
+            commit_msg,
+        )
+    )
+
+    # ── Root Cause Layer for Scene B/E (#12) — S.E.A.L. Framework ────────
+    # FIX-20260622-052: Root Cause Layer annotation is mandatory for ALL
+    # FIX commits modifying .py files. Previously only Scene A required it.
+    # Graduated enforcement: WARN (QUARANTINE) → REJECT (LIVE).
+    if scene in ("B", "E") and covered_staged and has_fix and not is_exempt:
+        rc_layer_match = re.search(
+            r"Root\s*Cause\s*Layer\s*:\s*(L[123])", commit_msg, re.IGNORECASE
+        )
+        if not rc_layer_match:
+            if ROOT_CAUSE_GATE_MODE == "live":
+                print("=" * 60)
+                print("[Ω] COMMIT REJECTED: Scene B/E FIX commit missing Root Cause Layer (#12).")
+                print("[Ω] All FIX commits modifying .py files must include:")
+                print("[Ω]   Root Cause Layer: L1 | L2 | L3 — <explanation>")
+                print("[Ω]   L1 = syntax/typo  L2 = logic defect  L3 = architecture defect")
+                print("[Ω] S.E.A.L. Framework — Institutional Enforcement (FIX-20260622-052)")
+                print("=" * 60)
+                return 1
+            else:
+                print("-" * 50)
+                print("[Ω] ⚠ WARNING (QUARANTINE): Root Cause Layer missing.")
+                print("[Ω] Scene B/E FIX commits MUST include Root Cause Layer.")
+                print("[Ω] Add to commit body: Root Cause Layer: L1 | L2 | L3 — <explanation>")
+                print(f"[Ω] Current mode: {ROOT_CAUSE_GATE_MODE.upper()}")
+                print("[Ω] Set ROOT_CAUSE_GATE_MODE=live to activate blocking.")
+                print("-" * 50)
+        else:
+            claimed_layer = rc_layer_match.group(1).upper()
+
+            # ── Plausibility Heuristics (always WARN, never block) ──
+            diff_stats = _staged_diff_stats()
+            dl, df = diff_stats["line_count"], diff_stats["file_count"]
+
+            implausible: list[str] = []
+            if claimed_layer == "L1" and (dl > L1_MAX_DIFF_LINES or df > L1_MAX_DIFF_FILES):
+                implausible.append(
+                    f"L1 (typo/syntax) claimed but diff is {dl} lines "
+                    f"across {df} .py file(s) — review root cause classification"
+                )
+            if claimed_layer == "L3" and (dl < L3_MIN_DIFF_LINES and df <= L3_MIN_DIFF_FILES):
+                implausible.append(
+                    f"L3 (architecture) claimed but diff is only {dl} lines "
+                    f"in {df} .py file(s) — review root cause classification"
+                )
+
+            for warn_msg in implausible:
+                print("-" * 50)
+                print(f"[Ω] ⚠ PLAUSIBILITY WARNING: {warn_msg}")
+                print("[Ω] This is advisory only — commit NOT blocked.")
+                print("-" * 50)
+
+            if not implausible:
+                print(f"[Ω] Root Cause Layer PASSED: {claimed_layer} ({dl} lines, {df} files).")
+
     # ── Check 3: Hot-path files require #10 ──
     hot_path_staged = staged & HOT_PATH_FILES
     if hot_path_staged and HOT_PATH_IRON_LAW not in signature:
@@ -158,19 +280,22 @@ def main() -> int:
         return 1
 
     if hot_path_staged:
-        print(f"[Ω] Hot-path check PASSED: {HOT_PATH_IRON_LAW} in signature for {len(hot_path_staged)} file(s).")
+        print(
+            f"[Ω] Hot-path check PASSED: {HOT_PATH_IRON_LAW} in signature for {len(hot_path_staged)} file(s)."
+        )
 
         # ── Deep verification: did BLE001 actually get replaced? ──
         # IRON_LAW-13-S1: #10 requires at least 1 BLE001 → fail_open_guard per commit.
         try:
             diff_result = subprocess.run(
                 ["git", "diff", "--cached", "--", *sorted(hot_path_staged)],
-                capture_output=True, text=True, cwd=str(ROOT), timeout=10,
+                capture_output=True,
+                text=True,
+                cwd=str(ROOT),
+                timeout=10,
             )
             diff_text = diff_result.stdout
-            ble001_removed = bool(re.search(
-                r"^-\s*.*#\s*noqa:\s*BLE001", diff_text, re.MULTILINE
-            ))
+            ble001_removed = bool(re.search(r"^-\s*.*#\s*noqa:\s*BLE001", diff_text, re.MULTILINE))
             fail_open_added = bool(re.search(r"fail_open_guard", diff_text))
             if not (ble001_removed or fail_open_added):
                 print("=" * 60)
@@ -182,22 +307,12 @@ def main() -> int:
                 print("=" * 60)
                 return 1
             print("[Ω] BLE001 replacement VERIFIED in diff.")
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001
             with fail_open_guard("omega_gate:main"):
                 pass  # non-blocking: diff parsing failure shouldn't block commit
     # ── Check 4: FIX/DQAF ID required for .py/.yaml/.json changes ──
     # Iron Law #0: every non-exempt change to covered files must carry a docket ID.
-    covered_staged = {
-        f for f in staged
-        if f.endswith((".py", ".yaml", ".yml", ".json"))
-        and not any(f.startswith(d) for d in ("data/", "data_btc/", "__pycache__/", ".claude/"))
-    }
-    has_fix = bool(re.search(r"FIX-\d{8}-\d{3}", commit_msg))
-    has_dqaf = bool(re.search(r"DQAF-\d{8}-\d{3}", commit_msg))
-    is_exempt = bool(re.search(
-        r"(?i)(?:pure.?mechanical|formatting|docs?.only|config.value|exempt|豁免|no.dqaf.needed)",
-        commit_msg,
-    ))
+    # Variables pre-computed at Check 2.5 above (S.E.A.L. Framework restructuring).
 
     if covered_staged and not has_fix and not has_dqaf and not is_exempt:
         print("=" * 60)
@@ -212,20 +327,16 @@ def main() -> int:
 
     if covered_staged:
         docket_type = "FIX" if has_fix else ("DQAF" if has_dqaf else "exempt")
-        print(f"[Ω] Docket check PASSED: {docket_type} ID for {len(covered_staged)} covered file(s).")
+        print(
+            f"[Ω] Docket check PASSED: {docket_type} ID for {len(covered_staged)} covered file(s)."
+        )
 
         # ── DQAF depth check for Scene A (#9) ──
         # IRON_LAW-13-S1: Scene A requires DQAF report markers + severity.
         if scene == "A" and not is_exempt:
-            has_dqaf_report = bool(re.search(
-                r"\[(DQAF_REPORT|DQAF_LITE_REPORT)\]", commit_msg
-            ))
-            has_severity = bool(re.search(
-                r"Severity:\s*Sev\s*[1-4]", commit_msg
-            ))
-            has_awaiting = bool(re.search(
-                r"\[AWAITING_IC_APPROVAL\]", commit_msg
-            ))
+            has_dqaf_report = bool(re.search(r"\[(DQAF_REPORT|DQAF_LITE_REPORT)\]", commit_msg))
+            has_severity = bool(re.search(r"Severity:\s*Sev\s*[1-4]", commit_msg))
+            has_awaiting = bool(re.search(r"\[AWAITING_IC_APPROVAL\]", commit_msg))
             if not has_dqaf_report:
                 print("=" * 60)
                 print("[Ω] COMMIT REJECTED: Scene A requires DQAF report markers (#9).")
@@ -250,13 +361,13 @@ def main() -> int:
         # ── Pattern Search check for Scene A/B/E (#5) ──
         # IRON_LAW-13-S1: code changes require pattern search declaration.
         if scene in ("A", "B", "E") and not is_exempt:
-            has_pattern = bool(re.search(
-                r"(?:Pattern|模式)\s*:\s*\S", commit_msg
-            ))
-            has_pattern_skip = bool(re.search(
-                r"(?i)(?:pattern|模式).*(?:not\s*needed|跳过|skip|N/?A|不需要)",
-                commit_msg,
-            ))
+            has_pattern = bool(re.search(r"(?:Pattern|模式)\s*:\s*\S", commit_msg))
+            has_pattern_skip = bool(
+                re.search(
+                    r"(?i)(?:pattern|模式).*(?:not\s*needed|跳过|skip|N/?A|不需要)",
+                    commit_msg,
+                )
+            )
             if not has_pattern and not has_pattern_skip:
                 print("=" * 60)
                 print("[Ω] COMMIT REJECTED: Pattern Search (#5) not documented.")
@@ -280,9 +391,7 @@ def main() -> int:
                 f.startswith(("data_btc/", "data/")) and f.endswith((".jsonl", ".lock"))
                 for f in staged
             ),
-            "documentation-only": lambda: all(
-                f.endswith(".md") for f in staged
-            ),
+            "documentation-only": lambda: all(f.endswith(".md") for f in staged),
             "emergency rollback": lambda: "EMERGENCY_ROLLBACK" in commit_msg.upper(),
         }
 
@@ -315,7 +424,9 @@ def main() -> int:
             print("=" * 60)
             print("[Ω] COMMIT REJECTED: --no-verify with unrecognized reason.")
             print(f"[Ω] Reason: '{reason}'")
-            print("[Ω] Allowed reasons: live process file locks | documentation-only | emergency rollback")
+            print(
+                "[Ω] Allowed reasons: live process file locks | documentation-only | emergency rollback"
+            )
             print("=" * 60)
             return 1
 
@@ -329,9 +440,7 @@ def main() -> int:
         registry_path = ROOT / "blueprints" / "system" / "FIX_REGISTRY.md"
         if registry_path.exists():
             registry_text = registry_path.read_text(encoding="utf-8")
-            missing_in_registry = [
-                fid for fid in fix_ids if fid not in registry_text
-            ]
+            missing_in_registry = [fid for fid in fix_ids if fid not in registry_text]
             if missing_in_registry:
                 print("=" * 60)
                 print("[Ω] COMMIT REJECTED: FIX ID(s) not registered in FIX_REGISTRY.md:")
@@ -351,22 +460,34 @@ def main() -> int:
     # Forgiving regex: accepts English OR Chinese dimension names, with
     # flexible formatting (arrows, colons, separators are optional).
     if covered_staged and not is_exempt:
-        _has_stability = bool(re.search(
-            r"(?:Stability|稳定性)\b.*[↑→↓↗↘]",
-            commit_msg, re.IGNORECASE,
-        ))
-        _has_repairability = bool(re.search(
-            r"(?:Repairability|可修复性)\b.*[↑→↓↗↘]",
-            commit_msg, re.IGNORECASE,
-        ))
-        _has_decoupling = bool(re.search(
-            r"(?:Decoupling|解耦性)\b.*[↑→↓↗↘]",
-            commit_msg, re.IGNORECASE,
-        ))
-        _has_iterability = bool(re.search(
-            r"(?:Iterability|迭代性)\b.*[↑→↓↗↘]",
-            commit_msg, re.IGNORECASE,
-        ))
+        _has_stability = bool(
+            re.search(
+                r"(?:Stability|稳定性)\b.*[↑→↓↗↘]",
+                commit_msg,
+                re.IGNORECASE,
+            )
+        )
+        _has_repairability = bool(
+            re.search(
+                r"(?:Repairability|可修复性)\b.*[↑→↓↗↘]",
+                commit_msg,
+                re.IGNORECASE,
+            )
+        )
+        _has_decoupling = bool(
+            re.search(
+                r"(?:Decoupling|解耦性)\b.*[↑→↓↗↘]",
+                commit_msg,
+                re.IGNORECASE,
+            )
+        )
+        _has_iterability = bool(
+            re.search(
+                r"(?:Iterability|迭代性)\b.*[↑→↓↗↘]",
+                commit_msg,
+                re.IGNORECASE,
+            )
+        )
         missing_4d = []
         if not _has_stability:
             missing_4d.append("Stability/稳定性")
@@ -395,12 +516,8 @@ def main() -> int:
     # IRON_LAW-13-S1: Scene B/E commits modifying .py files require the
     # pre-edit checklist to be documented in the commit body.
     if scene in ("B", "E") and not is_exempt:
-        has_checklist = bool(re.search(
-            r"\[PRE-EDIT CHECKLIST.*#0\]", commit_msg
-        ))
-        has_checklist_passed = bool(re.search(
-            r"\[CHECKLIST PASSED\]", commit_msg
-        ))
+        has_checklist = bool(re.search(r"\[PRE-EDIT CHECKLIST.*#0\]", commit_msg))
+        has_checklist_passed = bool(re.search(r"\[CHECKLIST PASSED\]", commit_msg))
         if not (has_checklist and has_checklist_passed):
             print("=" * 60)
             print("[Ω] COMMIT REJECTED: Pre-Edit Checklist (#0) not completed.")
@@ -416,8 +533,7 @@ def main() -> int:
     # IRON_LAW-13-S1: commits modifying core/ or scripts/ .py files require
     # the closing block (收口完毕) with minimum required fields.
     _core_or_scripts_py = any(
-        f.startswith(("core/", "scripts/")) and f.endswith(".py")
-        for f in covered_staged
+        f.startswith(("core/", "scripts/")) and f.endswith(".py") for f in covered_staged
     )
     if _core_or_scripts_py and not is_exempt:
         _has_closing = bool(re.search(r"收口完毕", commit_msg))

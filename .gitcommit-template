@@ -1,0 +1,38 @@
+
+# <type>(<scope>): [FIX-YYYYMMDD-NNN] <subject>
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# Ω Institutional Commit Template — S.E.A.L. Framework (FIX-20260622-052)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ── Root Cause Layer (MANDATORY for FIX commits touching .py files) ──────────
+# Root Cause Layer: L___ — ___________________________
+#   L1 = syntax/typo (single-line or single-expression fix)
+#   L2 = logic defect (implementation deviates from design intent)
+#   L3 = architecture defect (design causes the error; structural fix needed)
+#
+# ── Ω Routing Signature (MANDATORY for all code changes) ─────────────────────
+# [Ω-Routing: Scene __ → #__ → #__ → ...]
+#   Scene A = Bug fix       (#9 → #8 → #12 → #6 → #5)
+#   Scene B = Code change   (#0 → #6 → #5)
+#   Scene C = Config change (#0 → #8)
+#   Scene E = New file      (#6 → #0)
+#   Scene H = Closing       (#13 → #7 → #1.1 → #4 → #7.1)
+#
+# ── 4-D Quality Gate (MANDATORY for .py/.yaml/.json changes) ─────────────────
+# Stability: → (assessment — does this introduce new failure modes?)
+# Repairability: → (assessment — does this make diagnosis faster or slower?)
+# Decoupling: → (assessment — does this increase cross-module dependencies?)
+# Iterability: → (assessment — does this consolidate or scatter logic?)
+#   ↑ = improved   → = neutral   ↓ = degraded (explain why)
+#
+# ── Closing Checklist (MANDATORY for core/ or scripts/ .py changes) ──────────
+# 收口完毕。
+# 未提交变更: <count>
+# 蓝图: <module blueprint or 无需更新>
+# Git: <branch> → <remote> 已推送
+# 本轮 commit: <count + description>
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# To activate: git config commit.template .gitcommit-template
+# ═══════════════════════════════════════════════════════════════════════════════
