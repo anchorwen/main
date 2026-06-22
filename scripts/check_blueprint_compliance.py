@@ -209,6 +209,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/omega_gate.py",
         "scripts/dqaf053_phase1_sanitize.py",  # DQAF-053 migration script
         "scripts/generate_btc_empirical_scaler.py",  # DQAF-054 BTC scaler
+        "scripts/generate_micro_scaler.py",  # DQAF-058 multi-asset scaler
         "scripts/brain.py",
         "scripts/training/register_brain.py",
         "scripts/system_trust_report.py",
@@ -253,6 +254,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/observability/message_broker.py",
         "core/observability/data_health_schema.py",
         "core/observability/data_health_service.py",
+        "core/observability/health_checks.py",
         "core/metrics/factor_attribution.py",
         "scripts/live_dashboard.py",
         "scripts/dqaf_collect.py",

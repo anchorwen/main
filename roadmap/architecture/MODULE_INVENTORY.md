@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T08:25:52Z
-> **扫描模块数**: 650
+> **自动生成**: 2026-06-22T09:18:59Z
+> **扫描模块数**: 651
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -291,7 +291,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 11 | 213 | — | |
+| `microstructure_feature_adapter.py` | ✅ active | MicrostructureFeatureAdapter | 12 | 275 | — | |
 | `v9_feature_adapter.py` | ✅ active | V9FeatureAdapter | 6 | 103 | — | |
 
 ## core/features/computers
@@ -420,7 +420,7 @@
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 210 | — | |
 | `event_bus.py` | ✅ active | EventBus | 7 | 66 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | ✅ active | HealthCheckMethods | 39 | 2733 | — | |
+| `health_checks.py` | ✅ active | HealthCheckMethods | 39 | 2734 | — | |
 | `live_alert_hub.py` | ✅ active | BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 26 | 677 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
 | `message_broker.py` | ✅ active | Message, MessageBroker, InProcessBroker, RedisStreamsBroker | 23 | 280 | — | |
@@ -664,7 +664,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 626 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 628 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -697,6 +697,7 @@
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
 | `generate_btc_empirical_scaler.py` | ✅ active | — | 3 | 221 | — | |
+| `generate_micro_scaler.py` | ✅ active | — | 5 | 320 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
 | `guard_git_stash.py` | ✅ active | — | 3 | 113 | — | |
 | `hook_architecture_gate.py` | ✅ active | — | 6 | 397 | — | |

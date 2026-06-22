@@ -97,7 +97,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.CRITICAL,
         source="feature_store",
@@ -183,7 +182,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.CRITICAL,
         source="execution_state",
@@ -268,7 +266,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.CRITICAL,
         source="governance_state",
@@ -296,9 +293,7 @@ class HealthCheckMethods:
         _TERMINAL = {"retired", "frozen", "archived", "shadow", "error"}
 
         def _is_operational(brain_dict: dict) -> bool:
-            raw_state = str(
-                brain_dict.get("state", brain_dict.get("status", ""))
-            ).lower()
+            raw_state = str(brain_dict.get("state", brain_dict.get("status", ""))).lower()
             return raw_state not in _TERMINAL and raw_state != ""
 
         if isinstance(brain_states, list):
@@ -341,11 +336,10 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.CRITICAL,
         source="meta_filter_state",
-        description="MetaFilter runtime status via event-interception (tail-read intent log)",
+        description="MetaFilter + MicroScaler runtime status via event-interception (tail-read intent log). DQAF-058: micro_scaler_loaded now tracked.",
     )
     def check_meta_filter_state(self) -> SourceCheckResult:
         """Check MetaFilter health via event-interception, not state file polling.
@@ -356,9 +350,13 @@ class HealthCheckMethods:
         false positives that destroy alert credibility (wolf-crying effect).
 
         Now uses _safe_jsonl_last() tail-read on the latest intent log to find
-        the `meta_pipeline_wired` event, which is written synchronously at
+        the ``meta_pipeline_wired`` event, which is written synchronously at
         startup when the filter loads successfully.  This provides millisecond-
         accurate status without adding I/O burden (8KB tail read).
+
+        DQAF-20260622-058: Also extracts ``micro_scaler_loaded`` from the same
+        event.  If the scaler is not loaded, emits ``MICRO_SCALER_NOT_LOADED``
+        (WARN) — raw features are in use, causing PSI drift false positives.
         """
         import glob as _glob
 
@@ -397,11 +395,13 @@ class HealthCheckMethods:
             if wired_entry is not None:
                 lgb_loaded = wired_entry.get("lgb_loaded", False)
                 calibrator = wired_entry.get("calibrator_loaded", False)
+                micro_scaler = wired_entry.get("micro_scaler_loaded", False)
                 features = wired_entry.get("features", 0)
                 wired_at = wired_entry.get("time", "")
                 age_min = _age_minutes(wired_at)
                 metrics["lgb_loaded"] = lgb_loaded
                 metrics["calibrator_loaded"] = calibrator
+                metrics["micro_scaler_loaded"] = micro_scaler
                 metrics["feature_count"] = features
                 metrics["wired_age_minutes"] = round(age_min, 1)
                 metrics["log_source"] = wired_log
@@ -410,11 +410,16 @@ class HealthCheckMethods:
                     # Last wired >6h ago — may have restarted without reload
                     status = SourceStatus.WARN
                     code = "META_FILTER_WIRED_STALE"
-                    message = f"MetaFilter wired {age_min:.0f}min ago (LGB={lgb_loaded}, cal={calibrator}, dims={features})"
+                    message = f"MetaFilter wired {age_min:.0f}min ago (LGB={lgb_loaded}, cal={calibrator}, micro_scaler={micro_scaler}, dims={features})"
+                elif not micro_scaler:
+                    # DQAF-058: micro scaler not loaded — raw features in use → PSI drift
+                    status = SourceStatus.WARN
+                    code = "MICRO_SCALER_NOT_LOADED"
+                    message = f"MetaFilter active but micro_scaler NOT loaded (LGB={lgb_loaded}, cal={calibrator}, micro_scaler=False, dims={features}, wired {age_min:.0f}min ago)"
                 else:
                     status = SourceStatus.PASS
                     code = "META_FILTER_OK"
-                    message = f"MetaFilter active (LGB={lgb_loaded}, cal={calibrator}, dims={features}, wired {age_min:.0f}min ago)"
+                    message = f"MetaFilter active (LGB={lgb_loaded}, cal={calibrator}, micro_scaler={micro_scaler}, dims={features}, wired {age_min:.0f}min ago)"
                 return SourceCheckResult(
                     source="meta_filter_state",
                     tier=Tier.CRITICAL,
@@ -478,7 +483,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.CRITICAL,
         source="mt5_bridge_health",
@@ -500,7 +504,9 @@ class HealthCheckMethods:
             )
 
         # Check heartbeat freshness
-        last_ack = bh.get("last_heartbeat_utc", bh.get("bridge_last_ack_utc", bh.get("last_ack_utc", "")))
+        last_ack = bh.get(
+            "last_heartbeat_utc", bh.get("bridge_last_ack_utc", bh.get("last_ack_utc", ""))
+        )
         age_sec = (_age_minutes(last_ack) * 60.0) if last_ack else -1
         max_age = self._t("bridge_heartbeat_max_age_seconds")
 
@@ -547,7 +553,6 @@ class HealthCheckMethods:
     # ══════════════════════════════════════════════════════════════════════
     # HIGH-TIER CHECKS (FULL mode only)
     # ══════════════════════════════════════════════════════════════════════
-
 
     @health_check(
         tier=Tier.HIGH,
@@ -602,7 +607,6 @@ class HealthCheckMethods:
             message=message,
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.HIGH,
@@ -664,7 +668,6 @@ class HealthCheckMethods:
             message=f"Calibrator feed: {phase} ({phase_msg}), age {age_min:.0f} min",
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.HIGH,
@@ -744,7 +747,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.HIGH,
         source="brain_performance",
@@ -804,7 +806,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.HIGH,
         source="brain_pnl_ledger",
@@ -852,7 +853,6 @@ class HealthCheckMethods:
             message=message,
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.HIGH,
@@ -905,7 +905,6 @@ class HealthCheckMethods:
             message=message,
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.HIGH,
@@ -990,7 +989,6 @@ class HealthCheckMethods:
     # MEDIUM-TIER CHECKS (FULL mode only)
     # ══════════════════════════════════════════════════════════════════════
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="alpha_registry",
@@ -1034,7 +1032,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="regime_detector_state",
@@ -1077,7 +1074,6 @@ class HealthCheckMethods:
             message=message,
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.MEDIUM,
@@ -1142,7 +1138,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="daily_ops_state",
@@ -1201,7 +1196,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="live_labels",
@@ -1247,7 +1241,6 @@ class HealthCheckMethods:
             message=message,
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.MEDIUM,
@@ -1296,7 +1289,6 @@ class HealthCheckMethods:
             message=message,
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.MEDIUM,
@@ -1349,7 +1341,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="feature_store_schemas",
@@ -1400,7 +1391,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="alert_delivery",
@@ -1448,7 +1438,6 @@ class HealthCheckMethods:
             message=message,
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.MEDIUM,
@@ -1498,7 +1487,6 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="alpha_allocation",
@@ -1538,7 +1526,6 @@ class HealthCheckMethods:
     # ══════════════════════════════════════════════════════════════════════
     # CROSS-SOURCE VALIDATION (FULL mode only)
     # ══════════════════════════════════════════════════════════════════════
-
 
     def _check_brain_registry_governance_alignment(self) -> CrossCheckResult:
         """FIX-20260612-015: Detect brain registry ↔ governance mismatches.
@@ -1585,7 +1572,8 @@ class HealthCheckMethods:
 
         # Find live brains in governance
         live_ids = {
-            bid for bid, bs in brain_states.items()
+            bid
+            for bid, bs in brain_states.items()
             if isinstance(bs, dict) and bs.get("status") == "live"
         }
 
@@ -1602,6 +1590,7 @@ class HealthCheckMethods:
         registry_entries: dict[str, dict] = {}
         if _os.path.isdir(brains_dir):
             import glob as _glob
+
             for f in _glob.glob(f"{brains_dir}/*.json"):
                 if ".normalization." in f:
                     continue
@@ -1610,13 +1599,13 @@ class HealthCheckMethods:
                     if entry.get("schema_version") == "brain_registry_entry.v1":
                         registry_entries[entry["brain_id"]] = entry
                 except Exception:  # BLE001:FOG
-                    with fail_open_guard("health_checks:_check_brain_registry_governance_alignment"):
+                    with fail_open_guard(
+                        "health_checks:_check_brain_registry_governance_alignment"
+                    ):
                         pass
         for bid in live_ids:
             if bid not in registry_entries:
-                warnings.append(
-                    f"LIVE brain {bid} has NO registry entry in {brains_dir}"
-                )
+                warnings.append(f"LIVE brain {bid} has NO registry entry in {brains_dir}")
             else:
                 entry = registry_entries[bid]
                 if entry.get("status") in ("retired", "frozen"):
@@ -1624,13 +1613,12 @@ class HealthCheckMethods:
                         f"LIVE brain {bid}: registry says {entry['status']} — status skew"
                     )
                 if float(entry.get("vote_weight", 0) or 0) <= 0:
-                    warnings.append(
-                        f"LIVE brain {bid}: vote_weight=0 — muted in parliament"
-                    )
+                    warnings.append(f"LIVE brain {bid}: vote_weight=0 — muted in parliament")
 
         # Check 2: Is each live brain enabled in live.yaml?
         try:
             import yaml as _yaml
+
             if _os.path.exists(yaml_path):
                 with open(yaml_path, encoding="utf-8") as _yf:
                     yc = _yaml.safe_load(_yf)
@@ -1641,12 +1629,8 @@ class HealthCheckMethods:
                 for bid in live_ids:
                     entry = registry_entries.get(bid, {})
                     src = entry.get("_source_path", "") or f"{brains_dir}/{bid}.json"
-                    if src in disabled_paths or any(
-                        bid in dp for dp in disabled_paths
-                    ):
-                        warnings.append(
-                            f"LIVE brain {bid}: disabled in {yaml_path}"
-                        )
+                    if src in disabled_paths or any(bid in dp for dp in disabled_paths):
+                        warnings.append(f"LIVE brain {bid}: disabled in {yaml_path}")
         except Exception:  # BLE001:FOG
             with fail_open_guard("health_checks:_check_brain_registry_governance_alignment"):
                 pass  # yaml not available — skip this check
@@ -1667,7 +1651,6 @@ class HealthCheckMethods:
             message=f"{len(live_ids)} live brain(s) aligned with registry",
             checked_at=_utc_iso(),
         )
-
 
     def _check_journal_vs_pnl_ledger(self) -> CrossCheckResult:
         """Audit PnL ledger: freshness of most recent settled entry.
@@ -1704,11 +1687,7 @@ class HealthCheckMethods:
                         total_settled += 1
                         try:
                             _ev = json.loads(line)
-                            _ct = (
-                                _ev.get("data", {})
-                                .get("trade_outcome", {})
-                                .get("close_time", "")
-                            )
+                            _ct = _ev.get("data", {}).get("trade_outcome", {}).get("close_time", "")
                             if _ct and (not latest_ts or _ct > latest_ts):
                                 latest_ts = _ct
                         except Exception:  # BLE001:FOG
@@ -1767,7 +1746,6 @@ class HealthCheckMethods:
             message=f"PnL ledger: {total_settled} settled, last close {age_h:.1f}h ago (journal: {journal_closes} closes)",
             checked_at=_utc_iso(),
         )
-
 
     def _check_open_vs_close_convergence(self) -> CrossCheckResult:
         """Check that open and close counts converge within 24h."""
@@ -1839,7 +1817,6 @@ class HealthCheckMethods:
         ("brain_pnl_ledger.json", None, "empty_init"),
     ]
 
-
     def _detect_orphan_subsystems(self) -> list[OrphanFinding]:
         """Scan for subsystems whose state files exist but contain only initial/empty data.
 
@@ -1889,7 +1866,6 @@ class HealthCheckMethods:
     # ══════════════════════════════════════════════════════════════════════
     # STATE PERSISTENCE
     # ══════════════════════════════════════════════════════════════════════
-
 
     def _hydrate_behavioral_metrics(self) -> None:
         """Incrementally scan intent log for behavioral compliance counters.
@@ -1964,8 +1940,8 @@ class HealthCheckMethods:
         except Exception:  # BLE001:FOG
             with fail_open_guard("health_checks:_hydrate_behavioral_metrics"):
                 pass  # best-effort — never crash the audit tick
-    # ── FIX-20260611-002: Behavioral compliance checks ──
 
+    # ── FIX-20260611-002: Behavioral compliance checks ──
 
     @health_check(
         tier=Tier.CRITICAL,
@@ -1987,12 +1963,14 @@ class HealthCheckMethods:
                 checked_at=_utc_iso(),
             )
         return SourceCheckResult(
-            source="gate_bypass", tier=Tier.CRITICAL,
-            status=SourceStatus.PASS, primary_code="GATE_BYPASS_OK",
+            source="gate_bypass",
+            tier=Tier.CRITICAL,
+            status=SourceStatus.PASS,
+            primary_code="GATE_BYPASS_OK",
             message="No gate bypass events detected",
-            metrics={"bypass_count": _count}, checked_at=_utc_iso(),
+            metrics={"bypass_count": _count},
+            checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.CRITICAL,
@@ -2007,8 +1985,10 @@ class HealthCheckMethods:
             # No position_manager available (e.g. standalone script usage) —
             # skip check gracefully rather than failing.
             return SourceCheckResult(
-                source="position_limit", tier=Tier.CRITICAL,
-                status=SourceStatus.PASS, primary_code="POSITION_LIMIT_NO_MANAGER",
+                source="position_limit",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.PASS,
+                primary_code="POSITION_LIMIT_NO_MANAGER",
                 message="position_manager not available — check skipped",
                 checked_at=_utc_iso(),
             )
@@ -2018,8 +1998,10 @@ class HealthCheckMethods:
         except Exception:  # BLE001:FOG
             with fail_open_guard("health_checks:check_position_limit"):
                 return SourceCheckResult(
-                    source="position_limit", tier=Tier.CRITICAL,
-                    status=SourceStatus.PASS, primary_code="POSITION_LIMIT_QUERY_FAILED",
+                    source="position_limit",
+                    tier=Tier.CRITICAL,
+                    status=SourceStatus.PASS,
+                    primary_code="POSITION_LIMIT_QUERY_FAILED",
                     message="Failed to query position_manager — assuming safe",
                     checked_at=_utc_iso(),
                 )
@@ -2030,6 +2012,7 @@ class HealthCheckMethods:
             if os.path.exists(_yp):
                 try:
                     import yaml
+
                     with open(_yp, encoding="utf-8") as f:
                         _cfg = yaml.safe_load(f)
                     _mp = _cfg.get("max_positions")
@@ -2080,13 +2063,14 @@ class HealthCheckMethods:
         # Reset streak
         self._position_exceeded_streak = 0
         return SourceCheckResult(
-            source="position_limit", tier=Tier.CRITICAL,
-            status=SourceStatus.PASS, primary_code="POSITION_LIMIT_OK",
+            source="position_limit",
+            tier=Tier.CRITICAL,
+            status=SourceStatus.PASS,
+            primary_code="POSITION_LIMIT_OK",
             message=f"Concurrent positions ({_current}) within limit ({_max_positions})",
             metrics={"current_positions": _current, "max_positions": _max_positions},
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.HIGH,
@@ -2135,13 +2119,14 @@ class HealthCheckMethods:
                 checked_at=_utc_iso(),
             )
         return SourceCheckResult(
-            source="brain_output_health", tier=Tier.HIGH,
-            status=SourceStatus.PASS, primary_code="BRAIN_OUTPUT_OK",
+            source="brain_output_health",
+            tier=Tier.HIGH,
+            status=SourceStatus.PASS,
+            primary_code="BRAIN_OUTPUT_OK",
             message=f"{_productive} brains producing output across {_cycles} cycles",
             metrics={"productive_brains": _productive, "cycles": _cycles, "alerts": _alerts},
             checked_at=_utc_iso(),
         )
-
 
     @health_check(
         tier=Tier.HIGH,
@@ -2156,8 +2141,10 @@ class HealthCheckMethods:
         if _trades > 0:
             self._silent_cycle_streak = 0
             return SourceCheckResult(
-                source="trade_activity", tier=Tier.HIGH,
-                status=SourceStatus.PASS, primary_code="TRADE_ACTIVITY_OK",
+                source="trade_activity",
+                tier=Tier.HIGH,
+                status=SourceStatus.PASS,
+                primary_code="TRADE_ACTIVITY_OK",
                 message=f"{_trades} trades dispatched — system is active",
                 metrics={"trades": _trades, "rejections": _rejections},
                 checked_at=_utc_iso(),
@@ -2165,7 +2152,8 @@ class HealthCheckMethods:
         if _rejections > 0:
             self._silent_cycle_streak = 0
             return SourceCheckResult(
-                source="trade_activity", tier=Tier.HIGH,
+                source="trade_activity",
+                tier=Tier.HIGH,
                 status=SourceStatus.PASS,
                 primary_code="TRADE_ACTIVITY_REJECTING",
                 message=f"0 trades but {_rejections} rejections — system thinking, market unfavorable",
@@ -2190,7 +2178,8 @@ class HealthCheckMethods:
                 checked_at=_utc_iso(),
             )
         return SourceCheckResult(
-            source="trade_activity", tier=Tier.HIGH,
+            source="trade_activity",
+            tier=Tier.HIGH,
             status=SourceStatus.PASS,
             primary_code="TRADE_ACTIVITY_SILENT_BUT_RECENT",
             message=(
@@ -2202,7 +2191,6 @@ class HealthCheckMethods:
         )
 
     # ── FIX-20260611-003: PnL Ledger integrity (data flywheel gate) ──
-
 
     @health_check(
         tier=Tier.CRITICAL,
@@ -2221,7 +2209,8 @@ class HealthCheckMethods:
         _ledger = _safe_json_load(_ledger_path)
         if _ledger is None:
             return SourceCheckResult(
-                source="pnl_ledger_integrity", tier=Tier.CRITICAL,
+                source="pnl_ledger_integrity",
+                tier=Tier.CRITICAL,
                 status=SourceStatus.MISSING,
                 primary_code="PNL_LEDGER_MISSING",
                 message="brain_pnl_ledger.json not found",
@@ -2231,8 +2220,10 @@ class HealthCheckMethods:
         settled = _ledger.get("settled", {})
         if not settled:
             return SourceCheckResult(
-                source="pnl_ledger_integrity", tier=Tier.CRITICAL,
-                status=SourceStatus.PASS, primary_code="PNL_LEDGER_EMPTY",
+                source="pnl_ledger_integrity",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.PASS,
+                primary_code="PNL_LEDGER_EMPTY",
                 message="No settled entries — ledger is clean (or newly initialized)",
                 checked_at=_utc_iso(),
             )
@@ -2306,8 +2297,10 @@ class HealthCheckMethods:
                 )
 
         return SourceCheckResult(
-            source="pnl_ledger_integrity", tier=Tier.CRITICAL,
-            status=SourceStatus.PASS, primary_code="PNL_LEDGER_INTEGRITY_OK",
+            source="pnl_ledger_integrity",
+            tier=Tier.CRITICAL,
+            status=SourceStatus.PASS,
+            primary_code="PNL_LEDGER_INTEGRITY_OK",
             message=(
                 f"PnL ledger integrity OK: {_phantom}/{_total} phantom "
                 f"({_phantom_pct:.1%}), hourly rate within bounds"
@@ -2317,7 +2310,6 @@ class HealthCheckMethods:
         )
 
     # ── FIX-20260611-005: Journal completeness SLA (30-day auto-expiry) ──
-
 
     @health_check(
         tier=Tier.CRITICAL,
@@ -2344,7 +2336,8 @@ class HealthCheckMethods:
         jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
         if not os.path.exists(jl_path):
             return SourceCheckResult(
-                source="journal_completeness", tier=Tier.CRITICAL,
+                source="journal_completeness",
+                tier=Tier.CRITICAL,
                 status=SourceStatus.MISSING,
                 primary_code="JOURNAL_MISSING",
                 message="live_trade_journal.jsonl not found",
@@ -2390,8 +2383,10 @@ class HealthCheckMethods:
         total = len(closes)
         if total == 0:
             return SourceCheckResult(
-                source="journal_completeness", tier=Tier.CRITICAL,
-                status=SourceStatus.PASS, primary_code="JOURNAL_NO_CLOSES",
+                source="journal_completeness",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.PASS,
+                primary_code="JOURNAL_NO_CLOSES",
                 message="No close entries yet — nothing to check",
                 checked_at=_utc_iso(),
             )
@@ -2459,8 +2454,10 @@ class HealthCheckMethods:
                 checked_at=_utc_iso(),
             )
         return SourceCheckResult(
-            source="journal_completeness", tier=Tier.CRITICAL,
-            status=SourceStatus.PASS, primary_code="JOURNAL_SLA_OK",
+            source="journal_completeness",
+            tier=Tier.CRITICAL,
+            status=SourceStatus.PASS,
+            primary_code="JOURNAL_SLA_OK",
             message=f"Journal SLA OK: close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={dupes}",
             metrics={
                 "close_price_rate": round(cp_rate, 4),
@@ -2477,7 +2474,6 @@ class HealthCheckMethods:
 
     # ── FIX-20260611-005: Governance event log integrity ──
 
-
     @health_check(
         tier=Tier.MEDIUM,
         source="governance_events",
@@ -2488,7 +2484,8 @@ class HealthCheckMethods:
         _path = os.path.join(self._base_dir, "governance_events.jsonl")
         if not os.path.exists(_path):
             return SourceCheckResult(
-                source="governance_events", tier=Tier.MEDIUM,
+                source="governance_events",
+                tier=Tier.MEDIUM,
                 status=SourceStatus.PASS,
                 primary_code="GOV_EVENTS_EMPTY",
                 message="No governance events yet — log will be created on first promotion",
@@ -2497,14 +2494,16 @@ class HealthCheckMethods:
         _count = _safe_jsonl_count(_path)
         if _count is None:
             return SourceCheckResult(
-                source="governance_events", tier=Tier.MEDIUM,
+                source="governance_events",
+                tier=Tier.MEDIUM,
                 status=SourceStatus.WARN,
                 primary_code="GOV_EVENTS_UNREADABLE",
                 message="governance_events.jsonl exists but is unreadable",
                 checked_at=_utc_iso(),
             )
         return SourceCheckResult(
-            source="governance_events", tier=Tier.MEDIUM,
+            source="governance_events",
+            tier=Tier.MEDIUM,
             status=SourceStatus.PASS,
             primary_code="GOV_EVENTS_OK",
             message=f"Governance event log: {_count} events",
@@ -2513,7 +2512,6 @@ class HealthCheckMethods:
         )
 
     # ── DLR-001 (2026-06-17): Entry context completeness ──
-
 
     @health_check(
         tier=Tier.CRITICAL,
@@ -2534,7 +2532,8 @@ class HealthCheckMethods:
         jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
         if not os.path.exists(jl_path):
             return SourceCheckResult(
-                source="entry_context", tier=Tier.CRITICAL,
+                source="entry_context",
+                tier=Tier.CRITICAL,
                 status=SourceStatus.MISSING,
                 primary_code="ENTRY_CTX_JOURNAL_MISSING",
                 message="live_trade_journal.jsonl not found",
@@ -2603,7 +2602,8 @@ class HealthCheckMethods:
                             sample_tickets.append(str(entry.get("position_ticket", "?")))
         except OSError:
             return SourceCheckResult(
-                source="entry_context", tier=Tier.CRITICAL,
+                source="entry_context",
+                tier=Tier.CRITICAL,
                 status=SourceStatus.WARN,
                 primary_code="ENTRY_CTX_UNREADABLE",
                 message="live_trade_journal.jsonl exists but could not be read",
@@ -2612,7 +2612,8 @@ class HealthCheckMethods:
 
         if total_opens == 0:
             return SourceCheckResult(
-                source="entry_context", tier=Tier.CRITICAL,
+                source="entry_context",
+                tier=Tier.CRITICAL,
                 status=SourceStatus.PASS,
                 primary_code="ENTRY_CTX_NO_OPENS",
                 message="No strategy open entries found — nothing to check",
@@ -2651,7 +2652,8 @@ class HealthCheckMethods:
             message += f" | samples: {sample_tickets}"
 
         return SourceCheckResult(
-            source="entry_context", tier=Tier.CRITICAL,
+            source="entry_context",
+            tier=Tier.CRITICAL,
             status=status,
             primary_code=code,
             message=message,
@@ -2668,7 +2670,6 @@ class HealthCheckMethods:
 
     # ── FIX-20260617-101/P1: Entry Context Guard heartbeat ──
 
-
     @health_check(
         tier=Tier.CRITICAL,
         source="entry_context_guard",
@@ -2681,9 +2682,7 @@ class HealthCheckMethods:
         every 5 minutes.  If the heartbeat is older than 15 minutes, the
         guard may have died silently (M1 violation).
         """
-        _path = os.path.join(
-            self._base_dir, "state", "heartbeats", "entry_context_guard.json"
-        )
+        _path = os.path.join(self._base_dir, "state", "heartbeats", "entry_context_guard.json")
         if not os.path.exists(_path):
             # Also check legacy path (pre-P1 migration)
             _legacy = os.path.join(self._base_dir, "state", "guard_heartbeat.json")
@@ -2691,7 +2690,8 @@ class HealthCheckMethods:
                 _path = _legacy
             else:
                 return SourceCheckResult(
-                    source="entry_context_guard", tier=Tier.CRITICAL,
+                    source="entry_context_guard",
+                    tier=Tier.CRITICAL,
                     status=SourceStatus.WARN,
                     primary_code="GUARD_HEARTBEAT_MISSING",
                     message="EntryContextGuard heartbeat file not found — guard may not be running",
@@ -2705,7 +2705,8 @@ class HealthCheckMethods:
         except Exception:  # BLE001:FOG
             with fail_open_guard("health_checks:check_entry_context_guard_heartbeat"):
                 return SourceCheckResult(
-                    source="entry_context_guard", tier=Tier.CRITICAL,
+                    source="entry_context_guard",
+                    tier=Tier.CRITICAL,
                     status=SourceStatus.WARN,
                     primary_code="GUARD_HEARTBEAT_UNREADABLE",
                     message="EntryContextGuard heartbeat file exists but is unreadable",
@@ -2714,7 +2715,8 @@ class HealthCheckMethods:
         max_age = 15  # minutes (3x the 5-min heartbeat interval)
         if _age > max_age:
             return SourceCheckResult(
-                source="entry_context_guard", tier=Tier.CRITICAL,
+                source="entry_context_guard",
+                tier=Tier.CRITICAL,
                 status=SourceStatus.FAIL,
                 primary_code="GUARD_HEARTBEAT_STALE",
                 message=f"EntryContextGuard heartbeat age {_age:.0f}min > {max_age}min limit — guard may be dead",
@@ -2722,12 +2724,11 @@ class HealthCheckMethods:
                 checked_at=_utc_iso(),
             )
         return SourceCheckResult(
-            source="entry_context_guard", tier=Tier.CRITICAL,
+            source="entry_context_guard",
+            tier=Tier.CRITICAL,
             status=SourceStatus.PASS,
             primary_code="GUARD_HEARTBEAT_OK",
             message=f"EntryContextGuard heartbeat: {_age:.0f}min old (pid={_data.get('pid', '?')})",
             metrics={"heartbeat_age_min": round(_age, 1), "pid": _data.get("pid")},
             checked_at=_utc_iso(),
         )
-
-
