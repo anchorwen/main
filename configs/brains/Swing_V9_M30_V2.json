@@ -10,8 +10,14 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_M30_V2_model.json",
   "model_version": "swing_v9_m30_v2",
   "artifact_hash": "234f2b8889447cb52c2e4ce43003f242893a6db863868e912fb2c8b5b9ab5930",
-  "status": "candidate",
+  "status": "live",
   "vote_weight": 1.0,
+  "_live_promotion": {
+    "authority": "IC_MANDATE",
+    "date": "2026-06-23",
+    "fix_id": "FIX-20260622-064d",
+    "reason": "42 trades +62.53R PF=6.48 Sharpe=1.69 — consistent profitability at moderate volume"
+  },
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,

@@ -10,8 +10,14 @@
   "artifact_path": "data/models/xau_directional_h1/xgboost_fold0_s42.json",
   "model_version": "xau_directional_v1",
   "artifact_hash": "8013ca10db9822f711730f19d5709686e561fe7db722b786ef0fe0cf3f759d54",
-  "status": "candidate",
-  "vote_weight": 0.5,
+  "status": "live",
+  "vote_weight": 1.0,
+  "_live_promotion": {
+    "authority": "IC_MANDATE",
+    "date": "2026-06-23",
+    "fix_id": "FIX-20260622-064d",
+    "reason": "30 trades +107.33R PF=81.10 Sharpe=2.66 — outstanding metrics, second-highest PnL engine"
+  },
   "magic": 90303,
   "brain_role": "alpha_brain",
   "training_horizon": 24,

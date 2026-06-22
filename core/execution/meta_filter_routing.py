@@ -57,7 +57,8 @@ def apply_meta_filter_gate(
 
     Covers all strategy routing:
       - statarb_dynamic/m15: z_score * 12.5 proxy (section 4ab)
-      - swing (m15/m30/h1/h4/btc): z_score * 12.5 proxy (section 4ab extended)
+      - swing (m15/m30/h1/h4/btc): PASSTHROUGH — excised per DQAF-20260623-065
+        (Category Error: OU z_score meaningless for momentum/trend signals)
       - barrier_12bar: Stage 1 probe score from Huber brain (section 4e)
     """
     # ── FIX-20260610-007: Direction-specific routing ──
@@ -69,13 +70,21 @@ def apply_meta_filter_gate(
     elif direction == "short" and meta_filter_short is not None:
         _active_filter = meta_filter_short
 
-    # ── Section 4ab: statarb + swing MetaFilter routing ──
+    # ── Section 4ab: statarb MetaFilter routing ──
+    # DQAF-20260623-065: Swing strategies (m15/m30/h1/h4/btc_swing) EXCISED
+    # from this routing block.  StatArb relies on OU z_score as primary
+    # predictor — swing signals operate in an orthogonal feature space
+    # (momentum/trend-following).  Routing swing through a statarb-trained
+    # MetaFilter is a Category Error: the model correctly outputs its
+    # training-set base rate (~0.193) for non-OU signals, killing all
+    # swing trades indiscriminately.
+    #
+    # Swing strategies now fall through to the FIX-20260611-001 excision
+    # in strategy_line.py → resolve_p_win_from_brains() → rolling_wr from
+    # PnL ledger (backed by 4 LIVE XAU brains as of DQAF-064d).
     if (
         _active_filter is not None
-        and (
-            "statarb" in name
-            or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing")
-        )
+        and "statarb" in name
         and _meta_p_win is None
     ):
         try:
