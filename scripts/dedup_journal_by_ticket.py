@@ -110,7 +110,7 @@ def main() -> int:
 
     if args.execute:
         # ── Acquire lock ──
-        lock_dir = Path(args.data_dir) / ".locks"
+        lock_dir = Path(args.data_dir) / "locks"
         try:
             from core.infrastructure.distributed_lock import FileLock
             lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)

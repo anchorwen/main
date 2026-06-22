@@ -23,6 +23,7 @@ import argparse
 import json
 import logging
 import sys
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -171,6 +172,153 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
             pass
     # 3. Fresh store
     return BrainPnLStore()
+
+
+def _step_journal_backfill(
+    base_dir: str, *, dry_run: bool = False
+) -> dict[str, Any]:
+    """Backfill null PnL in live_trade_journal.jsonl from close_price.
+
+    Strategy A only (no MT5 dependency): for close entries whose ``pnl`` field
+    is null but whose ``detail.close_price`` is populated, computes PnL from
+    ``(close_price - entry_price) × volume`` using the matching open entry.
+
+    Strategy B (MT5 deal history) is intentionally NOT run here — it belongs
+    in the standalone ``scripts/backfill_journal_pnl.py`` which requires an
+    MT5 terminal session.
+
+    The journal is rewritten atomically (temp file + os.replace) under
+    FileLock protection to prevent concurrent-write corruption.
+
+    FIX-20260622-057 Phase 3c: Integrated into daily_ops to run before
+    label_builder so labels benefit from backfilled PnL data.
+    """
+    import os as _os
+
+    try:
+        base = Path(base_dir)
+        journal_path = base / "live_trade_journal.jsonl"
+        if not journal_path.exists():
+            return {
+                "step": "journal_backfill",
+                "status": "skipped",
+                "reason": "no_journal",
+                "fixed": 0,
+                "skipped": 0,
+            }
+
+        # ── Load journal ──
+        entries: list[dict[str, Any]] = []
+        for _line in journal_path.read_text(encoding="utf-8").splitlines():
+            _line = _line.strip()
+            if not _line:
+                continue
+            with suppress(json.JSONDecodeError):
+                entries.append(json.loads(_line))
+
+        # ── Build open-entry index: ticket → open entry ──
+        open_by_ticket: dict[int, dict[str, Any]] = {}
+        for e in entries:
+            if e.get("action") == "open":
+                t = e.get("position_ticket")
+                if isinstance(t, int) and t > 0:
+                    open_by_ticket[t] = e
+
+        # ── Find backfill candidates ──
+        fixed = 0
+        skipped_no_close_price = 0
+        skipped_no_open = 0
+
+        for e in entries:
+            if e.get("action") != "close":
+                continue
+            if e.get("pnl") is not None:
+                continue
+
+            ticket = e.get("position_ticket")
+            if not isinstance(ticket, int):
+                skipped_no_open += 1
+                continue
+            detail = e.get("detail", {})
+            close_price = detail.get("close_price") if isinstance(detail, dict) else None
+            if close_price is None:
+                skipped_no_close_price += 1
+                continue
+
+            open_entry = open_by_ticket.get(ticket)
+            if open_entry is None:
+                skipped_no_open += 1
+                continue
+
+            # Resolve entry price from open entry
+            _od = open_entry.get("detail", {})
+            _oreq = _od.get("request", {}) if isinstance(_od, dict) else {}
+            entry_price = _oreq.get("price") if isinstance(_oreq, dict) else None
+            if entry_price is None:
+                skipped_no_open += 1
+                continue
+
+            side = e.get("side", open_entry.get("side", ""))
+            # Volume: prefer open entry (close entries often have vol=0 for full closes)
+            _cv = float(e.get("volume", 0) or 0)
+            _ov = float(open_entry.get("volume", 0) or 0)
+            volume = _ov if _ov > 0 else (_cv if _cv > 0 else 0.01)
+
+            cp = float(close_price)
+            ep = float(entry_price)
+            if side == "short":
+                pnl = round((ep - cp) * volume, 6)
+            else:
+                pnl = round((cp - ep) * volume, 6)
+
+            if not dry_run:
+                e["pnl"] = pnl
+                if isinstance(e.get("detail"), dict):
+                    e["detail"]["profit"] = pnl
+            fixed += 1
+
+        # ── Rewrite journal atomically if anything was fixed ──
+        if fixed > 0 and not dry_run:
+            from core.infrastructure.distributed_lock import FileLock
+
+            _lock_dir = base / "locks"
+            lock = FileLock("live_trade_journal", lock_dir=str(_lock_dir), ttl_seconds=10)
+            acquired = lock.acquire(blocking=True, timeout_seconds=5)
+            if not acquired.acquired:
+                return {
+                    "step": "journal_backfill",
+                    "status": "error",
+                    "error": f"lock denied: {acquired.error}",
+                    "fixed": fixed,
+                    "skipped": skipped_no_close_price + skipped_no_open,
+                }
+            try:
+                _tmp = journal_path.with_suffix(".jsonl.backfill_tmp")
+                _tmp.write_text(
+                    "\n".join(
+                        json.dumps(e, ensure_ascii=False, default=str) for e in entries
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                _os.replace(_tmp, journal_path)
+            finally:
+                lock.release()
+
+        return {
+            "step": "journal_backfill",
+            "status": "ok",
+            "dry_run": dry_run,
+            "fixed": fixed,
+            "skipped": skipped_no_close_price + skipped_no_open,
+            "skipped_no_close_price": skipped_no_close_price,
+            "skipped_no_open": skipped_no_open,
+            "total_entries": len(entries),
+        }
+
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
+        with fail_open_guard("daily_ops:_step_journal_backfill"):
+            return {"step": "journal_backfill", "status": "error", "error": str(exc)[:500]}
 
 
 def _step_label_builder(
@@ -1972,6 +2120,7 @@ def run_daily_ops(
     base_dir: str = "data",
     *,
     skip_shadow: bool = False,
+    skip_journal_backfill: bool = False,
     skip_label_builder: bool = False,
     skip_feedback: bool = False,
     skip_governance: bool = False,
@@ -1997,6 +2146,7 @@ def run_daily_ops(
     Args:
         base_dir: Base data directory.
         skip_shadow: Skip shadow ensemble step.
+        skip_journal_backfill: Skip journal PnL backfill (Strategy A: close_price→PnL).
         skip_feedback: Skip feedback loop step.
         skip_governance: Skip governance cycle.
         skip_champion: Skip champion/challenger promotion.
@@ -2093,6 +2243,14 @@ def run_daily_ops(
             )
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
+
+    # Journal backfill: fill null PnL in close entries from close_price.
+    # Strategy A only — no MT5 dependency.  Runs BEFORE label_builder so
+    # the label pipeline sees backfilled PnL data.
+    # FIX-20260622-057 Phase 3c: Integrated close_price→PnL backfill into
+    # daily pipeline.  Idempotent — becomes a no-op once all entries fixed.
+    if not skip_journal_backfill:
+        steps.append(_step_journal_backfill(base_dir, dry_run=dry_run))
 
     # Label builder: generate fresh training labels from journals.
     # Runs BEFORE feedback_loop so tracker sees the latest labels.
@@ -2239,6 +2397,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--symbol", default="XAUUSDc", help="Trading symbol (default: XAUUSDc)")
     p.add_argument("--dry-run", action="store_true", help="Assess without applying transitions")
     p.add_argument("--skip-shadow", action="store_true", help="Skip shadow ensemble")
+    p.add_argument(
+        "--skip-journal-backfill",
+        action="store_true",
+        help="Skip journal PnL backfill (close_price→PnL)",
+    )
     p.add_argument("--skip-label-builder", action="store_true", help="Skip label builder")
     p.add_argument("--skip-feedback", action="store_true", help="Skip feedback loop")
     p.add_argument("--skip-governance", action="store_true", help="Skip governance cycle")
@@ -2281,6 +2444,7 @@ def main(argv: list[str] | None = None) -> int:
     report = run_daily_ops(
         base_dir=args.base_dir,
         skip_shadow=args.skip_shadow,
+        skip_journal_backfill=args.skip_journal_backfill,
         skip_label_builder=args.skip_label_builder,
         skip_feedback=args.skip_feedback,
         skip_governance=args.skip_governance,
