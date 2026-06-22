@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-22T07:45:26Z
+> **自动生成**: 2026-06-22T08:25:52Z
 
 ## Package-Level Dependencies
 
@@ -597,7 +597,7 @@
 - `commander_guardrails_arch.py` → (无内部依赖)
 - `coverage_baseline.py` → (无内部依赖)
 - `daily_cost_report.py` → (无内部依赖)
-- `daily_ops.py` → `core.alpha.contracts`, `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.brain_registry`, `core.brains.services.brain_leaderboard`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.exceptions`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.ledger.services.journal_cleanup`, `core.observability.data_health_service`, `core.runtime.fault_handler`, `core.state.catalog`, `core.state.writer`, `scripts.brain`, `scripts.check_training_readiness`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
+- `daily_ops.py` → `core.alpha.contracts`, `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.brain_registry`, `core.brains.services.brain_leaderboard`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.exceptions`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.services.journal_cleanup`, `core.observability.data_health_service`, `core.runtime.fault_handler`, `core.state.catalog`, `core.state.freshness_guard`, `core.state.writer`, `scripts.brain`, `scripts.check_training_readiness`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
 - `data_pipeline_audit.py` → `core.runtime.fault_handler`
 - `dedup_journal.py` → (无内部依赖)
 - `dedup_journal_by_ticket.py` → `core.infrastructure.distributed_lock`, `core.runtime.fault_handler`

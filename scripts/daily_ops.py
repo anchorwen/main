@@ -174,9 +174,7 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
     return BrainPnLStore()
 
 
-def _step_journal_backfill(
-    base_dir: str, *, dry_run: bool = False
-) -> dict[str, Any]:
+def _step_journal_backfill(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Backfill null PnL in live_trade_journal.jsonl from close_price.
 
     Strategy A only (no MT5 dependency): for close entries whose ``pnl`` field
@@ -295,9 +293,7 @@ def _step_journal_backfill(
             try:
                 _tmp = journal_path.with_suffix(".jsonl.backfill_tmp")
                 _tmp.write_text(
-                    "\n".join(
-                        json.dumps(e, ensure_ascii=False, default=str) for e in entries
-                    )
+                    "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in entries)
                     + "\n",
                     encoding="utf-8",
                 )
@@ -2085,6 +2081,183 @@ def _step_data_health(
             return {"step": "data_health", "status": "error", "error": str(exc)[:500]}
 
 
+def _step_reconcile_governance_pnl(base_dir: str) -> dict[str, Any]:
+    """Reconcile governance_state.json brain registry against brain_pnl_ledger.json.
+
+    DQAF-20260622-057 Phase 2: Institutional-grade referential integrity check.
+    对标 BlackRock Aladdin Data Integrity Protocol §7.1 — "Every registered
+    entity MUST have a corresponding ledger entry within one business day
+    of registration."
+
+    Cross-references all brains in governance_state against the PnL settled
+    registry.  Detects three classes of integrity gap:
+      - Live brains missing from PnL → CRITICAL (trading without PnL tracking)
+      - Non-live brains missing from PnL → WARNING (expected for new registrations)
+      - PnL entries for brains not in governance → orphaned (stale artifacts)
+
+    Structured log output enables downstream alerting integration.
+    """
+    base = Path(base_dir)
+    gov_path = base / "governance_state.json"
+    pnl_path = base / "brain_pnl_ledger.json"
+
+    if not gov_path.exists():
+        return {
+            "step": "governance_pnl_reconciliation",
+            "status": "skipped",
+            "reason": "no_governance_state",
+        }
+    if not pnl_path.exists():
+        return {
+            "step": "governance_pnl_reconciliation",
+            "status": "skipped",
+            "reason": "no_pnl_ledger",
+        }
+
+    try:
+        gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
+        pnl_data = json.loads(pnl_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return {
+            "step": "governance_pnl_reconciliation",
+            "status": "error",
+            "error": f"read_error:{exc}",
+        }
+
+    brain_states: dict[str, dict[str, Any]] = (
+        gov_data.get("brain_states") or gov_data.get("brains") or {}
+    )
+    settled: dict[str, Any] = pnl_data.get("settled", {})
+    pending: dict[str, Any] = pnl_data.get("pending", {})
+
+    gov_brains = set(brain_states.keys())
+    pnl_settled_brains = set(settled.keys())
+
+    # ── Gap 1: Brains in governance but NOT in PnL settled ──
+    pnl_missing = gov_brains - pnl_settled_brains
+
+    # ── Gap 2: Brains in PnL settled but NOT in governance (orphaned) ──
+    gov_missing = pnl_settled_brains - gov_brains
+
+    # ── Gap 3: Brains in PnL with zero entries (paper artifacts) ──
+    zero_entry = sorted(
+        brain_id
+        for brain_id, entries in settled.items()
+        if isinstance(entries, list) and len(entries) == 0
+    )
+
+    # ── Gap 4: Orphaned pending signals (brain removed from governance) ──
+    orphaned_pending: list[str] = []
+    for sig_id, entry in pending.items():
+        if isinstance(entry, dict):
+            entry_brain = entry.get("brain_id", "")
+            # Also check base-name match (e.g. Swing_V9_M30_V2_<ts> → Swing_V9_M30_V2)
+            base_name = entry_brain.rsplit("_", 1)[0] if "_" in entry_brain else entry_brain
+            if entry_brain not in gov_brains and base_name not in gov_brains:
+                orphaned_pending.append(sig_id)
+
+    # ── Severity classification (对标 Goldman Sachs Marquee DQF §4.2) ──
+    live_missing = sorted(b for b in pnl_missing if brain_states.get(b, {}).get("status") == "live")
+
+    result: dict[str, Any] = {
+        "step": "governance_pnl_reconciliation",
+        "status": "ok",
+        "gov_total": len(gov_brains),
+        "pnl_settled_total": len(pnl_settled_brains),
+        "pnl_pending_total": len(pending),
+        "pnl_missing_brains": sorted(pnl_missing),
+        "pnl_missing_count": len(pnl_missing),
+        "gov_missing_brains": sorted(gov_missing),
+        "gov_missing_count": len(gov_missing),
+        "zero_entry_brains": zero_entry,
+        "zero_entry_count": len(zero_entry),
+        "orphaned_pending_signals": orphaned_pending,
+        "orphaned_pending_count": len(orphaned_pending),
+    }
+
+    if live_missing:
+        result["severity"] = "CRITICAL"
+        result["live_brains_missing_pnl"] = live_missing
+        result["detail"] = (
+            f"CRITICAL: {len(live_missing)} LIVE brain(s) trading without PnL tracking: "
+            f"{live_missing}.  This means the Dynamic Brain Weighter operates on "
+            f"incomplete data — PnL-based vote weighting is silently degraded."
+        )
+    elif pnl_missing:
+        result["severity"] = "WARNING"
+        result["detail"] = (
+            f"WARNING: {len(pnl_missing)} brain(s) in governance without PnL entries. "
+            f"Expected for newly registered brains with no trading history."
+        )
+    elif gov_missing or zero_entry or orphaned_pending:
+        result["severity"] = "INFO"
+        result["detail"] = (
+            f"INFO: Orphaned PnL entries ({len(gov_missing)} gov-missing, "
+            f"{len(zero_entry)} zero-entry, {len(orphaned_pending)} pending) — "
+            f"candidates for retention pruning."
+        )
+    else:
+        result["severity"] = "CLEAN"
+
+    # Structured log for downstream alerting
+    print(json.dumps(result, ensure_ascii=False, default=str), flush=True)
+    return result
+
+
+def _step_freshness_check(base_dir: str) -> dict[str, Any]:
+    """Run Freshness Guard at end of daily_ops pipeline.
+
+    DQAF-20260622-057 Phase 1: Closes the CATALOG_COVERAGE_GAP by running
+    the Freshness Guard AS A PIPELINE STEP rather than as a passive,
+    manually-invoked diagnostic.  After all writes are complete, checks
+    every registered StateArtifact for staleness/emptiness/missingness.
+
+    对标 Goldman Sachs Marquee Data Quality Framework §4.2 (Freshness SLA):
+    "Every data product MUST self-assess freshness at the point of generation."
+    """
+    try:
+        from core.state.freshness_guard import check_catalog_freshness
+
+        # Only check the asset that just ran — don't cross-contaminate
+        result = check_catalog_freshness(
+            data_dirs=[base_dir],
+            emit_alerts=True,  # CRITICAL/WARNING lines → stderr
+        )
+
+        stale_count = len(result["stale"])
+        missing_count = len(result["missing"])
+        empty_count = len(result["empty"])
+
+        output: dict[str, Any] = {
+            "step": "freshness_check",
+            "status": "ok" if (stale_count == 0 and empty_count == 0) else "degraded",
+            "checked_at_utc": result["checked_at_utc"],
+            "total_artifacts": result["total"],
+            "healthy": len(result["healthy"]),
+            "stale_count": stale_count,
+            "missing_count": missing_count,
+            "empty_count": empty_count,
+        }
+
+        if stale_count > 0:
+            output["stale_artifacts"] = [
+                {"artifact_id": e["artifact_id"], "age_human": e.get("age_human", "?")}
+                for e in result["stale"]
+            ]
+        if missing_count > 0:
+            output["missing_artifacts"] = [e["artifact_id"] for e in result["missing"]]
+        if empty_count > 0:
+            output["empty_artifacts"] = [e["artifact_id"] for e in result["empty"]]
+
+        # Emit structured log for downstream consumption
+        print(json.dumps(output, ensure_ascii=False, default=str), flush=True)
+        return output
+
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
+        with fail_open_guard("daily_ops:_step_freshness_check"):
+            return {"step": "freshness_check", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) -> dict[str, Any]:
     """Run daily recap and return summary."""
     try:
@@ -2300,6 +2473,9 @@ def run_daily_ops(
                 pnl_store=shared_pnl_store,
             )
         )
+        # DQAF-20260622-057 Phase 2: Reconciliation runs immediately after
+        # governance so we detect freshly-promoted brains with no PnL.
+        steps.append(_step_reconcile_governance_pnl(base_dir))
 
     if not skip_champion:
         steps.append(
@@ -2372,6 +2548,12 @@ def run_daily_ops(
         retraining_result = retraining_results[-1] if retraining_results else None
         if retraining_result and retraining_result.get("degraded_count", 0) > 0:
             steps.append(_step_param_optimization(base_dir, retraining_result, dry_run=dry_run))
+
+    # ── DQAF-20260622-057 Phase 1: Freshness Guard as pipeline step ──
+    # Runs LAST, AFTER all writes are complete, so it catches the final state
+    # of every registered artifact including those just written by this pipeline.
+    # 对标 Goldman Sachs Marquee DQF §4.2: self-assess freshness at generation point.
+    steps.append(_step_freshness_check(base_dir))
 
     errors = [s for s in steps if s is not None and s.get("status") == "error"]
     actions = sum(s.get("actions_applied", 0) + s.get("promotions", 0) for s in steps)

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T07:45:26Z
+> **自动生成**: 2026-06-22T08:25:52Z
 > **扫描模块数**: 650
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -557,7 +557,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `catalog.py` | ✅ active | DataIntegrityError, CrossSymbolContaminationError, StateArtifact | 18 | 417 | — | |
+| `catalog.py` | ✅ active | DataIntegrityError, CrossSymbolContaminationError, StateArtifact | 20 | 470 | — | |
 | `freshness_guard.py` | ✅ active | FreshnessEntry | 8 | 458 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `writer.py` | ✅ active | StateWriter | 13 | 326 | — | |
@@ -681,7 +681,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 32 | 2326 | — | |
+| `daily_ops.py` | ✅ active | — | 35 | 2672 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |

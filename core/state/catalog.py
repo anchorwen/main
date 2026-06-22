@@ -35,6 +35,7 @@ SymbolName = Literal["XAUUSDc", "BTCUSDc"]
 
 # ── Error types ────────────────────────────────────────────────────────
 
+
 class DataIntegrityError(ValueError):
     """Raised when data fails schema validation at the write boundary.
 
@@ -57,7 +58,9 @@ class DataIntegrityError(ValueError):
 class CrossSymbolContaminationError(DataIntegrityError):
     """Raised when a cross-symbol invariant is violated (e.g. btc_swing in XAU registry)."""
 
-    def __init__(self, message: str, *, artifact_id: str = "", foreign_ids: list[str] | None = None):
+    def __init__(
+        self, message: str, *, artifact_id: str = "", foreign_ids: list[str] | None = None
+    ):
         super().__init__(message, artifact_id=artifact_id)
         self.foreign_ids = foreign_ids or []
 
@@ -70,6 +73,7 @@ SchemaValidator = Callable[[dict[str, Any]], None]
 
 
 # ── StateArtifact ──────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True, slots=True)
 class StateArtifact:
@@ -254,6 +258,37 @@ def validate_data_health_state(data: dict[str, Any]) -> None:
     validate_non_empty_dict(data)
 
 
+def validate_brain_pnl_ledger(data: dict[str, Any]) -> None:
+    """Validate brain_pnl_ledger.json structure.
+
+    DQAF-20260622-057: Registers the 15.5MB PnL ledger — the system's
+    largest state file — into the catalog perimeter.  Previously existed
+    outside governance (CATALOG_COVERAGE_GAP), allowing 42.3h staleness
+    without detection.
+    """
+    validate_non_empty_dict(data)
+    if "schema_version" not in data:
+        raise DataIntegrityError(
+            "brain_pnl_ledger.json must contain 'schema_version'",
+            artifact_id="BRAIN_PNL_LEDGER",
+            violations=["missing:schema_version"],
+        )
+    if "settled" not in data:
+        raise DataIntegrityError(
+            "brain_pnl_ledger.json must contain 'settled' key",
+            artifact_id="BRAIN_PNL_LEDGER",
+            violations=["missing:settled"],
+        )
+
+
+def validate_alert_cooling(data: dict[str, Any]) -> None:
+    """Validate alert_cooling.json — alert cooldown state.
+
+    DQAF-20260622-057: Second CATALOG_COVERAGE_GAP finding.
+    """
+    validate_non_empty_dict(data)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # The Catalog
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -264,28 +299,28 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="LEADERBOARD",
         path_template="reports/leaderboard.json",
         schema_validator=validate_leaderboard,
-        ttl_seconds=86400,  # 24h
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="daily_ops + brain_leaderboard",
     ),
     "ALPHA_ALLOCATION": StateArtifact(
         logical_id="ALPHA_ALLOCATION",
         path_template="reports/alpha_allocation.json",
         schema_validator=validate_alpha_allocation,
-        ttl_seconds=86400,
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="daily_ops + portfolio_allocator",
     ),
     "GOVERNANCE_STATE": StateArtifact(
         logical_id="GOVERNANCE_STATE",
         path_template="governance_state.json",
         schema_validator=validate_governance_state,
-        ttl_seconds=86400,
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="daily_ops + governance_service",
     ),
     "DAILY_OPS_STATE": StateArtifact(
         logical_id="DAILY_OPS_STATE",
         path_template="state/daily_ops_state.json",
         schema_validator=validate_daily_ops_state,
-        ttl_seconds=86400,
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="daily_ops",
     ),
     # ── Alpha pipeline ──
@@ -293,7 +328,7 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="ALPHA_REGISTRY",
         path_template="alpha_registry.json",
         schema_validator=validate_alpha_registry,
-        ttl_seconds=86400,
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="core/alpha/*",
         cross_symbol_guard=True,
     ),
@@ -301,14 +336,14 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="ALPHA_PERFORMANCE",
         path_template="alpha_performance.json",
         schema_validator=validate_alpha_performance,
-        ttl_seconds=86400,
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="core/alpha/*",
     ),
     "ALPHA_FEED_STATE": StateArtifact(
         logical_id="ALPHA_FEED_STATE",
         path_template="alpha_feed_state.json",
         schema_validator=validate_non_empty_dict,
-        ttl_seconds=86400,
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="core/alpha/*",
     ),
     # ── Governance / Training ──
@@ -316,14 +351,14 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="TRAINING_READINESS",
         path_template="reports/training_readiness.json",
         schema_validator=validate_training_readiness,
-        ttl_seconds=86400,
+        ttl_seconds=86400,  # 24h — training is genuinely daily
         generator="daily_ops + governance_scheduler",
     ),
     "RETRAINING_SIGNAL_PREV": StateArtifact(
         logical_id="RETRAINING_SIGNAL_PREV",
         path_template="reports/retraining_signal_prev.json",
         schema_validator=validate_non_empty_dict,
-        ttl_seconds=86400,
+        ttl_seconds=86400,  # 24h — retraining is genuinely daily
         generator="daily_ops + governance_scheduler",
     ),
     # ── Operational ──
@@ -331,14 +366,14 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="EXECUTION_STATE",
         path_template="state/execution_state.json",
         schema_validator=validate_execution_state,
-        ttl_seconds=3600,
+        ttl_seconds=1800,  # 30min (DQAF-057: tightened from 1h — execution changes every cycle)
         generator="daily_ops + execution_service",
     ),
     "DATA_HEALTH_STATE": StateArtifact(
         logical_id="DATA_HEALTH_STATE",
         path_template="state/data_health_state.json",
         schema_validator=validate_data_health_state,
-        ttl_seconds=86400,
+        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="daily_ops + data_health_service",
     ),
     # ── Leaderboard backup for run-to-run comparison ──
@@ -346,15 +381,34 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="LEADERBOARD_PREV",
         path_template="reports/leaderboard_prev.json",
         schema_validator=validate_leaderboard,
-        ttl_seconds=86400 * 2,  # 48h
+        ttl_seconds=86400 * 2,  # 48h — backup copy, intentionally longer
         generator="daily_ops (backup copy)",
     ),
     "MT5_BRIDGE_HEALTH": StateArtifact(
         logical_id="MT5_BRIDGE_HEALTH",
         path_template="reports/mt5_bridge_health.json",
         schema_validator=validate_mt5_bridge_health,
-        ttl_seconds=3600,
+        ttl_seconds=900,  # 15min (DQAF-057: tightened from 1h — bridge health is critical)
         generator="daily_ops + bridge_health",
+    ),
+    # ── DQAF-20260622-057: CATALOG_COVERAGE_GAP closure ──
+    # These files existed outside the State Governance Protocol perimeter.
+    # brain_pnl_ledger.json (15.5MB XAU) was the largest ungoverned state file.
+    # alert_cooling.json was also unmonitored.
+    "BRAIN_PNL_LEDGER": StateArtifact(
+        logical_id="BRAIN_PNL_LEDGER",
+        path_template="brain_pnl_ledger.json",
+        schema_validator=validate_brain_pnl_ledger,
+        ttl_seconds=14400,  # 4h — PnL is updated every cycle when live, every daily_ops otherwise
+        generator="daily_ops + brain_pnl_ledger.BrainPnLStore",
+        required_fields=("schema_version", "settled"),
+    ),
+    "ALERT_COOLING": StateArtifact(
+        logical_id="ALERT_COOLING",
+        path_template="state/alert_cooling.json",
+        schema_validator=validate_alert_cooling,
+        ttl_seconds=7200,  # 2h — cooling state must be recent
+        generator="execution exit_watchdog / alert system",
     ),
 }
 
@@ -395,8 +449,7 @@ def lookup(logical_id: str) -> StateArtifact:
     """
     if logical_id not in CATALOG:
         raise KeyError(
-            f"Unknown state artifact: {logical_id!r}. "
-            f"Registered artifacts: {list(CATALOG)}"
+            f"Unknown state artifact: {logical_id!r}. " f"Registered artifacts: {list(CATALOG)}"
         )
     return CATALOG[logical_id]
 
