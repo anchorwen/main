@@ -126,13 +126,22 @@ class MetaSignalFilter:
         self._ensemble_weights: tuple[float, float] = ensemble_weights or (0.6, 0.4)
 
         # v4.1: Microstructure StandardScaler (Scaling Toxicity Fix)
+        # DQAF-20260622-058-bis: replaced joblib.load() with
+        # MicrostructureFeatureAdapter._load_scaler_json() — joblib
+        # cannot load JSON-format scaler files (DQAF-054 format).
         self._micro_scaler: Any = None
         self._micro_scaler_path = micro_scaler_path
         if micro_scaler_path and os.path.exists(micro_scaler_path):
             with log_and_continue(component="MetaFilter:load_scaler"):
-                import joblib
+                from pathlib import Path
 
-                self._micro_scaler = joblib.load(micro_scaler_path)
+                from core.features.adapters.microstructure_feature_adapter import (
+                    MicrostructureFeatureAdapter,
+                )
+
+                self._micro_scaler = MicrostructureFeatureAdapter._load_scaler_json(
+                    Path(micro_scaler_path)
+                )
 
         # Protocol 2: Platt Scaling calibrator (smooth sigmoid, no step collapse)
         self._calibrator: Any = None

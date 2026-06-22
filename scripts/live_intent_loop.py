@@ -1498,6 +1498,8 @@ def main(argv: list[str] | None = None) -> int:
                         else Path(_cal_path)
                     )
                     _resolved_cal = str(_candidate) if _candidate.exists() else None
+                # DQAF-20260622-058-bis: auto-discover scaler when config
+                # doesn't specify micro_scaler_path (mirrors live_bootstrap).
                 _scaler_path = _fc.get("micro_scaler_path", "")
                 _resolved_scaler: str | None = None
                 if _scaler_path:
@@ -1507,6 +1509,16 @@ def main(argv: list[str] | None = None) -> int:
                         else Path(_scaler_path)
                     )
                     _resolved_scaler = str(_candidate) if _candidate.exists() else None
+                if _resolved_scaler is None:
+                    from core.features.adapters.microstructure_feature_adapter import (
+                        MicrostructureFeatureAdapter,
+                    )
+
+                    _auto = MicrostructureFeatureAdapter.resolve_scaler_path(
+                        args.base_dir, args.symbol
+                    )
+                    if _auto is not None:
+                        _resolved_scaler = str(_auto)
 
                 _raw_weights = _fc.get("ensemble_weights", [0.6, 0.4])
                 _ensemble_weights = (

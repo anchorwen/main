@@ -77,7 +77,7 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
                 if candidate_mlp.exists():
                     resolved_mlp = str(candidate_mlp)
 
-            # Resolve micro scaler path
+            # Resolve micro scaler path (DQAF-20260622-058-bis: auto-discover fallback)
             scaler_path = fc.get("micro_scaler_path", "")
             resolved_scaler: str | None = None
             if scaler_path:
@@ -88,6 +88,16 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
                 )
                 if candidate_scaler.exists():
                     resolved_scaler = str(candidate_scaler)
+            if resolved_scaler is None:
+                from core.features.adapters.microstructure_feature_adapter import (
+                    MicrostructureFeatureAdapter,
+                )
+
+                _auto = MicrostructureFeatureAdapter.resolve_scaler_path(
+                    repo_root / "data_btc", "BTCUSDC"
+                )
+                if _auto is not None:
+                    resolved_scaler = str(_auto)
 
             # Resolve calibrator path (Platt scaling)
             calibrator_path = fc.get("calibrator_path", "")
