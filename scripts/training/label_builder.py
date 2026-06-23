@@ -436,6 +436,12 @@ def build_trade_records(
 
     for rec in entries:
         ticket = rec.get("position_ticket")
+        # FIX-20260623-067: fallback to detail.order when position_ticket is None
+        # (some journal entries store the ticket in detail.order instead)
+        if ticket is None:
+            detail = rec.get("detail")
+            if isinstance(detail, dict):
+                ticket = detail.get("order")
         if ticket is not None and isinstance(ticket, int) and ticket > 0:
             by_ticket.setdefault(ticket, []).append(rec)
         else:

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T00:18:49Z
+> **自动生成**: 2026-06-23T01:31:13Z
 > **扫描模块数**: 656
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -632,7 +632,7 @@
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
-| `audit_data_exhaustive.py` | ✅ active | — | 7 | 458 | — | |
+| `audit_data_exhaustive.py` | ✅ active | — | 7 | 559 | — | |
 | `audit_data_final.py` | ✅ active | — | 5 | 201 | — | |
 | `audit_data_health_journal.py` | ✅ active | — | 2 | 170 | — | |
 | `audit_data_integrity.py` | ✅ active | — | 12 | 923 | — | |
@@ -666,7 +666,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 636 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 637 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -683,7 +683,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 35 | 2672 | — | |
+| `daily_ops.py` | ✅ active | — | 35 | 2677 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |
@@ -858,7 +858,7 @@
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
 | `governance_scheduler.py` | ✅ active | — | 6 | 564 | — | |
-| `label_builder.py` | ✅ active | — | 19 | 1032 | — | |
+| `label_builder.py` | ✅ active | — | 19 | 1038 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 424 | — | |
 | `optimize_ensemble_weights.py` | ✅ active | — | 4 | 166 | — | |

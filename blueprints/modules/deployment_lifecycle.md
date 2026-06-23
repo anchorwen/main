@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260623-067 | 2026-06-23 | cursor-agent | — | **DQAF-067: MODULE_SOURCE_MAP — `scripts/audit_data_exhaustive.py` registered in observability**. Previously unmapped orphan script now tracked. | L1 — orphan file never registered in MODULE_SOURCE_MAP |
 | FIX-20260622-059 | 2026-06-22 | cursor-agent | — | **DQAF-059 Magic Drift Attribution Loss — Complete Repair**. See FIX-20260622-059 in FIX_REGISTRY.md and DQAF-20260622-059 in DQAF_DOCKET_REGISTRY. | L2 — MAGIC_TO_STRATEGY missing entries; L3 — no SSOT for magic↔strategy mapping |
 | FIX-20260622-058 | 2026-06-22 | cursor-agent | — | **DQAF-058: MODULE_SOURCE_MAP — `scripts/generate_micro_scaler.py` + `core/observability/health_checks.py` registered**. New multi-asset scaler generator (supersedes BTC-only `generate_btc_empirical_scaler.py`). `health_checks.py` mapped to `monitor_dashboard` (previously unmapped orphan → FATAL). `pyproject.toml`: BLE001 per-file-ignore for pre-existing `BLE001:FOG` patterns in health_checks.py. | L3 — health_checks.py never registered in MODULE_SOURCE_MAP (23-day gap); scaler generator was BTC-only |
 | FIX-20260622-055 | 2026-06-22 | cursor-agent | — | **DQAF-055: MODULE_SOURCE_MAP — `scripts/live_shadow_ensemble.py` → `feedback_pnl`**. Newly tracked script (previously unmapped orphan → FATAL). Previously hardcoded `scaler_path=None` in `MicrostructureFeatureAdapter` instantiation. | L2 — DQAF-054 site sweep missed this script |

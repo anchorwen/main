@@ -270,6 +270,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/send_data_health_alert.py",
         "scripts/diagnose_journal_mt5_sev2.py",
         # ── Iron Law #11 Institutional Audit Portfolio (FIX-20260622-052 S.E.A.L.) ──
+        "scripts/audit_data_exhaustive.py",
         "scripts/audit_full_pipeline.py",
         "scripts/audit_state_of_system.py",
         "scripts/commander_g2_metafilter_path.py",
