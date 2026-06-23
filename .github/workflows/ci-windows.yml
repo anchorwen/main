@@ -81,8 +81,10 @@ jobs:
         timeout-minutes: 10
         shell: bash
         run: |
+          set +e
           python -m pytest tests/ -m "not slow" -o "addopts=" -p no:cov -q --tb=short > pytest_fast_out.txt 2>&1
           PEXIT=$?
+          set -e
           cat pytest_fast_out.txt
           exit $PEXIT
 
