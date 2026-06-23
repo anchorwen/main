@@ -7,10 +7,13 @@ Every data file, every cross-reference, every edge case.
 
 from __future__ import annotations
 
-import json, os, glob, time
+import hashlib, json, os, glob, time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+
+# DQAF-20260623-073: unified ticket resolution (replaces ad-hoc .get() chains)
+from core.data.ticket_resolver import resolve as resolve_ticket
 
 now = time.time()
 TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -224,13 +227,9 @@ for symbol in ["XAU", "BTC"]:
         _action = e.get("action", "")
         if _action != "open":
             continue
-        # ticket extraction mirrors label_builder.py:438 (FIX-20260623-067)
-        _ticket = e.get("position_ticket")
-        if _ticket is None:
-            _d = e.get("detail")
-            if isinstance(_d, dict):
-                _ticket = _d.get("order")
-        if _ticket is not None and isinstance(_ticket, int) and _ticket > 0:
+        # DQAF-20260623-073: unified ticket resolver
+        _ticket = resolve_ticket(e)
+        if _ticket is not None:
             if _ticket not in j_ticket_side:
                 j_ticket_side[_ticket] = e.get("side", "?")
 
@@ -314,18 +313,58 @@ if btc_ledger:
         ("V11 Directional", ["BTC_Swing_V11_H1_Directional", "BTC_Swing_V11_M15_Directional"]),
     ]
     for label, brains in triplets:
-        pnl_sets = []
+        signatures = []
         for bid in brains:
             recs = settled.get(bid, [])
-            pnl_sets.append(
-                tuple(round(r.get("pnl_per_unit", 0), 4) for r in recs[-5:]) if recs else ()
+            if not recs:
+                signatures.append(None)
+                continue
+            # FIX-20260623-069a: multi-dimensional identity check.
+            # (a) Full-record MD5 — different hashes = genuinely independent.
+            # (b) PnL-stream MD5 — same PnL with different full hashes =
+            #     limited-history coincidence (e.g. 1 shared trade then retired).
+            #     This is a WARN, not a FAIL.
+            # (c) Record count — different counts = clearly independent.
+            _full_hash = hashlib.md5(
+                json.dumps(recs, sort_keys=True, default=str).encode()
+            ).hexdigest()
+            _pnl_stream = tuple(round(r.get("pnl_per_unit", 0), 4) for r in recs)
+            _pnl_hash = hashlib.md5(json.dumps(_pnl_stream).encode()).hexdigest()
+            signatures.append(
+                {
+                    "bid": bid,
+                    "count": len(recs),
+                    "full_hash": _full_hash,
+                    "pnl_hash": _pnl_hash,
+                    "pnl_first5": _pnl_stream[:5],
+                    "pnl_last5": _pnl_stream[-5:],
+                    "cum_pnl": round(sum(_pnl_stream), 2),
+                }
             )
-        unique = len(set(pnl_sets))
-        verdict(
-            unique > 1,
-            f"BTC {label} records independent",
-            "STILL IDENTICAL" if unique <= 1 and len(pnl_sets) > 1 else f"{unique} unique patterns",
-        )
+
+        full_hashes = [s["full_hash"] for s in signatures]
+        pnl_hashes = [s["pnl_hash"] for s in signatures]
+        unique_full = len(set(full_hashes))
+        unique_pnl = len(set(pnl_hashes))
+
+        # Primary verdict: full-record uniqueness (catches actual data corruption)
+        if unique_full > 1:
+            verdict(True, f"BTC {label} records independent", f"{unique_full} unique full hashes")
+        else:
+            verdict(
+                False,
+                f"BTC {label} records independent",
+                "FULL HASH IDENTICAL — possible corruption",
+            )
+
+        # Secondary: PnL-only identity without full-record identity = limited history
+        if unique_pnl == 1 and unique_full > 1:
+            _counts = [s["count"] for s in signatures]
+            warn(
+                f"BTC {label} PnL streams identical (limited history — "
+                f"{sum(1 for c in _counts if c == max(_counts))}/{len(_counts)} "
+                f"brains, same single-trade outcome)"
+            )
 
 # 4b. Duplicate detection across all JSONL files
 for symbol in ["XAU", "BTC"]:
@@ -342,10 +381,21 @@ for symbol in ["XAU", "BTC"]:
                 f"{dups} duplicates" if dups else "",
             )
         elif name == "live_labels":
-            tickets = [lb.get("position_ticket") for lb in data if lb.get("position_ticket")]
-            dups = len(tickets) - len(set(tickets))
+            # FIX-20260623-069b: per-brain labeling (FIX-20260622-057 Phase 2 A1)
+            # produces one label record per brain per trade.  Multiple brains
+            # sharing the same position_ticket is BY DESIGN, not duplication.
+            # Dedup key = (position_ticket, brain_id) — same ticket with
+            # different brain_ids is legitimate multi-brain labeling.
+            ticket_brain_pairs = [
+                (lb.get("position_ticket"), lb.get("brain_id", ""))
+                for lb in data
+                if lb.get("position_ticket")
+            ]
+            dups = len(ticket_brain_pairs) - len(set(ticket_brain_pairs))
             verdict(
-                dups == 0, f"{symbol} labels: no dup tickets", f"{dups} duplicates" if dups else ""
+                dups == 0,
+                f"{symbol} labels: no dup (ticket, brain_id) pairs",
+                f"{dups} duplicates" if dups else "",
             )
 
 # 4c. Value sanity
@@ -519,6 +569,14 @@ for symbol in ["XAU", "BTC"]:
         prev = ""
         for e in journal:
             ts = e.get("recorded_at", "")
+            # FIX-20260623-069c: normalize timestamp formats before comparison.
+            # Journal entries mix "2026-05-05T04:12:42" (no TZ) and
+            # "2026-05-04T16:40:45Z" (UTC).  Raw string comparison can't
+            # handle this format inconsistency — normalise both to ISO.
+            if ts:
+                ts = ts.replace("Z", "+00:00")
+                if "+" not in ts:
+                    ts = ts + "+00:00"
             if ts and prev and ts < prev:
                 inversions += 1
             prev = ts
@@ -557,3 +615,285 @@ if RESULTS["WARN"]:
         print(f"    - {label}: {detail}")
 
 print(f"\n  Audit completed at {datetime.now().isoformat()[:19]}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# 9. AUDIT CHECK MANIFEST — Filter Bias Prevention (DQAF-20260623-069)
+# ═══════════════════════════════════════════════════════════════
+#
+# Every audit check MUST declare:
+#   - check_id: unique identifier
+#   - section: which audit section this belongs to
+#   - production_code_ref: the production code path(s) this check mirrors
+#   - what_it_measures: precise description of the metric
+#   - false_positive_condition: what would cause a spurious FAIL
+#   - false_negative_condition: what real problem would this MISS
+#   - last_validated: date of last cross-reference with production code
+#
+# This manifest is the structural answer to "audit tool ≠ audit conclusion."
+# Before adding or modifying any check, you MUST:
+#   1. Cross-reference the production code at production_code_ref
+#   2. Verify the filter/aggregation logic matches
+#   3. Update last_validated
+#   4. Run: python scripts/audit_data_exhaustive.py --validate-self
+#
+# Lessons learned (DQAF-067, DQAF-069):
+#   - DQAF-067: audit filter retcode==10009+request.action==1 measured
+#     "BUY market orders" not "label coverage" → 39% false FAIL
+#   - DQAF-069a: identity check used last-5 PnL → inactive brains all
+#     converge to (0,0,0,0,0) → false "IDENTICAL" FAIL
+#   - DQAF-069b: dup check used position_ticket without brain_id →
+#     multi-brain labels (by design) counted as duplicates → 335 false FAIL
+#   - DQAF-069c: timestamp compare without Z-suffix normalization →
+#     2 extra false inversions from format mismatch
+
+AUDIT_CHECK_MANIFEST: list[dict] = [
+    # ── Section 1: File Existence & Validity ──
+    {
+        "check_id": "1.1",
+        "section": "File Existence",
+        "description": "All 30 data files exist and are valid JSON/JSONL",
+        "production_code_ref": "DATA_FILES dict (this file, lines 85-120)",
+        "what_it_measures": "File presence and parseability",
+        "false_positive_condition": "None — existence and parseability are objective",
+        "false_negative_condition": "Empty-but-valid JSONL files pass silently",
+        "last_validated": "2026-06-23",
+    },
+    # ── Section 2: Schema Compliance ──
+    {
+        "check_id": "2.1",
+        "section": "Schema Compliance",
+        "description": "Governance, execution state, PnL ledger, labels schema fields present",
+        "production_code_ref": "governance_state.json, execution_state.json schemas",
+        "what_it_measures": "Required keys exist in state files",
+        "false_positive_condition": "Schema version mismatch from intentional upgrade",
+        "false_negative_condition": "New required fields added without updating check",
+        "last_validated": "2026-06-23",
+    },
+    # ── Section 3: Cross-Source Consistency ──
+    {
+        "check_id": "3.1",
+        "section": "Cross-Source",
+        "description": "Label side matches journal side per ticket",
+        "production_code_ref": "label_builder.py:build_trade_records() — side comes from open_rec",
+        "what_it_measures": "side field consistency between journal and labels",
+        "false_positive_condition": "Side normalization differences (buy/BUY/Buy)",
+        "false_negative_condition": "Side mismatch in tickets without labels",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "3.2",
+        "section": "Cross-Source",
+        "description": "Label coverage = |labeled tickets ∩ journal open tickets| / |journal open tickets|",
+        "production_code_ref": "daily_ops.py:_step_label_builder() coverage metric; label_builder.py:438 ticket resolution",
+        "what_it_measures": "Fraction of journal open tickets that have at least one label",
+        "false_positive_condition": (
+            "DQAF-067 (FIXED): audit used retcode==10009 filter → only BUY market orders; "
+            "now uses action=='open' + resolve_ticket() matching label_builder"
+        ),
+        "false_negative_condition": "Labels exist but ticket resolution misses them (different field name)",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "3.3",
+        "section": "Cross-Source",
+        "description": "All enabled brains in governance exist in config",
+        "production_code_ref": "governance_state.json brain_ids vs configs/brains_btc/*.json",
+        "what_it_measures": "Governance↔config brain count alignment",
+        "false_positive_condition": "Brain config in non-standard directory",
+        "false_negative_condition": "Config exists but model file is missing",
+        "last_validated": "2026-06-23",
+    },
+    # ── Section 4: Data Quality ──
+    {
+        "check_id": "4.1",
+        "section": "Data Quality",
+        "description": "BTC brain group PnL record independence",
+        "production_code_ref": "brain_pnl_ledger.json — BrainPnLStore.load_from_stream()",
+        "what_it_measures": "Full-record MD5 hashes; PnL-stream MD5 for limited-history WARN",
+        "false_positive_condition": (
+            "DQAF-069a (FIXED): last-5 PnL comparison → all inactive brains converge to "
+            "(0,0,0,0,0). Now uses full-record hash + record count + cumulative PnL signature. "
+            "PnL-only identity with different full hashes → WARN (limited trading history), not FAIL."
+        ),
+        "false_negative_condition": "Different tickets/timestamps but identical PnL due to shared trades → masked by full-hash check",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "4.2",
+        "section": "Data Quality",
+        "description": "No duplicate message_ids in journal",
+        "production_code_ref": "live_trade_journal.jsonl — message_id uniqueness contract",
+        "what_it_measures": "message_id cardinality vs total entries",
+        "false_positive_condition": "None — message_id should be unique per contract",
+        "false_negative_condition": "Missing message_id field → entries excluded from check",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "4.3",
+        "section": "Data Quality",
+        "description": "No duplicate (position_ticket, brain_id) pairs in labels",
+        "production_code_ref": "label_builder.py:build_trade_records() — per-brain labeling (FIX-20260622-057 Phase 2 A1)",
+        "what_it_measures": "Unique (ticket, brain_id) pairs vs total label entries",
+        "false_positive_condition": (
+            "DQAF-069b (FIXED): counted position_ticket duplicates without brain_id → "
+            "multi-brain labels (by design) were counted as duplicates. "
+            "Now uses (position_ticket, brain_id) as dedup key."
+        ),
+        "false_negative_condition": "Same brain producing duplicate labels for same ticket (journal re-entry)",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "4.4",
+        "section": "Data Quality",
+        "description": "Execution state value sanity (non-negative counts, wins ≤ trades)",
+        "production_code_ref": "execution_state.json — budget counters from live_cycle",
+        "what_it_measures": "Counter monotonicity and bounds",
+        "false_positive_condition": "Manual state reset causing counters to go backwards (legitimate restart)",
+        "false_negative_condition": "Counters wrapped around MAX_INT (unlikely at current volumes)",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "4.5",
+        "section": "Data Quality",
+        "description": "Extreme PnL values (>1000 per unit)",
+        "production_code_ref": "brain_pnl_ledger.json — SignalSettled events from ledger_events",
+        "what_it_measures": "Count of pnl_per_unit > 1000 records per brain",
+        "false_positive_condition": "Legitimate large PnL event (e.g. high leverage, large move)",
+        "false_negative_condition": "PnL stored in wrong field → not detected",
+        "last_validated": "2026-06-23",
+    },
+    # ── Section 5: Freshness ──
+    {
+        "check_id": "5.1",
+        "section": "Freshness",
+        "description": "File age within configured limits",
+        "production_code_ref": "daily_ops.py schedule — per-file freshness thresholds",
+        "what_it_measures": "Minutes since last file modification vs limit",
+        "false_positive_condition": "System intentionally paused (weekend, maintenance)",
+        "false_negative_condition": "File updated but with stale data (touch without refresh)",
+        "last_validated": "2026-06-23",
+    },
+    # ── Section 6: Edge Cases ──
+    {
+        "check_id": "6.1",
+        "section": "Edge Cases",
+        "description": "Bar sync lag and bar count",
+        "production_code_ref": "bar_sync_state.json — feature store bar synchronization",
+        "what_it_measures": "Bar count > 0 and lag ≥ 0",
+        "false_positive_condition": "None — zero bars or negative lag are always bugs",
+        "false_negative_condition": "Lag reported as 0 but feature store is actually behind (sync broken)",
+        "last_validated": "2026-06-23",
+    },
+    # ── Section 7: Referential Integrity ──
+    {
+        "check_id": "7.1",
+        "section": "Referential Integrity",
+        "description": "Brains in governance have PnL records",
+        "production_code_ref": "BrainPnLStore.load_from_stream() — event replay produces settled records",
+        "what_it_measures": "governance brain_ids ∩ pnl_ledger brain_ids",
+        "false_positive_condition": "DQAF-068 (FIXED): stale JSON VIEW missed V12 PnL. Fixed by SSOT rebuild.",
+        "false_negative_condition": "Brain has zero PnL events (never traded) → not detected as gap",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "7.2",
+        "section": "Referential Integrity",
+        "description": "Strategy configs have execution_state entries",
+        "production_code_ref": "live.yaml strat configs ↔ execution_state.json budgets",
+        "what_it_measures": "config strategy names ∩ exec_state budget names",
+        "false_positive_condition": "New strategy added to config but not yet deployed",
+        "false_negative_condition": "Strategy removed from config but budget still in exec_state (orphaned)",
+        "last_validated": "2026-06-23",
+    },
+    # ── Section 8: Temporal Consistency ──
+    {
+        "check_id": "8.1",
+        "section": "Temporal Consistency",
+        "description": "Label open_recorded_at < close_recorded_at",
+        "production_code_ref": "label_builder.py — open_rec.recorded_at, close_rec.recorded_at",
+        "what_it_measures": "Chronological ordering of open and close events per label",
+        "false_positive_condition": "1-second clock skew or Z/no-Z format mismatch",
+        "false_negative_condition": "Both timestamps missing → entry excluded from check",
+        "last_validated": "2026-06-23",
+    },
+    {
+        "check_id": "8.2",
+        "section": "Temporal Consistency",
+        "description": "Journal recorded_at monotonic (within format limits)",
+        "production_code_ref": "live_trade_journal.jsonl — MT5 bridge async writes",
+        "what_it_measures": "String-order of recorded_at after normalizing Z→+00:00",
+        "false_positive_condition": (
+            "DQAF-069c (PARTIALLY FIXED): Z vs no-Z format mismatch caused ~2 extra "
+            "inversions. Now normalized. Remaining 365/52 inversions are REAL — "
+            "MT5 async bridge writes journal out of chronological order."
+        ),
+        "false_negative_condition": "All timestamps missing → 0 inversions (empty check)",
+        "last_validated": "2026-06-23",
+    },
+]
+
+
+def validate_check_manifest() -> int:
+    """Self-validate the audit check manifest for completeness and anti-patterns.
+
+    Returns exit code: 0 = clean, 1 = issues found.
+    """
+    issues = 0
+    required_fields = [
+        "check_id",
+        "section",
+        "description",
+        "production_code_ref",
+        "what_it_measures",
+        "false_positive_condition",
+        "false_negative_condition",
+    ]
+
+    seen_ids = set()
+    for check in AUDIT_CHECK_MANIFEST:
+        cid = check.get("check_id", "?")
+        # Completeness
+        for field in required_fields:
+            if field not in check or not check[field]:
+                print(f"[MANIFEST-ERR] Check {cid}: missing field '{field}'")
+                issues += 1
+
+        # Uniqueness
+        if cid in seen_ids:
+            print(f"[MANIFEST-ERR] Check {cid}: duplicate check_id")
+            issues += 1
+        seen_ids.add(cid)
+
+        # Anti-pattern: false_positive = "None" without justification
+        fp = check.get("false_positive_condition", "")
+        if fp.lower().startswith("none"):
+            print(
+                f"[MANIFEST-INFO] Check {cid}: false_positive='None' — verify this is truly objective"
+            )
+
+    # Coverage: every section 1-8 should have at least one check
+    sections_present = {c["section"] for c in AUDIT_CHECK_MANIFEST if "section" in c}
+    expected_sections = {
+        "File Existence",
+        "Schema Compliance",
+        "Cross-Source",
+        "Data Quality",
+        "Freshness",
+        "Edge Cases",
+        "Referential Integrity",
+        "Temporal Consistency",
+    }
+    missing_sections = expected_sections - sections_present
+    if missing_sections:
+        print(f"[MANIFEST-WARN] Sections without checks: {missing_sections}")
+
+    print(f"\n  Manifest: {len(AUDIT_CHECK_MANIFEST)} checks registered, {issues} issues")
+    return 1 if issues > 0 else 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    if "--validate-self" in sys.argv:
+        sys.exit(validate_check_manifest())

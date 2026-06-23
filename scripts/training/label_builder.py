@@ -37,6 +37,7 @@ from typing import Any
 import numpy as np
 
 from core.contracts.training.label_contract import BarrierResult, LabelContract
+from core.data.ticket_resolver import resolve as resolve_ticket
 from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "training_label.v1"
@@ -435,14 +436,10 @@ def build_trade_records(
     unlinked: list[dict[str, Any]] = []
 
     for rec in entries:
-        ticket = rec.get("position_ticket")
-        # FIX-20260623-067: fallback to detail.order when position_ticket is None
-        # (some journal entries store the ticket in detail.order instead)
-        if ticket is None:
-            detail = rec.get("detail")
-            if isinstance(detail, dict):
-                ticket = detail.get("order")
-        if ticket is not None and isinstance(ticket, int) and ticket > 0:
+        ticket = resolve_ticket(rec)
+        # DQAF-20260623-073: unified ticket resolver handles position_ticket,
+        # detail.order, and bare ticket fields in canonical priority order.
+        if ticket is not None:
             by_ticket.setdefault(ticket, []).append(rec)
         else:
             unlinked.append(rec)

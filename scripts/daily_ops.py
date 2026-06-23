@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from core.contracts.exceptions import DataIntegrityError
+from core.data.ticket_resolver import resolve as resolve_ticket
 from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "daily_ops.v1"
@@ -400,12 +401,8 @@ def _step_label_builder(
                     continue
                 try:
                     _r = json.loads(_line)
-                    # FIX-20260623-067: fallback to detail.order when position_ticket is None
-                    _t = _r.get("position_ticket")
-                    if _t is None:
-                        _detail = _r.get("detail")
-                        if isinstance(_detail, dict):
-                            _t = _detail.get("order")
+                    # DQAF-20260623-073: unified ticket resolver
+                    _t = resolve_ticket(_r)
                     if _t and isinstance(_t, int) and _r.get("action") == "open":
                         _journal_tickets.add(_t)
                 except (json.JSONDecodeError, AttributeError):
