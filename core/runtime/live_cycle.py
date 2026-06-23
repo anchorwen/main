@@ -3231,7 +3231,13 @@ def execute_live_cycle(
                 import json as _json_gov
 
                 _gov_raw = _json_gov.loads(_gov_path.read_text(encoding="utf-8"))
-                _gov_state = _gov_raw.get("brain_states", {})
+                # DQAF-20260623-074: Pass the FULL governance dict (not just
+                # brain_states) so downstream consumers (strategy_line, pwin_chain)
+                # can access the "brain_states" key themselves.  The old
+                # .get("brain_states",{}) pre-stripping caused a schema mismatch:
+                # strategy_line:543 does governance_state.get("brain_states",{})
+                # which always returned {} because the dict keys were brain IDs.
+                _gov_state = _gov_raw
 
         # ── FIX-20260611-022: Evaluate data-health degradation ──
         # Progressive risk reduction based on data quality.
