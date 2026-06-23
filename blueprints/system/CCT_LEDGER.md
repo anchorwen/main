@@ -853,3 +853,53 @@
 - **关联 ReB Pattern**: `COLD_EXPLORE_TRAP`
 - **关联 FIX**: FIX-20260623-066 (P0-1 governance fallback, P0-2 cold_explore→governance, P0-3 ≥2 LIVE brains gate)
 - **状态**: **CLOSED** — 三修复部署: `resolve_p_win_from_brains()` governance cold-start fallback + `resolve_p_win()` cold_explore governance 替代盲 0.50 + cold explore ≥2 LIVE brain 准入门禁
+
+### CCT-20260623-070
+- **Docket ID**: DQAF-20260623-070
+- **日期**: 2026-06-23
+- **置信度**: confirmed (code audit × grep × production log evidence)
+- **因果链**:
+  - [Layer 1 — 症状]: 每周期 `session_guard_error`: `'LiveCycleState' object has no attribute '_feature_buffers_warm'`。重启后 feature freshness check 从未真正执行 — 冷特征直接进入交易决策。
+  - [Layer 2 — 中间异常]: `session_guards.py:148` 访问 `state._feature_buffers_warm`, 但 `LiveCycleState` dataclass (live_cycle.py:214-300) 从未定义此字段。AttributeError 被外层 `except Exception` (line 167) 捕获 → fail-open → 周期继续。
+  - [Layer 3 — 根因]: L1 — Strangler Fig 重构时 `_feature_buffers_warm` 字段未被提取到 dataclass。L2 — `run_session_guards()` 的外层异常处理过宽 (`except Exception`) — 状态完整性错误与瞬时 MT5 超时被同等对待 (fail-open)。
+- **证据引用**:
+  - Source 1: `core/runtime/live_cycle.py:214-300` — LiveCycleState 缺少 `_feature_buffers_warm`
+  - Source 2: `core/runtime/session_guards.py:148` — 直接属性访问 `state._feature_buffers_warm`
+  - Source 3: `tests/runtime/test_session_guards.py:46,61,78,111,139,158,174,189` — 测试代码 mock 了此字段, 证实设计意图但从未在生产代码中实现
+  - Source 4: `data_btc/logs/intent_*.log` — 每周期 `session_guard_error`
+- **是否被推翻**: 否 — AR 假设 (字段在其他地方动态设置) 被全库 grep 推翻: 仅在测试中有设置, 生产代码零初始化
+- **关联 ReB Pattern**: `MISSING_DATACLASS_FIELD`
+- **关联 FIX**: FIX-20260623-070 (补齐字段 + MT5 bootstrap 后置 True + getattr 安全访问 + 异常处理分层)
+
+### CCT-20260623-071
+- **Docket ID**: DQAF-20260623-071
+- **日期**: 2026-06-23
+- **置信度**: confirmed (production log evidence × code analysis)
+- **因果链**:
+  - [Layer 1 — 症状]: 定期出现 "FeatureService stale cache for BTCUSDc: age=300.1s" → Tier 2 实时计算不必要触发 → MT5 IPC 负载增加。
+  - [Layer 2 — 中间异常]: 特征持久化间隔 (~60s × 5 = 300s) 恰好等于新鲜度 SLA (300s)。缓存恰好在边界翻转 — 第 5 周期时 age≈300s, 第 6 周期时 age≈360s。每次翻转触发 live compute。
+  - [Layer 3 — 根因]: L2 — 写入间隔与读取 SLA 相同 (两个独立参数设为同一值 300s), 无抖动余量保证写入持续领先检查线。
+- **证据引用**:
+  - Source 1: `core/features/feature_service.py:139` — `max_age_seconds=300.0` (修复前)
+  - Source 2: `data_btc/logs/intent_*.log` — "age=300.1s (limit=300s), falling through to live compute"
+- **是否被推翻**: 否 — AR 假设 (特征持久化失败) 被代码审查推翻: persist_micro_features 正常运行, 只是间隔恰好 300s
+- **关联 ReB Pattern**: `CACHE_SLA_BOUNDARY`
+- **关联 FIX**: FIX-20260623-071 (SLA 300→310s 负向抖动余量)
+
+### CCT-20260623-072
+- **Docket ID**: DQAF-20260623-072
+- **日期**: 2026-06-23
+- **置信度**: confirmed (code audit × grep × production log evidence)
+- **因果链**:
+  - [Layer 1 — 症状]: DQAF-059 "ZERO LIVE brains found" 警告每周期触发 + DQAF-066 governance cold-start fallback 日志从未出现 + p_win 始终退化为 `brain_confidence`。
+  - [Layer 2 — 中间异常]: `strategy_line.py:538` — `governance_state.items()` 遍历顶层键 (`"brain_states"`, `"schema_version"`, `"performance_metrics"`), 而非 `governance_state["brain_states"].items()`。`_live_brain_ids` 恒为空集 `set()` (非 None)。在 `resolve_p_win_from_brains()` 中, `live_brain_ids is not None` → True, 但 `brain_id not in live_brain_ids` → True (所有 brain_id 都不在空集内) → 所有 brain 被治理门过滤 → governance fallback 也因相同检查而失败。
+  - [Layer 3 — 根因]: L1 — `governance_state.items()` 应该在 `governance_state["brain_states"].items()` 上迭代。L2 — 缺少集成测试: 空 `_live_brain_ids` 从未被任何测试捕获。
+- **证据引用**:
+  - Source 1: `core/execution/strategy_line.py:536-540` (修复前) — `for bid, b_info in governance_state.items()`
+  - Source 2: `core/execution/pwin_chain.py:99-101` — `if live_brain_ids is not None and brain_id not in live_brain_ids: continue`
+  - Source 3: `data_btc/logs/intent_*.log` — `FALLBACK_PATH_3c: All 1 brain(s) filtered out by governance gate (none are LIVE)`
+  - Source 4: governance_state.json 结构 — `{"brain_states": {...}, "performance_metrics": {...}}` — 顶层键不含 `status` 字段
+- **是否被推翻**: 否 — BTC_Swing_V12_H1_Survival 是 LIVE (WR=51.5%, 56 trades) 但从未出现在 `_live_brain_ids` 中
+- **关联 ReB Pattern**: `WRONG_DICT_LEVEL_GOVERNANCE`
+- **关联 FIX**: FIX-20260623-072 (`governance_state.get("brain_states",{}).items()` 单行修复)
+- **状态**: **CLOSED** — DQAF-059 治理门过滤 + DQAF-066 治理冷启动回退 + DQAF-066 cold_explore 门禁全部自愈

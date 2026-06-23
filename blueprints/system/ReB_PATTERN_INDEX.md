@@ -714,3 +714,72 @@
 | DQAF-20260621-046 | 2026-06-22 | 7 modules, 16 write sites | Sev 2 (系统性架构缺陷) |
 
 **Cross-References**: FIX-20260622-001, CCT-20260621-046
+
+### ReB-20260623-070
+- **Pattern Signature**: `MISSING_DATACLASS_FIELD`
+- **Date Cataloged**: 2026-06-23
+- **Source Docket**: DQAF-20260623-070
+- **Related**: ReB-20260623-072 (`WRONG_DICT_LEVEL_GOVERNANCE`)
+
+**Definition**: 重构提取 (Strangler Fig / Extract Method) 时, 新模块引用的字段未在新 dataclass 中定义。原代码中字段可能通过 `__dict__` 动态注入或在调用方初始化, 提取到类后未同步。当访问代码使用 `obj.field` (直接属性访问) 而非 `getattr(obj, 'field', default)`, 外层的宽泛 `except Exception` 会吞没 `AttributeError`, 导致 fail-open — 保护性门禁静默失效。修复: (1) 在 dataclass 补齐字段 + 正确默认值, (2) 门禁代码使用 `getattr` safe access, (3) 区分状态完整性错误 (AttributeError/TypeError → fail-closed) 与瞬时错误 (timeout/network → fail-open)。
+
+**Prevention Strategy**:
+1. 重构提取后运行 `grep -r "state\._" --include="*.py" | sort -u` 对比 dataclass 字段列表
+2. 门禁类 Guard 代码必须使用 `getattr(obj, field, safe_default)` 而非直接属性访问
+3. Guard 的异常处理必须分层: 状态完整性错误→fail-closed, 数据质量错误→fail-open
+4. CI: 新增 dataclass 字段对比检查 (extract 前 → extract 后 diff 确保无遗漏)
+
+**Detection Method**: `grep "session_guard_error" data_btc/logs/intent_*.log | grep AttributeError` → 任何 AttributeError in guard 代码 = 本模式触发。
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260623-070 | 2026-06-23 | runtime_live | Sev 2 |
+
+**Cross-References**: FIX-20260623-070, CCT-20260623-070
+
+### ReB-20260623-071
+- **Pattern Signature**: `CACHE_SLA_BOUNDARY`
+- **Date Cataloged**: 2026-06-23
+- **Source Docket**: DQAF-20260623-071
+- **Related**: None
+
+**Definition**: 缓存写入间隔与读取 SLA (Service Level Agreement) 被设为相同值 → 缓存恰好在边界翻转 (fresh ↔ stale)。当 writetime ≈ SLA, 每个周期都在边界上竞争 → 不必要触发 fallback 路径 (实时计算/重计算) → 增加下游负载。修复: 引入负向抖动余量 (SLA > 写入间隔) — 例如写入每 60s 发生, SLA 设为 310s (而非 300s) 给予 10s 缓冲。
+
+**Prevention Strategy**:
+1. 任何 freshness SLA 必须 > 最大写入间隔 + 安全余量 (至少 10%)
+2. SLA 值不应与任何系统周期 (M5 bar × N) 存在整数倍关系
+3. 使用质数或分数值 (如 307s 而非 300s) 打破与整周期的共振
+4. 健康检查应区分 "warn" (接近 SLA) 和 "critical" (超过 SLA)
+
+**Detection Method**: 日志中 age ≈ SLA ± 10s 反复出现 (非单调增长) → 边界竞争。真正的管线冻结会产生 age >> SLA (如 600s+)。
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260623-071 | 2026-06-23 | features | Sev 3 |
+
+**Cross-References**: FIX-20260623-071, CCT-20260623-071
+
+### ReB-20260623-072
+- **Pattern Signature**: `WRONG_DICT_LEVEL_GOVERNANCE`
+- **Date Cataloged**: 2026-06-23
+- **Source Docket**: DQAF-20260623-072
+- **Related**: ReB-20260623-070 (`MISSING_DATACLASS_FIELD`)
+
+**Definition**: 遍历嵌套字典时错误地迭代顶层键而非嵌套子字典 → 下游消费者基于空/错误数据静默失效。本例中 `governance_state.items()` (顶层: `brain_states`, `schema_version`) 被误用替代 `governance_state["brain_states"].items()` (嵌套: `BTC_Swing_V12: {status: live, ...}`)。`_live_brain_ids` 恒为空集 `set()` (非 None) → 所有 downstream gate 的 `if live_brain_ids is not None` 分支激活但 `brain_id in live_brain_ids` 永远 False → 全部 brain 被过滤。最危险的是: 两个独立部署的防护层 (DQAF-059 + DQAF-066) 被同一个 bug 同时静默击穿 — 红线多重覆盖产生虚假安全感。
+
+**Prevention Strategy**:
+1. 嵌套字典访问必须显式写 `.get("sub_key", {})` 链, CR 中禁止裸 `.items()` 在非叶子节点
+2. 集成测试: 验证 `_live_brain_ids` 非空且包含已知 LIVE brain_id
+3. Bootstrap 自检: 系统启动时如果 `_live_brain_ids` 为空但 governance_state 存在且 brain_states 含有 LIVE entry → 立即 CRITICAL 告警
+4. 两级防御必须使用异构检查路径 (不同代码路径/不同字典 key) — 相同 bug 不应能击穿两层
+
+**Detection Method**: `grep "ZERO LIVE brains found"` 日志 + 验证 governance brain_states 包含 `status: live` → 不匹配 = 本模式触发。
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260623-072 | 2026-06-23 | execution_strategy_line | Sev 1 |
+
+**Cross-References**: FIX-20260623-072, CCT-20260623-072
