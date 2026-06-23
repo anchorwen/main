@@ -29,6 +29,7 @@ Any producer needing an ID → contracts.ids.new_*_id() → uuid4-based string
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260622-059b | 2026-06-22 | cursor-agent | — | **DQAF-059 Production Hardening — UnattributedOrderRejected exception + SENTINEL_UNATTRIBUTED_MAGIC sentinel constant**. See FIX-20260622-059b in FIX_REGISTRY.md. | L2 — missing fail-fast on sentinel magic |
 | FIX-20260622-059 | 2026-06-22 | cursor-agent | — | **DQAF-059 Magic Drift Attribution Loss — Complete Repair**. See FIX-20260622-059 in FIX_REGISTRY.md and DQAF-20260622-059 in DQAF_DOCKET_REGISTRY. | L2 — MAGIC_TO_STRATEGY missing entries; L3 — no SSOT for magic↔strategy mapping |
 | FIX-20260530-086 | 2026-05-30 | cursor-agent | — | BTC magic: added `btc_swing: 90410` to `strategy_magic.py`. BTC uses isolated 904xx magic range to prevent signal routing conflicts with XAU (900xx). | RC-09 (config-drift) |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |

@@ -134,6 +134,7 @@ def _validate_ack_sl_tp(
     ack = None
     with fail_open_guard("LiveOrderSender:ResolveAck"):
         from core.protocol.services.zmq_receipt_listener import resolve_ack
+
         ack = resolve_ack(intent_id, base_dir=base_dir, timeout=5.0)
 
     if ack is not None:

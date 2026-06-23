@@ -96,7 +96,9 @@ class ExecutionQueue:
         self._open_attempt_count: dict[str, int] = {}  # cumulative attempts per strategy
         self._open_flood_locked: set[str] = set()  # permanent-locked strategies
         # ── DQAF-20260622-059 / P2: UnattributedOrderRejected self-protection ──
-        self._unattributed_blocked: set[str] = set()  # strategies blocked due to sentinel magic 90401
+        self._unattributed_blocked: set[str] = (
+            set()
+        )  # strategies blocked due to sentinel magic 90401
 
     # ── Entry-in-flight API (Blind Spot 3) ──────────────────────────────
 
@@ -221,6 +223,7 @@ class ExecutionQueue:
                 raise ExecutionQueueFatalError(
                     f"Dispatch pipeline fatal error: {_fatal_exc}"
                 ) from _fatal_exc
+
     def _flush_unsafe(
         self,
         dispatch_fn,

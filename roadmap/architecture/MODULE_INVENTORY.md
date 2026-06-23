@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T04:39:50Z
+> **自动生成**: 2026-06-23T04:52:30Z
 > **扫描模块数**: 657
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -222,7 +222,7 @@
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
-| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 528 | — | |
+| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 531 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 269 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 11 | 598 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
@@ -233,7 +233,7 @@
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 396 | — | |
+| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 397 | — | |
 | `managed_close.py` | ✅ active | — | 2 | 391 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
@@ -647,7 +647,7 @@
 | `audit_phase_c_fix5.py` | ✅ active | — | 7 | 328 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
-| `audit_profitability.py` | ✅ active | — | 7 | 348 | — | |
+| `audit_profitability.py` | ✅ active | — | 7 | 371 | — | |
 | `audit_state_of_system.py` | ✅ active | — | 5 | 347 | — | |
 | `audit_trade_quality.py` | ✅ active | — | 5 | 275 | — | |
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
@@ -711,7 +711,7 @@
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
-| `live_audit_realtime.py` | ✅ active | — | 4 | 362 | — | |
+| `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 234 | — | |
 | `live_daily_recap.py` | ✅ active | — | 25 | 941 | — | |
 | `live_dashboard.py` | ✅ active | — | 16 | 540 | — | |
