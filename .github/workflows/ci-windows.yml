@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 45
     env:
       PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
       TZ: "UTC"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -78,10 +79,11 @@ jobs:
 
       - name: Pytest (fast track — non-engine, ~3min, no coverage)
         timeout-minutes: 10
+        shell: bash
         run: |
           python -m pytest tests/ -m "not slow" -o "addopts=" -p no:cov -q --tb=short > pytest_fast_out.txt 2>&1
-          $PEXIT = $LASTEXITCODE
-          Get-Content pytest_fast_out.txt
+          PEXIT=$?
+          cat pytest_fast_out.txt
           exit $PEXIT
 
       - name: Pytest (slow track — engine integration/E2E, with coverage)

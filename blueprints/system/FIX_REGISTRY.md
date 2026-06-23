@@ -743,6 +743,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260621-039 | 2026-06-21 | execution, runtime | **DQAF-034 L3 Architecture Convergence — 消除 per-cycle SL sync 冗余。** live_intent_loop recovery 已无条件同步 SL(L1164-1166)，management_phase per-cycle sync_position_from_mt5() 是永不触发的死代码安全网。替换为 CRITICAL 告警 — recovery 失败必须可见，不得静默掩盖。sync_position_from_mt5() 保留为实用方法(非热路径)。 | RC-08 (incomplete-cleanup — dead safety net masking recovery failures) |
 | FIX-20260621-040 | 2026-06-21 | execution-orders, observability | **DQAF-033 P0 Addendum — close_accepted detail.reason fix.** mt5_bridge_worker.py: comment→detail.reason 复制 + managed_close.py: 空 reason 守卫。双端修复 51 笔 close_accepted 的 detail.reason 盲区。 | RC-07 (missing-validation) |
 | FIX-20260621-041 | 2026-06-21 | execution-orders | **DQAF-034 MIA Root Cause Fix — Bridge Idempotent WAL Gateway (3-Phase).** P1: 持久化 Processed IDs (bridge_processed_wal.jsonl)。P2: _mt5_close_position 状态验证网关。P3: _append_journal 退避重试 + 60s overflow 自愈合并。消除 47 笔 MIA 根因。 | RC-04 (race-condition) |
+| FIX-20260623-086 | 2026-06-23 | deployment-lifecycle | CI Red-X: PowerShell to bash shell migration for fast track step. pwsh $LASTEXITCODE + 2>&1 does not preserve Python exit codes reliably. | RC-09 |
 
 ---
 ## Fix Details by Year
@@ -4088,3 +4089,16 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 **Cross-Symbol Impact**: XAU only — BTC has no rule_engine strategies.
 **Verification**: verify.py --quick PASS. Next cycle must show 0 cycle_error for structural_swing_v1.
 
+
+
+### FIX-20260623-086
+- **Date**: 2026-06-23
+- **Author**: cursor-agent
+- **Commit**: 5f77c70a
+- **Type**: fix
+- **Module**: deployment-lifecycle
+- **Files**: .github/workflows/ci-windows.yml
+- **Description**: CI Red-X: PowerShell to bash shell migration for fast track step. pwsh $LASTEXITCODE + 2>&1 does not preserve Python exit codes reliably.
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
