@@ -69,15 +69,18 @@ jobs:
           if not exist D:\cursor\data\snapshots\v9_shadow_long.json exit 1
           if not exist D:\cursor\data\replays\v9_shadow_baselines\manifest.json exit 1
 
-      - name: Pytest (runtime contract guard)
+      - name: Pytest (runtime contract guard — 4 critical gates)
         run: |
           python -m pytest tests/engine/test_runtime_contract_guard.py
           python -m pytest tests/engine/test_communication_replay_executor.py::test_replay_executor_priority_contract_matrix
           python -m pytest tests/engine/test_v9_shadow_smoke.py::test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields
           python -m pytest tests/engine/test_live_read_only_preflight.py::test_live_preflight_main_supports_micro_live_mode
 
-      - name: Pytest (tests/engine)
-        run: python -m pytest tests/engine
+      - name: Pytest (fast track — non-engine, ~3min, no coverage)
+        run: python -m pytest tests/ -m "not slow" -o "addopts="
+
+      - name: Pytest (slow track — engine integration/E2E, with coverage)
+        run: python -m pytest tests/ -m "slow"
 
       - name: Pytest (governance contracts)
         run: python -m pytest --governance-contracts

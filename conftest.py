@@ -42,6 +42,17 @@ GOVERNANCE_CONTRACTS = [
     "tests/engine/test_cli_governance_contract_invariants.py",
 ]
 
+# Engine tests that are contract/preflight guards — fast by design, exempt from slow marking
+ENGINE_FAST_GATE = [
+    "tests/engine/test_runtime_contract_guard.py",
+    "tests/engine/test_live_read_only_preflight.py",
+]
+
+# All engine tests are slow by default, except these explicitly fast suites
+ENGINE_SLOW_EXEMPTIONS = (
+    set(FAST_COMMUNICATION_V9_SHADOW_CONTRACTS) | set(GOVERNANCE_CONTRACTS) | set(ENGINE_FAST_GATE)
+)
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -72,6 +83,10 @@ def pytest_configure(config):
         "markers", "staged_regression: staged communication/v9-shadow regression suite"
     )
     config.addinivalue_line("markers", "governance_contracts: governance summary contract suite")
+    config.addinivalue_line(
+        "markers",
+        "slow: integration/E2E tests that perform file I/O, MT5 simulation, or state loading",
+    )
 
     if config.getoption("--governance-contracts"):
         config.args[:] = GOVERNANCE_CONTRACTS
@@ -96,3 +111,10 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.staged_regression)
         if normalized_path in governance_paths:
             item.add_marker(pytest.mark.governance_contracts)
+        # Auto-mark engine tests as slow, except explicitly fast suites
+        # (fast_contracts, governance_contracts, contract guard, preflight)
+        if (
+            normalized_path.startswith("tests/engine/")
+            and normalized_path not in ENGINE_SLOW_EXEMPTIONS
+        ):
+            item.add_marker(pytest.mark.slow)

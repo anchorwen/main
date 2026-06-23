@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T04:52:30Z
+> **自动生成**: 2026-06-23T05:32:20Z
 > **扫描模块数**: 657
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -667,7 +667,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 637 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 638 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |

@@ -215,6 +215,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/dqaf053_phase1_sanitize.py",  # DQAF-053 migration script
         "scripts/generate_btc_empirical_scaler.py",  # DQAF-054 BTC scaler
         "scripts/generate_micro_scaler.py",  # DQAF-058 multi-asset scaler
+        "conftest.py",  # DQAF-075 pytest slow/fast marker config
         "scripts/brain.py",
         "scripts/training/register_brain.py",
         "scripts/validate_magic_sync.py",

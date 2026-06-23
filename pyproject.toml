@@ -91,6 +91,7 @@ markers = [
   "fast_contracts: fast communication/v9-shadow contract suite",
   "staged_regression: staged communication/v9-shadow regression suite",
   "governance_contracts: governance summary contract suite",
+  "slow: integration/E2E tests that perform file I/O, MT5 simulation, or state loading",
 ]
 
 [tool.coverage.run]
