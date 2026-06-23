@@ -77,7 +77,7 @@ jobs:
           python -m pytest tests/engine/test_live_read_only_preflight.py::test_live_preflight_main_supports_micro_live_mode
 
       - name: Pytest (fast track — non-engine, ~3min, no coverage)
-        run: python -m pytest tests/ -m "not slow" -o "addopts="
+        run: python -m pytest tests/ -m "not slow" -o "addopts=" -p no:cov
 
       - name: Pytest (slow track — engine integration/E2E, with coverage)
         run: python -m pytest tests/ -m "slow"
