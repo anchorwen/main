@@ -80,9 +80,9 @@ jobs:
         timeout-minutes: 10
         run: |
           python -m pytest tests/ -m "not slow" -o "addopts=" -p no:cov -q --tb=short > pytest_fast_out.txt 2>&1
-          set PEXIT=%ERRORLEVEL%
-          type pytest_fast_out.txt
-          exit /b %PEXIT%
+          $PEXIT = $LASTEXITCODE
+          Get-Content pytest_fast_out.txt
+          exit $PEXIT
 
       - name: Pytest (slow track — engine integration/E2E, with coverage)
         run: python -m pytest tests/ -m "slow"
