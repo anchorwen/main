@@ -217,6 +217,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/hook_mypy_check.py",
         "scripts/hook_architecture_gate.py",
         "scripts/omega_gate.py",
+        "scripts/validate_commit_msg.py",  # FIX-087 pre-flight validator
         "scripts/dqaf053_phase1_sanitize.py",  # DQAF-053 migration script
         "scripts/generate_btc_empirical_scaler.py",  # DQAF-054 BTC scaler
         "scripts/generate_micro_scaler.py",  # DQAF-058 multi-asset scaler

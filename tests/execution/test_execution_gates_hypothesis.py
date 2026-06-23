@@ -216,7 +216,9 @@ class TestMetaFilterGate:
         from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
         from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 
-        names = list(V9_INSTITUTIONAL_40_FEATURES) + list(MICROSTRUCTURE_9_FEATURES) + ["ou_z_entry"]
+        names = (
+            list(V9_INSTITUTIONAL_40_FEATURES) + list(MICROSTRUCTURE_9_FEATURES) + ["ou_z_entry"]
+        )
         fn_path = tmp_path / "feature_names.json"
         fn_path.write_text(json.dumps(names), encoding="utf-8")
         return fn_path
@@ -277,9 +279,7 @@ class TestMetaFilterGate:
             ]
         }
 
-        result = build_meta_filter_array(
-            short_vec, micro, feature_names_path=str(fn_path)
-        )
+        result = build_meta_filter_array(short_vec, micro, feature_names_path=str(fn_path))
         assert isinstance(result, np.ndarray)
 
     def test_missing_micro_features_default_zero(self, tmp_path: Path) -> None:

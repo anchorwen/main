@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-23T12:15:16Z
+> **自动生成**: 2026-06-23T15:33:21Z
 
 ## Package-Level Dependencies
 
@@ -551,6 +551,7 @@
 - `audit_data_health_journal.py` → (无内部依赖)
 - `audit_data_integrity.py` → `core.runtime.fault_handler`, `scripts.alert_dispatcher`
 - `audit_data_module.py` → (无内部依赖)
+- `audit_deferred_tasks.py` → (无内部依赖)
 - `audit_entry_spread.py` → (无内部依赖)
 - `audit_full_pipeline.py` → (无内部依赖)
 - `audit_institutional_performance.py` → (无内部依赖)
@@ -680,6 +681,7 @@
 - `validate_artifacts.py` → (无内部依赖)
 - `validate_blueprints.py` → `core.runtime.fault_handler`
 - `validate_brain_before_deploy.py` → `core.brains.services.brain_factory`, `core.runtime.fault_handler`
+- `validate_commit_msg.py` → (无内部依赖)
 - `validate_journal_health_fix.py` → (无内部依赖)
 - `validate_magic_sync.py` → `core.contracts.strategy_magic`
 - `verify.py` → `core.runtime.fault_handler`, `core.runtime.golden_master`
