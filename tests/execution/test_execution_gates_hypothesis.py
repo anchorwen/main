@@ -8,7 +8,9 @@ Phase 3: Targets the highest-risk 0% coverage files in core/execution/.
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 
 import numpy as np
 from hypothesis import given, settings
@@ -201,9 +203,29 @@ class TestRegimeDirectionGate:
 class TestMetaFilterGate:
     """Tests for meta_filter_gate.py build_meta_filter_array()."""
 
-    def test_build_array_correct_shape(self) -> None:
+    @staticmethod
+    def _write_feature_names_json(tmp_path: Path) -> Path:
+        """Write a minimal feature_names.json for testing.
+
+        CI has no ``data/models/`` directory (gitignored).  Tests that need the
+        file must create it inside a pytest ``tmp_path``.
+
+        Uses the canonical feature lists from the schemas so the file stays
+        in sync with ``build_meta_filter_array`` validation logic.
+        """
+        from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+        from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+        names = list(V9_INSTITUTIONAL_40_FEATURES) + list(MICROSTRUCTURE_9_FEATURES) + ["ou_z_entry"]
+        fn_path = tmp_path / "feature_names.json"
+        fn_path.write_text(json.dumps(names), encoding="utf-8")
+        return fn_path
+
+    def test_build_array_correct_shape(self, tmp_path: Path) -> None:
         """Must produce array matching expected feature dimension."""
         from core.execution.meta_filter_gate import build_meta_filter_array
+
+        fn_path = self._write_feature_names_json(tmp_path)
 
         feat_vec = np.random.default_rng(42).normal(0, 1, (40,)).astype(np.float32)
         micro = {
@@ -225,7 +247,7 @@ class TestMetaFilterGate:
             feat_vec,
             micro,
             ou_z_entry=1.3,
-            feature_names_path="data/models/meta_filter_v3/feature_names.json",
+            feature_names_path=str(fn_path),
         )
 
         assert isinstance(result, np.ndarray)
@@ -233,9 +255,11 @@ class TestMetaFilterGate:
         # Dimension should match feature_names.json
         assert len(result) > 40  # 40 V9 + 9 micro + 1 ou_z_entry = at least 47
 
-    def test_short_feature_vector_pads_with_zero(self) -> None:
+    def test_short_feature_vector_pads_with_zero(self, tmp_path: Path) -> None:
         """Feature vector shorter than expected → pad with 0, no crash."""
         from core.execution.meta_filter_gate import build_meta_filter_array
+
+        fn_path = self._write_feature_names_json(tmp_path)
 
         short_vec = np.array([1.0, 2.0, 3.0], dtype=np.float32)  # only 3 features
         micro = {
@@ -254,19 +278,21 @@ class TestMetaFilterGate:
         }
 
         result = build_meta_filter_array(
-            short_vec, micro, feature_names_path="data/models/meta_filter_v3/feature_names.json"
+            short_vec, micro, feature_names_path=str(fn_path)
         )
         assert isinstance(result, np.ndarray)
 
-    def test_missing_micro_features_default_zero(self) -> None:
+    def test_missing_micro_features_default_zero(self, tmp_path: Path) -> None:
         """Missing micro features → default to 0.0, no KeyError."""
         from core.execution.meta_filter_gate import build_meta_filter_array
+
+        fn_path = self._write_feature_names_json(tmp_path)
 
         feat_vec = np.zeros(40, dtype=np.float32)
         result = build_meta_filter_array(
             feat_vec,
             {},  # empty micro dict
-            feature_names_path="data/models/meta_filter_v3/feature_names.json",
+            feature_names_path=str(fn_path),
         )
 
         assert isinstance(result, np.ndarray)
