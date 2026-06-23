@@ -13,7 +13,7 @@ import queue
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,7 +23,6 @@ from core.observability.live_alert_hub import (
     _AlertAuditLog,
     _QueueChannel,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # BackgroundDeliveryWorker._dedup_or_pass (fast — no threads)
@@ -62,11 +61,11 @@ class TestDedupOrPass:
 
     def test_duplicate_after_window_passes(self) -> None:
         w = self.make_worker()
-        w._DEDUP_WINDOW = 0.001
         alert = {"rule_name": "strategy_degradation", "severity": "warning"}
-        w._dedup_or_pass(alert)
-        time.sleep(0.01)
-        assert w._dedup_or_pass(alert) is not None
+        w._dedup_or_pass(alert)  # first → passes, caches at T1
+        # Simulate window expiry by advancing monotonic clock past 60s default
+        with patch.object(time, "monotonic", return_value=time.monotonic() + 61.0):
+            assert w._dedup_or_pass(alert) is not None
 
     def test_max_dedup_burst_through(self) -> None:
         w = self.make_worker()
@@ -84,12 +83,12 @@ class TestDedupOrPass:
 
     def test_dedup_with_aggregated_count_on_window_exit(self) -> None:
         w = self.make_worker()
-        w._DEDUP_WINDOW = 0.001
         alert = {"rule_name": "test_rule", "severity": "warning"}
-        w._dedup_or_pass(alert)  # first → passes
-        w._dedup_or_pass(alert)  # suppressed (count=1)
-        time.sleep(0.01)
-        result = w._dedup_or_pass(alert)
+        w._dedup_or_pass(alert)  # first → passes, cache at (T1, 0)
+        w._dedup_or_pass(alert)  # suppressed, cache now (T1, 1)
+        # Simulate window expiry — count should be reported as aggregated_count
+        with patch.object(time, "monotonic", return_value=time.monotonic() + 61.0):
+            result = w._dedup_or_pass(alert)
         assert result is not None
         assert result.get("aggregated_count") == 2
 
@@ -181,7 +180,8 @@ class TestLiveAlertHub:
     def test_custom_thresholds_merged(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             hub = LiveAlertHub(
-                base_dir=tmpdir, symbol="BTCUSDc",
+                base_dir=tmpdir,
+                symbol="BTCUSDc",
                 thresholds={"daily_loss_limit": -10.0},
             )
             assert hub._thresholds["daily_loss_limit"] == -10.0
@@ -190,8 +190,14 @@ class TestLiveAlertHub:
 
     def test_get_status_keys(self, live_hub: LiveAlertHub) -> None:
         status = live_hub.get_status()
-        for key in ("circuit_breaker", "cycles_evaluated", "alerts_fired_total",
-                     "queue_size", "delivery_delivered", "delivery_suppressed"):
+        for key in (
+            "circuit_breaker",
+            "cycles_evaluated",
+            "alerts_fired_total",
+            "queue_size",
+            "delivery_delivered",
+            "delivery_suppressed",
+        ):
             assert key in status
 
     def test_send_critical_enqueues(self, live_hub: LiveAlertHub) -> None:
@@ -202,24 +208,34 @@ class TestLiveAlertHub:
     def test_notify_trade_open_enqueues(self, live_hub: LiveAlertHub) -> None:
         qsize_before = live_hub._alert_queue.qsize()
         live_hub.notify_trade(
-            action="open", symbol="XAUUSDc", side="long",
-            volume=0.1, price=4700.0,
+            action="open",
+            symbol="XAUUSDc",
+            side="long",
+            volume=0.1,
+            price=4700.0,
         )
         assert live_hub._alert_queue.qsize() > qsize_before
 
     def test_notify_trade_close_enqueues(self, live_hub: LiveAlertHub) -> None:
         qsize_before = live_hub._alert_queue.qsize()
         live_hub.notify_trade(
-            action="close", symbol="XAUUSDc", side="long",
-            volume=0.1, price=4750.0, pnl=5.0,
+            action="close",
+            symbol="XAUUSDc",
+            side="long",
+            volume=0.1,
+            price=4750.0,
+            pnl=5.0,
         )
         assert live_hub._alert_queue.qsize() > qsize_before
 
     def test_notify_trade_unknown_action_noop(self, live_hub: LiveAlertHub) -> None:
         qsize_before = live_hub._alert_queue.qsize()
         live_hub.notify_trade(
-            action="unknown", symbol="XAUUSDc", side="long",
-            volume=0.1, price=100.0,
+            action="unknown",
+            symbol="XAUUSDc",
+            side="long",
+            volume=0.1,
+            price=100.0,
         )
         assert live_hub._alert_queue.qsize() == qsize_before
 
@@ -237,6 +253,7 @@ class TestLiveAlertHub:
 
     def test_add_rule(self, live_hub: LiveAlertHub) -> None:
         from core.observability.alert_service import AlertRule
+
         mock_service = MagicMock()
         live_hub._alert_service = mock_service
         rule = AlertRule(

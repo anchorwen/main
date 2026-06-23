@@ -1,0 +1,33 @@
+fix(tests): [FIX-20260623-082] Fix 2 timing-sensitive dedup tests via time.monotonic mock
+
+[Ω-Routing: Scene A → #9 → #8 → #12(L2) → #6 → #5 → #1 → #7]
+
+Causal Chain:
+  L1 (symptoms): test_live_alert_hub.py 2 dedup tests FAIL with exit code 1
+  in CI full suite, but PASS in isolation — timing-dependent + global-state
+  contamination from test_execution_queue.py monkeypatch.setattr("time.monotonic").
+  L2 (root cause): time.sleep(0.01) + manual _DEDUP_WINDOW=0.001 override
+  vulnerable to both global monkeypatch contamination and Windows timer
+  resolution jitter under load (2450+ tests).
+
+test_live_alert_hub.py::TestDedupOrPass had 2 tests that relied on
+time.sleep(0.01) to expire a 1ms dedup window:
+- test_duplicate_after_window_passes
+- test_dedup_with_aggregated_count_on_window_exit
+
+On loaded CI runners (2450+ tests), time.monotonic() can be contaminated by
+monkeypatch.setattr("time.monotonic", lambda: 100.0) from
+test_execution_queue.py, causing the dedup window to never expire.
+This produced 2 FAILs and exit code 1 in CI.
+
+Fix: replace time.sleep(0.01) + manual _DEDUP_WINDOW=0.001 override with
+patch.object(time, "monotonic", return_value=time.monotonic() + 61.0) —
+explicitly fast-forwards past the 60s default dedup window, eliminating
+all timing and global-state dependencies.
+
+Root Cause Layer: L2 — timing-dependent tests susceptible to global
+monkeypatch contamination from unrelated test modules.
+
+4D Gate: Stability↑ (no more flaky failures from timing/monkeypatch)
+Repairability↑ (explicit mock makes test intent obvious)
+Decoupling→ Iterability→
