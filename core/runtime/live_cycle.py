@@ -1541,7 +1541,9 @@ def execute_live_cycle(
                 ),
                 flush=True,
             )
-        except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
+        except (TypeError, OSError) as _exc:
+            # DQAF-076/BLE001-P0: json.dumps() can raise TypeError on
+            # non-serializable objects; print() can raise OSError.
             with fail_open_guard("live_cycle:_log_phase_transition"):
                 print(
                     json.dumps(
@@ -1683,7 +1685,10 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:  # BLE001:AUDITED — complex nested block, not suitable for fog
+        except (TypeError, OSError) as _jc_exc:
+            # DQAF-076/BLE001-P0: journal event list serialization
+            # (json.dumps → TypeError) or console write (print → OSError).
+            # BLE001:AUDITED — complex nested block, non-trading-path.
             pass
 
     # ── Protection flag check ──
@@ -2230,7 +2235,18 @@ def execute_live_cycle(
                         ticket=_pm_pos.ticket,
                         micro_feature_dict=micro_feature_dict,
                     )
-            except Exception:  # BLE001:FOG
+            except (
+                ValueError,
+                RuntimeError,
+                TypeError,
+                KeyError,
+                AttributeError,
+                ConnectionError,
+                TimeoutError,
+                OSError,
+            ) as _mp_exc:
+                # DQAF-076/BLE001-P0: execute_management_phase() covers
+                # model inference, consensus, and dispatch — broad surface.
                 with fail_open_guard("live_cycle:_log_phase_transition"):
                     logger.exception(
                         "Management phase aborted for ticket=%s — position state not updated",
@@ -2319,7 +2335,10 @@ def execute_live_cycle(
                             )
                             if _pt and _pt.isdigit():
                                 _existing_close_tickets.add(int(_pt))
-                except Exception:  # BLE001:FOG
+                except OSError:
+                    # DQAF-076/BLE001-P0: journal JSONL file read for
+                    # close-ticket dedup — OSError on filesystem issue.
+                    # Non-blocking: skip dedup, proceed with all MIA closes.
                     with fail_open_guard("live_cycle:_emit_close_notification"):
                         pass  # Non-blocking — skip dedup on read error
                 _mia_closed = [
@@ -2399,7 +2418,11 @@ def execute_live_cycle(
                                 if _acc is not None
                                 else 1000.0
                             )
-                    except Exception:  # BLE001:FOG (Sev 4, Phase 3b — MT5 account_info fallback)
+                    except (ConnectionError, TimeoutError, RuntimeError) as _acc_exc:
+                        # DQAF-076/BLE001-P0: mt5_worker.account_info()
+                        # can fail on ConnectionError/TimeoutError (IPC) or
+                        # RuntimeError (MT5 terminal state).
+                        # Graceful fallback: keep _eq at 1000.0.
                         with fail_open_guard("live_cycle:_emit_close_notification"):
                             pass  # graceful fallback — keep _eq at 1000.0
                     _pnl_pct = float(_mia_pnl) / _eq if _eq > 0 else 0.0
@@ -2530,10 +2553,13 @@ def execute_live_cycle(
             _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
             # ── FIX-20260611-022: Make calibrator accessible for live updates ──
             state._conformal_calibrator = _cal
-        except Exception:  # BLE001:FOG
+        except (ImportError, ValueError, TypeError, OSError, RuntimeError) as _cc_exc:
+            # DQAF-076/BLE001-P0: ConformalCalibrator init can fail on
+            # ImportError (module missing), ValueError/TypeError (bad
+            # config), OSError (journal file read), RuntimeError (logic).
             with fail_open_guard("live_cycle:_emit_close_notification"):
                 with fail_open_guard("ConformalCalibratorInit"):
-                    raise
+                    raise  # Re-raise inside guard for structured traceback logging
         # ── MetaFilterGate (47-dim LGB, for non-OU strategies if any) ──
         try:
             from core.execution.meta_filter_gate import MetaFilterGate
@@ -2562,10 +2588,13 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:  # BLE001:FOG
+        except (ImportError, ValueError, TypeError, OSError, RuntimeError) as _mfg_exc:
+            # DQAF-076/BLE001-P0: MetaFilterGate init can fail on
+            # ImportError (module missing), ValueError/TypeError (bad
+            # config), OSError (model file read), RuntimeError (logic).
             with fail_open_guard("live_cycle:_emit_close_notification"):
                 with fail_open_guard("MetaFilterGateInit"):
-                    raise
+                    raise  # Re-raise inside guard for structured traceback logging
         # ── Conformal OU Gate (physics-based, for OU strategies) ──
         try:
             from core.execution.conformal_ou_gate import ConformalOUGate
@@ -2600,7 +2629,10 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception as _oug_exc:  # BLE001:FOG (logged, Phase 3b)
+        except (ImportError, ValueError, TypeError, OSError, RuntimeError) as _oug_exc:
+            # DQAF-076/BLE001-P0: ConformalOUGate init can fail on
+            # ImportError (module missing), ValueError/TypeError (bad
+            # config), OSError (config file read), RuntimeError (logic).
             with fail_open_guard("live_cycle:_emit_close_notification"):
                 with fail_open_guard("ConformalOUGateInit"):
                     raise  # Re-raise inside guard for structured traceback logging
@@ -2662,7 +2694,10 @@ def execute_live_cycle(
                 state._recent_atr_values.append(current_atr)
                 if len(state._recent_atr_values) > 50:
                     state._recent_atr_values.pop(0)
-        except Exception:  # BLE001:FOG
+        except (ValueError, RuntimeError, TypeError) as _rd_exc:
+            # DQAF-076/BLE001-P0: regime_detector.update() can raise
+            # ValueError (bad ATR), RuntimeError (detector state), or
+            # TypeError (wrong input type).
             with fail_open_guard("live_cycle:_emit_close_notification"):
                 logger.warning("Regime detector update failed — using stale regime values")
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
@@ -2710,7 +2745,9 @@ def execute_live_cycle(
     try:
         if broker is not None:
             _account_equity = broker.get_account_equity()
-    except Exception:  # BLE001:FOG
+    except (ConnectionError, TimeoutError, RuntimeError) as _eq_exc:
+        # DQAF-076/BLE001-P0: broker.get_account_equity() can fail on
+        # ConnectionError/TimeoutError (network/IPC) or RuntimeError.
         with fail_open_guard("live_cycle:_emit_close_notification"):
             logger.warning("Broker equity fetch failed — falling back to MT5 direct query")
     if _account_equity is None and mt5_worker is not None:
@@ -2868,7 +2905,10 @@ def execute_live_cycle(
                         _phys_ou, _phys_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
                         regime_info["ou_theta_m5"] = float(_phys_ou)
                         regime_info["hurst_m5"] = float(_phys_hurst)
-                    except Exception:  # BLE001:FOG
+                    except (ValueError, TypeError) as _ou_exc:
+                        # DQAF-076/BLE001-P0: _compute_tf_ou_hurst()
+                        # can raise ValueError/TypeError on degenerate
+                        # price data.  Fail-safe: ADX-only gating.
                         with fail_open_guard("live_cycle:_emit_close_notification"):
                             pass  # fail-safe: gate falls back to ADX-only logic
                 trend_direction = regime_gate_result.get("primary_trend", "neutral")
@@ -2907,7 +2947,11 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-            except Exception as _rg_exc:  # BLE001:FOG
+            except (ValueError, RuntimeError, TypeError) as _rg_exc:
+                # DQAF-076/BLE001-P0: regime_detector.get_result() can
+                # raise ValueError/RuntimeError on bad state, TypeError
+                # on malformed output.  Increment stale counter →
+                # fail-closed after 12 consecutive failures.
                 with fail_open_guard("live_cycle:_emit_close_notification"):
                     state._regime_gate_stale_counter += 1
                     _stale_n = state._regime_gate_stale_counter
@@ -3013,7 +3057,9 @@ def execute_live_cycle(
                                 flush=True,
                             )
                     # else: stale >5min — skip, fall through to cold warm-up
-            except Exception:  # BLE001:FOG
+            except (ValueError, TypeError, KeyError) as _sg_exc:
+                # DQAF-076/BLE001-P0: stale gate skip involves dict
+                # lookups + json serialization.  Fail-safe: skip.
                 with fail_open_guard("live_cycle:_emit_close_notification"):
                     pass
         # Portfolio risk controller (persist for VaR/correlation tracking) + execution queue
@@ -3189,7 +3235,10 @@ def execute_live_cycle(
                 feature_vector_sample=_fv_sample,
                 data_dir=config.base_dir,
             )
-        except Exception as _gm_exc:  # Iron Law #10: BLE001→fail_open_guard
+        except (ValueError, TypeError, OSError) as _gm_exc:
+            # DQAF-076/BLE001-P0: record_cycle_inputs() writes golden
+            # master JSONL.  ValueError/TypeError on bad data, OSError
+            # on file I/O.  Non-blocking: golden master is telemetry.
             import logging as _gm_log
 
             _gm_log.getLogger(__name__).warning(
@@ -3359,7 +3408,9 @@ def execute_live_cycle(
                     queued=eval_summary.get("queued", 0),
                     data_dir=config.base_dir,
                 )
-            except Exception as _gm_exc:  # BLE001:FOG
+            except (ValueError, TypeError, OSError) as _gm_exc:
+                # DQAF-076/BLE001-P0: record_cycle_outputs() writes
+                # golden master JSONL.  Non-blocking telemetry.
                 with fail_open_guard("live_cycle:_emit_close_notification"):
                     import logging as _gm_log
 
@@ -3773,7 +3824,18 @@ def execute_live_cycle(
                                                 ),
                                                 flush=True,
                                             )
-                                        except Exception as _fc_exc:  # BLE001:FOG
+                                        except (
+                                            ImportError,
+                                            RuntimeError,
+                                            ValueError,
+                                            ConnectionError,
+                                            TimeoutError,
+                                            OSError,
+                                            TypeError,
+                                        ) as _fc_exc:
+                                            # DQAF-076/BLE001-P0: force-close
+                                            # uses dispatch_live_order() +
+                                            # position_manager operations.
                                             with fail_open_guard(
                                                 "live_cycle:_net_out_close_dispatch_fn"
                                             ):
@@ -3804,16 +3866,20 @@ def execute_live_cycle(
                                     ),
                                     flush=True,
                                 )
-                    except Exception:  # BLE001:FOG
+                    except (ValueError, TypeError, RuntimeError) as _dd_exc:
+                        # DQAF-076/BLE001-P0: intraday drawdown recovery
+                        # check involves dict comparisons + math.
                         with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
                             logger.warning("Intraday drawdown recovery check failed")
                 _fv = check_feature_vector(feature_vector)
                 if not _fv.get("passed"):
                     _log_cycle_end(state.loop_iteration)
                     return state, not config.once
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
-                    pass
+            except (ValueError, RuntimeError, TypeError, KeyError, AttributeError) as _prop_exc:
+                # DQAF-076/BLE001-P0: outer proposal generation try
+                # covers feature checks, drawdown logic, and proposal
+                # assembly.  Fail-safe: skip cycle proposals.
+                pass
         raw_proposals = []
         for b_info in brains:
             schema_id = b_info.get("feature_schema_id", "")
@@ -3834,7 +3900,9 @@ def execute_live_cycle(
                 if seq is not None and seq.ndim == 2 and seq.shape[0] >= 32:
                     try:
                         prop = b_info["adapter"].run(None, seq)
-                    except Exception:  # BLE001:FOG
+                    except (ValueError, RuntimeError, TypeError) as _run_exc:
+                        # DQAF-076/BLE001-P0: adapter.run() can raise
+                        # ValueError/RuntimeError (ONNX) or TypeError.
                         with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
                             # Fallback: bypass run() pipeline.
                             # Transformer adapters: use infer_sequence() to avoid rolling-buffer corruption.
@@ -3848,7 +3916,9 @@ def execute_live_cycle(
                                 else:
                                     raw = b_info["adapter"].infer(seq.ravel().astype(np.float64))
                                 prop = b_info["adapter"].get_signal(raw)
-                            except Exception:  # BLE001:FOG
+                            except (ValueError, RuntimeError, TypeError) as _inf_exc:
+                                # DQAF-076/BLE001-P0: adapter.infer()
+                                # / adapter.infer_sequence() fallback.
                                 with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
                                     prop = None
                 else:
@@ -3887,7 +3957,14 @@ def execute_live_cycle(
                                     tf_ou=tf_ou,
                                     tf_hurst=tf_hurst,
                                 )
-                            except Exception:  # BLE001:FOG
+                            except (
+                                ValueError,
+                                TypeError,
+                                RuntimeError,
+                                AttributeError,
+                            ) as _btc2_exc:
+                                # DQAF-076/BLE001-P0: BTC augment
+                                # computation (BTCFeatureAugmenter).
                                 with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
                                     import logging as _btc_log
                                     import traceback as _btc_tb
@@ -4016,7 +4093,9 @@ def execute_live_cycle(
             import numpy as np
 
             _rolling_p80 = float(np.percentile(state._recent_consensus_scores, 80))
-        except Exception:  # BLE001:FOG
+        except (ValueError, TypeError) as _rp_exc:
+            # DQAF-076/BLE001-P0: np.percentile() can raise ValueError
+            # on empty array or TypeError on non-numeric data.
             with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
                 _rolling_p80 = 0.0
     _effective_threshold = (

@@ -137,8 +137,6 @@ def _dispatch_managed_close(
     )
 
 
-
-
 def _build_and_dispatch_alert_context(
     config: Any,
     state: Any,
@@ -175,17 +173,19 @@ def _build_and_dispatch_alert_context(
                 _brain_states = _gv_raw.get("brain_states", {})
                 if isinstance(_brain_states, dict):
                     _ctx_frozen = sum(
-                        1 for _bs in _brain_states.values()
+                        1
+                        for _bs in _brain_states.values()
                         if isinstance(_bs, dict)
                         and str(_bs.get("state", _bs.get("status", ""))).lower() == "frozen"
                     )
-        except Exception:  # BLE001:FOG
+        except (json.JSONDecodeError, OSError) as _fz_exc:
+            # DQAF-076/BLE001-P0: governance_state.json read can fail on
+            # JSONDecodeError (corruption) or OSError (filesystem).
+            # Non-critical: frozen count degrades to 0.
             with fail_open_guard("management_phase:_build_and_dispatch_alert_context"):
                 pass  # Non-critical: frozen check degrades gracefully
         _ctx_pos_util = 0.0
-        _ctx_bridge_last_ack = time.time() - getattr(
-            state, "_last_bridge_ack_time", time.time()
-        )
+        _ctx_bridge_last_ack = time.time() - getattr(state, "_last_bridge_ack_time", time.time())
 
         # Position utilization
         if pm.has_position() if pos is not None else False:
@@ -196,9 +196,7 @@ def _build_and_dispatch_alert_context(
             )
 
         # Cycle duration
-        _ctx_cycle_duration = time.time() - getattr(
-            state, "_last_cycle_start_time", time.time()
-        )
+        _ctx_cycle_duration = time.time() - getattr(state, "_last_cycle_start_time", time.time())
 
         _ctx: dict[str, Any] = {
             "error_rate": _ctx_error_rate,
@@ -266,9 +264,9 @@ def _build_and_dispatch_alert_context(
                     # Prefer detail.request.position (the actual MT5
                     # position ticket being closed).  Fall back to the
                     # close order's own position_ticket.
-                    _pos_tkt = _e.get("detail", {}).get("request", {}).get(
-                        "position"
-                    ) or _e.get("position_ticket")
+                    _pos_tkt = _e.get("detail", {}).get("request", {}).get("position") or _e.get(
+                        "position_ticket"
+                    )
                     if _pos_tkt is not None:
                         _pos_tkt = int(_pos_tkt)
                         if _pos_tkt in _seen_positions:
@@ -289,10 +287,13 @@ def _build_and_dispatch_alert_context(
             _ctx["consecutive_losses"] = _consec_losses
             _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
             _ctx["total_trades_window"] = _trade_count
-        except Exception:  # BLE001:FOG
+        except (json.JSONDecodeError, OSError, ValueError, TypeError, KeyError) as _je_exc:
+            # DQAF-076/BLE001-P0: journal JSONL read + parse can fail on
+            # JSONDecodeError (corruption), OSError (filesystem), or
+            # ValueError/TypeError on malformed PnL/ticket data.
+            # Non-blocking: alert context degrades without journal enrichment.
             with fail_open_guard("management_phase:_build_and_dispatch_alert_context"):
-                with fail_open_guard("AlertContext:journal_enrich"):
-                    raise  # surface hidden journal corruption
+                pass  # journal enrichment failed — alert context will lack daily PnL
         if pnl_ledger is not None:
             with log_and_continue(component="AlertHub:PnL_context"):
                 # FIX-20260613-052: resolved placeholder: "Frankenstein" logic fix.
@@ -314,18 +315,14 @@ def _build_and_dispatch_alert_context(
                 _TERMINAL_STATES = {"retired", "frozen", "archived", "shadow", "error"}
 
                 def _is_operational(brain_dict: dict) -> bool:
-                    _raw = str(
-                        brain_dict.get("state", brain_dict.get("status", ""))
-                    ).lower()
+                    _raw = str(brain_dict.get("state", brain_dict.get("status", ""))).lower()
                     return _raw not in _TERMINAL_STATES and _raw != ""
 
                 _active_brain_ids: set[str] = set()
                 try:
                     _gov_path = Path(config.base_dir) / "governance_state.json"
                     if _gov_path.exists():
-                        _gov_raw = json.loads(
-                            _gov_path.read_text(encoding="utf-8")
-                        )
+                        _gov_raw = json.loads(_gov_path.read_text(encoding="utf-8"))
                         _brain_states = _gov_raw.get("brain_states", {})
                         if isinstance(_brain_states, dict):
                             for _bid, _bs in _brain_states.items():
@@ -337,7 +334,11 @@ def _build_and_dispatch_alert_context(
                                     _bid = _b.get("brain_id", _b.get("id", ""))
                                     if _bid:
                                         _active_brain_ids.add(_bid)
-                except Exception:  # BLE001:FOG
+                except (json.JSONDecodeError, OSError) as _gv_exc:
+                    # DQAF-076/BLE001-P0: governance_state.json read failure.
+                    # JSONDecodeError = corruption, OSError = filesystem.
+                    # Fail-Close: empty active_brain_ids → worst-brain
+                    # computation skipped (Missing > Corrupted).
                     with fail_open_guard("management_phase:_is_operational"):
                         # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
                         # If governance is unreadable, we MUST NOT fall back to unfiltered
@@ -352,9 +353,7 @@ def _build_and_dispatch_alert_context(
                 # brain pollution from unfiltered data.
                 if _all_m and _active_brain_ids:
                     _active_m = {
-                        _bid: _m
-                        for _bid, _m in _all_m.items()
-                        if _bid in _active_brain_ids
+                        _bid: _m for _bid, _m in _all_m.items() if _bid in _active_brain_ids
                     }
                     if _active_m:
                         _all_m = _active_m
@@ -381,7 +380,6 @@ def _build_and_dispatch_alert_context(
                     _ctx["worst_brain_id"] = ""
 
         _ah.evaluate_and_dispatch(_ctx)
-
 
 
 def _evaluate_brain_ensemble(
@@ -420,7 +418,10 @@ def _evaluate_brain_ensemble(
         if micro_feature_computer is not None:
             try:
                 mgmt_sequences = micro_feature_computer.compute_all_sequences(32)
-            except Exception as _seq_exc:  # BLE001:FOG
+            except (ValueError, TypeError, KeyError, RuntimeError) as _seq_exc:
+                # DQAF-076/BLE001-P0: compute_all_sequences() uses numpy
+                # ops. ValueError on shape mismatch, TypeError on dtype,
+                # KeyError on missing feature, RuntimeError on compute fail.
                 with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
                     _emit("sequence_compute_error", error=str(_seq_exc))
         raw_proposals: list[Any] = []
@@ -475,8 +476,20 @@ def _evaluate_brain_ensemble(
                                             tf_ou=tf_ou,
                                             tf_hurst=tf_hurst,
                                         )
-                                    except Exception:  # BLE001:FOG
-                                        with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
+                                    except (
+                                        ValueError,
+                                        TypeError,
+                                        RuntimeError,
+                                        AttributeError,
+                                    ) as _btc_exc:
+                                        # DQAF-076/BLE001-P0: BTC augment
+                                        # computation can fail on ValueError
+                                        # (bad input), TypeError (dtype),
+                                        # RuntimeError (model), or
+                                        # AttributeError (augmenter not init).
+                                        with fail_open_guard(
+                                            "management_phase:_evaluate_brain_ensemble"
+                                        ):
                                             _mgmt_btc_aug = None  # degrade: fall through to None
                             fv = assemble_swing_features(
                                 schema_id,
@@ -637,15 +650,26 @@ def _evaluate_brain_ensemble(
                     if _r_check < -1.0:
                         _trend_protected = False
                         _trend_mild_protected = False
-                        _emit("trend_protection_overridden_loss", ticket=pos.ticket, r=round(_r_check, 3), reason="position_underwater_despite_trend_support")
-
+                        _emit(
+                            "trend_protection_overridden_loss",
+                            ticket=pos.ticket,
+                            r=round(_r_check, 3),
+                            reason="position_underwater_despite_trend_support",
+                        )
 
                 # Diagnostic: one-shot log when trend protection activates
                 if (_trend_protected or _trend_mild_protected) and getattr(
                     pos, "cycles_held", 0
                 ) <= 3:
-                    _emit("trend_protection_active", ticket=pos.ticket, side=pos.side, h4_trend=_h4_dir, h1_trend=_h1_dir, protection_level="full" if _trend_protected else "mild", action="blocking_M5_noise_exits")
-
+                    _emit(
+                        "trend_protection_active",
+                        ticket=pos.ticket,
+                        side=pos.side,
+                        h4_trend=_h4_dir,
+                        h1_trend=_h1_dir,
+                        protection_level="full" if _trend_protected else "mild",
+                        action="blocking_M5_noise_exits",
+                    )
 
                 # FIX-20260525-020: Mean-reversion (statarb/OU) strategies are
                 # EXEMPT from bleed_stop.  They enter at trend extremes — price
@@ -689,7 +713,17 @@ def _evaluate_brain_ensemble(
                             exit_watchdog=exit_watchdog,
                             mt5_worker=mt5_worker,
                         )
-                        _emit("bleed_stop_triggered", ticket=pos.ticket, r_now=round(_r_now, 3), reason=_bleed_reason, bleed_bars=_bleed_bars, cycles_held=getattr(pos, "cycles_held", 0), min_hold_cycles=_min_hold, horizon_cycles=_horizon, dispatched=_dispatched)
+                        _emit(
+                            "bleed_stop_triggered",
+                            ticket=pos.ticket,
+                            r_now=round(_r_now, 3),
+                            reason=_bleed_reason,
+                            bleed_bars=_bleed_bars,
+                            cycles_held=getattr(pos, "cycles_held", 0),
+                            min_hold_cycles=_min_hold,
+                            horizon_cycles=_horizon,
+                            dispatched=_dispatched,
+                        )
 
                         if _dispatched:
                             pm.clear_position(ticket=pos.ticket)
@@ -730,7 +764,13 @@ def _evaluate_brain_ensemble(
                                         exit_watchdog=exit_watchdog,
                                         mt5_worker=mt5_worker,
                                     )
-                                    _emit("ou_exit_triggered", ticket=pos.ticket, z_score=round(ou_z, 3), reason=ou_reason, dispatched=_dispatched)
+                                    _emit(
+                                        "ou_exit_triggered",
+                                        ticket=pos.ticket,
+                                        z_score=round(ou_z, 3),
+                                        reason=ou_reason,
+                                        dispatched=_dispatched,
+                                    )
 
                                     if _dispatched:
                                         pm.clear_position(ticket=pos.ticket)
@@ -800,21 +840,40 @@ def _evaluate_brain_ensemble(
                         exit_watchdog=exit_watchdog,
                         mt5_worker=mt5_worker,
                     )
-                    _emit("brain_exit_triggered", ticket=pos.ticket, reason=exit_reason, dispatched=_dispatched)
+                    _emit(
+                        "brain_exit_triggered",
+                        ticket=pos.ticket,
+                        reason=exit_reason,
+                        dispatched=_dispatched,
+                    )
 
                     if _dispatched:
                         pm.clear_position(ticket=pos.ticket)
                     return True
-            except Exception as exc:  # BLE001:FOG
+            except (
+                ValueError,
+                RuntimeError,
+                TypeError,
+                KeyError,
+                AttributeError,
+                ConnectionError,
+                TimeoutError,
+                OSError,
+            ) as exc:
+                # DQAF-076/BLE001-P0: brain re-evaluation covers ONNX
+                # inference (ValueError/RuntimeError), data access
+                # (TypeError/KeyError/AttributeError), and dispatch
+                # I/O (ConnectionError/TimeoutError/OSError).
+                # Fail-closed: emit error, return consensus with closed=False.
                 with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
                     _emit("brain_reeval_error", error=str(exc))
     # Not closed — return consensus for downstream layers
     return {
         "closed": False,
-        "current_consensus": current_consensus if 'current_consensus' in dir() else {},
-        "current_supporting": current_supporting if 'current_supporting' in dir() else [],
-        "meta_consensus": meta_consensus if 'meta_consensus' in dir() else {},
-        "meta_supporting": meta_supporting if 'meta_supporting' in dir() else [],
+        "current_consensus": current_consensus if "current_consensus" in dir() else {},
+        "current_supporting": current_supporting if "current_supporting" in dir() else [],
+        "meta_consensus": meta_consensus if "meta_consensus" in dir() else {},
+        "meta_supporting": meta_supporting if "meta_supporting" in dir() else [],
     }
 
 
@@ -855,7 +914,9 @@ def execute_management_phase(
     # clear the stale position and skip management phase entirely.
     if state.known_open_tickets and pos.ticket not in state.known_open_tickets:
         pm.clear_position(ticket=pos.ticket)
-        _emit("position_manager_stale_cleared", ticket=pos.ticket, reason="not_in_known_open_tickets")
+        _emit(
+            "position_manager_stale_cleared", ticket=pos.ticket, reason="not_in_known_open_tickets"
+        )
 
         return False
 
@@ -919,7 +980,13 @@ def execute_management_phase(
                 component="pos_state_save_mia_close",
             ):
                 pm.save_state(config.position_state_path)
-            _emit("position_manager_mt5_not_found", ticket=pos.ticket, reason="position_closed_in_mt5", close_price=_mia_entry.get("detail", {}).get("close_price"), pnl=_mia_entry.get("pnl"))
+            _emit(
+                "position_manager_mt5_not_found",
+                ticket=pos.ticket,
+                reason="position_closed_in_mt5",
+                close_price=_mia_entry.get("detail", {}).get("close_price"),
+                pnl=_mia_entry.get("pnl"),
+            )
 
             return False
 
@@ -1017,8 +1084,9 @@ def execute_management_phase(
                 _mult = _action.get("multiplier", 1.0)
                 if _mult < (state._last_health_volume_mult or 1.0):
                     state._last_health_volume_mult = _mult
-                _emit("health_action_reduce_size", multiplier=_mult, reason=_action.get("reason", ""))
-
+                _emit(
+                    "health_action_reduce_size", multiplier=_mult, reason=_action.get("reason", "")
+                )
 
     # ── 1c. Alert evaluation (FIX-20260529-040) ──
     _build_and_dispatch_alert_context(config, state, pos, pm, pnl_ledger)
@@ -1030,7 +1098,8 @@ def execute_management_phase(
     _wd = getattr(state, "exit_watchdog", None)
     if pos.cycles_held % 10 == 0 or pos.cycles_held <= 3:
         _wd_status = "available" if _wd is not None else "MISSING"
-        _emit("watchdog_heartbeat",
+        _emit(
+            "watchdog_heartbeat",
             ticket=pos.ticket,
             cycles_held=pos.cycles_held,
             watchdog_status=_wd_status,
@@ -1038,9 +1107,10 @@ def execute_management_phase(
             entry_price=getattr(pos, "entry_price", 0),
             current_sl=getattr(pos, "current_sl", 0),
             unrealized_r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 3)
-                          if mid is not None else 0.0,
-            status="management_phase_active")
-
+            if mid is not None
+            else 0.0,
+            status="management_phase_active",
+        )
 
     # ── 2. Update regime detector ──
     regime_info: dict[str, Any] = {}
@@ -1171,7 +1241,10 @@ def execute_management_phase(
                     _strat_magic = STRATEGY_TO_MAGIC.get(_sname, 0)
                     if _strat_magic:
                         _close_payload["magic"] = _strat_magic
-                except Exception:  # BLE001:FOG
+                except (ImportError, TypeError) as _mg_exc:
+                    # DQAF-076/BLE001-P0: STRATEGY_TO_MAGIC import
+                    # (ImportError) or dict key TypeError on malformed
+                    # strategy name.  Non-blocking: close uses default magic.
                     with fail_open_guard("management_phase:execute_management_phase"):
                         logger.warning("Magic resolution failed for partial close — using default")
             _open_entry = state.known_open_tickets.get(pos.ticket, {})
@@ -1216,7 +1289,12 @@ def execute_management_phase(
                     )
                     _ptp_dispatched = _ptp_result.success
                     if not _ptp_result.success:
-                        _emit("partial_tp_watchdog_failed", ticket=pos.ticket, final_status=_ptp_result.final_status, alerts=_ptp_result.alerts)
+                        _emit(
+                            "partial_tp_watchdog_failed",
+                            ticket=pos.ticket,
+                            final_status=_ptp_result.final_status,
+                            alerts=_ptp_result.alerts,
+                        )
 
                 else:
                     from core.execution.live_order_sender import dispatch_live_order
@@ -1233,7 +1311,18 @@ def execute_management_phase(
                         extensions={"mt5_terminal_path": config.mt5_terminal_path},
                     )
                     _ptp_dispatched = True
-            except Exception as _ptp_exc:  # BLE001:FOG
+            except (
+                ImportError,
+                RuntimeError,
+                ValueError,
+                ConnectionError,
+                TimeoutError,
+                OSError,
+            ) as _ptp_exc:
+                # DQAF-076/BLE001-P0: partial TP uses dispatch_live_order()
+                # and exit_watchdog.execute_exit().  ImportError from
+                # dynamic import, RuntimeError/ValueError from dispatch
+                # guards, ConnectionError/TimeoutError/OSError from I/O.
                 with fail_open_guard("management_phase:_ptp_dispatch_fn"):
                     _emit("partial_tp_dispatch_error", ticket=pos.ticket, error=str(_ptp_exc))
             if not _ptp_dispatched:
@@ -1261,14 +1350,25 @@ def execute_management_phase(
 
                 pos.volume = ptp_remain_vol
                 pos.expected_remaining_volume = ptp_remain_vol
-                _emit("partial_tp_executed", ticket=pos.ticket, trigger="ofi" if _ofi_reason else "r_milestone", r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2), closed_volume=ptp_close_vol, remaining_volume=ptp_remain_vol, sl_moved_to_be=improve)
-
+                _emit(
+                    "partial_tp_executed",
+                    ticket=pos.ticket,
+                    trigger="ofi" if _ofi_reason else "r_milestone",
+                    r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
+                    closed_volume=ptp_close_vol,
+                    remaining_volume=ptp_remain_vol,
+                    sl_moved_to_be=improve,
+                )
 
     # ── 6. R-milestone checks ──
     milestone = pm.check_r_milestones(mid, ticket=pos.ticket)
     if milestone:
-        _emit("r_milestone_hit", ticket=pos.ticket, milestone=milestone, r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2))
-
+        _emit(
+            "r_milestone_hit",
+            ticket=pos.ticket,
+            milestone=milestone,
+            r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
+        )
 
     # ── 6.5. Per-strategy exit config lookup ──
     _scfg = config.strategy_configs.get(_sname, {})
@@ -1319,13 +1419,26 @@ def execute_management_phase(
                 exit_watchdog=state.exit_watchdog,
                 mt5_worker=mt5_worker,
             )
-            _emit("grace_period_emergency_exit", ticket=pos.ticket, r=_gr_r, emergency_threshold=_emergency_r, dispatched=_dispatched)
+            _emit(
+                "grace_period_emergency_exit",
+                ticket=pos.ticket,
+                r=_gr_r,
+                emergency_threshold=_emergency_r,
+                dispatched=_dispatched,
+            )
 
             if _dispatched:
                 pm.clear_position(ticket=pos.ticket)
             return True
 
-        _emit("grace_period_skip", ticket=pos.ticket, recovery_cycle=pm._recovery_cycle, cycles_held=pos.cycles_held, r=_gr_r, skipped_layers=["brain_flip", "meta_exit", "time_decay"])
+        _emit(
+            "grace_period_skip",
+            ticket=pos.ticket,
+            recovery_cycle=pm._recovery_cycle,
+            cycles_held=pos.cycles_held,
+            r=_gr_r,
+            skipped_layers=["brain_flip", "meta_exit", "time_decay"],
+        )
 
         return False
 
@@ -1415,23 +1528,31 @@ def execute_management_phase(
                 # dispatch a close.  Layer 1 (Trail SL) + Layer 2 (Brain Flip)
                 # handle exits.  TODO: re-enable when >=500 XAU trades with
                 # ExitFeatureSnapshot-level features are available for retraining.
-                _emit("meta_exit_shadow_telemetry",
+                _emit(
+                    "meta_exit_shadow_telemetry",
                     ticket=pos.ticket,
                     exit_urgency=round(evaluation.exit_urgency, 3),
                     threshold=_meta_threshold,
                     p_win=evaluation.p_win,
                     exit_reason=evaluation.exit_reason,
                     factor_breakdown=evaluation.factor_breakdown,
-                    action="BLOCKED — telemetry only, close NOT dispatched")
+                    action="BLOCKED — telemetry only, close NOT dispatched",
+                )
             elif pos.cycles_held % 20 == 0:
                 # Periodic heartbeat: MetaExit alive, assessed, no trigger
-                _emit("meta_exit_heartbeat",
+                _emit(
+                    "meta_exit_heartbeat",
                     ticket=pos.ticket,
                     cycles_held=pos.cycles_held,
                     threshold=_meta_threshold,
-                    status="NO_TRIGGER — MetaExit engine alive, no exit signal")
+                    status="NO_TRIGGER — MetaExit engine alive, no exit signal",
+                )
 
-        except Exception as exc:  # BLE001:FOG
+        except (ValueError, TypeError, AttributeError) as exc:
+            # DQAF-076/BLE001-P0: MetaExit evaluation uses
+            # pm.evaluate_meta_exit().  ValueError on bad inputs,
+            # TypeError/AttributeError on malformed evaluation object.
+            # Non-blocking: MetaExit is shadow-mode (telemetry only).
             with fail_open_guard("management_phase:_ptp_dispatch_fn"):
                 _emit("meta_exit_error", error=str(exc))
     # ── 7.8 Layer 2.8: Hesitation exit (no breakeven within N cycles) ──
@@ -1456,7 +1577,13 @@ def execute_management_phase(
                 exit_watchdog=state.exit_watchdog,
                 mt5_worker=mt5_worker,
             )
-            _emit("hesitation_exit_triggered", ticket=pos.ticket, cycles_held=pos.cycles_held, hesitation_cycles=pm.hesitation_cycles, dispatched=_dispatched)
+            _emit(
+                "hesitation_exit_triggered",
+                ticket=pos.ticket,
+                cycles_held=pos.cycles_held,
+                hesitation_cycles=pm.hesitation_cycles,
+                dispatched=_dispatched,
+            )
 
             if _dispatched:
                 pm.clear_position(ticket=pos.ticket)
@@ -1488,7 +1615,13 @@ def execute_management_phase(
                 exit_watchdog=state.exit_watchdog,
                 mt5_worker=mt5_worker,
             )
-            _emit("time_exit_triggered", ticket=pos.ticket, cycles_held=pos.cycles_held, r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2), dispatched=_dispatched)
+            _emit(
+                "time_exit_triggered",
+                ticket=pos.ticket,
+                cycles_held=pos.cycles_held,
+                r=round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
+                dispatched=_dispatched,
+            )
 
             if _dispatched:
                 pm.clear_position(ticket=pos.ticket)

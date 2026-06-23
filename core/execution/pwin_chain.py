@@ -102,11 +102,20 @@ def resolve_p_win_from_brains(
             continue
         try:
             m = pnl_store.get_metrics(str(brain_id), window=100)
-        except Exception:  # BLE001:FOG
+        except (KeyError, ValueError) as _gm_exc:
+            # DQAF-076/BLE001-P0: get_metrics() can raise KeyError when
+            # brain_id is absent from the PnL store (benign — brain may be
+            # new or have no settled trades yet).  ValueError indicates
+            # invalid parameters.  Skip this brain; unknown exceptions
+            # (e.g. AttributeError, TypeError — code bugs) propagate to
+            # the caller for diagnosis.
             with fail_open_guard("pwin_chain:resolve_p_win_from_brains"):
-                with fail_open_guard("PWinMetricsResolver"):
-                    raise
-                continue
+                logger.debug(
+                    "PnL store get_metrics skipped brain=%s: %s",
+                    brain_id,
+                    _gm_exc,
+                )
+            continue
         if m is None:
             continue
         sc = getattr(m, "sample_count", 0)

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-23T05:32:20Z
+> **自动生成**: 2026-06-23T07:09:04Z
 
 ## Package-Level Dependencies
 
@@ -529,9 +529,6 @@
 - `alert_dispatcher.py` → `core.runtime.fault_handler`
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)
-- `analyze_dqaf033_mia_bridge.py` → (无内部依赖)
-- `analyze_dqaf033_temporal_coupling.py` → (无内部依赖)
-- `analyze_dqaf034_trail_timing.py` → (无内部依赖)
 - `analyze_dual_symbol_trades.py` → (无内部依赖)
 - `analyze_exit_optimization_effect.py` → (无内部依赖)
 - `analyze_feature_shift.py` → `core.runtime.fault_handler`
@@ -554,13 +551,11 @@
 - `audit_data_health_journal.py` → (无内部依赖)
 - `audit_data_integrity.py` → `core.runtime.fault_handler`, `scripts.alert_dispatcher`
 - `audit_data_module.py` → (无内部依赖)
-- `audit_deep_fullstack.py` → `core.runtime.fault_handler`
 - `audit_entry_spread.py` → (无内部依赖)
 - `audit_full_pipeline.py` → (无内部依赖)
 - `audit_institutional_performance.py` → (无内部依赖)
 - `audit_live_brains.py` → (无内部依赖)
 - `audit_live_health.py` → (无内部依赖)
-- `audit_phase_c_fix5.py` → (无内部依赖)
 - `audit_physics_thresholds.py` → (无内部依赖)
 - `audit_pnl_ledger_integrity.py` → (无内部依赖)
 - `audit_profitability.py` → (无内部依赖)
@@ -573,7 +568,6 @@
 - `backtest_runner.py` → `core.backtest.data_feed`, `core.backtest.engine`, `core.backtest.metrics`, `core.backtest.strategy_adapter`, `core.contracts.strategy_magic`, `core.metrics.brinson_attribution`, `core.metrics.factor_attribution`, `core.runtime.fault_handler`
 - `backtest_structural_swing.py` → `core.strategies.structural_swing_v1`
 - `benchmark_zmq_latency.py` → `core.runtime.fault_handler`
-- `ble001_annotate_scripts.py` → (无内部依赖)
 - `ble001_phase3b_migrate_hotpath.py` → (无内部依赖)
 - `ble001_phase3c_fog_wrap.py` → (无内部依赖)
 - `ble001_phase3d_coldpath_fog_wrap.py` → (无内部依赖)

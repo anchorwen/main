@@ -332,7 +332,10 @@ class StrategyLine:
             if not math.isfinite(theta_hat):
                 return 0.0
             return max(0.0, min(10.0, float(theta_hat)))
-        except Exception:  # BLE001:FOG
+        except (ValueError, TypeError) as _ou_exc:
+            # DQAF-076/BLE001-P0: numpy operations (np.log, np.diff, etc.)
+            # can raise ValueError on degenerate/invalid data or TypeError
+            # on incompatible dtypes.  Return neutral theta=0.0.
             with fail_open_guard("strategy_line:_compute_tf_ou_theta"):
                 return 0.0
 
@@ -375,7 +378,10 @@ class StrategyLine:
             if not math.isfinite(slope):
                 return 0.5
             return max(0.1, min(1.0, float(slope)))
-        except Exception:  # BLE001:FOG
+        except (ValueError, TypeError) as _hs_exc:
+            # DQAF-076/BLE001-P0: numpy polyfit/np.log can raise ValueError
+            # on degenerate data; TypeError on incompatible dtypes.
+            # Return neutral Hurst=0.5.
             with fail_open_guard("strategy_line:_compute_tf_hurst"):
                 return 0.5
 
@@ -645,8 +651,15 @@ class StrategyLine:
                 daily_feature_vector,
                 btc_augment,  # FIX-20260613-052: resolved placeholder
             )
-        except Exception:  # BLE001:FOG
+        except (ValueError, RuntimeError, TypeError, KeyError, AttributeError) as _inf_exc:
+            # DQAF-076/BLE001-P0: _run_inference() runs ONNX model inference
+            # + brain voting. ValueError/RuntimeError from ONNX runtime on
+            # shape mismatch or bad input; TypeError/KeyError/AttributeError
+            # from malformed feature vectors.  All are non-recoverable in
+            # this cycle — return fail-closed (should_trade=False).
+            # Unknown exceptions (e.g. MemoryError) propagate to caller.
             with fail_open_guard("strategy_line:evaluate"):
+                logger.exception("Brain inference failed for strategy=%s", name)
                 return self._make_decision(
                     should_trade=False,
                     direction="neutral",
@@ -727,7 +740,12 @@ class StrategyLine:
                         entry_spread=_entry_spread,
                         entry_slippage=0.10,
                     )
-                except Exception as _rec_exc:  # BLE001:FOG
+                except (ValueError, TypeError, OSError, AttributeError) as _rec_exc:
+                    # DQAF-076/BLE001-P0: pnl_ledger.record_signal() can
+                    # raise ValueError/TypeError on bad data, OSError on
+                    # file I/O failure, or AttributeError on malformed
+                    # proposal object.  Per-proposal catch prevents one
+                    # misbehaving brain from silencing others.
                     with fail_open_guard("strategy_line:evaluate"):
                         import logging as _lg
 
@@ -800,11 +818,16 @@ class StrategyLine:
                 base_dir=self.config.base_dir,
                 brain_status_map=_status_map,
             )
-        except Exception:  # BLE001:FOG
+        except (ValueError, TypeError, OSError, KeyError) as _bv_exc:
+            # DQAF-076/BLE001-P0: record_brain_votes() writes audit trail
+            # to file.  ValueError/TypeError from bad data, OSError from
+            # file I/O, KeyError from malformed proposal dicts.
+            # Non-blocking — audit trail loss doesn't stop trading.
             with fail_open_guard("strategy_line:evaluate"):
                 logger.warning(
-                    "Brain vote recording failed strategy=%s — audit trail incomplete",
+                    "Brain vote recording failed strategy=%s — audit trail incomplete: %s",
                     name,
+                    _bv_exc,
                 )
         parliament_passed = (
             direction != "neutral" and confidence >= self.config.confidence_threshold
@@ -1023,7 +1046,10 @@ class StrategyLine:
                         if pnl_store is not None:
                             try:
                                 _m = pnl_store.get_metrics(str(_bid), window=100)
-                            except Exception:
+                            except (KeyError, ValueError):
+                                # DQAF-076/BLE001-P0: get_metrics() raises
+                                # KeyError when brain_id is absent (benign),
+                                # ValueError on invalid params.
                                 _m = None
                             if _m is not None:
                                 _sc = getattr(_m, "sample_count", 0)

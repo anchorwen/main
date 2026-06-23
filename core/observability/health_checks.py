@@ -41,6 +41,19 @@ class HealthCheckMethods:
     ``self._t()``, and ``self._symbol`` from the host class.
     """
 
+    # ── Host-class attributes (satisfies mypy attr-defined for mixin pattern) ──
+    _base_dir: str
+    _symbol: str
+    _position_manager: Any
+    _cached_behavioral_metrics: Any
+    _position_exceeded_streak: int
+    _silent_cycle_streak: int
+
+    def _t(self, key: str) -> float:
+        """Threshold lookup stub — implemented by DataHealthService host.
+        Declared here to satisfy mypy attr-defined checks on the mixin."""
+        raise NotImplementedError("HealthCheckMethods._t() requires DataHealthService host")
+
     @health_check(
         tier=Tier.CRITICAL,
         source="trade_journal",

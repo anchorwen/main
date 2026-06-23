@@ -305,12 +305,15 @@ class ExecutionQueue:
                             )
                             self._last_dispatch_time = _time.monotonic()
                             continue
-                except Exception as _pg_exc:  # BLE001:FOG (logged, Phase 3b)
+                except (TypeError, AttributeError) as _pg_exc:
+                    # DQAF-076/BLE001-P0: Granular catch — float comparisons
+                    # can only fail on TypeError (None/incompatible type) or
+                    # AttributeError (missing .direction/.sl/.tp).  Both are
+                    # data-integrity failures; skip this decision, don't crash.
                     with fail_open_guard("execution_queue:_flush_unsafe"):
-                        logger.error(
-                            "price_guard validation exception for strategy=%s: %s",
+                        logger.exception(
+                            "price_guard validation exception for strategy=%s",
                             queued.strategy_name,
-                            _pg_exc,
                         )
                         results.append(
                             DispatchResult(
@@ -318,7 +321,7 @@ class ExecutionQueue:
                                 magic=decision.magic,
                                 dispatched=False,
                                 direction=decision.direction,
-                                reason=f"price_guard_exception:{_pg_exc}",
+                                reason=f"price_guard_exception:{type(_pg_exc).__name__}",
                             )
                         )
                         self._last_dispatch_time = _time.monotonic()
@@ -393,12 +396,18 @@ class ExecutionQueue:
                                             "new_ticket": _ack_detail["new_ticket"],
                                             "close_volume": _close_vol,
                                         }
-                            except Exception as _ack_exc:  # BLE001:FOG (logged, Phase 3b)
+                            except (ImportError, KeyError, AttributeError) as _ack_exc:
+                                # DQAF-076/BLE001-P0: resolve_ack() internally
+                                # wraps all paths in fail_open_guard — it cannot
+                                # raise.  Exceptions here come from: the dynamic
+                                # import (ImportError), malformed ack_detail dict
+                                # (KeyError on missing field, AttributeError on
+                                # non-dict .get()).
                                 with fail_open_guard("execution_queue:_flush_unsafe"):
                                     logger.warning(
-                                        "ACK resolve error for intent_id=%s: %s",
+                                        "ACK resolve error for intent_id=%s",
                                         _intent_id,
-                                        _ack_exc,
+                                        exc_info=True,
                                     )
                         else:
                             # When intent_id is empty, honour the dispatched flag from the
@@ -407,13 +416,19 @@ class ExecutionQueue:
                             # confirmation would open a new position against a still-open
                             # opposing position when the close actually failed.
                             _close_confirmed = bool(_close_result.get("dispatched", False))
-                except Exception as _net_out_exc:  # BLE001:FOG (logged, Phase 3b)
+                except (ImportError, RuntimeError, ValueError) as _net_out_exc:
+                    # DQAF-076/BLE001-P0: net-out close uses dispatch_live_order()
+                    # which can raise ImportError (dynamic import), RuntimeError
+                    # (protection flag / dispatcher None / CircuitBreakerOpenError),
+                    # or ValueError (missing sl/tp — only for market_open route).
+                    # Close actions skip the price guard path, so ValueError is
+                    # a defensive catch.  Unknown exceptions propagate to the
+                    # FATAL wrapper (Block 1) for circuit-breaking.
                     with fail_open_guard("execution_queue:_flush_unsafe"):
-                        logger.error(
-                            "net-out close dispatch failed for strategy=%s ticket=%s: %s",
+                        logger.exception(
+                            "net-out close dispatch failed for strategy=%s ticket=%s",
                             queued.strategy_name,
                             risk.net_out_ticket if hasattr(risk, "net_out_ticket") else "unknown",
-                            _net_out_exc,
                         )
                 if not _close_confirmed:
                     results.append(
@@ -481,9 +496,31 @@ class ExecutionQueue:
                         _sentinel_exc.intent_id,
                     )
                     break  # do NOT retry — fail-fast
-                except Exception as exc:  # BLE001:FOG (logged, Phase 3b)
+                except (RuntimeError, ValueError, ImportError) as exc:
+                    # DQAF-076/BLE001-P0: Structural dispatch failures —
+                    # state-machine corruption, config error, or missing module.
+                    # Retrying is futile; exit the retry loop immediately.
                     with fail_open_guard("execution_queue:_flush_unsafe"):
-                        _last_error = str(exc)
+                        logger.exception(
+                            "Structural dispatch failed (NO RETRY) strategy=%s attempt=%d/%d",
+                            queued.strategy_name,
+                            _attempt + 1,
+                            _max_attempts,
+                        )
+                        _last_error = f"{type(exc).__name__}: {exc}"
+                    break  # do NOT retry — structural errors don't heal
+                except (ConnectionError, TimeoutError, OSError) as exc:
+                    # DQAF-076/BLE001-P0: Transient network/I/O failures —
+                    # MT5/ZMQ flakiness or filesystem contention.  Retry with
+                    # stagger delay; unknown exceptions propagate to FATAL wrapper.
+                    with fail_open_guard("execution_queue:_flush_unsafe"):
+                        logger.exception(
+                            "Transient dispatch failed (RETRYING) strategy=%s attempt=%d/%d",
+                            queued.strategy_name,
+                            _attempt + 1,
+                            _max_attempts,
+                        )
+                        _last_error = f"{type(exc).__name__}: {exc}"
                         if _attempt < _max_attempts - 1:
                             _time.sleep(1.5)
             if _dispatched:
