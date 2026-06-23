@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T09:33:52Z
+> **自动生成**: 2026-06-23T11:26:43Z
 > **扫描模块数**: 651
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -535,7 +535,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 94 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 923 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 811 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 871 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
@@ -678,7 +678,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 35 | 2674 | — | |
+| `daily_ops.py` | ✅ active | — | 35 | 2697 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |

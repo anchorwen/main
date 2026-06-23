@@ -934,7 +934,7 @@ def _step_retraining_check(
         if leaderboard.get("total_decisions", 0) == 0:
             try:
                 from core.brains.services.brain_leaderboard import BrainLeaderboard
-                from core.feedback.brain_pnl_ledger import BrainPnLStore
+                from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
                 from core.feedback.live_journal_metrics import compute_journal_brain_metrics
                 from core.governance.governance_service import GovernanceService
 
@@ -963,11 +963,34 @@ def _step_retraining_check(
 
                     # Merge: journal metrics take priority. Shadow-only brains
                     # (no journal trades) fall back to PnL store metrics.
+                    #
+                    # FIX-20260623-083: compute_journal_brain_metrics() returns
+                    # plain dicts, but downstream consumers (BrainLeaderboard.rank,
+                    # BrainQualityEngine.assess) may receive mixed types.  Convert
+                    # journal dicts → BrainPnLMetrics before merging to prevent
+                    # AttributeError ('dict' object has no attribute 'win_rate').
                     _merged_metrics: dict[str, Any] = {}
                     for bid, m in _pnl_metrics.items():
                         _merged_metrics[bid] = m
                     for bid, m in _journal_metrics.items():
-                        _merged_metrics[bid] = m  # journal overwrites PnL store
+                        if isinstance(m, dict):
+                            _merged_metrics[bid] = BrainPnLMetrics(
+                                brain_id=bid,
+                                sample_count=int(m.get("sample_count", 0)),
+                                cumulative_pnl=float(
+                                    m.get("cumulative_pnl", m.get("pnl_r", 0.0)) or 0.0
+                                ),
+                                win_rate=float(m.get("win_rate", 0.0) or 0.0),
+                                sharpe_ratio=float(m.get("sharpe_ratio", 0.0) or 0.0),
+                                profit_factor=float(m.get("profit_factor", 0.0) or 0.0),
+                                max_drawdown=float(m.get("max_drawdown", 0.0) or 0.0),
+                                long_win_rate=float(m.get("long_win_rate", 0.0) or 0.0),
+                                short_win_rate=float(m.get("short_win_rate", 0.0) or 0.0),
+                                long_count=int(m.get("long_count", 0)),
+                                short_count=int(m.get("short_count", 0)),
+                            )
+                        else:
+                            _merged_metrics[bid] = m  # already BrainPnLMetrics
 
                     # FIX-20260610-007: pass vote_weights from DynamicBrainWeighter
                     _vote_weights: dict[str, float] = {}

@@ -498,6 +498,7 @@ def evaluate_strategy_lines(
                 for bid in _voted_brain_ids
                 if governance_state.get(bid, {}).get("status") == "live"
             )
+            _total_voters = len(_voted_brain_ids)
             if _live_count == 0:
                 _degraded_confidence_floor = 0.50
                 _degraded_max_volume = 0.01
@@ -538,6 +539,65 @@ def evaluate_strategy_lines(
                         ),
                         flush=True,
                     )
+            # ── Cut 4-bis: Non-live brain dominance gate ──────────────────
+            # FIX-20260623-083: When live brains exist but are a MINORITY of
+            # voters (e.g. 1 live + 2 probation = 33% live), non-live brains
+            # can collectively dominate the consensus.  This caused BTC_Swing_V4
+            # (probation, 62% of opens) to outvote BTC_Swing_V12_H1_Survival
+            # (live, 16% of opens) — V4 generated ~$57 profit then bled to
+            # -$20 while governance correctly kept it on probation.
+            #
+            # Gate: if live brains < 50% of voters → require higher confidence
+            # and cap volume.  This prevents "probation fleet" from driving
+            # heavy exposure while a lone live brain provides regulatory cover.
+            elif _total_voters > 0:
+                _live_ratio = _live_count / _total_voters
+                if _live_ratio < 0.5:
+                    _nonlive_confidence_floor = 0.55
+                    _nonlive_max_volume = 0.01
+                    if decision.confidence < _nonlive_confidence_floor:
+                        decision.should_trade = False
+                        decision.reason = "non_live_dominance_low_confidence"
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "governance_non_live_dominance_blocked",
+                                    "time": _utc_iso(),
+                                    "strategy": sname,
+                                    "direction": decision.direction,
+                                    "confidence": round(decision.confidence, 4),
+                                    "live_brains": _live_count,
+                                    "total_voters": _total_voters,
+                                    "live_ratio": round(_live_ratio, 3),
+                                    "reason": decision.reason,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    else:
+                        decision.volume = min(decision.volume, _nonlive_max_volume)
+                        decision.reason = (
+                            decision.reason or ""
+                        ) + " [degraded: non_live_dominance]"
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "governance_non_live_dominance_volume",
+                                    "time": _utc_iso(),
+                                    "strategy": sname,
+                                    "direction": decision.direction,
+                                    "confidence": round(decision.confidence, 4),
+                                    "volume": decision.volume,
+                                    "live_brains": _live_count,
+                                    "total_voters": _total_voters,
+                                    "live_ratio": round(_live_ratio, 3),
+                                    "reason": decision.reason,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
 
         # ── Cut 5: Fail-Closed SL/TP assertion (FIX-20260611-020) ───────
         # Reject ANY trade decision that lacks valid SL/TP, regardless of
