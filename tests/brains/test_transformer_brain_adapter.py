@@ -1,9 +1,24 @@
+import os
+
 import numpy as np
+import pytest
 
 from core.brains.adapters.transformer_brain_adapter import (
     MICROSTRUCTURE_9_FEATURES,
     NUM_FEATURES,
     TransformerBrainAdapter,
+)
+
+# ONNX model files are large binary artifacts not tracked in git.
+# CI runs without them; tests requiring real ONNX inference are skipped.
+_ONNX_MODEL_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "data", "models",
+    "transformer_v5_micro_barrier_h4.onnx",
+)
+_ONNX_AVAILABLE = os.path.isfile(_ONNX_MODEL_PATH)
+_requires_onnx = pytest.mark.skipif(
+    not _ONNX_AVAILABLE,
+    reason=f"ONNX model not available (not tracked in git): {_ONNX_MODEL_PATH}",
 )
 
 
@@ -23,6 +38,7 @@ def _make_entry():
     }
 
 
+@_requires_onnx
 def test_transformer_brain_adapter_loads():
     """Adapter loads ONNX model + scaler and sets backend correctly."""
     adapter = TransformerBrainAdapter(brain_entry=_make_entry())
@@ -49,6 +65,7 @@ def test_transformer_brain_adapter_fallback_when_buffer_not_full():
     assert raw["buffer_size"] == 1
 
 
+@_requires_onnx
 def test_transformer_brain_adapter_inference_after_buffer_full():
     """Produces a non-fallback inference once 64 entries have been accumulated."""
     adapter = TransformerBrainAdapter(brain_entry=_make_entry())
@@ -67,6 +84,7 @@ def test_transformer_brain_adapter_inference_after_buffer_full():
     assert isinstance(last_raw["runtime_ms"], float)
 
 
+@_requires_onnx
 def test_transformer_brain_adapter_get_signal():
     """get_signal maps raw score to a valid BrainSignal."""
     adapter = TransformerBrainAdapter(brain_entry=_make_entry())
@@ -137,6 +155,7 @@ def test_transformer_brain_adapter_feature_names():
     assert "USDJPYc_return" in MICROSTRUCTURE_9_FEATURES
 
 
+@_requires_onnx
 def test_transformer_with_feature_adapter_e2e():
     """End-to-end: MicrostructureFeatureAdapter → Transformer inference → proposal."""
     from core.features.adapters.microstructure_feature_adapter import (
