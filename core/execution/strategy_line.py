@@ -925,8 +925,46 @@ class StrategyLine:
             and confidence >= 0.35
             and ("statarb" in name or "ou" in name.lower() or "swing" in name or "btc" in name)
         )
+        # ── DQAF-20260623-066 (P0-3): Cold explore entry gate ──
+        # Require at least 2 LIVE brains with governance win_rate > 0 before
+        # allowing cold_explore exploration.  Without this gate, swing strategies
+        # (post DQAF-065 MetaFilter excision) always enter cold_explore with
+        # blind p_win=0.50, producing -34.84R in 36h with 10% WR.
+        # Governance performance_metrics survive restarts — they provide the
+        # "is this brain known to have edge?" signal that the cold PnL store cannot.
         if _is_cold_explore:
-            _p_win = 0.50
+            _gov_qualified = 0
+            if governance_state is not None and _live_brain_ids:
+                _gov_brain_states = governance_state.get("brain_states", {})
+                for _g_bid in _live_brain_ids:
+                    _bs = _gov_brain_states.get(str(_g_bid), {})
+                    if isinstance(_bs, dict):
+                        _pm = _bs.get("performance_metrics", {})
+                        if isinstance(_pm, dict):
+                            _wr = _pm.get("win_rate", 0) or 0
+                            _trades = _pm.get("total_trades", 0) or 0
+                            if _wr > 0 and _trades >= 3:
+                                _gov_qualified += 1
+            # ── DQAF-066 gate: < 2 qualified LIVE brains → block cold explore ──
+            # The number 2 is calibrated: with 1 brain, a single outlier WR
+            # (e.g. 1 trade, lucky win → WR=1.0) would unlock full exploration.
+            # With 2+, we have cross-brain confirmation that the strategy family
+            # has alpha.  This gate auto-relaxes as more brains accumulate live
+            # labels — the "3" in the DQAF report recommendation is aspirational;
+            # 2 is the minimum viable cross-section.
+            if _gov_qualified < 2:
+                logger.info(
+                    "[DQAF-066] Cold explore blocked for %s: only %d LIVE brain(s) "
+                    "with governance win_rate>0 (need ≥2). Waiting for more "
+                    "live_labels data to accumulate.",
+                    name,
+                    _gov_qualified,
+                )
+                _is_cold_explore = False
+        if _is_cold_explore:
+            # p_win resolved in resolve_p_win() Step 1 — governance fallback
+            # replaces the old hardcoded 0.50 (DQAF-20260623-066 P0-2).
+            _p_win = 0.50  # ultimate floor; resolve_p_win() may override
             _p_win_source = "cold_explore_neutral"
         if _meta_reject is not None and not _is_cold_explore:
             # ── FIX-20260611-001: Swing MetaFilter routing excision ──
@@ -944,6 +982,7 @@ class StrategyLine:
                     pnl_store,
                     direction,
                     live_brain_ids=_live_brain_ids,
+                    governance_state=governance_state,
                 )
                 # DQAF-063: Cold-start Pathfinder Exemption.
                 # Two triggers:
@@ -960,7 +999,7 @@ class StrategyLine:
                 if _rolling < 0.50:
                     _all_need_amnesty = True
                     for _b in self.brains:
-                        _bid = (
+                        _bid: str | None = (
                             _b.get("brain_id")
                             if isinstance(_b, dict)
                             else getattr(_b, "brain_id", None)
@@ -1137,6 +1176,7 @@ class StrategyLine:
             regime_info=regime_info,
             entry_z_score=entry_z_score,
             live_brain_ids=_live_brain_ids,
+            governance_state=governance_state,
         )
         _p_win = _p_res.p_win
         _p_win_source = _p_res.p_win_source

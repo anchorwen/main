@@ -116,13 +116,14 @@ Market data → detect_session() → check_var() → compute_position_size()
 | FIX-20260608-148 | 2026-06-08 | cursor-agent | — | **S3 — p_win chain extracted as pure functions (Functional Core)**: `resolve_p_win_from_brains()` and `adjust_p_win_for_regime()` moved from kelly_sizer.py + strategy_line.py to new `pwin_chain.py`. Both functions are pure (no I/O, same input → same output). Verified by Golden Master replay (911 cycles, behavior unchanged). Enables Hypothesis property-based testing. | RC-06 |
 | FIX-20260613-058 | 2026-06-13 | cursor-agent | — | **Extreme Value Gate BTC False Positive**: Threshold 10.0 was blocking all btc_swing trades (BTC co_ratio=221 is legitimate). Raised to 1e6. | RC-05 |
 | FIX-20260613-090 | 2026-06-13 | cursor-agent | 35c7213 | **Fail-Closed Budget Latch + Physics Override**: (1) StrategyBudget.cooldown_minutes 30→0 — paused strategies never auto-unpause, budget breach cascades to global circuit_breaker via block_new_entries with auto-reset immunity. (2) RegimeDirectionGate._resolve_trend() Priority 0 physics override: OU Theta > 0.5 AND Hurst < 0.48 → "ranging" regardless of ADX. NaN-guarded, physically range-bounded. (3) MT5 backfill hydrates _recent_mid_prices on startup for instant physics availability. TODO: phase out ADX gating when brains retrained with V9_Micro features. | RC-06, RC-02 |
+| FIX-20260623-066 | 2026-06-23 | cursor-agent | — | **DQAF-066: p_win Cold-Start Triple-Break Repair**. P0-1: `resolve_p_win_from_brains()` gains `governance_state` cold-start fallback — when PnL store is empty, computes median win_rate from governance `performance_metrics` (all-time WR from immutable labels ledger). P0-2: `resolve_p_win()` cold_explore step now uses governance fallback instead of blind 0.50. P0-3: Cold explore entry gate requires ≥2 LIVE brains with governance win_rate>0 before allowing bounded exploration. Fixes -34.84R/36h cold-start spiral (0% XAU WR, 13% BTC WR) where DQAF-065 MetaFilter excision routed all swing strategies through blind p_win=0.50. ReB: `COLD_EXPLORE_TRAP`. | L2 — cold_explore p_win resolution had no governance alignment; L3 — PnL store amnesia after restart created chicken-and-egg deadlock |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
 |----------|-----------|----------|
 | `compute_position_size(account_equity, risk_per_trade, atr, sl_distance)` → `float` | strategy_line | Stable |
 | `compute_kelly_mult(p_win, rr_ratio, fractional_k=0.5, floor=0.5, cap=1.5)` → `KellyResult` | strategy_line | Stable |
-| `resolve_p_win_from_brains(brains, pnl_store, direction)` → `float` | strategy_line | Stable |
+| `resolve_p_win_from_brains(brains, pnl_store, direction, live_brain_ids, governance_state)` → `float` | strategy_line | Stable |
 | `apply_sqrt_n_discount(decisions, lot_step, min_lot)` → `(decisions, [ClusterResult])` | live_cycle | Stable |
 | `detect_session(timestamp)` → `str` (asian/london/ny) | live_cycle | Stable |
 | `StrategyBudget.check(strategy_id, sl_hit)` → `bool` | live_cycle | Stable |

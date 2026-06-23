@@ -103,6 +103,7 @@ def resolve_p_win_from_brains(
     pnl_store: Any | None,
     direction: str = "long",
     live_brain_ids: set[str] | None = None,
+    governance_state: dict[str, Any] | None = None,
 ) -> float:
     """Resolve dynamic p_win for a strategy that does NOT use MetaFilter.
 
@@ -111,7 +112,16 @@ def resolve_p_win_from_brains(
 
     DQAF-20260622-064 (P0-1): *live_brain_ids* forwarded to pwin_chain
     implementation for governance-gated brain filtering.
+
+    DQAF-20260623-066 (P0-1): *governance_state* forwarded for cold-start
+    fallback when PnL store is empty.
     """
     from core.execution.pwin_chain import resolve_p_win_from_brains as _impl
 
-    return _impl(brains, pnl_store, direction, live_brain_ids=live_brain_ids)
+    return _impl(
+        brains,
+        pnl_store,
+        direction,
+        live_brain_ids=live_brain_ids,
+        governance_state=governance_state,
+    )

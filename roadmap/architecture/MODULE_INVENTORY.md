@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-22T15:51:29Z
-> **扫描模块数**: 654
+> **自动生成**: 2026-06-23T00:18:49Z
+> **扫描模块数**: 656
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -221,7 +221,7 @@
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
-| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 531 | — | |
+| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 528 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 269 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 11 | 598 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
@@ -230,15 +230,15 @@
 | `fix_gateway_adapter.py` | ✅ active | FixGatewayAdapter | 12 | 136 | — | |
 | `fix_message_builder.py` | ✅ active | FixMessageBuilder | 5 | 57 | — | |
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
-| `kelly_sizer.py` | ✅ active | KellyResult | 2 | 117 | — | |
+| `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 397 | — | |
+| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 396 | — | |
 | `managed_close.py` | ✅ active | — | 2 | 391 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 511 | — | |
 | `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 220 | — | |
-| `meta_filter_routing.py` | ✅ active | — | 1 | 241 | — | |
+| `meta_filter_routing.py` | ✅ active | — | 1 | 250 | — | |
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 490 | — | |
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 955 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 88 | — | |
@@ -251,7 +251,7 @@
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 535 | — | |
 | `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2087 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
-| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 421 | — | |
+| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 506 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 571 | — | |
@@ -263,7 +263,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 331 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 92 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1748 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1788 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 316 | — | |
@@ -646,6 +646,7 @@
 | `audit_phase_c_fix5.py` | ✅ active | — | 7 | 328 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
+| `audit_profitability.py` | ✅ active | — | 7 | 348 | — | |
 | `audit_state_of_system.py` | ✅ active | — | 5 | 347 | — | |
 | `audit_trade_quality.py` | ✅ active | — | 5 | 275 | — | |
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
@@ -709,6 +710,7 @@
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
+| `live_audit_realtime.py` | ✅ active | — | 4 | 362 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 234 | — | |
 | `live_daily_recap.py` | ✅ active | — | 25 | 941 | — | |
 | `live_dashboard.py` | ✅ active | — | 16 | 540 | — | |

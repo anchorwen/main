@@ -39,6 +39,7 @@ def resolve_p_win_from_brains(
     pnl_store: Any | None,
     direction: str = "long",
     live_brain_ids: set[str] | None = None,
+    governance_state: dict[str, Any] | None = None,
 ) -> float:
     """Resolve dynamic p_win for a strategy that does NOT use MetaFilter.
 
@@ -46,9 +47,16 @@ def resolve_p_win_from_brains(
     window=100 explicitly passed to avoid all-time aggregation bias).
     Requires at least 10 settled trades before trusting the win rate.
 
-    Falls back to 0.40 (Fail-Closed — FIX-20260526-031) when data is
-    insufficient.  With min_p_win=0.45 (statarb) or 0.50 (barrier),
-    0.40 < both → trades rejected when system lacks evidence.
+    **DQAF-20260623-066 (P0-1): Governance cold-start fallback.**
+    When the PnL store is cold (no valid brain metrics available — e.g.
+    after restart), computes the median of ``performance_metrics.win_rate``
+    from governance_state's LIVE brains as a fallback.  Governance metrics
+    are derived from the immutable live_labels.jsonl ledger and survive
+    restarts.  This eliminates the chicken-and-egg deadlock where:
+      PnL store empty → p_win=0.40 → all trades rejected → PnL store stays empty
+
+    Falls back to 0.40 (Fail-Closed — FIX-20260526-031) only when BOTH
+    the PnL store AND governance have insufficient data.
 
     DQAF-20260622-059 (P0-1): **Governance-aligned brain filtering**.
     When *live_brain_ids* is provided, only brains whose ``brain_id`` is
@@ -68,6 +76,9 @@ def resolve_p_win_from_brains(
         direction: "long" or "short" — for directional win rate lookup.
         live_brain_ids: Optional set of brain_ids whose governance status
             is ``"live"``.  When provided, non-LIVE brains are skipped.
+        governance_state: Optional governance_state dict with
+            ``brain_states[brain_id].performance_metrics.win_rate``.
+            Used as cold-start fallback when PnL store has no valid data.
     """
     if pnl_store is None:
         logger.warning(
@@ -121,6 +132,51 @@ def resolve_p_win_from_brains(
             len(valid_rates),
         )
         return _median
+
+    # ── DQAF-20260623-066 (P0-1): Governance cold-start fallback ──
+    # When the PnL store is cold (no valid rates), fall back to
+    # governance_state → performance_metrics.win_rate for LIVE brains.
+    # Governance metrics are derived from the immutable live_labels.jsonl
+    # ledger and survive restarts.  This breaks the chicken-and-egg deadlock:
+    #   PnL store empty → p_win=0.40 → all trades rejected → PnL stays empty.
+    if governance_state is not None:
+        _gov_rates: list[float] = []
+        _gov_brain_states = (
+            governance_state.get("brain_states", {}) if isinstance(governance_state, dict) else {}
+        )
+        for b in brains:
+            brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
+            if not brain_id:
+                continue
+            # DQAF-059: only LIVE brains
+            if live_brain_ids is not None and brain_id not in live_brain_ids:
+                continue
+            _bs = _gov_brain_states.get(str(brain_id), {})
+            if not isinstance(_bs, dict):
+                continue
+            _pm = _bs.get("performance_metrics", {})
+            if not isinstance(_pm, dict):
+                continue
+            _gov_wr = _pm.get("win_rate")
+            _gov_trades = _pm.get("total_trades", 0)
+            if (
+                _gov_wr is not None
+                and isinstance(_gov_wr, int | float)
+                and _gov_wr > 0
+                and _gov_trades >= 3
+            ):
+                _gov_rates.append(float(_gov_wr))
+        if _gov_rates:
+            _gov_median = float(statistics.median(_gov_rates))
+            logger.info(
+                "[pwin_chain:DQAF-066] Governance cold-start fallback: "
+                "median win_rate=%.4f from %d LIVE brain(s) with "
+                "performance_metrics (PnL store had 0 valid rates). "
+                "p_win_degraded=True — governance data is all-time, not rolling.",
+                _gov_median,
+                len(_gov_rates),
+            )
+            return _gov_median
 
     # ── FALLBACK PATH 3: no brain produced a valid win rate ──
     # Distinguish: (a) no brains registered vs (b) all brains below threshold
@@ -291,24 +347,31 @@ def resolve_p_win(
     regime_info: dict[str, Any] | None,
     entry_z_score: float,
     live_brain_ids: set[str] | None = None,
+    governance_state: dict[str, Any] | None = None,
 ) -> PWinResolution:
     """Run the 7-step p_win resolution chain for Tier 2 Kelly sizing.
 
     Resolution order (first available source wins):
-      1. Cold explore → 0.50 (bounded-volume data collection)
+      1. Cold explore → governance fallback or 0.50 (bounded exploration)
       2. MetaFilter → Platt-calibrated P(TP|signal)
       3. Rolling WR → median win rate from PnL store (≥10 settled trades)
+         → DQAF-066: governance fallback when PnL store is cold
       4. Brain confidence → monotonic fallback (0.40 + confidence × 0.20)
       5. MetaFilter absent → elevated floor (max(min_p_win, 0.50)), disables UCB
       6. UCB elastic floor → confidence-based lift for rolling_wr
       7. Regime + Z-strength adjustments → trend/weak-Z penalties
+
+    DQAF-20260623-066 (P0-1): Step 1 (cold_explore) no longer forces a blind
+    p_win=0.50.  When governance_state is available, p_win is derived from
+    governance performance_metrics (all-time win rate from immutable labels
+    ledger).  Only falls back to 0.50 when governance also lacks data.
 
     Returns a :class:`PWinResolution` with the final p_win, its source,
     degradation flag, and MetaFilter-absent state for downstream gate logic.
 
     Args:
         is_cold_explore: True when MetaFilter hasn't produced p_win yet and
-            confidence ≥ 0.35.  Forces p_win=0.50 for bounded exploration.
+            confidence ≥ 0.35.  Enables bounded-volume exploration.
         meta_p_win: Platt-calibrated P(TP|signal) from MetaFilter (or None).
         pnl_store: BrainPnLStore for rolling WR resolution (or None).
         brains: List of brain info dicts with ``brain_id``.
@@ -319,6 +382,9 @@ def resolve_p_win(
         min_p_win: ``config.min_p_win`` — hard floor for position sizing.
         regime_info: Regime gate output dict (or None).
         entry_z_score: OU Z-score at entry (or 0.0).
+        governance_state: Optional governance_state dict with
+            ``brain_states[brain_id].performance_metrics.win_rate``.
+            Used as cold-start fallback when PnL store is cold (DQAF-066).
 
     Returns:
         PWinResolution with all resolved fields.
@@ -328,12 +394,27 @@ def resolve_p_win(
     meta_filter_absent: bool = False
     meta_absent_floor: float = 0.50
 
-    # ── Step 1: Cold explore → forced neutral for data collection ──
+    # ── Step 1: Cold explore → governance fallback or bounded exploration ──
     if is_cold_explore:
-        # FIX-20260610-007-C: Cold explore bypasses all p_win resolution.
-        # Force p_win=0.50 (Kelly mult=1.0) for bounded-volume data collection.
-        p_win = 0.50
-        p_win_source = "cold_explore_neutral"
+        # DQAF-20260623-066 (P0-2): Cold explore no longer forces blind p_win=0.50
+        # when governance state is available.  Try governance fallback first
+        # (all-time WR from immutable labels ledger), then 0.50 as ultimate floor.
+        _cold_p_win = 0.50
+        _cold_source = "cold_explore_neutral"
+        if governance_state is not None:
+            _cold_from_gov = resolve_p_win_from_brains(
+                brains,
+                pnl_store,
+                direction,
+                live_brain_ids=live_brain_ids,
+                governance_state=governance_state,
+            )
+            if _cold_from_gov > 0.40:
+                # Governance produced a meaningful estimate — use it
+                _cold_p_win = _cold_from_gov
+                _cold_source = "cold_explore_governance"
+        p_win = _cold_p_win
+        p_win_source = _cold_source
     elif meta_p_win is not None:
         # ── Step 2: MetaFilter — Platt-calibrated P(TP|signal) ──
         p_win = meta_p_win
@@ -341,7 +422,11 @@ def resolve_p_win(
     elif pnl_store is not None:
         # ── Step 3: Rolling WR from PnL ledger ──
         p_win = resolve_p_win_from_brains(
-            brains, pnl_store, direction, live_brain_ids=live_brain_ids
+            brains,
+            pnl_store,
+            direction,
+            live_brain_ids=live_brain_ids,
+            governance_state=governance_state,
         )
         p_win_source = "rolling_wr"
 
