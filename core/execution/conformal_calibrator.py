@@ -361,7 +361,30 @@ class ConformalCalibrator:
         if self._cold_started and len(_loaded_history) >= self._warmup_samples:
             self._cold_started = False
 
-        for item in data.get("history", []):
+        # FIX-20260623-084: Detect p_win=0.5 contamination from hardcoded
+        # live_cycle.py:1607 bug.  Contamination signature: >80% entries
+        # are exactly 0.5 AND <10 unique p_win values (distinguishes
+        # "hardcoded contamination" from "legitimate cold-explore 0.5s").
+        _contaminated = 0
+        _unique_pwins: set[float] = set()
+        for item in _loaded_history:
+            _pw = float(item.get("p_win", 0.0))
+            _unique_pwins.add(_pw)
+            if _pw == 0.5:
+                _contaminated += 1
+        _n = len(_loaded_history)
+        if _n > 20 and _contaminated > _n * 0.80 and len(_unique_pwins) < 10:
+            logger.warning(
+                "ConformalCalibrator: detected p_win=0.5 contamination "
+                "(%d/%d entries = %.0f%%).  Auto-sanitizing — history "
+                "discarded, will re-seed from journal.",
+                _contaminated,
+                len(_loaded_history),
+                100 * _contaminated / len(_loaded_history),
+            )
+            return  # skip loading contaminated history (cold_started stays False → cold_start_from_journal will proceed)
+
+        for item in _loaded_history:
             self._history.append(
                 (
                     float(item["p_win"]),

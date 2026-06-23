@@ -98,11 +98,7 @@ def register_dispatched_positions(
                                 if t is not None and isinstance(t, int) and t > 0:
                                     ticket = t
                                 ep = rec.get("entry_price")
-                                if (
-                                    ep is not None
-                                    and isinstance(ep, int | float)
-                                    and ep > 0
-                                ):
+                                if ep is not None and isinstance(ep, int | float) and ep > 0:
                                     entry_from_journal = float(ep)
                                 bv = rec.get("brain_votes")
                                 if isinstance(bv, list):
@@ -180,11 +176,7 @@ def register_dispatched_positions(
             _s_cfg = config.strategy_configs.get(dr.strategy_name, {})
             _tp_cfg = _s_cfg.get("tp", {})
             _exit_cfg = _s_cfg.get("exit", {})
-            _ptp_r = (
-                _tp_cfg.get("partial_tp_r", 0.0)
-                if _tp_cfg.get("partial_tp_enabled")
-                else 0.0
-            )
+            _ptp_r = _tp_cfg.get("partial_tp_r", 0.0) if _tp_cfg.get("partial_tp_enabled") else 0.0
             _ptp_ratio = _tp_cfg.get("partial_tp_ratio", 0.5)
             # ── DQAF-20260621-034: fallback_unmanaged ──
             # Positions that fail to resolve a strategy (blank strategy_name)
@@ -214,8 +206,12 @@ def register_dispatched_positions(
                 strategy_name=_strategy_name,
                 trail_policy=TrailPolicy(
                     trail_atr_mult=_exit_cfg.get("trail_atr_mult", 3.0 if _is_fallback else 2.0),
-                    trail_atr_mult_low=_exit_cfg.get("trail_atr_mult_low", 2.0 if _is_fallback else 1.5),
-                    trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high", 4.0 if _is_fallback else 3.0),
+                    trail_atr_mult_low=_exit_cfg.get(
+                        "trail_atr_mult_low", 2.0 if _is_fallback else 1.5
+                    ),
+                    trail_atr_mult_high=_exit_cfg.get(
+                        "trail_atr_mult_high", 4.0 if _is_fallback else 3.0
+                    ),
                     breakeven_threshold_atr=_exit_cfg.get(
                         "breakeven_threshold_atr", 1.5 if _is_fallback else 1.0
                     ),
@@ -227,6 +223,9 @@ def register_dispatched_positions(
                 cold_explore=getattr(decision, "cold_explore", False),
             )
             # ── Sync known_open_tickets ──
+            # FIX-20260623-084: Carry p_win/sl/tp so PositionCloseAdapter
+            # can propagate them to PositionClosed events → calibrator
+            # receives real p_win instead of default 0.5.
             known_open_tickets[ticket] = {
                 "position_ticket": ticket,
                 "action": "open",
@@ -238,6 +237,9 @@ def register_dispatched_positions(
                 "message_id": intent_id,
                 "brain_ids": decision.brain_ids,
                 "brain_votes": brain_votes_from_journal or [],
+                "p_win": float(getattr(decision, "p_win", 0.5) or 0.5),
+                "sl": decision.sl,
+                "tp": decision.tp,
                 "entry_consensus": {
                     "consensus_score": decision.confidence,
                     "direction": decision.direction,
@@ -285,7 +287,7 @@ def register_dispatched_positions(
                     )
 
             registered_count += 1
-        except Exception as _reg_exc:  # BLE001:FOG
+        except Exception as _reg_exc:  # noqa: BLE001 — BLE001:FOG pattern with fail_open_guard
             with fail_open_guard("position_registration:register_dispatched_positions"):
                 print(
                     json.dumps(

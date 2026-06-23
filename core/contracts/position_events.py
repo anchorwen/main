@@ -45,6 +45,9 @@ class PositionClosed:
     trail_contribution: dict | None = None
     open_message_id: str = ""
 
+    # ── Signal quality (propagated from open decision) ──
+    p_win: float = 0.5  # FIX-20260623-084: carried from PositionOpened → Close
+
     # ── Technical ──
     message_id: str = ""
     deal_id: int = 0  # MT5 deal ID for dedup
@@ -79,6 +82,7 @@ class PositionClosed:
             "sl": self.sl,
             "tp": self.tp,
             "open_message_id": self.open_message_id,
+            "p_win": self.p_win,
             "brain_ids": list(self.brain_ids) if self.brain_ids else None,
             "trail_contribution": self.trail_contribution,
             "entry_price": self.entry_price,

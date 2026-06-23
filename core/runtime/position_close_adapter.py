@@ -121,6 +121,7 @@ def record_position_opened(
         return adapter.record_open(evt, journal_path, state=state)
     return False  # best-effort — never block position registration
 
+
 UTC = UTC
 _log = logging.getLogger(__name__)
 
@@ -256,7 +257,9 @@ class PositionCloseAdapter:
         _now = datetime.now(UTC).replace(tzinfo=None).isoformat()
         _entry = event.to_journal_entry()
         _entry["recorded_at"] = _now
-        _entry["message_id"] = _entry["message_id"] or f"close_{event.position_ticket}_{event.deal_id}"
+        _entry["message_id"] = (
+            _entry["message_id"] or f"close_{event.position_ticket}_{event.deal_id}"
+        )
 
         _path = Path(journal_path)
         _lock_dir = _path.parent / "locks"
@@ -332,7 +335,8 @@ class PositionCloseAdapter:
                 # with volume-delta detection, but handle gracefully
                 _log.warning(
                     "PositionCloseAdapter: no new deals for ticket=%s (cursor=%s)",
-                    ticket, _cursor,
+                    ticket,
+                    _cursor,
                 )
                 return None
 
@@ -349,7 +353,8 @@ class PositionCloseAdapter:
                 _log.error(
                     "[CRITICAL] PositionCloseAdapter: deal %s for ticket=%s "
                     "has close_price=0 — cannot build event",
-                    _deal_id, ticket,
+                    _deal_id,
+                    ticket,
                 )
                 # Update cursor to skip this broken deal
                 self._last_deal_id[ticket] = _deal_id
@@ -369,6 +374,9 @@ class PositionCloseAdapter:
             _sl = float(open_entry.get("sl", 0) or 0)
             _tp = float(open_entry.get("tp", 0) or 0)
             _open_msg = str(open_entry.get("message_id", ""))
+            # FIX-20260623-084: propagate p_win from open decision through
+            # to PositionClosed so the calibrator receives actual p_win
+            _p_win = float(open_entry.get("p_win", 0.5) or 0.5)
 
             # ── Label from deal reason ──
             if _deal_reason == DEAL_REASON_SL:
@@ -386,6 +394,7 @@ class PositionCloseAdapter:
             _close_time = ""
             if _deal_time > 0:
                 import contextlib as _ctxlib_ts
+
                 with _ctxlib_ts.suppress(ValueError, OSError):
                     _close_time = datetime.fromtimestamp(_deal_time, tz=UTC).isoformat()
 
@@ -412,6 +421,7 @@ class PositionCloseAdapter:
                 sl=_sl,
                 tp=_tp,
                 deal_id=_deal_id,
+                p_win=_p_win,
             )
 
         _log.error(
@@ -451,7 +461,8 @@ class PositionCloseAdapter:
                     ticket=event.position_ticket,
                 )
                 _rs = ensure_reentry_state(
-                    getattr(state, "_reentry_states", {}), event.strategy,
+                    getattr(state, "_reentry_states", {}),
+                    event.strategy,
                 )
                 _rs.record_exit(_rec)
         except Exception:  # BLE001:FOG_WRAPPED
@@ -485,7 +496,8 @@ class PositionCloseAdapter:
             if _settled > 0:
                 _log.debug(
                     "PnL Ledger: settled %s signals for ticket=%s",
-                    _settled, event.position_ticket,
+                    _settled,
+                    event.position_ticket,
                 )
         except Exception:  # BLE001:FOG_WRAPPED
             with fail_open_guard("PositionCloseAdapter:PnLLedgerNotify"):
@@ -497,11 +509,13 @@ class PositionCloseAdapter:
         try:
             _pending = getattr(state, "_pending_budget_records", None)
             if _pending is not None:
-                _pending.append({
-                    "strategy": event.strategy,
-                    "pnl": event.pnl,
-                    "ticket": event.position_ticket,
-                })
+                _pending.append(
+                    {
+                        "strategy": event.strategy,
+                        "pnl": event.pnl,
+                        "ticket": event.position_ticket,
+                    }
+                )
         except Exception:  # BLE001:FOG_WRAPPED
             with fail_open_guard("PositionCloseAdapter:BudgetNotify"):
                 raise

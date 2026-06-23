@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T11:26:43Z
+> **自动生成**: 2026-06-23T12:15:16Z
 > **扫描模块数**: 651
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -114,7 +114,7 @@
 | `exceptions.py` | ✅ active | DomainError, RiskError, RiskPolicyViolation, GovernanceError, InvalidTransitionError, BrainNotFoundError, ExecutionError, OrderNotFoundError, DuplicateOrderError, ProtocolError, DispatchError, IdempotencyError, ConfigurationError, ContractViolationError, DataIntegrityError | 10 | 159 | — | |
 | `ids.py` | ✅ active | — | 14 | 57 | — | |
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 218 | — | |
-| `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 146 | — | |
+| `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 150 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
 | `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
 | `validators.py` | ✅ active | ContractViolation, ContractValidator | 7 | 123 | — | |
@@ -216,7 +216,7 @@
 | `brain_gates.py` | ✅ active | — | 3 | 92 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 468 | — | |
-| `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 11 | 437 | — | |
+| `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 11 | 460 | — | |
 | `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 828 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
@@ -508,7 +508,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 162 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4168 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4180 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 376 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1630 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
@@ -518,9 +518,9 @@
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 316 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 91 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 559 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 573 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
-| `position_registration.py` | ✅ active | — | 1 | 307 | — | |
+| `position_registration.py` | ✅ active | — | 1 | 309 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 410 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
@@ -661,7 +661,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 638 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 643 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |

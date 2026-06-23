@@ -56,6 +56,7 @@ so downstream modules can decide whether to degrade, skip, or circuit-break.
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260623-084 | 2026-06-23 | cursor-agent | — | **DQAF-084: PositionClosed +p_win field — signal quality through close-event contract**. `PositionClosed` had no `p_win` (unlike `PositionOpened` which carries p_win/confidence/kelly_mult). Added `p_win: float = 0.5` + `to_journal_entry()` output. Backward-compatible via default. | L3 — signal quality metadata not propagated through close-event contract |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | 520b371 | Event Sourcing Foundation: PnLEvent + GovernanceTransitionEvent Pydantic models with extra=forbid, frozen=True, allow_inf_nan=False. | contract-violation |
 | FIX-20260605-122 | 2026-06-05 | cursor-agent | ae0d006 | **Orphan domain key cleanup**: Removed 4 unused constants from domain_keys.py — PAYLOAD_KEY_CIRCUIT_STATE, PAYLOAD_KEY_FROZEN_BRAIN_COUNT, PAYLOAD_KEY_POSITION_UTILIZATION, CIRCUIT_STATE_OPEN. Zero references in codebase. | RC-11 |
 | FIX-20260525-014 | 2026-05-25 | cursor-agent | — | Gate audit observability: StrategyDecision.gate_diag field for per-gate diagnostics. ConformalOU gate captures z_score/theta/half_life/composite_score; parliament captures confidence/threshold; counter-trend captures trend info. Supports structured gate_audit JSONL recording. | RC-12 |

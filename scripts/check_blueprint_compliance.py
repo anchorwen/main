@@ -165,7 +165,12 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/infrastructure/",
         "scripts/validators/journal_validator.py",
     ],
-    "contracts_domain": ["core/contracts/domain/", "core/schemas/", "core/contracts/events.py"],
+    "contracts_domain": [
+        "core/contracts/domain/",
+        "core/schemas/",
+        "core/contracts/events.py",
+        "core/contracts/position_events.py",
+    ],
     "contracts_ids": [
         "core/contracts/ids.py",
         "core/contracts/serialization/",

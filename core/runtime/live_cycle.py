@@ -1599,12 +1599,24 @@ def execute_live_cycle(
                     state.consecutive_sl_hits[_strategy] = _curr
 
                     # ── FIX-20260611-022: Feed conformal calibrator ──
+                    # FIX-20260623-084: Use actual p_win from PositionClosed
+                    # event (propagated from StrategyDecision → known_open_tickets
+                    # → PositionCloseAdapter._build_event).  Previously hardcoded
+                    # 0.5, contaminating 360/500 (72%) calibrator entries and
+                    # collapsing Q10 threshold to 0.5.  Label mapping now uses
+                    # -1/0/1 (not 1/0) to match calibrator._trade_label() taxonomy.
                     _calib = getattr(state, "_conformal_calibrator", None)
                     if _calib is not None:
                         with fail_open_guard("ConformalCalibratorUpdate"):
-                            _label_int = 1 if _evt.pnl > 0 else 0
-                            for _brain_id in _evt.brain_ids:
-                                _calib.update(0.5, _label_int)
+                            _p_win = float(getattr(_evt, "p_win", 0.5) or 0.5)
+                            _label_str = str(getattr(_evt, "label", "") or "").lower()
+                            if _label_str in ("tp_hit_first", "win"):
+                                _label_int = 1
+                            elif _label_str in ("sl_hit_first", "loss"):
+                                _label_int = -1
+                            else:
+                                _label_int = 0
+                            _calib.update(_p_win, _label_int)
 
                     # ── SignalSettled — real trade PnL ──
                     # Strangler Fig #32 — extracted to core.runtime.signal_settlement
