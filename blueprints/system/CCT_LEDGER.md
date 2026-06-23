@@ -829,3 +829,27 @@
 - **关联 ReB Pattern**: `FEATURE_SCHEMA_ROUTING_AND_BRAIN_API_CONTRACT`
 - **关联 FIX**: FIX-20260622-003 (XAU dual-track), FIX-20260622-001 (Plan B State Governance Protocol)
 - **状态**: **CLOSED** — Dual-track feature pipeline deployed: 35-dim swing resolver (DailyFeatureComputer 24 daily + 9 micro + 2 TF) + feature router (feature_schema_id) + BrainSignal API fix (direction/confidence/raw_score). 0/21→11/21 non-neutral. Plan B 同步交付防止复发
+
+## DQAF-20260623-066: p_win Cold-Start Triple-Break
+
+- **Label**: COLD_EXPLORE_TRAP
+- **Docket**: DQAF-20260623-066 (Sev 1)
+- **Causal Chain (4 Layers)**:
+  - **Layer 1 (症状)**: 30 笔交易亏损 -34.84R, 胜率 ~10% (XAU 0/6, BTC 3/24)。系统盈利能力崩溃。
+  - **Layer 2 (直接原因)**: 所有获批交易使用 p_win=0.50 (cold_explore_neutral)。Kelly sizing, RR gate, volume 全部基于假数据 → 好策略和坏策略获得相同仓位规模。
+  - **Layer 3 (中间异常)**: DQAF-065 MetaFilter 切除后 swing 策略永远返回 (None, None) → 触发 `_is_cold_explore=True` → p_win 硬编码为 0.50。BrainPnLStore 重启后为空 → `resolve_p_win_from_brains()` 返回 0.40 → 低于 min_p_win → 所有通过 rolling WR 路径的交易被拒。
+  - **Layer 4 (根因 — L3 架构缺陷)**: p_win 计算链路三连环断裂:
+    1. DQAF-065 → swing 策略唯一可行通道是 cold_explore
+    2. BrainPnLStore 纯内存, 重启后为空 → 无真实统计 → fail-closed 0.40
+    3. Governance `performance_metrics` 存在但未接入 p_win 解析链
+- **Evidence**:
+  - Source 1: `live_trade_journal.jsonl` — XAU 6 笔全部 p_win=0.50, BTC 24 笔全部 p_win=0.50
+  - Source 2: `golden_master.jsonl` — XAU 1107 决策中 21 approved (1.9%), BTC 414 中 104 approved (25%)
+  - Source 3: `strategy_line.py:922-930` — cold_explore 触发条件: _meta_p_win is None AND _meta_reject is None
+  - Source 4: `meta_filter_routing.py:74-89` — DQAF-065: swing 策略不在 statarb 条件中 → passthrough (None, None)
+  - Source 5: `pwin_chain.py:81-106` — DQAF-059 governance gate: sample_count<10 排除 → 0 valid rates → 0.40 fallback
+  - Source 6: `brain_pnl_ledger.py:548-553` — BrainPnLStore.__init__() 纯内存, 无 data_dir 参数
+- **是否被推翻**: 否 — AR 反向假设 (行情不利) 被推翻: BTC 在窗口中仅下跌 2%, 但 16/24 笔保本退出 (PnL=0.00) 表明是系统决策问题非行情问题
+- **关联 ReB Pattern**: `COLD_EXPLORE_TRAP`
+- **关联 FIX**: FIX-20260623-066 (P0-1 governance fallback, P0-2 cold_explore→governance, P0-3 ≥2 LIVE brains gate)
+- **状态**: **CLOSED** — 三修复部署: `resolve_p_win_from_brains()` governance cold-start fallback + `resolve_p_win()` cold_explore governance 替代盲 0.50 + cold explore ≥2 LIVE brain 准入门禁

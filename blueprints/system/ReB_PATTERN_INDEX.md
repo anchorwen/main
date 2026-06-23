@@ -615,6 +615,23 @@
 - **Detection**: governance 有 live brain 但 voted_brain_ids 中缺失 + disabled_brains_filtered 日志 + strategy.brains 不包含该 brain_id
 - **Prevention**: 大脑退役/重激活应通过单一原子操作执行，或至少包含一致性检查（governance live ↔ registry status ↔ yaml enabled ↔ vote_weight）。参考 FIX-20260612-006。
 
+## ReB-20260623-066: COLD_EXPLORE_TRAP
+
+- **发现日期**: 2026-06-23
+- **关联 DQAF**: DQAF-20260623-066
+- **严重等级**: Sev 1
+- **模式签名**: `cold_explore_neutral` 成为策略的唯一可行路径 → 所有获批交易使用固定 p_win=0.50 → Kelly sizing 和 RR 评估基于假数据 → 系统无方向偏差抵抗力
+- **传导机制**:
+  1. MetaFilter 切除 (DQAF-065) → swing 策略永远返回 (None, None)
+  2. (None, None) 触发 `_is_cold_explore=True` → p_win=0.50
+  3. BrainPnLStore 重启后为空 → `resolve_p_win_from_brains()` 返回 0.40 (fail-closed)
+  4. PnL store 空 → 冷启动豁免条件过严 → amnesty 可能被阻断
+  5. 结果: 好策略和坏策略获得相同的 p_win=0.50, 真实 alpha 被淹没
+- **影响品种**: XAU (-15.70R), BTC (-19.14R)
+- **修复**: FIX-20260623-066: (1) governance `performance_metrics` 冷启动回退, (2) cold_explore 使用 governance 替代盲 0.50, (3) ≥2 LIVE brain 准入门禁
+- **预防**: 任何切除 MetaFilter 的策略必须确保有替代的 p_win 数据源; 冷启动后验证至少 2 个 LIVE brain 有有效 win_rate
+- **检测**: 监控 `cold_explore_neutral` 占总批准决策的比例; 告警阈值 >50%
+
 ## ReB-20260612-008: GOVERNANCE_BRAIN_SOURCE_MISMATCH
 
 - **Docket**: DQAF-20260612-002
