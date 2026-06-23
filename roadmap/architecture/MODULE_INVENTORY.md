@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T07:09:04Z
+> **自动生成**: 2026-06-23T09:33:52Z
 > **扫描模块数**: 651
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -500,7 +500,7 @@
 | `execution_gates.py` | ✅ active | RuntimeRiskGate, RuntimeGovernanceGate, RuntimeExecutionApprovalChain | 6 | 107 | — | |
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
-| `execution_state.py` | ✅ active | — | 3 | 250 | — | |
+| `execution_state.py` | ✅ active | — | 3 | 263 | — | |
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 413 | — | |
 | `feature_freshness.py` | ✅ active | — | 2 | 80 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 64 | — | |

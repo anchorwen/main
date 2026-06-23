@@ -72,8 +72,7 @@ def save_execution_state(
     # ── DQAF-20260615-004: Persist known_open_tickets ──
     if known_open_tickets:
         payload["known_open_tickets"] = {
-            str(t): {k: v for k, v in data.items()}
-            for t, data in known_open_tickets.items()
+            str(t): {k: v for k, v in data.items()} for t, data in known_open_tickets.items()
         }
 
     # ── Strategy budgets ──
@@ -120,15 +119,29 @@ def save_execution_state(
             flush=True,
         )
 
-    # ── Atomic write via StateWriter gate (DQAF-046 Plan B) ──
-    try:
-        from core.state.catalog import lookup
-        from core.state.writer import StateWriter
+    # ── Atomic write (DQAF-046 Plan B) ──
+    # StateWriter resolves the canonical path from data_dir + catalog path_template.
+    # This is correct when save_path lives under data/ or data_btc/ (production).
+    # For non-canonical paths (e.g. pytest tmpdir), write directly to save_path
+    # so callers can control the exact file location.
+    _in_data_tree = any(parent.name in ("data", "data_btc") for parent in p.parents)
+    if _in_data_tree:
+        try:
+            from core.state.catalog import lookup
+            from core.state.writer import StateWriter
 
-        writer = StateWriter.from_state_path(save_path)
-        writer.write_artifact(lookup("EXECUTION_STATE"), writer._symbol, payload)
-    except OSError:
-        pass  # Disk write failure is non-fatal
+            writer = StateWriter.from_state_path(save_path)
+            writer.write_artifact(lookup("EXECUTION_STATE"), writer._symbol, payload)
+        except OSError:
+            pass  # Disk write failure is non-fatal
+    else:
+        # Non-canonical path — direct atomic write (preserves test compatibility)
+        try:
+            _tmp = p.with_suffix(p.suffix + ".tmp")
+            _tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            _tmp.replace(p)
+        except OSError:
+            pass  # Disk write failure is non-fatal
 
 
 def load_execution_state(save_path: str | Path) -> dict[str, Any] | None:

@@ -6,12 +6,7 @@ Tests label-write path without MT5 dependency.
 
 from __future__ import annotations
 
-import json
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from core.runtime.reconciliation import reconcile_closed_positions
 
@@ -22,7 +17,10 @@ class TestReconcileClosedPositions:
         mock_worker = MagicMock()
         mock_worker.positions_get.return_value = []
         result = reconcile_closed_positions(
-            mt5_worker=mock_worker, known_open_tickets={}, symbol="XAUUSDc",
-            journal_path="/fake/path.jsonl", state=None,
+            mt5_worker=mock_worker,
+            known_tickets={},
+            symbol="XAUUSDc",
+            journal_path="/fake/path.jsonl",
+            state=None,
         )
         assert result == []

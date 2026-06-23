@@ -38,6 +38,7 @@ def tmp_data_dir():
 def xau_writer(tmp_data_dir):
     """Create a StateWriter bound to a temp XAU data directory."""
     from core.state.writer import StateWriter
+
     return StateWriter(str(tmp_data_dir), symbol="XAUUSDc")
 
 
@@ -45,6 +46,7 @@ def xau_writer(tmp_data_dir):
 def btc_writer(tmp_data_dir):
     """Create a StateWriter bound to a temp BTC data directory."""
     from core.state.writer import StateWriter
+
     return StateWriter(str(tmp_data_dir), symbol="BTCUSDc")
 
 
@@ -61,27 +63,25 @@ class TestCatalog:
         from core.state.catalog import CATALOG
 
         for logical_id, artifact in CATALOG.items():
-            assert callable(artifact.schema_validator), (
-                f"{logical_id}: schema_validator is not callable"
-            )
+            assert callable(
+                artifact.schema_validator
+            ), f"{logical_id}: schema_validator is not callable"
 
     def test_all_artifacts_have_ttl(self):
         """Every catalog entry must declare a TTL (0 = no check)."""
         from core.state.catalog import CATALOG
 
         for logical_id, artifact in CATALOG.items():
-            assert artifact.ttl_seconds >= 0, (
-                f"{logical_id}: ttl_seconds must be >= 0"
-            )
+            assert artifact.ttl_seconds >= 0, f"{logical_id}: ttl_seconds must be >= 0"
 
     def test_all_path_templates_use_json(self):
         """All state files must end in .json."""
         from core.state.catalog import CATALOG
 
         for logical_id, artifact in CATALOG.items():
-            assert artifact.path_template.endswith(".json"), (
-                f"{logical_id}: path_template must end with .json, got {artifact.path_template!r}"
-            )
+            assert artifact.path_template.endswith(
+                ".json"
+            ), f"{logical_id}: path_template must end with .json, got {artifact.path_template!r}"
 
     def test_lookup_known_id(self):
         """Lookup of known artifacts succeeds."""
@@ -89,7 +89,7 @@ class TestCatalog:
 
         artifact = lookup("LEADERBOARD")
         assert artifact.logical_id == "LEADERBOARD"
-        assert artifact.ttl_seconds == 86400
+        assert artifact.ttl_seconds == 14400  # DQAF-057: tightened from 86400 (24h → 4h)
 
     def test_lookup_unknown_id_raises(self):
         """Lookup of unknown artifact raises KeyError."""
@@ -103,9 +103,9 @@ class TestCatalog:
         from core.state.catalog import lookup
 
         artifact = lookup("ALPHA_REGISTRY")
-        assert artifact.cross_symbol_guard is True, (
-            "ALPHA_REGISTRY must have cross_symbol_guard=True"
-        )
+        assert (
+            artifact.cross_symbol_guard is True
+        ), "ALPHA_REGISTRY must have cross_symbol_guard=True"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -126,9 +126,7 @@ class TestSchemaValidation:
             ],
             "total_brains": 1,
         }
-        result = xau_writer.write_artifact(
-            lookup("LEADERBOARD"), "XAUUSDc", data, dry_run=True
-        )
+        result = xau_writer.write_artifact(lookup("LEADERBOARD"), "XAUUSDc", data, dry_run=True)
         assert result["validated"] is True
         assert result["dry_run"] is True
 
@@ -137,9 +135,7 @@ class TestSchemaValidation:
         from core.state.catalog import DataIntegrityError, lookup
 
         with pytest.raises(DataIntegrityError, match="must not be an empty dict"):
-            xau_writer.write_artifact(
-                lookup("LEADERBOARD"), "XAUUSDc", {}, dry_run=True
-            )
+            xau_writer.write_artifact(lookup("LEADERBOARD"), "XAUUSDc", {}, dry_run=True)
 
     def test_non_dict_rejected(self, xau_writer):
         """Non-dict data must be rejected."""
@@ -147,7 +143,10 @@ class TestSchemaValidation:
 
         with pytest.raises(DataIntegrityError, match="Expected dict"):
             xau_writer.write_artifact(
-                lookup("LEADERBOARD"), "XAUUSDc", "not_a_dict", dry_run=True  # type: ignore
+                lookup("LEADERBOARD"),
+                "XAUUSDc",
+                "not_a_dict",
+                dry_run=True,
             )
 
     def test_alpha_allocation_missing_recommendations(self, xau_writer):
@@ -212,9 +211,7 @@ class TestCrossSymbolGuard:
             ],
         }
         with pytest.raises(CrossSymbolContaminationError, match="cross-symbol contamination"):
-            xau_writer.write_artifact(
-                lookup("ALPHA_REGISTRY"), "XAUUSDc", data, dry_run=True
-            )
+            xau_writer.write_artifact(lookup("ALPHA_REGISTRY"), "XAUUSDc", data, dry_run=True)
 
     def test_xau_in_btc_registry_accepted(self, btc_writer):
         """xau_live in BTC registry should also be caught."""
@@ -227,9 +224,7 @@ class TestCrossSymbolGuard:
             ],
         }
         with pytest.raises(CrossSymbolContaminationError, match="cross-symbol contamination"):
-            btc_writer.write_artifact(
-                lookup("ALPHA_REGISTRY"), "BTCUSDc", data, dry_run=True
-            )
+            btc_writer.write_artifact(lookup("ALPHA_REGISTRY"), "BTCUSDc", data, dry_run=True)
 
     def test_pure_xau_registry_accepted(self, xau_writer):
         """XAU registry with only XAU alphas passes."""
@@ -241,9 +236,7 @@ class TestCrossSymbolGuard:
                 {"alpha_id": "alpha_xau_swing", "notional": 30000},
             ],
         }
-        result = xau_writer.write_artifact(
-            lookup("ALPHA_REGISTRY"), "XAUUSDc", data, dry_run=True
-        )
+        result = xau_writer.write_artifact(lookup("ALPHA_REGISTRY"), "XAUUSDc", data, dry_run=True)
         assert result["validated"] is True
 
     def test_pure_btc_registry_accepted(self, btc_writer):
@@ -256,9 +249,7 @@ class TestCrossSymbolGuard:
                 {"alpha_id": "alpha_btc_trend", "notional": 50000},
             ],
         }
-        result = btc_writer.write_artifact(
-            lookup("ALPHA_REGISTRY"), "BTCUSDc", data, dry_run=True
-        )
+        result = btc_writer.write_artifact(lookup("ALPHA_REGISTRY"), "BTCUSDc", data, dry_run=True)
         assert result["validated"] is True
 
 
@@ -275,9 +266,7 @@ class TestAtomicWrite:
         from core.state.catalog import lookup
 
         data = {"leaderboard": [{"brain_id": "test", "score": 1.0}], "total_brains": 1}
-        result = xau_writer.write_artifact(
-            lookup("LEADERBOARD"), "XAUUSDc", data
-        )
+        result = xau_writer.write_artifact(lookup("LEADERBOARD"), "XAUUSDc", data)
 
         assert result["written"] is True
         target = tmp_data_dir / "reports" / "leaderboard.json"
@@ -331,9 +320,9 @@ class TestAtomicWrite:
 
         target = tmp_data_dir / "reports" / "leaderboard.json"
         read_back = json.loads(target.read_text(encoding="utf-8"))
-        assert read_back["leaderboard"][0]["brain_id"] == "v2", (
-            "Overwrite must replace entire content"
-        )
+        assert (
+            read_back["leaderboard"][0]["brain_id"] == "v2"
+        ), "Overwrite must replace entire content"
 
     def test_nested_directory_created(self, xau_writer, tmp_data_dir):
         """Writing to a path with non-existent parent dirs creates them."""
@@ -352,9 +341,7 @@ class TestAtomicWrite:
         from core.state.catalog import lookup
 
         data = {"leaderboard": [{"brain_id": "ghost", "score": 0.0}], "total_brains": 1}
-        result = xau_writer.write_artifact(
-            lookup("LEADERBOARD"), "XAUUSDc", data, dry_run=True
-        )
+        result = xau_writer.write_artifact(lookup("LEADERBOARD"), "XAUUSDc", data, dry_run=True)
 
         assert result["written"] is True
         assert result["dry_run"] is True

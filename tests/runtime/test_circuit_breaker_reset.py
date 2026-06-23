@@ -2,8 +2,10 @@
 
 FIX-20260620-083: New module zero-coverage breakout.
 """
+
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 from core.runtime.circuit_breaker_reset import auto_reset_circuit_breaker
@@ -16,12 +18,23 @@ class _FakeConfig:
 
 
 class _FakeState:
-    def __init__(self, **attrs):
+    # Class-level annotations so mypy can track dynamically-set attributes
+    # (__init__ uses self.__dict__.update(attrs))
+    _circuit_breaker_tripped: bool = False
+    _circuit_breaker_tripped_at: float = 0.0
+    _circuit_breaker_trip_reason: str = ""
+    block_new_entries: bool = False
+    _consecutive_degraded_cycles: int = 0
+    _consecutive_stale_cycles: int = 0
+    _consecutive_stale_features: int = 0
+    _last_bridge_ack_time: float = 0.0
+    _strategies: dict[str, Any] = {}
+
+    def __init__(self, **attrs: Any) -> None:
         self.__dict__.update(attrs)
 
 
 class TestAutoResetCircuitBreaker:
-
     def test_noop_when_not_tripped(self) -> None:
         config = _FakeConfig()
         state = _FakeState(
@@ -77,6 +90,7 @@ class TestAutoResetCircuitBreaker:
 
     def test_resets_when_cooldown_elapsed_and_all_clear(self) -> None:
         import time
+
         config = _FakeConfig()
         config.circuit_breaker_cooldown_seconds = 1  # very short
         tripped_at = time.time() - 10  # 10 seconds ago (cooldown elapsed)
@@ -98,6 +112,7 @@ class TestAutoResetCircuitBreaker:
 
     def test_does_not_reset_when_bridge_dead(self) -> None:
         import time
+
         config = _FakeConfig()
         tripped_at = time.time() - 10
         state = _FakeState(
@@ -112,6 +127,7 @@ class TestAutoResetCircuitBreaker:
 
     def test_does_not_reset_when_degraded_wakeup(self) -> None:
         import time
+
         config = _FakeConfig()
         tripped_at = time.time() - 10
         state = _FakeState(
@@ -125,6 +141,8 @@ class TestAutoResetCircuitBreaker:
         assert state._circuit_breaker_tripped is True
 
     def test_resets_counter_on_clean_cycle_when_not_tripped(self) -> None:
+        import time as _time
+
         config = _FakeConfig()
         state = _FakeState(
             _circuit_breaker_tripped=False,
@@ -133,17 +151,20 @@ class TestAutoResetCircuitBreaker:
             _consecutive_degraded_cycles=3,
             _consecutive_stale_cycles=0,
             _consecutive_stale_features=0,
-            _last_bridge_ack_time=0.0,
+            _last_bridge_ack_time=_time.time(),  # bridge alive → counter SHOULD reset
             _strategies={},
         )
         auto_reset_circuit_breaker(config, state, degraded_wakeup=False, cycle_duration=1.0)
         assert state._consecutive_degraded_cycles == 0
 
     def test_does_not_reset_counter_on_degraded_cycle(self) -> None:
+        import time as _time
+
         config = _FakeConfig()
         state = _FakeState(
             _circuit_breaker_tripped=False,
             _consecutive_degraded_cycles=3,
+            _last_bridge_ack_time=_time.time(),  # bridge alive, but degraded_wakeup=True prevents reset
         )
         auto_reset_circuit_breaker(config, state, degraded_wakeup=True, cycle_duration=1.0)
         assert state._consecutive_degraded_cycles == 3  # unchanged
