@@ -45,9 +45,7 @@ def run_session_guards(
     try:
         from core.execution.pre_trade_guards import detect_session
 
-        session_info = detect_session(
-            market_type=getattr(config, "market_type", "forex_24_5")
-        )
+        session_info = detect_session(market_type=getattr(config, "market_type", "forex_24_5"))
         if session_info.get("risk_tier") == "off":
             _log_cycle_end(state.loop_iteration)
             return True, session_info  # market closed, skip cycle
@@ -89,10 +87,7 @@ def run_session_guards(
                             circuit_breaker="CLOSED — new entries allowed",
                         )
                         # Force-close existing positions when drawdown is severe
-                        if (
-                            dd_result.get("force_close")
-                            and state.position_manager is not None
-                        ):
+                        if dd_result.get("force_close") and state.position_manager is not None:
                             _pos = state.position_manager.get_position()
                             if _pos is not None:
                                 try:
@@ -100,9 +95,7 @@ def run_session_guards(
                                         dispatch_live_order,
                                     )
 
-                                    _dd_brain_ids = getattr(
-                                        _pos, "supporting_brain_ids", None
-                                    )
+                                    _dd_brain_ids = getattr(_pos, "supporting_brain_ids", None)
                                     _dd_payload: dict[str, Any] = {
                                         "action": "close",
                                         "side": _pos.side,
@@ -122,9 +115,7 @@ def run_session_guards(
                                         ignore_protection_flag=config.ignore_protection_flag,
                                         protection_flag_path=config.protection_flag_path,
                                         adapter_name=config.adapter_name,
-                                        extensions={
-                                            "mt5_terminal_path": config.mt5_terminal_path
-                                        },
+                                        extensions={"mt5_terminal_path": config.mt5_terminal_path},
                                     )
                                     _emit(
                                         "force_close_executed",
@@ -145,7 +136,11 @@ def run_session_guards(
                     # DEGRADE — intraday DD check setup failed, continue without it
                     _emit("intraday_drawdown_kill_error", error=str(_dd_setup_exc))
         # ── Feature freshness check ──
-        if not state._feature_buffers_warm:
+        # DQAF-20260623-067: Use getattr with safe default so a missing
+        # dataclass field does not cause a silent fail-open AttributeError.
+        # Fail-closed: if the attribute is absent for any reason, treat
+        # the buffers as cold and skip the cycle.
+        if not getattr(state, "_feature_buffers_warm", False):
             _log_cycle_end(state.loop_iteration)
             return True, session_info  # skip cycle — insufficient warm-up
 
@@ -160,7 +155,25 @@ def run_session_guards(
                 _log_cycle_end(state.loop_iteration)
                 return True, {}  # skip cycle — circuit breaker open (no session_info)
 
+    except (AttributeError, TypeError) as _state_exc:
+        # ── DQAF-20260623-067: State integrity errors → FAIL-CLOSED ──
+        # Missing dataclass fields, type mismatches — the system state is
+        # structurally corrupted.  Letting the cycle continue would mean
+        # trading on unverified state.  Skip the cycle and alert.
+        with fail_open_guard("session_guards:run_session_guards"):
+            _emit(
+                "session_guard_state_integrity_error",
+                error=str(_state_exc),
+                error_type=type(_state_exc).__name__,
+                action="fail_closed_skip_cycle",
+            )
+        _log_cycle_end(state.loop_iteration)
+        return True, session_info  # skip cycle — state integrity unverified
     except Exception as _session_exc:  # BLE001:FOG (fail-open, Phase 3b)
+        # ── Transient / data-quality errors → FAIL-OPEN ──
+        # MT5 timeouts, network blips, calendar I/O — the guard itself is
+        # non-critical; failing open lets the cycle proceed with the other
+        # downstream safety nets (price guards, circuit breaker, etc.).
         with fail_open_guard("session_guards:run_session_guards"):
             _emit("session_guard_error", error=str(_session_exc))
             # Fail-open on session detection failure — let the cycle continue

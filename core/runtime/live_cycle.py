@@ -297,6 +297,11 @@ class LiveCycleState:
 
     # Regime gate fail-closed: stale counter for fail-open → fail-closed migration
     _regime_gate_stale_counter: int = 0
+    # ── DQAF-20260623-067: feature buffer warm-up gate ──
+    # Set False at init; flipped to True after MT5 bootstrap hydrates
+    # price history + MTF service (Phase 2a).  session_guards.py reads
+    # this to prevent trading on cold feature buffers after restart.
+    _feature_buffers_warm: bool = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -1843,6 +1848,22 @@ def execute_live_cycle(
                                     "time": _utc_iso(),
                                     "source": "mt5_copy_rates",
                                     "prices_loaded": len(_hydrated),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    # ── DQAF-20260623-067: Feature buffers warm ──
+                    # MT5 bootstrap + physics hydration complete.
+                    # Feature freshness gate can now allow cycles.
+                    if not state._feature_buffers_warm:
+                        state._feature_buffers_warm = True
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "feature_buffers_warm",
+                                    "time": _utc_iso(),
+                                    "note": "MT5 bootstrap + physics hydrated — trading gates open",
                                 },
                                 ensure_ascii=False,
                             ),

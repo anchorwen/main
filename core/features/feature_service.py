@@ -136,7 +136,17 @@ class FeatureService:
                                 ts = feature_ts.timestamp()
                             else:
                                 ts = float(feature_ts)
-                            freshness = check_feature_freshness(ts, max_age_seconds=300.0)
+                            # ── DQAF-20260623-068: Negative jitter margin ──
+                            # SLA was 300s — same as 5×M5 cycle interval,
+                            # creating a predictable boundary collision where
+                            # the cache would flip between fresh/stale on
+                            # consecutive cycles.  310s adds 10s of negative
+                            # jitter on the write side: the feature persister
+                            # (Phase 4b) writes every ~60s, so a 310s SLA
+                            # ensures writes always beat the check line.
+                            # A genuine data pipeline freeze produces ages
+                            # of 600s+, so 300→310 does not weaken detection.
+                            freshness = check_feature_freshness(ts, max_age_seconds=310.0)
                             if not freshness["fresh"]:
                                 logging.warning(
                                     "FeatureService stale cache for %s: age=%.1fs (limit=%.0fs), falling through to live compute",
@@ -186,6 +196,7 @@ class FeatureService:
                 except Exception as exc:  # BLE001:FOG
                     with fail_open_guard("feature_service:_run_compute"):
                         _compute_error[0] = exc
+
             _t = threading.Thread(target=_run_compute, daemon=True)
             _t0 = time.monotonic()
             _t.start()

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T01:31:13Z
+> **自动生成**: 2026-06-23T01:57:24Z
 > **扫描模块数**: 656
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -263,7 +263,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 331 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 92 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1788 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1799 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 316 | — | |
@@ -278,7 +278,7 @@
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
 | `feature_assembler.py` | ✅ active | — | 3 | 256 | — | |
 | `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 3 | 229 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 376 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 387 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
 | `meta_feature_builder.py` | ✅ active | — | 1 | 136 | — | |
@@ -507,7 +507,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 162 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4062 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4083 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 376 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1497 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
@@ -526,7 +526,7 @@
 | `reentry_recording.py` | ✅ active | — | 2 | 82 | — | |
 | `restart_state.py` | ✅ active | — | 1 | 364 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
-| `session_guards.py` | ✅ active | — | 3 | 168 | — | |
+| `session_guards.py` | ✅ active | — | 3 | 181 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
 | `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 511 | — | |
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |

@@ -533,9 +533,20 @@ class StrategyLine:
         # carry stale or negative-alpha PnL data that contaminates the estimate.
         _live_brain_ids: set[str] | None = None
         if governance_state is not None:
+            # ── DQAF-20260623-069: Iterate brain_states, NOT top-level ──
+            # governance_state = {"brain_states": {bid: {status, ...}}, ...}
+            # The old code iterated governance_state.items() (top-level keys
+            # like "brain_states", "schema_version"), producing an empty set
+            # every time.  This silently disabled DQAF-059 (governance gate)
+            # AND DQAF-066 (governance cold-start fallback) since 2026-06-22.
+            _gov_brains = (
+                governance_state.get("brain_states", {})
+                if isinstance(governance_state, dict)
+                else {}
+            )
             _live_brain_ids = {
                 str(bid)
-                for bid, b_info in governance_state.items()
+                for bid, b_info in _gov_brains.items()
                 if isinstance(b_info, dict) and b_info.get("status") == "live"
             }
             if _live_brain_ids:
