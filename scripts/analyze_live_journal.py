@@ -128,7 +128,9 @@ def analyze_journal(data_dir: Path) -> dict:
     )
 
     # ── PnL by exit label ──
-    pnl_by_label: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0})
+    pnl_by_label: dict[str, dict[str, float]] = defaultdict(
+        lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0}
+    )
     for r in realized:
         lbl = r["label"]
         pnl_by_label[lbl]["count"] += 1
@@ -139,15 +141,32 @@ def analyze_journal(data_dir: Path) -> dict:
             pnl_by_label[lbl]["losses"] += 1
 
     # ── Direction distribution from OPEN events ──
+    # FIX-20260624-061: Multi-source brain data with priority fallback.
+    # entry_context.brain_predictions was removed from journal schema ~2026-06-20.
+    # Priority: brain_votes (top-level, rich) > entry_context.brain_predictions
+    #   (legacy, up_prob/down_prob) > brain_ids (top-level, bare IDs only).
     open_events = [r for r in records if r.get("action") == "open"]
     trade_directions: dict[str, int] = defaultdict(int)  # side of the trade (long/short)
-    brain_directions: dict[str, int] = defaultdict(int)  # direction from brain_predictions
+    brain_directions: dict[str, int] = defaultdict(int)  # direction from brain predictions
     brain_detail = []  # per-open brain breakdown
 
     for o in open_events:
         trade_directions[o.get("side", "?")] += 1
+        # ── Multi-source brain data extraction ──
+        votes = o.get("brain_votes") or []
         ctx = o.get("entry_context", {}) or {}
-        preds = ctx.get("brain_predictions", [])
+        ctx_preds = ctx.get("brain_predictions", [])
+        top_bids = o.get("brain_ids", [])
+
+        if votes:
+            preds = votes  # [{brain_id, direction_bias, confidence}]
+        elif ctx_preds:
+            preds = ctx_preds  # [{brain_id, direction_bias, up_prob, down_prob, confidence}]
+        elif top_bids:
+            preds = [{"brain_id": bid} for bid in top_bids]  # bare IDs only
+        else:
+            preds = []
+
         if not preds:
             brain_directions["no_predictions"] += 1
         for p in preds:
@@ -159,9 +178,11 @@ def analyze_journal(data_dir: Path) -> dict:
                 "trade_side": o.get("side"),
                 "n_brains": len(preds),
                 "brain_ids": [p.get("brain_id") for p in preds],
-                "directions": [p.get("direction_bias") for p in preds],
-                "up_probs": [round(p.get("up_prob", 0), 3) for p in preds],
-                "down_probs": [round(p.get("down_prob", 0), 3) for p in preds],
+                "directions": [p.get("direction_bias", "?") for p in preds],
+                "up_probs": [round(p.get("up_prob", 0), 3) for p in preds if "up_prob" in p]
+                or None,
+                "down_probs": [round(p.get("down_prob", 0), 3) for p in preds if "down_prob" in p]
+                or None,
             }
         )
 
@@ -414,7 +435,7 @@ def print_report(journal: dict, snapshots: dict) -> None:
     detail = direction.get("brain_detail", [])
     for d in detail[-15:]:
         time_str = d.get("time", "?")[:19] if d.get("time") else "?"
-        trade_side = d.get('trade_side') or '?'
+        trade_side = d.get("trade_side") or "?"
         print(
             f"    {time_str}  trade={trade_side:<6s}  "
             f"n_brains={d['n_brains']}  "

@@ -768,6 +768,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-118 | 2026-06-24 | infrastructure | P1-3 + docs: auto-fix script + CONTRIBUTING.md bootstrap workflow + CLAUDE.md Scene F routing | RC-09 |
 | FIX-20260624-119 | 2026-06-24 | monitor_dashboard | **BLE001:FOG over-narrowing in EventBus.publish()** — restore except Exception for pub/sub fire-and-forget handler dispatch. 5-type tuple excluded ZeroDivisionError, crashing publisher when handler raises unlisted exception. Same class as FIX-20260624-104 (scheduler_service). | RC-05 |
 | FIX-20260624-120 | 2026-06-24 | execution_orders | **Ω-M1: Consensus Contamination Root Cause — brain_ids→supporting_brains (4 sites).** `_compute_consensus()` L1569 returned `signal.brain_ids` (ALL brains) instead of `signal.supporting_brains` (only winning-direction brains). `_compute_weighted_fallback()` L1628+L1637 neutral paths returned all `brain_ids`→`[]`; L1648 directional path `brain_ids`→`supporting`. True root cause of FIX-20260527-002 (6 patches in feedback_loop/reconciliation/journal never touched this field-selection error). ReB: `CONSENSUS_CONTAMINATION_BRAIN_IDS`. L3 deferred: rename fields to `all_participating_brains`/`winning_brains`. | RC-06 |
+| FIX-20260624-061 | 2026-06-24 | training | **DQAF-061: analyze_live_journal.py multi-source brain data priority fallback.** `entry_context.brain_predictions` deprecated ~2026-06-20. Audit script read from single stale source → all recent entries showed `n_brains=0`. Fix: 3-tier source — `brain_votes` > `entry_context.brain_predictions` > `brain_ids`. Bare-ID entries show `dirs=['?']` / `up_probs=None` (honest unknown). | RC-09 |
 
 
 ---
@@ -4487,4 +4488,15 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: RC-06 (contract-violation) — API contract between `ContractGroupConsensus.compute()` and `_compute_consensus()` violated: `brain_ids` field used where `supporting_brains` was required. L1 fix applied; L3 rename deferred.
 - **Prevention**: L3 architecture fix: rename `brain_ids`→`all_participating_brains` and `supporting_brains`→`winning_brains` in ContractGroupConsensus to make the semantic distinction self-documenting at the type level.
 - **Dependents Checked**: `feedback_loop.py:ingest_journal_to_tracker`, `reconciliation.py:SignalSettled`, `strategy_line.py:_compute_consensus` (all 6 FIX-20260527-002 mitigation sites) — confirmed the new correct field propagates correctly through all downstream consumers.
-- **Dependents Checked**: (none)
+
+### FIX-20260624-061
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: training
+- **Files**: scripts/analyze_live_journal.py, blueprints/modules/training.md
+- **Description**: DQAF-061: Audit script brain data source staleness. `analyze_live_journal.py:149-150` read `entry_context.brain_predictions` — a field deprecated from the journal schema ~2026-06-20. All 50 recent open events showed `n_brains=0, ids=[]` while top-level `brain_ids` and `brain_votes` held correct data. Fix: 3-tier priority fallback at lines 149-167: (1) `brain_votes` top-level (rich: brain_id/direction_bias/confidence), (2) `entry_context.brain_predictions` (legacy: up_prob/down_prob), (3) `brain_ids` top-level (bare IDs only). Bare-ID entries display `dirs=['?']` and `up_probs=None` — honest representation of missing data.
+- **Root Cause**: RC-09 (configuration/operational) — audit script's data source path became stale when journal entry_context schema was trimmed. L1 fix: change read path to multi-source priority fallback.
+- **Prevention**: Dual-source reads with None-safe rendering. All audit scripts should use the most durable top-level fields as primary sources and treat nested context fields as optional enrichment.
+- **Dependents Checked**: `core/data/label_builder.py:build_trade_records()` (consumes journal entries for training labels — unaffected, reads from top-level fields)

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T11:19:51Z
+> **自动生成**: 2026-06-24T12:44:37Z
 > **扫描模块数**: 666
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -624,7 +624,7 @@
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
 | `analyze_feature_shift.py` | ✅ active | — | 5 | 323 | — | |
 | `analyze_live_brain_performance.py` | ✅ active | — | 6 | 672 | — | |
-| `analyze_live_journal.py` | ✅ active | — | 6 | 521 | — | |
+| `analyze_live_journal.py` | ✅ active | — | 6 | 542 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
