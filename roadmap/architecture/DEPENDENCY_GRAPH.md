@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T09:51:22Z
+> **自动生成**: 2026-06-24T09:53:30Z
 
 ## Package-Level Dependencies
 
@@ -589,6 +589,7 @@
 - `check_data_health_contract.py` → (无内部依赖)
 - `check_import_boundaries.py` → (无内部依赖)
 - `check_omega_compliance.py` → (无内部依赖)
+- `check_omega_pre_push.py` → (无内部依赖)
 - `check_preconditions.py` → (无内部依赖)
 - `check_training_readiness.py` → `core.state.catalog`, `core.state.writer`
 - `check_training_triggers.py` → (无内部依赖)

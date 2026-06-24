@@ -41,6 +41,7 @@ LiveCycle.run_cycle() reads snapshot once per cycle
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |------|------|--------|--------|---------|------------|
+| FIX-20260624-114 | 2026-06-24 | cursor-agent | 14b4c6da | P0-3: unify pre-push with pre-commit framework — extract check_omega_pre_push.py, add ci-mirror-omega hook, create bootstrap-dev-env.sh | config-drift |
 | FIX-20260624-112 | 2026-06-24 | cursor-agent | a2c77b03 | P0-2: blueprint baseline mechanism — pre_commit_blueprint.py with baseline-gated validation, mirrors mypy_baseline.json pattern | config-drift |
 | FIX-20260622-001 | 2026-06-22 | cursor-agent | — | **Plan B Phase 1-4: State Governance Protocol — 4-layer defense**. Layer 1: Data Catalog (catalog.py, 13 artifacts + validators). Layer 2: Write Gate (writer.py, 4-gate pipeline). Layer 3: Cross-Symbol Guard (alpha_id prefix registry). Layer 4: Freshness Guard (freshness_guard.py, TTL-based staleness). Purged 16 wild writes across 7 modules. 30/30 tests. | RC-07 (missing-validation — no schema enforcement at write boundary) |
 | FIX-20260622-003 | 2026-06-22 | cursor-agent | — | **DQAF-046: XAU dual-track feature pipeline — end 45-day signal vacuum**. BrainSignal API fracture fix + 35-dim feature resolver (_resolve_swing35_feature_vector) + feature router (_route_feature_vector) + 16 brain configs updated. 0/21→11/21 non-neutral. | L2 — missing schema routing contract + dict→dataclass API fracture |

@@ -761,6 +761,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-111 | 2026-06-24 | infrastructure | P0-1: ruff config single-source-of-truth — move SIM105 to global ignore in pyproject.toml, remove --ignore SIM105 from all 4 gate layers | RC-09 |
 | FIX-20260624-112 | 2026-06-24 | runtime_state | P0-2: blueprint baseline mechanism — pre_commit_blueprint.py with baseline-gated validation, mirrors mypy_baseline.json pattern | RC-09 |
 | FIX-20260624-113 | 2026-06-24 | deployment_lifecycle | P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state | RC-09 |
+| FIX-20260624-114 | 2026-06-24 | runtime_state | P0-3: unify pre-push with pre-commit framework — extract check_omega_pre_push.py, add ci-mirror-omega hook, create bootstrap-dev-env.sh | RC-09 |
+| FIX-20260624-115 | 2026-06-24 | deployment_lifecycle | P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state | RC-09 |
 
 ---
 ## Fix Details by Year
@@ -4393,6 +4395,30 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Module**: deployment_lifecycle
 - **Files**: scripts/check_blueprint_compliance.py
 - **Description**: P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-114
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: 14b4c6da
+- **Type**: feat
+- **Module**: runtime_state
+- **Files**: scripts/check_omega_pre_push.py,scripts/bootstrap-dev-env.sh,.pre-commit-config.yaml
+- **Description**: P0-3: unify pre-push with pre-commit framework — extract check_omega_pre_push.py, add ci-mirror-omega hook, create bootstrap-dev-env.sh
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-115
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: 14b4c6da
+- **Type**: refactor
+- **Module**: deployment_lifecycle
+- **Files**: scripts/check_blueprint_compliance.py
+- **Description**: P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state
 - **Root Cause**: RC-09 — config-drift
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

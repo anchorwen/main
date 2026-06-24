@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T09:51:22Z
-> **扫描模块数**: 664
+> **自动生成**: 2026-06-24T09:53:30Z
+> **扫描模块数**: 665
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -669,10 +669,11 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 660 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 665 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
+| `check_omega_pre_push.py` | ✅ active | — | 2 | 86 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1010 | — | |
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |

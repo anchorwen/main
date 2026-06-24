@@ -1,6 +1,6 @@
 {
   "module": "deployment_lifecycle",
-  "acknowledged_at": 1782294580.6198754,
+  "acknowledged_at": 1782294770.2935195,
   "files": {
     "core/deployment/lifecycle_manager.py": "15f8f62d105b7bf6",
     "core/deployment/state_persistence.py": "acada217839d2b07",
@@ -18,7 +18,7 @@
     "scripts/verify.py": "30d1becbfb090b1b",
     "scripts/validate_artifacts.py": "dd8849bcb33d8a95",
     "scripts/validate_blueprints.py": "a4fd0ae469e3144b",
-    "scripts/check_blueprint_compliance.py": "0a5bd1c77412ff0d",
+    "scripts/check_blueprint_compliance.py": "737f6c1f627a61f9",
     "scripts/hook_blueprint_precheck.py": "b0b946a1b7a3c7ca",
     "scripts/hook_mypy_check.py": "93bc2c863763e8a9",
     "scripts/hook_architecture_gate.py": "9fa72f17bc1da569",

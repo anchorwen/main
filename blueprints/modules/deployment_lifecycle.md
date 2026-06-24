@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260624-115 | 2026-06-24 | cursor-agent | 14b4c6da | P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state | config-drift |
 | FIX-20260624-113 | 2026-06-24 | cursor-agent | a2c77b03 | P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state | config-drift |
 | UGR-B01 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/contracts/phantom_contract.py` + `scripts/verify_phantom_contracts.py` → contracts_resilience**. New phantom contract module + verifier script registered. | RC-09 |
 | UGR-A07 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/contracts/adapters.py` → contracts_resilience**. New adapter module registered. Also fixed pre-existing mypy return-statement error in _run_git(). | RC-09 |
