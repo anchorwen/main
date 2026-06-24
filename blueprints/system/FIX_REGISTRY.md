@@ -763,6 +763,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-113 | 2026-06-24 | deployment_lifecycle | P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state | RC-09 |
 | FIX-20260624-114 | 2026-06-24 | runtime_state | P0-3: unify pre-push with pre-commit framework — extract check_omega_pre_push.py, add ci-mirror-omega hook, create bootstrap-dev-env.sh | RC-09 |
 | FIX-20260624-115 | 2026-06-24 | deployment_lifecycle | P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state | RC-09 |
+| FIX-20260624-116 | 2026-06-24 | runtime_state | P1-1+P1-2: Scene F full exemption in omega gate + shared omega_constants.py + pre-flight validator hook | RC-09 |
+| FIX-20260624-117 | 2026-06-24 | deployment_lifecycle | P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption) | RC-09 |
 
 ---
 ## Fix Details by Year
@@ -4419,6 +4421,30 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Module**: deployment_lifecycle
 - **Files**: scripts/check_blueprint_compliance.py
 - **Description**: P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-116
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: 018e58e5
+- **Type**: feat
+- **Module**: runtime_state
+- **Files**: scripts/omega_constants.py,scripts/omega_gate.py,scripts/validate_commit_msg.py,.pre-commit-config.yaml
+- **Description**: P1-1+P1-2: Scene F full exemption in omega gate + shared omega_constants.py + pre-flight validator hook
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-117
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: 018e58e5
+- **Type**: refactor
+- **Module**: deployment_lifecycle
+- **Files**: scripts/omega_gate.py,scripts/validate_commit_msg.py,scripts/check_blueprint_compliance.py
+- **Description**: P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption)
 - **Root Cause**: RC-09 — config-drift
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

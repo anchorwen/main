@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T09:53:30Z
+> **自动生成**: 2026-06-24T09:57:52Z
 
 ## Package-Level Dependencies
 
@@ -654,8 +654,9 @@
 - `mt5_positions_snapshot.py` → (无内部依赖)
 - `mt5_spread_probe.py` → (无内部依赖)
 - `normalize_journal_pnl.py` → (无内部依赖)
+- `omega_constants.py` → (无内部依赖)
 - `omega_crash_snapshot.py` → (无内部依赖)
-- `omega_gate.py` → (无内部依赖)
+- `omega_gate.py` → `scripts.omega_constants`
 - `online_feedback_hook.py` → `core.brains.adapters.online_learner_adapter`, `core.feedback.online_feedback_hook`
 - `optimize_sl_tp.py` → `scripts.paper_trade_simulator`
 - `paper_trade_simulator.py` → `core.simulation.spread_model`
@@ -691,7 +692,7 @@
 - `validate_artifacts.py` → (无内部依赖)
 - `validate_blueprints.py` → (无内部依赖)
 - `validate_brain_before_deploy.py` → `core.brains.services.brain_factory`
-- `validate_commit_msg.py` → (无内部依赖)
+- `validate_commit_msg.py` → `scripts.omega_constants`
 - `validate_journal_health_fix.py` → (无内部依赖)
 - `validate_magic_sync.py` → `core.contracts.strategy_magic`
 - `verify.py` → `core.runtime.golden_master`

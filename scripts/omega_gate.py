@@ -42,32 +42,14 @@ L1_MAX_DIFF_FILES = 3  # L1 claims across more files → implausible
 L3_MIN_DIFF_LINES = 10  # L3 claims below this → implausible
 L3_MIN_DIFF_FILES = 1  # L3 claims in fewer files → implausible
 
-# ── Hot-path files (require #10 in signature) ──
-HOT_PATH_FILES = {
-    "core/runtime/live_cycle.py",
-    "core/execution/strategy_line.py",
-    "core/execution/execution_queue.py",
-    "scripts/live_intent_loop.py",
-}
-
-# ── Signature patterns ──
-SIGNATURE_RE = re.compile(
-    r"\[[OΩ].*Routing:\s*Scene\s+[A-H]\s*(?:→|->)\s*.*\]",
-    re.IGNORECASE,
+from scripts.omega_constants import (
+    EXEMPTION_PATTERN,
+    HOT_PATH_FILES,
+    HOT_PATH_IRON_LAW,
+    SCENE_F_EXEMPTION_SCOPE,
+    SCENE_REQUIRES_IRON_LAW,
+    SIGNATURE_RE,
 )
-# Scene A (Bug fix) requires DQAF: #9
-# Scene B (Code) requires: #0 → #6 → #5
-# Scene C (Config) requires: #0 → #8
-# etc.
-
-SCENE_REQUIRES_IRON_LAW: dict[str, list[str]] = {
-    "A": ["#9", "#8", "#12"],
-    "B": ["#0", "#6", "#5"],
-    "C": ["#0", "#8"],
-    "E": ["#6", "#0"],
-}
-
-HOT_PATH_IRON_LAW = "#10"
 
 
 def get_commit_msg() -> str:
@@ -158,6 +140,9 @@ def main() -> int:
     # IRON_LAW-13-S1: Enhanced with Root Cause Layer + Causal Chain depth (#8, #12).
     scene_match = re.search(r"Scene\s+([A-H])", signature)
     scene = scene_match.group(1).upper() if scene_match else ""
+    is_scene_f = scene == "F"  # P0-3: Scene F = pure mechanical, full exemption
+    if is_scene_f:
+        print(f"[Ω] Scene F detected — quality gates bypassed. Scope: {SCENE_F_EXEMPTION_SCOPE}")
     if scene_match:
         required = SCENE_REQUIRES_IRON_LAW.get(scene, [])
         missing = [law for law in required if law not in signature]
@@ -204,12 +189,7 @@ def main() -> int:
     }
     has_fix = bool(re.search(r"FIX-\d{8}-\d{3}", commit_msg))
     has_dqaf = bool(re.search(r"DQAF-\d{8}-\d{3}", commit_msg))
-    is_exempt = bool(
-        re.search(
-            r"(?i)(?:pure.?mechanical|formatting|docs?.only|config.value|exempt|豁免|no.dqaf.needed)",
-            commit_msg,
-        )
-    )
+    is_exempt = is_scene_f or bool(EXEMPTION_PATTERN.search(commit_msg))
 
     # ── Root Cause Layer for Scene B/E (#12) — S.E.A.L. Framework ────────
     # FIX-20260622-052: Root Cause Layer annotation is mandatory for ALL

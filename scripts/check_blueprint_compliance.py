@@ -334,6 +334,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/hook_pre_push.py",
         "scripts/pre_commit_blueprint.py",
         "scripts/check_omega_pre_push.py",
+        "scripts/omega_constants.py",
     ],
     "training": [
         "core/training/",

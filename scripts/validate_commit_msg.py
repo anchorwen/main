@@ -23,21 +23,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# ── Constants (mirror omega_gate.py) ──────────────────────────────────────
-SIGNATURE_RE = re.compile(r"\[[OΩ].*Routing:\s*Scene\s+[A-H]\s*(?:→|->)\s*.*\]", re.IGNORECASE)
-SCENE_REQUIRES_IRON_LAW: dict[str, list[str]] = {
-    "A": ["#9", "#8", "#12"],
-    "B": ["#0", "#6", "#5"],
-    "C": ["#0", "#8"],
-    "E": ["#6", "#0"],
-}
-HOT_PATH_FILES = {
-    "core/runtime/live_cycle.py",
-    "core/execution/strategy_line.py",
-    "core/execution/execution_queue.py",
-    "scripts/live_intent_loop.py",
-}
-HOT_PATH_IRON_LAW = "#10"
+from scripts.omega_constants import (
+    EXEMPTION_PATTERN,
+    HOT_PATH_FILES,
+    HOT_PATH_IRON_LAW,
+    SCENE_REQUIRES_IRON_LAW,
+    SIGNATURE_RE,
+)
 
 
 @dataclass
@@ -141,6 +133,7 @@ def validate(msg: str) -> ValidationReport:
     # ── Parse scene ───────────────────────────────────────────────────────
     scene_match = re.search(r"Scene\s+([A-H])", signature)
     scene = scene_match.group(1).upper() if scene_match else ""
+    is_scene_f = scene == "F"
     if not scene_match:
         report.add("1b. Scene Code", False, "Could not parse Scene code from signature.")
     else:
@@ -150,12 +143,7 @@ def validate(msg: str) -> ValidationReport:
     covered_staged = get_staged_covered()
     has_fix = bool(re.search(r"FIX-\d{8}-\d{3}", msg))
     has_dqaf = bool(re.search(r"DQAF-\d{8}-\d{3}", msg))
-    is_exempt = bool(
-        re.search(
-            r"(?i)(?:pure.?mechanical|formatting|docs?.only|config.value|exempt|豁免|no.dqaf.needed)",
-            msg,
-        )
-    )
+    is_exempt = is_scene_f or bool(EXEMPTION_PATTERN.search(msg))
 
     # ── Check 2: Scene requires minimal iron law references ────────────────
     if scene_match:

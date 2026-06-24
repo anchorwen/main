@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T09:53:30Z
-> **扫描模块数**: 665
+> **自动生成**: 2026-06-24T09:57:52Z
+> **扫描模块数**: 666
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -669,7 +669,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 665 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 666 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -738,8 +738,9 @@
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 185 | — | |
+| `omega_constants.py` | 📄 config | — | 0 | 70 | — | |
 | `omega_crash_snapshot.py` | ✅ active | — | 4 | 158 | — | |
-| `omega_gate.py` | ✅ active | — | 4 | 562 | — | |
+| `omega_gate.py` | ✅ active | — | 4 | 542 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
@@ -775,7 +776,7 @@
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
 | `validate_blueprints.py` | ✅ active | — | 7 | 297 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
-| `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 418 | — | |
+| `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 406 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
 | `verify.py` | ✅ active | — | 15 | 992 | — | |

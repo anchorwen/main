@@ -99,6 +99,12 @@ repos:
   # ------------------------------------------------------------------
   - repo: local
     hooks:
+      - id: omega-preflight
+        name: "[Ω] Pre-flight commit message validator"
+        entry: python scripts/validate_commit_msg.py
+        language: system
+        stages: [prepare-commit-msg]
+        pass_filenames: false
       - id: omega-routing
         name: "[Ω] Routing signature required"
         entry: python scripts/omega_gate.py
