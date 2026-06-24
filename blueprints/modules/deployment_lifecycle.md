@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260624-119 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/observability/event_bus.py` added to monitor_dashboard**. New file registered as part of EventBus FOG over-narrowing fix. | RC-09 |
 | FIX-20260624-117 | 2026-06-24 | cursor-agent | 018e58e5 | P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption) | config-drift |
 | FIX-20260624-115 | 2026-06-24 | cursor-agent | 14b4c6da | P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state | config-drift |
 | FIX-20260624-113 | 2026-06-24 | cursor-agent | a2c77b03 | P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state | config-drift |

@@ -271,6 +271,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "monitor_dashboard": [
         "apps/monitor/live_trading_dashboard.py",
         "core/observability/diagnostics_dashboard.py",
+        "core/observability/event_bus.py",
         "core/observability/slo_service.py",
         "core/observability/alert_channels.py",
         "core/observability/alert_service.py",

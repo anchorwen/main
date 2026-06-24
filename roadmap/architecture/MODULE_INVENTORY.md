@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T09:59:37Z
+> **自动生成**: 2026-06-24T10:55:03Z
 > **扫描模块数**: 666
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -423,7 +423,7 @@
 | `degradation.py` | ✅ active | DegradationLevel, DegradationConstraints | 4 | 267 | — | |
 | `diagnostics_dashboard.py` | ✅ active | DiagnosticsDashboard | 7 | 149 | — | |
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
-| `event_bus.py` | ✅ active | EventBus | 7 | 63 | — | |
+| `event_bus.py` | ✅ active | EventBus | 7 | 65 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
 | `health_checks.py` | 🧪 stub | HealthCheckMethods | 40 | 2731 | — | |
 | `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
@@ -669,7 +669,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 666 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 667 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |

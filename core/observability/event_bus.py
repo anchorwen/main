@@ -43,7 +43,9 @@ class EventBus:
             try:
                 handler(event_type, payload)
                 delivered += 1
-            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            except (
+                Exception
+            ):  # BLE001:FOG — pub/sub fire-and-forget: handler errors NEVER crash publisher
                 logging.exception("EventBus handler failed for event_type=%s", event_type)
         return delivered
 

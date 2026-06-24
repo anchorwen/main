@@ -766,6 +766,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-116 | 2026-06-24 | runtime_state | P1-1+P1-2: Scene F full exemption in omega gate + shared omega_constants.py + pre-flight validator hook | RC-09 |
 | FIX-20260624-117 | 2026-06-24 | deployment_lifecycle | P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption) | RC-09 |
 | FIX-20260624-118 | 2026-06-24 | infrastructure | P1-3 + docs: auto-fix script + CONTRIBUTING.md bootstrap workflow + CLAUDE.md Scene F routing | RC-09 |
+| FIX-20260624-119 | 2026-06-24 | monitor_dashboard | **BLE001:FOG over-narrowing in EventBus.publish()** — restore except Exception for pub/sub fire-and-forget handler dispatch. 5-type tuple excluded ZeroDivisionError, crashing publisher when handler raises unlisted exception. Same class as FIX-20260624-104 (scheduler_service). | RC-05 |
+
 
 ---
 ## Fix Details by Year
@@ -4460,4 +4462,16 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Description**: P1-3 + docs: auto-fix script + CONTRIBUTING.md bootstrap workflow + CLAUDE.md Scene F routing
 - **Root Cause**: RC-09 — config-drift
 - **Prevention**: (to be filled)
+
+### FIX-20260624-119
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: monitor_dashboard
+- **Files**: core/observability/event_bus.py,scripts/check_blueprint_compliance.py
+- **Description**: BLE001:FOG over-narrowing — EventBus.publish() catch narrowed to 5-type tuple excluding ZeroDivisionError. Restored broad except Exception for pub/sub fire-and-forget handler dispatch (same class as FIX-20260624-104 scheduler_service fix).
+- **Root Cause**: RC-05 — one-size-fits-all FOG narrow tuple applied to generic callable dispatch; pub/sub buses MUST catch all handler errors
+- **Prevention**: Code review checklist for FOG migration: "does this site dispatch user-provided callables? → except Exception"
+- **Dependents Checked**: (none)
 - **Dependents Checked**: (none)
