@@ -33,8 +33,7 @@ class TestRecordMiaExitsForReentry:
             "pnl": -50.0,
         }
         with patch("core.execution.reentry_guard.ensure_reentry_state") as mock_ensure, \
-             patch("core.execution.reentry_guard.ExitRecord") as mock_record_cls, \
-             patch("core.runtime.reentry_recording.log_and_continue") as mock_lc:
+             patch("core.execution.reentry_guard.ExitRecord") as mock_record_cls:
             mock_rs = MagicMock()
             mock_ensure.return_value = mock_rs
             mock_record = MagicMock()
@@ -84,8 +83,7 @@ class TestRecordMiaExitsForReentry:
             "position_ticket": 67890,
         }
         with patch("core.execution.reentry_guard.ensure_reentry_state") as mock_ensure, \
-             patch("core.execution.reentry_guard.ExitRecord") as mock_record_cls, \
-             patch("core.runtime.reentry_recording.log_and_continue") as mock_lc:
+             patch("core.execution.reentry_guard.ExitRecord") as mock_record_cls:
             mock_rs = MagicMock()
             mock_ensure.return_value = mock_rs
             mock_record_cls.return_value = MagicMock()
@@ -106,8 +104,7 @@ class TestRecordMiaExitsForReentry:
             "position_ticket": 99999,
         }
         with patch("core.execution.reentry_guard.ensure_reentry_state") as mock_ensure, \
-             patch("core.execution.reentry_guard.ExitRecord") as mock_record_cls, \
-             patch("core.runtime.reentry_recording.log_and_continue") as mock_lc:
+             patch("core.execution.reentry_guard.ExitRecord") as mock_record_cls:
             mock_rs = MagicMock()
             mock_ensure.return_value = mock_rs
             mock_record_cls.return_value = MagicMock()

@@ -52,6 +52,7 @@ def run_session_guards(
 
         # ── Intraday drawdown kill switch ──
         if config.intraday_drawdown_kill_enabled:
+            _acc = None
             with FaultTolerantContext(
                 level=FaultLevel.DEGRADE,
                 component="MT5_IPC:account_info:drawdown_kill",
@@ -66,6 +67,7 @@ def run_session_guards(
                         force_close_enabled=config.intraday_dd_force_close,
                         force_close_pct=config.intraday_dd_force_close_pct,
                     )
+                dd_result: dict[str, Any] = {}
                 if _acc is not None:
                     _eq = float(getattr(_acc, "equity", 0))
                     dd_result = state.intraday_dd_kill.update(_eq)

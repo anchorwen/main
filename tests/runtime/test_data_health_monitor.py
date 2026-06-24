@@ -23,7 +23,7 @@ class TestCheckDataHealth:
         """
         with patch(
             "core.observability.data_health_service.DataHealthService",
-            side_effect=ImportError("no module"),
+            side_effect=RuntimeError("no module"),
         ):
             result = check_data_health("/fake/path", "XAUUSDc")
 
