@@ -50,6 +50,8 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| UGR-A06 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/observability/invariant_engine.py` → monitor_dashboard**. New InvariantEngine file registered in source map. | RC-09 |
+| UGR-P01 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `contracts_resilience` module registered**. New module for UGR v3.1 zero-tolerance resilience architecture (CapResult, Phantom Contracts, TypedClock, WAL, SupervisedScheduler). Blueprint: `blueprints/modules/contracts_resilience.md`. | RC-09 — new module not yet registered |
 | FIX-20260623-087 | 2026-06-23 | cursor-agent | 3dbc07ec | Commit Message Pre-Flight Validator: single-pass omega-routing validation script. Runs all 14 checks at once, reports all failures with fix hints. Eliminates whack-a-mole push pattern. | config-drift |
 | FIX-20260623-086 | 2026-06-23 | cursor-agent | 5f77c70a | CI Red-X: PowerShell to bash shell migration for fast track step. pwsh $LASTEXITCODE + 2>&1 does not preserve Python exit codes reliably. | config-drift |
 | FIX-20260623-084 | 2026-06-23 | cursor-agent | — | **DQAF-084: MODULE_SOURCE_MAP — `core/contracts/position_events.py` → contracts_domain**. Previously unmapped contract file now tracked (PositionClosed + p_win for calibrator). | L1 — orphan file never registered in MODULE_SOURCE_MAP |

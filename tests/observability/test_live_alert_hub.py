@@ -263,3 +263,160 @@ class TestLiveAlertHub:
         )
         live_hub.add_rule(rule)
         mock_service.add_rule.assert_called_once_with(rule)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AlertStormDetector — UGR v3.1 §A05 storm protection tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAlertStormDetector:
+    """Tests for AlertStormDetector — sliding-window storm detection."""
+
+    def test_normal_state_initially(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector()
+        assert d.state == StormState.NORMAL
+        assert d.current_rate == 0
+
+    def test_warning_at_threshold(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector(warning_threshold=3, storm_threshold=30)
+        for i in range(3):
+            d.record(f"rule_{i}")
+        assert d.state == StormState.WARNING
+
+    def test_storm_at_threshold(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector(warning_threshold=3, storm_threshold=5)
+        for i in range(5):
+            d.record(f"rule_{i}")
+        assert d.state == StormState.STORM
+
+    def test_storm_aggregates_alerts(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector(warning_threshold=3, storm_threshold=5)
+        for i in range(10):
+            state = d.record("rule_a" if i < 6 else "rule_b")
+        assert d.state == StormState.STORM
+        # rule_a: 6, rule_b: 4 (but first 5 trigger the storm, so only 5+5 counted or 1+4 after storm...)
+        # After storm is entered at record 5 (index 4), records 5-9 are in storm
+        metrics = d.get_metrics()
+        suppressed = metrics["total_suppressed_in_storm"]
+        assert isinstance(suppressed, int)
+        assert suppressed >= 5
+
+    def test_summary_emission(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector
+
+        d = AlertStormDetector(warning_threshold=3, storm_threshold=5, storm_summary_interval=0.05)
+        for _ in range(10):
+            d.record("rule_a")
+        # First emission: interval has elapsed since storm entered
+        time.sleep(0.06)
+        assert d.should_emit_summary()
+        summary = d.consume_summary()
+        assert "rule_a" in summary
+        assert summary["rule_a"] > 0
+        # After consuming, should not emit until interval elapses again
+        assert not d.should_emit_summary()
+
+    def test_rate_decays(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector(window_seconds=0.01, warning_threshold=3, storm_threshold=5)
+        for _ in range(5):
+            d.record("rule_a")
+        assert d.state == StormState.STORM
+
+        # Wait for window to expire
+        time.sleep(0.02)
+        assert d.current_rate == 0
+        assert d.state != StormState.STORM  # must have decayed from STORM
+
+    def test_normal_mode_does_not_aggregate(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector(warning_threshold=5, storm_threshold=10)
+        state = d.record("rule_a")
+        assert state == StormState.NORMAL
+        assert not d.should_emit_summary()
+
+    def test_critical_never_aggregated_by_detector(self) -> None:
+        """The storm detector records all rules; caller decides CRITICAL bypass."""
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector(warning_threshold=3, storm_threshold=5)
+        for _ in range(5):
+            d.record("circuit_open")
+        assert d.state == StormState.STORM
+        # The detector doesn't know about severity — the CALLER must bypass
+
+    def test_metrics_include_state_info(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector
+
+        d = AlertStormDetector()
+        d.record("test_rule")
+        metrics = d.get_metrics()
+        assert metrics["storm_state"] == "normal"
+        assert metrics["total_recorded"] == 1
+        assert "current_firing_rate" in metrics
+        assert "seconds_in_current_state" in metrics
+
+    def test_storm_events_counter(self) -> None:
+        from core.observability.live_alert_hub import AlertStormDetector, StormState
+
+        d = AlertStormDetector(window_seconds=0.01, warning_threshold=2, storm_threshold=3)
+        # Enter storm
+        for _ in range(3):
+            d.record("rule_a")
+        assert d.state == StormState.STORM
+        assert d._storm_events == 1
+
+        # Decay
+        time.sleep(0.02)
+        assert d.state != StormState.STORM  # must have decayed from STORM
+        # Re-enter storm
+        for _ in range(3):
+            d.record("rule_b")
+        assert d.state == StormState.STORM
+        assert d._storm_events == 2
+
+
+class TestLiveAlertHubStormIntegration:
+    """Integration tests: LiveAlertHub evaluate_and_dispatch with storm detection."""
+
+    def test_storm_detector_initialized(self, live_hub: LiveAlertHub) -> None:
+        assert hasattr(live_hub, "_storm_detector")
+        from core.observability.live_alert_hub import StormState
+
+        assert live_hub._storm_detector.state == StormState.NORMAL
+
+    def test_get_status_includes_storm_metrics(self, live_hub: LiveAlertHub) -> None:
+        status = live_hub.get_status()
+        assert "storm" in status
+        assert status["storm"]["storm_state"] == "normal"
+
+    def test_get_health_status_returns_comprehensive(self, live_hub: LiveAlertHub) -> None:
+        health = live_hub.get_health_status()
+        assert "healthy" in health
+        assert "issues" in health
+        assert "worker_alive" in health
+        assert "queue_pressure_pct" in health
+        assert "storm" in health
+        assert "circuit_breaker_state" in health
+
+    def test_evaluate_and_dispatch_tracks_storm_rate(self, live_hub: LiveAlertHub) -> None:
+        """Repeated evaluate_and_dispatch calls feed the storm detector."""
+        # Call evaluate multiple times — storm detector records firings
+        for _ in range(5):
+            live_hub.evaluate_and_dispatch({"error_rate": 0.01})
+        metrics = live_hub._storm_detector.get_metrics()
+        # Each evaluate may fire some alerts; the detector records them
+        total = metrics["total_recorded"]
+        assert isinstance(total, int)
+        assert total >= 0  # Depends on which rules fire

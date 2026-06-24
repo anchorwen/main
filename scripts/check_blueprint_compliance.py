@@ -176,6 +176,13 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/contracts/serialization/",
         "core/contracts/strategy_magic.py",
     ],
+    "contracts_resilience": [
+        # UGR v3.1 — Zero-tolerance resilience architecture
+        "core/contracts/cap_result.py",
+        "core/contracts/phantom_contract.py",
+        "scripts/verify_capresult_ast.py",
+        "scripts/verify_phantom_contracts.py",
+    ],
     "contracts_training": ["core/contracts/training/"],
     "data_infrastructure": [
         "core/data/",
@@ -265,6 +272,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/observability/alert_service.py",
         "core/observability/alert_runbook_bridge.py",
         "core/observability/live_alert_hub.py",
+        "core/observability/invariant_engine.py",
         "core/observability/message_broker.py",
         "core/observability/data_health_schema.py",
         "core/observability/data_health_service.py",

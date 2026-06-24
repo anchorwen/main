@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-23T15:33:21Z
+> **自动生成**: 2026-06-24T00:43:54Z
 
 ## Package-Level Dependencies
 
@@ -88,6 +88,7 @@
 ### `core/contracts/`
 
 - `calibrator_contract.py` → (无内部依赖)
+- `cap_result.py` → (无内部依赖)
 - `domain_keys.py` → (无内部依赖)
 - `enums.py` → (无内部依赖)
 - `events.py` → (无内部依赖)
@@ -132,6 +133,7 @@
 - `projections.py` → `core.contracts.events`
 - `ticket_resolver.py` → (无内部依赖)
 - `wap.py` → (无内部依赖)
+- `write_ahead_log.py` → (无内部依赖)
 
 ### `core/deployment/`
 
@@ -364,6 +366,7 @@
 - `event_bus.py` → `core.runtime.fault_handler`
 - `event_schema.py` → (无内部依赖)
 - `health_checks.py` → `core.observability._health_helpers`, `core.observability.data_health_schema`, `core.runtime.fault_handler`
+- `invariant_engine.py` → `core.data.write_ahead_log`, `core.runtime.fault_handler`
 - `live_alert_hub.py` → `core.observability.alert_channels`, `core.observability.alert_runbook_bridge`, `core.observability.alert_service`, `core.protocol.services.resilience`, `core.runtime.fault_handler`
 - `localization.py` → (无内部依赖)
 - `message_broker.py` → `core.observability.event_bus`, `core.runtime.fault_handler`
@@ -469,10 +472,12 @@
 - `strategy_config_validator.py` → (无内部依赖)
 - `strategy_evaluator.py` → `core.execution.correlation_sizer`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_direction_gate`, `core.execution.regime_gate`, `core.observability.degradation`, `core.runtime.fault_handler`, `core.runtime.gate_audit_recorder`, `core.runtime.time_utils`
 - `summary_service.py` → `core.runtime.evidence_reader`, `core.runtime.schema_versions`
+- `supervised_scheduler.py` → (无内部依赖)
 - `time_utils.py` → (无内部依赖)
 - `timeframe_scaling.py` → (无内部依赖)
 - `trade_notify.py` → `core.runtime.time_utils`
 - `trail_dispatch.py` → `core.runtime.fault_handler`
+- `typed_clock.py` → (无内部依赖)
 
 ### `core/schemas/`
 
@@ -686,6 +691,7 @@
 - `validate_magic_sync.py` → `core.contracts.strategy_magic`
 - `verify.py` → `core.runtime.fault_handler`, `core.runtime.golden_master`
 - `verify_all_brains.py` → `core.brains.services.brain_factory`, `core.runtime.fault_handler`
+- `verify_capresult_ast.py` → (无内部依赖)
 - `verify_dqaf044_fix_effect.py` → (无内部依赖)
 - `verify_dqaf_002_fix.py` → `core.execution.position_manager`
 - `verify_event_stream.py` → `core.feedback.brain_pnl_ledger`, `core.runtime.fault_handler`

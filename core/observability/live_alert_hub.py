@@ -56,6 +56,168 @@ from core.runtime.fault_handler import fail_open_guard
 logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]  # d:\future\
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Alert Storm Detector — UGR v3.1 §A05 storm protection
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+import enum as _enum
+
+
+class StormState(_enum.Enum):
+    """Alert storm detector state."""
+
+    NORMAL = "normal"
+    WARNING = "warning"  # Elevated rate, not yet throttling
+    STORM = "storm"  # Active throttling — aggregate only
+
+
+class AlertStormDetector:
+    """Sliding-window alert storm detector with automatic throttling.
+
+    When the alert ingress rate exceeds ``storm_threshold`` within
+    ``window_seconds``, the detector transitions through WARNING →
+    STORM.  In STORM mode, per-rule alerts are aggregated and only
+    summary alerts are emitted at ``storm_summary_interval``.
+
+    Self-monitoring metrics are exposed via ``get_metrics()`` for
+    integration into the alert bus health status.
+    """
+
+    def __init__(
+        self,
+        window_seconds: float = 60.0,
+        storm_threshold: int = 30,
+        warning_threshold: int = 15,
+        storm_summary_interval: float = 30.0,
+    ) -> None:
+        self._window = window_seconds
+        self._storm_threshold = storm_threshold
+        self._warning_threshold = warning_threshold
+        self._summary_interval = storm_summary_interval
+
+        # Sliding window: deque of (timestamp, rule_name)
+        self._firing_log: list[tuple[float, str]] = []
+        self._state = StormState.NORMAL
+        self._state_changed_at = time.monotonic()
+
+        # Aggregation during storm
+        self._storm_aggregates: dict[str, int] = {}  # rule_name → count
+        self._last_summary_at: float = 0.0
+
+        # Metrics
+        self._total_recorded: int = 0
+        self._total_suppressed_in_storm: int = 0
+        self._storm_events: int = 0  # Number of times storm mode was entered
+
+    # ── Core API ────────────────────────────────────────────────────────
+
+    def record(self, rule_name: str) -> StormState:
+        """Record an alert firing and return the current storm state.
+
+        Caller should check the return value:
+        - NORMAL / WARNING: deliver alert normally
+        - STORM: aggregate; do NOT deliver individually
+        """
+        now = time.monotonic()
+        self._total_recorded += 1
+        self._firing_log.append((now, rule_name))
+        self._prune(now)
+
+        rate = len(self._firing_log)
+        old_state = self._state
+
+        if rate >= self._storm_threshold:
+            self._state = StormState.STORM
+        elif rate >= self._warning_threshold:
+            self._state = StormState.WARNING
+        else:
+            self._state = StormState.NORMAL
+
+        # Track state transitions
+        if self._state != old_state:
+            self._state_changed_at = now
+            if self._state == StormState.STORM:
+                self._storm_events += 1
+                self._storm_aggregates.clear()
+                self._last_summary_at = now
+
+        # Aggregate in storm mode
+        if self._state == StormState.STORM:
+            self._storm_aggregates[rule_name] = self._storm_aggregates.get(rule_name, 0) + 1
+            self._total_suppressed_in_storm += 1
+
+        return self._state
+
+    def should_emit_summary(self) -> bool:
+        """Return True if it's time to emit an aggregated storm summary."""
+        if self._state != StormState.STORM:
+            return False
+        now = time.monotonic()
+        return (now - self._last_summary_at) > self._summary_interval
+
+    def consume_summary(self) -> dict[str, int]:
+        """Return the aggregated counts since last summary and reset."""
+        summary = dict(self._storm_aggregates)
+        self._storm_aggregates.clear()
+        self._last_summary_at = time.monotonic()
+        return summary
+
+    # ── Properties ──────────────────────────────────────────────────────
+
+    @property
+    def state(self) -> StormState:
+        """Current storm state, auto-recovers when firing rate drops."""
+        now = time.monotonic()
+        self._prune(now)
+        rate = len(self._firing_log)
+        if rate < self._warning_threshold and self._state != StormState.NORMAL:
+            self._state = StormState.NORMAL
+            self._state_changed_at = now
+        elif (
+            self._warning_threshold <= rate < self._storm_threshold
+            and self._state == StormState.STORM
+        ):
+            self._state = StormState.WARNING
+            self._state_changed_at = now
+        return self._state
+
+    @property
+    def current_rate(self) -> int:
+        """Number of alerts in the current window."""
+        self._prune(time.monotonic())
+        return len(self._firing_log)
+
+    # ── Metrics ─────────────────────────────────────────────────────────
+
+    def get_metrics(self) -> dict[str, object]:
+        """Return self-monitoring metrics for health status."""
+        return {
+            "storm_state": self._state.value,
+            "storm_events_total": self._storm_events,
+            "current_firing_rate": self.current_rate,
+            "total_recorded": self._total_recorded,
+            "total_suppressed_in_storm": self._total_suppressed_in_storm,
+            "seconds_in_current_state": round(time.monotonic() - self._state_changed_at, 2),
+        }
+
+    # ── Internal ────────────────────────────────────────────────────────
+
+    def _prune(self, now: float) -> None:
+        """Remove entries outside the sliding window."""
+        cutoff = now - self._window
+        # In-place truncation: find first index >= cutoff
+        keep_from = 0
+        for i, (ts, _) in enumerate(self._firing_log):
+            if ts >= cutoff:
+                keep_from = i
+                break
+        else:
+            keep_from = len(self._firing_log)
+        self._firing_log = self._firing_log[keep_from:]
+
+
 # ── Background delivery worker ─────────────────────────────────────────────
 
 
@@ -112,7 +274,7 @@ class BackgroundDeliveryWorker(threading.Thread):
             try:
                 self._channel.send(enriched)
                 self._delivered += 1
-            except Exception:  # BLE001:FOG
+            except Exception:  # noqa: BLE001  # BLE001:FOG
                 with fail_open_guard("live_alert_hub:run"):
                     logger.exception(
                         "BackgroundDeliveryWorker: channel.send failed for rule=%s",
@@ -259,6 +421,14 @@ class LiveAlertHub:
         self._register_rules_from_config()
         self._load_cooling_state()
 
+        # ── Storm protection (UGR v3.1 §A05) ──
+        self._storm_detector = AlertStormDetector(
+            window_seconds=60.0,
+            storm_threshold=30,
+            warning_threshold=15,
+            storm_summary_interval=30.0,
+        )
+
         # ── Stats ──
         self._cycles_evaluated: int = 0
         self._alerts_fired_total: int = 0
@@ -390,6 +560,9 @@ class LiveAlertHub:
         Called from the main trading loop every cycle.  NO I/O — only
         in-memory rule evaluation and queue.put().
 
+        UGR v3.1 §A05: Storm protection — when alert rate exceeds threshold,
+        non-critical alerts are aggregated; only summaries are emitted.
+
         Returns the list of fired alerts (for optional JSON logging).
         """
         fired = self._alert_service.evaluate(context)
@@ -406,25 +579,64 @@ class LiveAlertHub:
                 self._circuit_breaker.trip(reason=alert.get("rule_name", ""))
 
         # ── Shadow RCA: async LLM root cause analysis for Sev1/Sev2 ──
-        critical_or_error = [
-            a for a in fired
-            if a.get("severity") in ("critical", "error")
-        ]
+        critical_or_error = [a for a in fired if a.get("severity") in ("critical", "error")]
         if critical_or_error:
             self._trigger_shadow_rca(critical_or_error)
 
-        # ── Enqueue for async delivery (backpressure: drop if full) ──
+        # ── Storm detection + enqueue (UGR v3.1 §A05) ──
+        storm_state = StormState.NORMAL
         for alert in fired:
-            try:
-                self._alert_queue.put_nowait(alert)
-            except queue.Full:
-                logger.error(
-                    "ALERT QUEUE FULL (1000) — downstream dead, alert dropped: %s",
-                    alert.get("rule_name", "?"),
-                )
-                self._write_fallback_alert(alert)
+            rule_name = alert.get("rule_name", "unknown")
+            is_critical = alert.get("severity") == "critical"
+
+            # Record every non-trade alert in the storm detector
+            if rule_name != "trade_notification":
+                storm_state = self._storm_detector.record(rule_name)
+
+            # CRITICAL always passes through regardless of storm
+            if is_critical:
+                self._enqueue_alert(alert)
+            elif storm_state == StormState.STORM:
+                # Suppress individual alert — aggregated in storm detector
+                pass
+            else:
+                # NORMAL or WARNING: deliver normally
+                self._enqueue_alert(alert)
+
+        # ── Emit storm summary when interval elapses ──
+        if self._storm_detector.should_emit_summary():
+            summary = self._storm_detector.consume_summary()
+            if summary:
+                total_aggregated = sum(summary.values())
+                summary_alert = {
+                    "rule_name": "alert_storm_summary",
+                    "severity": "critical",
+                    "symbol": self._symbol,
+                    "fired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                    "context_snapshot": {
+                        "message": (
+                            f"Alert Storm — {total_aggregated} alerts aggregated "
+                            f"across {len(summary)} rules in the last "
+                            f"{self._storm_detector._summary_interval}s"
+                        ),
+                        "aggregated_rules": summary,
+                        "storm_events_total": self._storm_detector._storm_events,
+                    },
+                }
+                self._enqueue_alert(summary_alert)
 
         return fired
+
+    def _enqueue_alert(self, alert: dict[str, Any]) -> None:
+        """Enqueue a single alert for async delivery. Drop if queue full."""
+        try:
+            self._alert_queue.put_nowait(alert)
+        except queue.Full:
+            logger.error(
+                "ALERT QUEUE FULL (1000) — downstream dead, alert dropped: %s",
+                alert.get("rule_name", "?"),
+            )
+            self._write_fallback_alert(alert)
 
     def _trigger_shadow_rca(self, alerts: list[dict[str, Any]]) -> None:
         """Fire-and-forget async LLM root cause analysis.
@@ -433,23 +645,27 @@ class LiveAlertHub:
         trading loop (Guardrail G1).  Failures are silent (fail-open).
         """
         try:
-            payload = json.dumps({
-                "alert": alerts[0],  # analyze the first critical/error alert
-                "file": alerts[0].get("context_snapshot", {}).get("_source_file", ""),
-            }, ensure_ascii=False)
+            payload = json.dumps(
+                {
+                    "alert": alerts[0],  # analyze the first critical/error alert
+                    "file": alerts[0].get("context_snapshot", {}).get("_source_file", ""),
+                },
+                ensure_ascii=False,
+            )
             subprocess.Popen(
                 [
                     sys.executable,
                     str(ROOT / "scripts" / "shadow_rca.py"),
                     "--stdin",
-                    "--data-dir", str(self._base_dir),
+                    "--data-dir",
+                    str(self._base_dir),
                 ],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 cwd=str(ROOT),
             ).communicate(input=payload.encode("utf-8"), timeout=0.5)
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001  # BLE001:FOG
             with fail_open_guard("live_alert_hub:_trigger_shadow_rca"):
                 pass  # Shadow RCA is best-effort — never block trading
 
@@ -516,7 +732,7 @@ class LiveAlertHub:
                 with contextlib.suppress(OSError):
                     os.unlink(tmp_path)
                 raise
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001  # BLE001:FOG
             with fail_open_guard("live_alert_hub:_save_cooling_state"):
                 pass
 
@@ -632,6 +848,44 @@ class LiveAlertHub:
             "cycles_evaluated": self._cycles_evaluated,
             "alerts_fired_total": self._alerts_fired_total,
             "queue_size": self._alert_queue.qsize(),
+            "delivery_delivered": self._worker.delivered_count,
+            "delivery_suppressed": self._worker.suppressed_count,
+            "storm": self._storm_detector.get_metrics(),
+        }
+
+    def get_health_status(self) -> dict[str, Any]:
+        """Self-monitoring health report (UGR v3.1 §A05).
+
+        Returns a comprehensive health snapshot including storm detection,
+        queue pressure, worker liveness, and circuit breaker state.
+        Callers can use this for external monitoring or dashboard display.
+        """
+        worker_alive = self._worker.is_alive()
+        queue_depth = self._alert_queue.qsize()
+        storm_metrics = self._storm_detector.get_metrics()
+
+        # Determine overall health
+        issues: list[str] = []
+        if not worker_alive:
+            issues.append("delivery_worker_dead")
+        if queue_depth > 900:
+            issues.append("queue_near_capacity")
+        if storm_metrics["storm_state"] == "storm":
+            issues.append("alert_storm_active")
+        if self._circuit_breaker.state.value == "open":
+            issues.append("circuit_breaker_open")
+
+        return {
+            "healthy": len(issues) == 0,
+            "issues": issues,
+            "worker_alive": worker_alive,
+            "queue_depth": queue_depth,
+            "queue_capacity": 1000,
+            "queue_pressure_pct": round(queue_depth / 10.0, 1),  # 0.0–100.0
+            "storm": storm_metrics,
+            "circuit_breaker_state": self._circuit_breaker.state.value,
+            "cycles_evaluated": self._cycles_evaluated,
+            "alerts_fired_total": self._alerts_fired_total,
             "delivery_delivered": self._worker.delivered_count,
             "delivery_suppressed": self._worker.suppressed_count,
         }

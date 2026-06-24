@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-23T15:33:21Z
-> **扫描模块数**: 653
+> **自动生成**: 2026-06-24T00:43:54Z
+> **扫描模块数**: 659
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -108,6 +108,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `calibrator_contract.py` | ✅ active | CalibratorHistoryEntry, CalibratorState | 3 | 116 | — | |
+| `cap_result.py` | ✅ active | CapProofExpired, CapProofReused, _SuccessProof, CapResult, Kernel | 18 | 275 | — | |
 | `domain_keys.py` | 📄 config | — | 0 | 979 | — | |
 | `enums.py` | ✅ active | BrainRole, BrainStatus, DecisionAction, DecisionSide, RiskDecisionStatus, SystemMode, OverrideStatus, CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision, ExecutionEventType, ReconciliationStatus | 0 | 109 | — | |
 | `events.py` | ✅ active | DataSource, EventType, PnLEvent, GovernanceTransitionEvent | 0 | 168 | — | |
@@ -160,6 +161,7 @@
 | `projections.py` | ✅ active | — | 7 | 271 | — | |
 | `ticket_resolver.py` | ✅ active | TicketResolutionError | 3 | 101 | — | |
 | `wap.py` | ✅ active | WAPStore | 11 | 219 | — | |
+| `write_ahead_log.py` | ✅ active | WALConfig, WALRecord, WriteAheadLog | 12 | 300 | — | |
 
 ## core/deployment
 
@@ -422,7 +424,8 @@
 | `event_bus.py` | ✅ active | EventBus | 7 | 66 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
 | `health_checks.py` | 🧪 stub | HealthCheckMethods | 40 | 2747 | — | |
-| `live_alert_hub.py` | ✅ active | BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 26 | 677 | — | |
+| `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 554 | — | |
+| `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 931 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
 | `message_broker.py` | ✅ active | Message, MessageBroker, InProcessBroker, RedisStreamsBroker | 23 | 280 | — | |
 | `metric_names.py` | ✅ active | — | 2 | 56 | — | |
@@ -537,10 +540,12 @@
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 2 | 871 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
+| `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 15 | 400 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
 | `trail_dispatch.py` | ✅ active | — | 1 | 250 | — | |
+| `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 206 | — | |
 
 ## core/schemas
 
@@ -662,7 +667,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 644 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 652 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
@@ -770,6 +775,7 @@
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
 | `verify.py` | ✅ active | — | 15 | 987 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 92 | — | |
+| `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector | 9 | 252 | — | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 | `verify_event_stream.py` | ✅ active | — | 3 | 202 | — | |
