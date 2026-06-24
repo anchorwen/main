@@ -154,7 +154,13 @@ class FeatureService:
                                     freshness["max_age_seconds"],
                                 )
                                 _stale = True
-                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ):  # BLE001:FOG
                             logging.warning(
                                 "FeatureService freshness check failed for %s — "
                                 "forcing live recompute to avoid stale cache",
@@ -190,7 +196,7 @@ class FeatureService:
             def _run_compute() -> None:
                 try:
                     _compute_result[0] = self._computer.compute_all()
-                except Exception as exc:  # BLE001:FOG
+                except Exception as exc:  # noqa: BLE001  # BLE001:FOG
                     _compute_error[0] = exc
 
             _t = threading.Thread(target=_run_compute, daemon=True)
@@ -350,11 +356,29 @@ class FeatureBrainRegistry:
     def remove(self, brain_id: str) -> None:
         self._entries = [e for e in self._entries if e.get("brain_id") != brain_id]
 
-    def list_active_entries(self) -> list[dict]:
-        return [
+    def list_active_entries(
+        self,
+        gov_state_filter: dict[str, str] | None = None,
+    ) -> list[dict]:
+        """Return active brain entries, optionally filtered by governance state.
+
+        Args:
+            gov_state_filter: Optional ``{brain_id: governance_status}`` dict.
+                When provided, entries whose status is ``frozen`` or ``retired``
+                are excluded (DQAF-20260624-058).
+        """
+        _EXCLUDED = frozenset({"frozen", "retired"})
+        entries = [
             e
             for e in self._entries
-            if e.get("enabled", True) and e.get("status", "live") not in {"retired", "frozen"}
+            if e.get("enabled", True) and e.get("status", "live") not in _EXCLUDED
+        ]
+        if gov_state_filter is None:
+            return entries
+        return [
+            e
+            for e in entries
+            if gov_state_filter.get(e.get("brain_id", ""), "probation") not in _EXCLUDED
         ]
 
     def list_all_entries(self) -> list[dict]:

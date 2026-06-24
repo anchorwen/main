@@ -135,6 +135,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/risk/regime_detector.py",
         "core/execution/regime_gate.py",
         "core/execution/trend_detector.py",
+        "core/execution/gods_eye.py",
+        "scripts/task_b_regime_baseline.py",
     ],
     "risk_portfolio": ["core/execution/portfolio_risk.py", "core/execution/capital_allocator.py"],
     "feedback_performance": [
@@ -350,6 +352,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/backtest_structural_swing.py",
         "scripts/build_btc_metafilter_v2_dataset.py",
         "scripts/train_btc_metafilter_v2.py",
+        "scripts/task_a_directional_closure.py",
     ],
 }
 

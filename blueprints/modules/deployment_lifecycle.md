@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260625-090 | 2026-06-25 | cursor-agent | — | **God's Eye + M5 ML burial**: Added `gods_eye.py` and `task_a_directional_closure.py`/`task_b_regime_baseline.py` to MODULE_SOURCE_MAP (risk_regime + training modules). Blueprint compliance mapping update. | RC-09 |
 | FIX-20260624-121 | 2026-06-24 | cursor-agent | — | **Blueprint consistency 117→0 — full audit clearance**: Added 6 modules to EXPECTED_MODULES, filled 45 missing sections across 12 blueprints, fixed reconcile regex bug + idempotent guard, backfilled 84 FIX cross-references, added DEPENDENCY_GRAPH entries + MODULE_SOURCE_MAP, fixed omega_gate.py Windows GBK Unicode crash. Baseline zeroed. | RC-09 |
 | FIX-20260624-119 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/observability/event_bus.py` added to monitor_dashboard**. New file registered as part of EventBus FOG over-narrowing fix. | RC-09 |
 | FIX-20260620-071 | 2026-06-20 | cursor-agent | — | **Script-level fixes**: system_health.py, audit scripts, import boundary checks, training/train.py, verify_pnl_data_integrity.py, verify_training_serving_parity.py. | RC-06 |
