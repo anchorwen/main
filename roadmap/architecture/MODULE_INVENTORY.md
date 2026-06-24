@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T06:17:02Z
+> **自动生成**: 2026-06-24T06:57:35Z
 > **扫描模块数**: 663
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -205,7 +205,7 @@
 | `rollback_drill.py` | ✅ active | RollbackDrillService | 8 | 304 | — | |
 | `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 664 | — | |
 | `scheduled_task_registry.py` | ✅ active | — | 4 | 36 | — | |
-| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 567 | — | |
+| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 586 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
 | `service_container.py` | ✅ active | ServiceContainer | 41 | 638 | — | |
 | `startup_validator.py` | ✅ active | — | 1 | 113 | — | |
@@ -532,7 +532,7 @@
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
 | `restart_state.py` | ✅ active | — | 1 | 370 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
-| `session_guards.py` | ✅ active | — | 3 | 182 | — | |
+| `session_guards.py` | ✅ active | — | 3 | 184 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
 | `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 505 | — | |
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |

@@ -137,6 +137,15 @@ class SchedulerService:
                 PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
                 PAYLOAD_KEY_ERROR: str(exc),
             }
+        except Exception as exc:  # noqa: BLE001 (generic task runner — must catch all exceptions)
+            task.error_count += 1
+            task.last_run = datetime.now(UTC).replace(tzinfo=None)
+            task.last_error = str(exc)
+            return {
+                PAYLOAD_KEY_TASK: task.name,
+                PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
+                PAYLOAD_KEY_ERROR: str(exc),
+            }
 
     @classmethod
     def for_container(cls, container, persistence=None, alert_service=None):
@@ -412,6 +421,16 @@ class SchedulerService:
                             "__system__",
                             "pnl_pipeline_failure",
                             {"error": "PnL governance evaluation raised exception"},
+                        )
+                    except Exception as _gov_exc:  # noqa: BLE001 (pipeline safety net — must catch domain errors)
+                        _logger.exception(
+                            "CRITICAL: PnL-based governance evaluation failed — "
+                            "brain promotion decisions will be skipped this cycle"
+                        )
+                        emit_brain_alert(
+                            "__system__",
+                            "pnl_pipeline_failure",
+                            {"error": str(_gov_exc)},
                         )
 
             svc.add_task("governance_evaluation", governance_eval, interval_seconds=60)
