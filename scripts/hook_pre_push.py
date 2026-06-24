@@ -65,7 +65,7 @@ def _git_tracked_py_files() -> list[str] | None:
 def _run_ruff_on_paths(paths: list[str]) -> subprocess.CompletedProcess:
     """Run ruff on a list of file paths, respecting Windows cmdline limits."""
     return subprocess.run(
-        [sys.executable, "-m", "ruff", "check", "--ignore", "SIM105", *paths],
+        [sys.executable, "-m", "ruff", "check", *paths],
         cwd=REPO_ROOT,
         capture_output=True,
         timeout=120,
@@ -89,17 +89,7 @@ def check_ruff() -> bool:
         print("[pre-push] Ruff check (core/ apps/ scripts/ — directory fallback)")
         print("=" * 60)
         result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "ruff",
-                "check",
-                "--ignore",
-                "SIM105",
-                "core/",
-                "apps/",
-                "scripts/",
-            ],
+            [sys.executable, "-m", "ruff", "check", "core/", "apps/", "scripts/"],
             cwd=REPO_ROOT,
             capture_output=True,
             timeout=120,

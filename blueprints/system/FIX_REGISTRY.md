@@ -758,6 +758,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-106 | 2026-06-24 | contracts | test_stub_sequence_gap_detectable: fix field tracking — test used record.seq (WAL sequential numbering) instead of record.payload.recorded_at_wal_seq (where the intentional gap at seq 4 lives in the stub payload). | RC-06 |
 | FIX-20260624-107 | 2026-06-24 | execution | meta_signal_filter.load(): ImportError not caught — lightgbm import raises ModuleNotFoundError in CI (no lightgbm installed), but except tuple only caught RuntimeError/ValueError/KeyError/TypeError/OSError. Added ImportError to except tuple. | RC-06 |
 | FIX-20260624-108 | 2026-06-24 | tests | test_poll_ack_zmq_failure_graceful: @patch(fail_open_guard) — fail_open_guard was removed from exit_watchdog.py during A09e FOG migration. Removed stale @patch decorator (method now handles ZMQ failures internally). | RC-06 |
+| FIX-20260624-111 | 2026-06-24 | infrastructure | P0-1: ruff config single-source-of-truth — move SIM105 to global ignore in pyproject.toml, remove --ignore SIM105 from all 4 gate layers | RC-09 |
 
 ---
 ## Fix Details by Year
@@ -4355,5 +4356,17 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Files**: tests/unit/test_exit_watchdog.py
 - **Description**: test_poll_ack_zmq_failure_graceful had @patch("core.execution.exit_watchdog.fail_open_guard") but fail_open_guard was removed from exit_watchdog.py during A09e FOG migration (commit 974104c3). _poll_ack now handles ZMQ failures internally with its own try/except + file fallback. Removed stale @patch decorator and unused patch import.
 - **Root Cause**: RC-06 — L2: test decorator not updated when FOG migration removed fail_open_guard from exit_watchdog
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-111
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: edbb730c
+- **Type**: refactor
+- **Module**: infrastructure
+- **Files**: pyproject.toml,.pre-commit-config.yaml,scripts/hook_pre_push.py,.github/workflows/ci-windows.yml,scripts/verify_ruff_config.sh
+- **Description**: P0-1: ruff config single-source-of-truth — move SIM105 to global ignore in pyproject.toml, remove --ignore SIM105 from all 4 gate layers
+- **Root Cause**: RC-09 — config-drift
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
