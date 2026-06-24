@@ -15,7 +15,7 @@ Tests cover:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from core.execution.exit_watchdog import (
     ACK_POLL_INTERVAL,
@@ -384,11 +384,10 @@ class TestPollAck:
         result = wd._poll_ack("nonexistent_intent_id", timeout=0.5)
         assert result is None
 
-    @patch("core.execution.exit_watchdog.fail_open_guard")
-    def test_poll_ack_zmq_failure_graceful(self, mock_fail_open: MagicMock, tmp_path: Path) -> None:
-        """fail_open_guard catches ZMQ errors, falls through to file fallback."""
+    def test_poll_ack_zmq_failure_graceful(self, tmp_path: Path) -> None:
+        """ZMQ import/connection errors fall through to file fallback gracefully."""
         wd = ExitWatchdog(data_dir=str(tmp_path))
-        # fail_open_guard will catch the ZMQ import/connection error
+        # _poll_ack handles ZMQ errors internally via try/except + file fallback
         result = wd._poll_ack("test_intent_123", timeout=0.5)
         # Should return None (no ZMQ, no file)
         assert result is None

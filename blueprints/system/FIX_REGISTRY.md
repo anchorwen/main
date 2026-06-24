@@ -757,6 +757,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-105 | 2026-06-24 | contracts_resilience | UGR-A09d: fail_open_guard + log_and_continue full sweep across 67 core/ files outside runtime/. Migrated ~285 FOG sites to specific except tuple (inside except Exception) or try/except (standalone). All 575 execution + 902 observability/deployment + 388 brains/features tests pass. | RC-06 |
 | FIX-20260624-106 | 2026-06-24 | contracts | test_stub_sequence_gap_detectable: fix field tracking — test used record.seq (WAL sequential numbering) instead of record.payload.recorded_at_wal_seq (where the intentional gap at seq 4 lives in the stub payload). | RC-06 |
 | FIX-20260624-107 | 2026-06-24 | execution | meta_signal_filter.load(): ImportError not caught — lightgbm import raises ModuleNotFoundError in CI (no lightgbm installed), but except tuple only caught RuntimeError/ValueError/KeyError/TypeError/OSError. Added ImportError to except tuple. | RC-06 |
+| FIX-20260624-108 | 2026-06-24 | tests | test_poll_ack_zmq_failure_graceful: @patch(fail_open_guard) — fail_open_guard was removed from exit_watchdog.py during A09e FOG migration. Removed stale @patch decorator (method now handles ZMQ failures internally). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -4336,11 +4337,23 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 ### FIX-20260624-107
 - **Date**: 2026-06-24
 - **Author**: cursor-agent
-- **Commit**: (pending)
+- **Commit**: 91a17883
 - **Type**: fix
 - **Module**: execution
 - **Files**: core/execution/meta_signal_filter.py
 - **Description**: CI crash: meta_signal_filter.load() at line 218 does `import lightgbm as lgb` inside a try/except that only catches (RuntimeError, ValueError, KeyError, TypeError, OSError). When lightgbm is not installed in the CI runner, ModuleNotFoundError (subclass of ImportError) escapes uncaught and crashes ci_prepare_v9_shadow_fixtures.py → build_v9_shadow_container → _wire_meta_pipeline → filt.load(). Fix: add ImportError to the except tuple so missing lightgbm is handled gracefully (load() returns False, meta filter disabled).
 - **Root Cause**: RC-06 — L1: except tuple incomplete, did not include ImportError
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-108
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: tests
+- **Files**: tests/unit/test_exit_watchdog.py
+- **Description**: test_poll_ack_zmq_failure_graceful had @patch("core.execution.exit_watchdog.fail_open_guard") but fail_open_guard was removed from exit_watchdog.py during A09e FOG migration (commit 974104c3). _poll_ack now handles ZMQ failures internally with its own try/except + file fallback. Removed stale @patch decorator and unused patch import.
+- **Root Cause**: RC-06 — L2: test decorator not updated when FOG migration removed fail_open_guard from exit_watchdog
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
