@@ -755,6 +755,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-103 | 2026-06-24 | runtime-live | UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/ (25 files, 172→8 sites). Replaced all fail_open_guard/log_and_continue context managers with specific exception types (RuntimeError, ValueError, KeyError, TypeError, OSError). Removed from core.runtime.fault_handler import fail_open_guard/log_and_continue from 23 files. | RC-07 |
 | FIX-20260624-104 | 2026-06-24 | deployment_config | Restore Exception catch for generic handlers in scheduler_service. BLE001:FOG migration (A09b) narrowed _execute_task and governance_eval outer handler from except Exception to 5-type tuple, causing ZeroDivisionError and DataIntegrityError to crash the scheduler. | RC-05 |
 | FIX-20260624-105 | 2026-06-24 | contracts_resilience | UGR-A09d: fail_open_guard + log_and_continue full sweep across 67 core/ files outside runtime/. Migrated ~285 FOG sites to specific except tuple (inside except Exception) or try/except (standalone). All 575 execution + 902 observability/deployment + 388 brains/features tests pass. | RC-06 |
+| FIX-20260624-106 | 2026-06-24 | contracts | test_stub_sequence_gap_detectable: fix field tracking — test used record.seq (WAL sequential numbering) instead of record.payload.recorded_at_wal_seq (where the intentional gap at seq 4 lives in the stub payload). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -4316,5 +4317,17 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Files**: core/ (67 files)
 - **Description**: UGR-A09d: fail_open_guard + log_and_continue full sweep across 67 core/ files outside runtime/. Migrated ~285 FOG sites to specific except tuple (inside except Exception) or try/except (standalone). All 575 execution + 902 observability/deployment + 388 brains/features tests pass.
 - **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-106
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: contracts
+- **Files**: tests/contracts/test_phantom_inconsistency.py
+- **Description**: test_stub_sequence_gap_detectable: track recorded_at_wal_seq not WAL seq. Test collected record.seq (WAL's own sequential numbering, always sequential) instead of record.payload.recorded_at_wal_seq (where the intentional gap at seq 4 lives in the stub payload). 1-line test assertion fix.
+- **Root Cause**: RC-06 — test-contract (L1 field access error)
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
