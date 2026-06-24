@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T02:24:26Z
+> **自动生成**: 2026-06-24T03:32:19Z
 > **扫描模块数**: 662
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -116,7 +116,7 @@
 | `exceptions.py` | ✅ active | DomainError, RiskError, RiskPolicyViolation, GovernanceError, InvalidTransitionError, BrainNotFoundError, ExecutionError, OrderNotFoundError, DuplicateOrderError, ProtocolError, DispatchError, IdempotencyError, ConfigurationError, ContractViolationError, DataIntegrityError | 10 | 159 | — | |
 | `ids.py` | ✅ active | — | 14 | 57 | — | |
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 218 | — | |
-| `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, ContractViolation | 19 | 406 | — | |
+| `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 44 | 908 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 150 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
 | `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
@@ -782,7 +782,7 @@
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 | `verify_event_stream.py` | ✅ active | — | 3 | 202 | — | |
 | `verify_health_check_coverage.py` | ✅ active | — | 2 | 143 | — | |
-| `verify_phantom_contracts.py` | ✅ active | Violation, VerificationReport | 6 | 302 | — | |
+| `verify_phantom_contracts.py` | ✅ active | Violation, VerificationReport | 7 | 437 | — | |
 | `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 292 | — | |
 | `verify_training_serving_parity.py` | ✅ active | — | 7 | 492 | — | |
 | `watchdog_daily_ops.py` | ✅ active | — | 3 | 94 | — | |

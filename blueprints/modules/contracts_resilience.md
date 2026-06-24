@@ -19,7 +19,7 @@ v3.1 architectural transformation described in the master plan.
 | `core/observability/invariant_engine.py` | 15 binary predicate invariants + WAL integrity check | ✅ UGR-A06 |
 | `core/observability/live_alert_hub.py` | AlertBus — AlertStormDetector + get_health_status (storm protection + self-monitoring) | ✅ UGR-A05 |
 | `scripts/verify_capresult_ast.py` | AST scanner: 5 detectors (DynamicCall, CapResultOk, RawAccess, FailOpenGuard, ProofLeak) with --enforce mode | ✅ UGR-B03 |
-| `scripts/verify_phantom_contracts.py` | Phantom offline verifier (WAL state reconstruction + replay) | ✅ UGR-B01 |
+| `scripts/verify_phantom_contracts.py` | Phantom offline verifier (WAL state reconstruction + replay) — state-aware with StateProjector, incremental mode | ✅ UGR-B04 |
 
 ## Data Flow
 ```
@@ -50,9 +50,10 @@ verify_phantom_contracts.py (offline replay against WAL state)
 | deployment_lifecycle | CapResult | Lifecycle operations |
 
 ## Known Issues
-- Phantom Contracts state reconstruction protocol TBD (see docs/specs/phantom_state_replay.md).
+- Phantom Contracts state reconstruction protocol: ✅ UGR-B04 — StateProjector implemented with state completeness assertions, handler priority/conflict detection, timeout/overflow protection.
 - InvariantEngine currently shadow-only — no circuit-breaking integration yet.
 - AlertStormDetector rate decay is window-based; may need persistent state for long-running storms.
+- Production @phantom decorator wiring deferred to UGR-A09 (predicate signatures require per-site function adaptation).
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
@@ -67,3 +68,4 @@ verify_phantom_contracts.py (offline replay against WAL state)
 | FIX-20260624-094 | 2026-06-24 | cursor-agent | — | **UGR-Phase0-1 CI Red-X repair**. Committed missing Phase 0-1 files that were created locally but never git-added. CI ImportError on cap_result + typed_clock → Red X on A05-B02 commits. Added ruff/mypy fixes. | L1 — git add omitted |
 | FIX-20260624-095 | 2026-06-24 | cursor-agent | — | **UGR-A08: CapResult migration — StrategyBudget + live_cycle budget pipeline**. Added record_trade_checked(), record_sl_checked(), load_state_checked() CapResult-wrapped methods to StrategyBudget. Replaced fail_open_guard("BudgetStateRestore") + log_and_continue at 3 budget pipeline sites in live_cycle Phase 7 with CapResult pattern matching. 17 new tests. | RC-12 — missing-feature: no CapResult integration in budget pipeline |
 | FIX-20260624-096 | 2026-06-24 | cursor-agent | — | **UGR-B03: AST Scanner full enforcement — 5 detectors**. Upgraded verify_capresult_ast.py from baseline (1 detector) to full enforcement (5 detectors): CapResultOkPlacementDetector (ok() outside success_scope→violation), RawAccessDetector (._raw on TypedClock types outside whitelist), FailOpenGuardDetector (fail_open_guard/log_and_continue DEPRECATED), ProofLeakDetector (proof stored to persistent location). 41 tests. | RC-12 — missing-feature: no AST enforcement for CapResult.ok() placement, ._raw access, or proof leakage |
+| FIX-20260624-097 | 2026-06-24 | cursor-agent | — | **UGR-B04: Phantom Contracts full implementation — 9 predicates + StateProjector + state-aware verifier**. Upgraded from B01 prototype (1 input-only predicate) to full implementation: StateProjector with state completeness assertions, handler priority/conflict detection, timeout/overflow protection; 8 additional predicates (4 hot-path + 5 non-hot-path); snapshot_for() per-contract key validation; PhantomSerializer NaN/Inf/numpy/Decimal support; PredicateRegistry.reset() + required_state_keys; _alert_violation LiveAlertHub integration + violation counter; offline verifier state-aware mode + incremental (since_seq) + exit code 4 for projection errors. 39 new tests (66 total). Production @phantom wiring deferred to UGR-A09. | RC-12 — missing-feature: only 1 prototype predicate, no StateProjector, no state-aware verification |

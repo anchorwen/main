@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T02:24:26Z
+> **自动生成**: 2026-06-24T03:32:19Z
 
 ## Package-Level Dependencies
 
@@ -96,7 +96,7 @@
 - `exceptions.py` → (无内部依赖)
 - `ids.py` → (无内部依赖)
 - `journal_contract.py` → (无内部依赖)
-- `phantom_contract.py` → `core.data.write_ahead_log`
+- `phantom_contract.py` → `core.data.write_ahead_log`, `core.observability.live_alert_hub`
 - `position_events.py` → (无内部依赖)
 - `schema_versions.py` → (无内部依赖)
 - `strategy_magic.py` → (无内部依赖)

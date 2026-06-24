@@ -4204,3 +4204,15 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: RC-12 — missing-feature: no AST-level enforcement of CapResult.ok() placement, TypedClock ._raw access, or _SuccessProof lifecycle
 - **Prevention**: CI enforcement via `--enforce` flag; each detector independently whitelisted; zero false positives on current codebase
 - **Dependents Checked**: CapResult.ok() in strategy_budget.py+adapters.py (verified inside success_scope), ._raw in typed_clock.py+adapters.py (whitelisted), fail_open_guard/log_and_continue 777 sites (DEPRECATED, UGR-A09 track)
+
+### FIX-20260624-097
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: contracts-resilience, scripts
+- **Files**: core/contracts/phantom_contract.py, scripts/verify_phantom_contracts.py, tests/contracts/test_phantom_contract.py
+- **Description**: UGR-B04 Phantom Contracts full implementation — 9 predicates + StateProjector + state-aware verifier. Upgraded from B01 prototype: (1) StateProjector class with state completeness assertions (required_state_keys), handler priority ordering with conflict detection, idempotency requirement, timeout (timeout_seconds)/overflow (max_replay_entries) protection, snapshot_for() per-contract key validation; (2) 8 additional predicates: exit_latency_bounded, position_count_consistent, no_silent_cap_unwrap, training_readiness, governance_alignment, model_card_completeness, data_health_report_completeness, alpha_lifecycle_valid — all registered with PredicateRegistry, state-dependent predicates declare required_state_keys; (3) PhantomSerializer NaN/Inf/NegInf markers, numpy float32/64+ndarray support, Decimal roundtrip; (4) PredicateRegistry.reset() for test isolation, duplicate registration UserWarning, get_required_state_keys(); (5) _alert_violation LiveAlertHub integration with stderr fallback, get_violation_counts() thread-safe counter; (6) offline verifier --state-aware mode using StateProjector, --since-seq incremental mode, exit code 4 for state projection errors, per-contract key validation via snapshot_for(). Built-in handlers: _handle_position_open, _handle_position_close, _handle_budget_update, _handle_brain_state. 66 tests (27 existing + 39 new). Production @phantom wiring deferred to UGR-A09.
+- **Root Cause**: RC-12 — missing-feature: only 1 prototype predicate (risk_budget_non_negative, input-only), no StateProjector for state reconstruction, no state-aware verification
+- **Prevention**: StateProjector.snapshot_for() validates per-contract required_state_keys before predicate evaluation; timeout/overflow protection prevents CI blockage; key conflict detection prevents handler ordering bugs
+- **Dependents Checked**: PredicateRegistry.list_contracts() returns 9 contracts; verify_phantom_contracts.py --state-aware mode successfully replays state-dependent predicates; StateProjector 13 unit tests including idempotency, completeness assertion, error propagation, timeout/overflow
