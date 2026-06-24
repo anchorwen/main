@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T00:53:04Z
+> **自动生成**: 2026-06-24T00:59:43Z
 
 ## Package-Level Dependencies
 
@@ -96,6 +96,7 @@
 - `exceptions.py` → (无内部依赖)
 - `ids.py` → (无内部依赖)
 - `journal_contract.py` → (无内部依赖)
+- `phantom_contract.py` → `core.data.write_ahead_log`
 - `position_events.py` → (无内部依赖)
 - `schema_versions.py` → (无内部依赖)
 - `strategy_magic.py` → (无内部依赖)
@@ -697,6 +698,7 @@
 - `verify_dqaf_002_fix.py` → `core.execution.position_manager`
 - `verify_event_stream.py` → `core.feedback.brain_pnl_ledger`, `core.runtime.fault_handler`
 - `verify_health_check_coverage.py` → `core.observability.data_health_service`
+- `verify_phantom_contracts.py` → `core.contracts.phantom_contract`, `core.data.write_ahead_log`
 - `verify_pnl_data_integrity.py` → (无内部依赖)
 - `verify_training_serving_parity.py` → `scripts.build_btc_metafilter_v2_dataset`
 - `watchdog_daily_ops.py` → `core.runtime.fault_handler`

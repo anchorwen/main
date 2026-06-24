@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| UGR-B01 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/contracts/phantom_contract.py` + `scripts/verify_phantom_contracts.py` → contracts_resilience**. New phantom contract module + verifier script registered. | RC-09 |
 | UGR-A07 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/contracts/adapters.py` → contracts_resilience**. New adapter module registered. Also fixed pre-existing mypy return-statement error in _run_git(). | RC-09 |
 | UGR-A06 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/observability/invariant_engine.py` → monitor_dashboard**. New InvariantEngine file registered in source map. | RC-09 |
 | UGR-P01 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `contracts_resilience` module registered**. New module for UGR v3.1 zero-tolerance resilience architecture (CapResult, Phantom Contracts, TypedClock, WAL, SupervisedScheduler). Blueprint: `blueprints/modules/contracts_resilience.md`. | RC-09 — new module not yet registered |
