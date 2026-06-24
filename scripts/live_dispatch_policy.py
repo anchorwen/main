@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
 from scripts.guards.journal_quality import evaluate_guard
 from scripts.market_calendar import evaluate_utc_blackout, load_calendar
 from scripts.mt5_spread_probe import probe_spread
@@ -60,9 +59,10 @@ def _read_auto_recovery_state(state_path: Path) -> int:
     """Return consecutive zero-block passes from state file, or 0."""
     try:
         return int(state_path.read_text(encoding="utf-8").strip())
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_dispatch_policy:_read_auto_recovery_state"):
-            return 0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return 0
+
+
 def _write_auto_recovery_state(state_path: Path, count: int) -> None:
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(str(count), encoding="utf-8")

@@ -34,7 +34,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from core.execution.pre_trade_guards import detect_session
-from core.runtime.fault_handler import fail_open_guard
 
 # ── stdout encoding fix for Windows ──
 if sys.platform == "win32":
@@ -117,6 +116,7 @@ DATA_FILES = [
 # Utilities
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _utc_iso() -> str:
     return NOW_ISO
 
@@ -174,6 +174,7 @@ def _load_all_data() -> dict:
 # Section 1: Data Pipeline Integrity
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def section_1_pipeline(data: dict) -> tuple[dict[str, list[dict]], dict[str, bool]]:
     """Check file existence and freshness for all symbols.
 
@@ -191,9 +192,8 @@ def section_1_pipeline(data: dict) -> tuple[dict[str, list[dict]], dict[str, boo
             _mt = SYMBOL_MARKET_TYPE.get(sym, "forex_24_5")
             _session = detect_session(market_type=_mt)
             symbol_market_off[sym] = _session.get("risk_tier") == "off"
-        except Exception:  # BLE001:FOG — non-critical; assume market open
-            with fail_open_guard("system_trust_report:session_detect"):
-                symbol_market_off[sym] = False
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            symbol_market_off[sym] = False
 
     for sym in DATA_DIRS:
         base = DATA_DIRS[sym]
@@ -210,19 +210,21 @@ def section_1_pipeline(data: dict) -> tuple[dict[str, list[dict]], dict[str, boo
                     break
             # Skip staleness check for alert/event-driven files
             _effective_limit = limit if rel not in NO_STALENESS_FILES else None
-            _raw_stale = (age is not None and _effective_limit is not None and age > _effective_limit)
+            _raw_stale = age is not None and _effective_limit is not None and age > _effective_limit
             # FIX-20260621-030: Bypass stale checks when market is closed
             stale = _raw_stale if not _market_off else False
-            checks.append({
-                "file": rel,
-                "exists": exists,
-                "age_min": round(age, 1) if age else None,
-                "limit_min": _effective_limit,
-                "stale": stale,
-                "market_off": _market_off,
-                "would_be_stale": _raw_stale if _market_off else False,
-                "optional": rel in OPTIONAL_FILES if not exists else False,
-            })
+            checks.append(
+                {
+                    "file": rel,
+                    "exists": exists,
+                    "age_min": round(age, 1) if age else None,
+                    "limit_min": _effective_limit,
+                    "stale": stale,
+                    "market_off": _market_off,
+                    "would_be_stale": _raw_stale if _market_off else False,
+                    "optional": rel in OPTIONAL_FILES if not exists else False,
+                }
+            )
         results[sym] = checks
 
     # Feature store freshness (per-symbol)
@@ -236,15 +238,17 @@ def section_1_pipeline(data: dict) -> tuple[dict[str, list[dict]], dict[str, boo
             fs_age = _age_minutes(fs_path)
             limit = FRESH_LIMITS["feature_store"]
             _raw_stale = fs_age > limit
-            results[sym].append({
-                "file": f"feature_store/{tf_dir_name}",
-                "exists": fs_path.exists(),
-                "age_min": round(fs_age, 1),
-                "limit_min": limit,
-                "stale": _raw_stale if not _market_off else False,
-                "market_off": _market_off,
-                "would_be_stale": _raw_stale if _market_off else False,
-            })
+            results[sym].append(
+                {
+                    "file": f"feature_store/{tf_dir_name}",
+                    "exists": fs_path.exists(),
+                    "age_min": round(fs_age, 1),
+                    "limit_min": limit,
+                    "stale": _raw_stale if not _market_off else False,
+                    "market_off": _market_off,
+                    "would_be_stale": _raw_stale if _market_off else False,
+                }
+            )
     return results, symbol_market_off
 
 
@@ -261,15 +265,21 @@ def _print_section_1(results: dict, symbol_market_off: dict[str, bool]) -> list[
 
         if _market_off and would_be_stale:
             # Market closed — stale files are expected, bypass the check
-            print(f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
-                  f" | missing={len(missing)}"
-                  f" | [BYPASSED: MARKET_OFF] {len(would_be_stale)} files would flag stale in trading hours")
+            print(
+                f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
+                f" | missing={len(missing)}"
+                f" | [BYPASSED: MARKET_OFF] {len(would_be_stale)} files would flag stale in trading hours"
+            )
             for w in would_be_stale[:3]:
-                print(f"    [BYPASSED] {w['file']} — {w['age_min']:.0f}min"
-                      f" (limit={w['limit_min']}min, market closed)")
+                print(
+                    f"    [BYPASSED] {w['file']} — {w['age_min']:.0f}min"
+                    f" (limit={w['limit_min']}min, market closed)"
+                )
         else:
-            print(f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
-                  f" | missing={len(missing)} stale={len(stale)}")
+            print(
+                f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
+                f" | missing={len(missing)} stale={len(stale)}"
+            )
             for s in stale[:5]:
                 print(f"    STALE: {s['file']} — {s['age_min']:.0f}min (limit={s['limit_min']}min)")
 
@@ -291,6 +301,7 @@ def _print_section_1(results: dict, symbol_market_off: dict[str, bool]) -> list[
 # Section 2: Brain Portfolio Health
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def section_2_brain_portfolio(data: dict) -> dict:
     """Parse brain states from governance for all symbols."""
     portfolios: dict[str, list[dict]] = {}
@@ -303,16 +314,18 @@ def section_2_brain_portfolio(data: dict) -> dict:
         brains = []
         for bid, bs in brain_states.items():
             pm = bs.get("performance_metrics", {})
-            brains.append({
-                "brain_id": bid,
-                "status": bs.get("status", "?"),
-                "vote_weight": bs.get("vote_weight"),
-                "pf": pm.get("profit_factor", 0),
-                "wr": pm.get("win_rate", 0),
-                "pnl_r": pm.get("pnl_r", 0),
-                "trades": pm.get("total_trades", 0),
-                "sharpe": pm.get("sharpe_ratio", 0),
-            })
+            brains.append(
+                {
+                    "brain_id": bid,
+                    "status": bs.get("status", "?"),
+                    "vote_weight": bs.get("vote_weight"),
+                    "pf": pm.get("profit_factor", 0),
+                    "wr": pm.get("win_rate", 0),
+                    "pnl_r": pm.get("pnl_r", 0),
+                    "trades": pm.get("total_trades", 0),
+                    "sharpe": pm.get("sharpe_ratio", 0),
+                }
+            )
         brains.sort(key=lambda b: b["pnl_r"], reverse=True)
         portfolios[sym] = brains
     return portfolios
@@ -324,13 +337,17 @@ def _print_section_2(portfolios: dict, data: dict) -> list[str]:
     for sym in DATA_DIRS:
         brains = portfolios.get(sym, [])
         print(f"\n  {sym} ({len(brains)} brains):")
-        print(f"    {'Brain ID':<40s} {'Status':<12s} {'PF':>6s} {'WR':>6s} {'PnL-R':>8s} {'Trades':>7s} {'VoteWt':>6s}")
+        print(
+            f"    {'Brain ID':<40s} {'Status':<12s} {'PF':>6s} {'WR':>6s} {'PnL-R':>8s} {'Trades':>7s} {'VoteWt':>6s}"
+        )
         print(f"    {'-'*40} {'-'*12} {'-'*6} {'-'*6} {'-'*8} {'-'*7} {'-'*6}")
         for b in brains:
-            vw = f"{b['vote_weight']:.1f}" if b['vote_weight'] is not None else "?"
-            print(f"    {b['brain_id']:<40s} {b['status']:<12s} "
-                  f"{b['pf']:>6.2f} {b['wr']:>6.3f} {b['pnl_r']:>8.1f} "
-                  f"{b['trades']:>7d} {vw:>6s}")
+            vw = f"{b['vote_weight']:.1f}" if b["vote_weight"] is not None else "?"
+            print(
+                f"    {b['brain_id']:<40s} {b['status']:<12s} "
+                f"{b['pf']:>6.2f} {b['wr']:>6.3f} {b['pnl_r']:>8.1f} "
+                f"{b['trades']:>7d} {vw:>6s}"
+            )
 
         # Count live journal participation per brain
         journal = data.get(sym, {}).get("live_trade_journal", [])
@@ -339,28 +356,35 @@ def _print_section_2(portfolios: dict, data: dict) -> list[str]:
         live_journal_trades: dict[str, int] = {}
         for entry in journal:
             if isinstance(entry, dict):
-                for bid in (entry.get("brain_ids") or []):
+                for bid in entry.get("brain_ids") or []:
                     live_journal_trades[bid] = live_journal_trades.get(bid, 0) + 1
 
         # Flags
         for b in brains:
             lj_trades = live_journal_trades.get(b["brain_id"], 0)
             if b["status"] == "live" and b["pf"] < 1.0 and b["trades"] > 0:
-                print(f"    ⚠ LIVE_BRAIN_NEGATIVE_EV: {b['brain_id']} PF={b['pf']:.2f} trades={b['trades']}")
+                print(
+                    f"    ⚠ LIVE_BRAIN_NEGATIVE_EV: {b['brain_id']} PF={b['pf']:.2f} trades={b['trades']}"
+                )
                 flags.append(f"WARN|{sym}|live_negative_ev:{b['brain_id']}")
             if b["status"] == "live" and b["trades"] == 0 and lj_trades == 0:
                 print(f"    ⚠ LIVE_BRAIN_NO_TRADES: {b['brain_id']} (0 training + 0 live trades)")
                 flags.append(f"WARN|{sym}|live_no_trades:{b['brain_id']}")
             elif b["status"] == "live" and b["trades"] == 0 and lj_trades > 0:
-                print(f"    ℹ LIVE_BRAIN_TRADING: {b['brain_id']} (0 training trades, {lj_trades} live journal entries)")
+                print(
+                    f"    ℹ LIVE_BRAIN_TRADING: {b['brain_id']} (0 training trades, {lj_trades} live journal entries)"
+                )
             if b["pf"] > 1.0 and b["status"] in ("candidate", "probation"):
-                print(f"    ℹ PROFITABLE_NOT_PROMOTED: {b['brain_id']} PF={b['pf']:.2f} status={b['status']}")
+                print(
+                    f"    ℹ PROFITABLE_NOT_PROMOTED: {b['brain_id']} PF={b['pf']:.2f} status={b['status']}"
+                )
     return flags
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Section 3: Frozen Brain Participation (critical gap)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def section_3_frozen_participation(data: dict, portfolios: dict) -> dict:
     """Scan recent 24h journal for frozen brain_ids in trade decisions.
@@ -407,14 +431,18 @@ def section_3_frozen_participation(data: dict, portfolios: dict) -> dict:
                     else:
                         frozen_weight_zero += 1
                 if len(sample_entries) < 5:
-                    sample_entries.append({
-                        "time": recorded[:19],
-                        "frozen_brains": frozen_in,
-                        "total_brains": len(brain_ids),
-                        "label": entry.get("label", "?"),
-                    })
+                    sample_entries.append(
+                        {
+                            "time": recorded[:19],
+                            "frozen_brains": frozen_in,
+                            "total_brains": len(brain_ids),
+                            "label": entry.get("label", "?"),
+                        }
+                    )
 
-        contamination_pct = (closes_with_frozen / total_closes_24h * 100) if total_closes_24h > 0 else 0
+        contamination_pct = (
+            (closes_with_frozen / total_closes_24h * 100) if total_closes_24h > 0 else 0
+        )
 
         results[sym] = {
             "frozen_brains": frozen_brains,
@@ -436,14 +464,20 @@ def _print_section_3(results: dict) -> list[str]:
         r = results.get(sym, {})
         frozen_brains = r.get("frozen_brains", {})
         print(f"\n  {sym}:")
-        print(f"    Frozen brains in governance: {list(frozen_brains.keys()) if frozen_brains else '(none)'}")
+        print(
+            f"    Frozen brains in governance: {list(frozen_brains.keys()) if frozen_brains else '(none)'}"
+        )
         print(f"    Closes in 24h: {r['total_closes_24h']}")
-        print(f"    Closes with frozen brain_ids: {r['closes_with_frozen']} ({r['contamination_pct']}%)")
+        print(
+            f"    Closes with frozen brain_ids: {r['closes_with_frozen']} ({r['contamination_pct']}%)"
+        )
         print(f"    Frozen with weight>0: {r['frozen_with_weight']}")
         print(f"    Frozen with weight=0: {r['frozen_weight_zero']}")
         for s in r.get("samples", [])[:3]:
-            print(f"    SAMPLE: {s['time']} label={s['label']} "
-                  f"frozen={s['frozen_brains']} of {s['total_brains']} brains")
+            print(
+                f"    SAMPLE: {s['time']} label={s['label']} "
+                f"frozen={s['frozen_brains']} of {s['total_brains']} brains"
+            )
 
         if r["contamination_pct"] > 0:
             if r["frozen_with_weight"] > 0:
@@ -451,7 +485,9 @@ def _print_section_3(results: dict) -> list[str]:
                 flags.append(f"FAIL|{sym}|frozen_contamination_weighted:{r['frozen_with_weight']}")
             else:
                 print(f"    ⚠ WARN: Frozen brains in {sym} closes (all weight=0, audit residual)")
-                flags.append(f"WARN|{sym}|frozen_contamination_zero_weight:{r['frozen_weight_zero']}")
+                flags.append(
+                    f"WARN|{sym}|frozen_contamination_zero_weight:{r['frozen_weight_zero']}"
+                )
         else:
             print("    ✅ No frozen brain contamination")
     return flags
@@ -460,6 +496,7 @@ def _print_section_3(results: dict) -> list[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Section 4: Trade Quality
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def section_4_trade_quality(data: dict) -> dict:
     """Compute trade quality metrics from journal.
@@ -494,11 +531,17 @@ def section_4_trade_quality(data: dict) -> dict:
         breakevens = [p for p in pnls if p == 0]
 
         total_pnl = sum(pnls)
-        profit_factor = (abs(sum(wins)) / abs(sum(losses))) if sum(losses) != 0 else (float("inf") if sum(wins) > 0 else 0)
+        profit_factor = (
+            (abs(sum(wins)) / abs(sum(losses)))
+            if sum(losses) != 0
+            else (float("inf") if sum(wins) > 0 else 0)
+        )
         wr = (len(wins) / (len(wins) + len(losses)) * 100) if (len(wins) + len(losses)) > 0 else 0
 
         # PnL by label
-        by_label: dict[str, dict] = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0})
+        by_label: dict[str, dict] = defaultdict(
+            lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0}
+        )
         for c in closes:
             label = c.get("label", "unknown")
             pnl = c.get("pnl", 0) or 0
@@ -512,7 +555,11 @@ def section_4_trade_quality(data: dict) -> dict:
         # Direction distribution
         sides: dict[str, int] = defaultdict(int)
         for entry in journal:
-            if isinstance(entry, dict) and entry.get("action") in ("open", None) and entry.get("side"):
+            if (
+                isinstance(entry, dict)
+                and entry.get("action") in ("open", None)
+                and entry.get("side")
+            ):
                 sides[entry["side"]] += 1
 
         quality[sym] = {
@@ -527,7 +574,9 @@ def section_4_trade_quality(data: dict) -> dict:
             "avg_loss": round(sum(losses) / len(losses), 2) if losses else 0,
             "max_win": round(max(wins), 2) if wins else 0,
             "max_loss": round(min(losses), 2) if losses else 0,
-            "by_label": {k: dict(v) for k, v in sorted(by_label.items(), key=lambda x: x[1]["pnl"])},
+            "by_label": {
+                k: dict(v) for k, v in sorted(by_label.items(), key=lambda x: x[1]["pnl"])
+            },
             "sides": dict(sides),
         }
     return quality
@@ -541,16 +590,22 @@ def _print_section_4(quality: dict) -> list[str]:
         if not q or q["total_trades"] == 0:
             print(f"  {sym}: No trades")
             continue
-        print(f"\n  {sym}: {q['total_trades']} trades | WR={q['win_rate_pct']:.1f}% | "
-              f"PF={q['profit_factor']:.2f} | PnL=${q['total_pnl_usd']:+.2f}")
-        print(f"    avg_win=${q['avg_win']:.2f} avg_loss=${q['avg_loss']:.2f} "
-              f"max_win=${q['max_win']:.2f} max_loss=${q['max_loss']:.2f}")
+        print(
+            f"\n  {sym}: {q['total_trades']} trades | WR={q['win_rate_pct']:.1f}% | "
+            f"PF={q['profit_factor']:.2f} | PnL=${q['total_pnl_usd']:+.2f}"
+        )
+        print(
+            f"    avg_win=${q['avg_win']:.2f} avg_loss=${q['avg_loss']:.2f} "
+            f"max_win=${q['max_win']:.2f} max_loss=${q['max_loss']:.2f}"
+        )
         print(f"    Sides: {q.get('sides', {})}")
         print("    PnL by label:")
         for label, stats in q.get("by_label", {}).items():
             lbl = label or "(none)"
-            print(f"      {lbl:<45s} count={stats['count']:>3d}  PnL=${stats['pnl']:>+10.2f}  "
-                  f"W={stats['wins']:>3d} L={stats['losses']:>3d}")
+            print(
+                f"      {lbl:<45s} count={stats['count']:>3d}  PnL=${stats['pnl']:>+10.2f}  "
+                f"W={stats['wins']:>3d} L={stats['losses']:>3d}"
+            )
 
         if q["win_rate_pct"] < 35 and q["total_trades"] >= 20:
             flags.append(f"WARN|{sym}|low_win_rate:{q['win_rate_pct']:.1f}%")
@@ -562,6 +617,7 @@ def _print_section_4(quality: dict) -> list[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Section 5: Runtime Status
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def section_5_runtime(data: dict) -> dict:
     """Check circuit breaker, budget, bridge health."""
@@ -582,9 +638,12 @@ def section_5_runtime(data: dict) -> dict:
         bridge = sym_data.get("mt5_bridge_health", {})
         if isinstance(bridge, dict) and "_missing" not in bridge:
             bridge_connected = bridge.get("mt5_connected", False)
-            bridge_hb_age_s = (NOW - datetime.fromisoformat(
-                bridge.get("last_heartbeat_utc", "2000-01-01T00:00:00").replace("Z", "+00:00")
-            ).replace(tzinfo=None)).total_seconds()
+            bridge_hb_age_s = (
+                NOW
+                - datetime.fromisoformat(
+                    bridge.get("last_heartbeat_utc", "2000-01-01T00:00:00").replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+            ).total_seconds()
             bridge_pid = bridge.get("pid", "?")
         else:
             bridge_connected = False
@@ -615,18 +674,24 @@ def _print_section_5(runtime: dict) -> list[str]:
     for sym in DATA_DIRS:
         r = runtime.get(sym, {})
         print(f"\n  {sym}:")
-        print(f"    Circuit breaker: {'TRIPPED' if r['circuit_breaker_tripped'] else 'NOT TRIPPED'}"
-              f"{' — ' + r['trip_reason'] if r['trip_reason'] else ''}")
-        print(f"    Bridge: connected={r['bridge_connected']} heartbeat={r['bridge_hb_age_s']:.0f}s ago PID={r['bridge_pid']}")
+        print(
+            f"    Circuit breaker: {'TRIPPED' if r['circuit_breaker_tripped'] else 'NOT TRIPPED'}"
+            f"{' — ' + r['trip_reason'] if r['trip_reason'] else ''}"
+        )
+        print(
+            f"    Bridge: connected={r['bridge_connected']} heartbeat={r['bridge_hb_age_s']:.0f}s ago PID={r['bridge_pid']}"
+        )
         print(f"    Data health overall: {r['data_health_overall']}")
 
         for budget_name, budget in r.get("budgets", {}).items():
             if isinstance(budget, dict):
-                print(f"    Budget [{budget_name}]: "
-                      f"daily_pnl={budget.get('daily_pnl_pct', 0):+.2f}% "
-                      f"consL={budget.get('consecutive_losses', 0)} "
-                      f"trades={budget.get('total_trades_today', 0)} "
-                      f"paused={'YES' if budget.get('paused') else 'no'}")
+                print(
+                    f"    Budget [{budget_name}]: "
+                    f"daily_pnl={budget.get('daily_pnl_pct', 0):+.2f}% "
+                    f"consL={budget.get('consecutive_losses', 0)} "
+                    f"trades={budget.get('total_trades_today', 0)} "
+                    f"paused={'YES' if budget.get('paused') else 'no'}"
+                )
 
         if r["circuit_breaker_tripped"]:
             flags.append(f"FAIL|{sym}|circuit_breaker_tripped:{r['trip_reason']}")
@@ -637,7 +702,9 @@ def _print_section_5(runtime: dict) -> list[str]:
         for budget_name, budget in r.get("budgets", {}).items():
             if isinstance(budget, dict):
                 if budget.get("consecutive_losses", 0) >= 5:
-                    flags.append(f"WARN|{sym}|consecutive_losses:{budget.get('consecutive_losses')}")
+                    flags.append(
+                        f"WARN|{sym}|consecutive_losses:{budget.get('consecutive_losses')}"
+                    )
                 if budget.get("daily_pnl_pct", 0) < -3:
                     flags.append(f"WARN|{sym}|daily_pnl:{budget.get('daily_pnl_pct'):.1f}%")
     return flags
@@ -646,6 +713,7 @@ def _print_section_5(runtime: dict) -> list[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Section 6: Config-Governance Alignment
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def section_6_config_alignment(portfolios: dict) -> dict:
     """Detect cross-asset brain contamination and config-gov mismatches.
@@ -663,6 +731,7 @@ def section_6_config_alignment(portfolios: dict) -> dict:
     for sym, yaml_path in [("XAU", "configs/live.yaml"), ("BTC", "configs/live_btc.yaml")]:
         try:
             import yaml  # noqa: F401 — optional dependency
+
             with open(ROOT / yaml_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f)
             entries = cfg.get("brains", {}).get("registry_entries", [])
@@ -673,16 +742,15 @@ def section_6_config_alignment(portfolios: dict) -> dict:
                     if bid and "normalization" not in bid and "meta_stage" not in bid:
                         config_brains[sym].add(bid)
                         config_enabled[sym][bid] = entry.get("enabled", False)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("system_trust_report:section_6_config_alignment"):
-                # Fallback: scan configs/brains*/ directory
-                cfg_dir = ROOT / "configs" / ("brains" if sym == "XAU" else "brains_btc")
-                if cfg_dir.is_dir():
-                    for cfg_file in cfg_dir.glob("*.json"):
-                        if "normalization" in cfg_file.name or "meta_stage" in cfg_file.name:
-                            continue
-                        config_brains[sym].add(cfg_file.stem)
-                        config_enabled[sym][cfg_file.stem] = True
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            # Fallback: scan configs/brains*/ directory
+            cfg_dir = ROOT / "configs" / ("brains" if sym == "XAU" else "brains_btc")
+            if cfg_dir.is_dir():
+                for cfg_file in cfg_dir.glob("*.json"):
+                    if "normalization" in cfg_file.name or "meta_stage" in cfg_file.name:
+                        continue
+                    config_brains[sym].add(cfg_file.stem)
+                    config_enabled[sym][cfg_file.stem] = True
     # Collect governance brain_ids
     gov_brains: dict[str, set[str]] = {}
     for sym in DATA_DIRS:
@@ -695,13 +763,18 @@ def section_6_config_alignment(portfolios: dict) -> dict:
         for bid in cfg_ids:
             # Prefix-based detection
             if bid.startswith("BTC_") and sym == "XAU":
-                cross_asset.append({"brain_id": bid, "config_symbol": sym, "prefix_match": "BTC_ in XAU"})
+                cross_asset.append(
+                    {"brain_id": bid, "config_symbol": sym, "prefix_match": "BTC_ in XAU"}
+                )
             elif bid.startswith("XAU_") and sym == "BTC":
-                cross_asset.append({"brain_id": bid, "config_symbol": sym, "prefix_match": "XAU_ in BTC"})
+                cross_asset.append(
+                    {"brain_id": bid, "config_symbol": sym, "prefix_match": "XAU_ in BTC"}
+                )
             # Directory-based: check if same brain_id exists in other symbol's gov
             elif bid in gov_brains.get(other_sym, set()):
-                cross_asset.append({"brain_id": bid, "config_symbol": sym,
-                                   "present_in_gov": other_sym})
+                cross_asset.append(
+                    {"brain_id": bid, "config_symbol": sym, "present_in_gov": other_sym}
+                )
 
     # Config-gov mismatches
     mismatches: dict[str, list[dict]] = {}
@@ -741,13 +814,14 @@ def _print_section_6(alignment: dict) -> list[str]:
     if cross_asset:
         print(f"\n  ❌ CROSS-ASSET CONTAMINATION ({len(cross_asset)}):")
         for ca in cross_asset:
-            print(f"    {ca['brain_id']} in {ca['config_symbol']} config"
-                  f"{' — ' + ca.get('prefix_match', '') if ca.get('prefix_match') else ''}"
-                  f"{' — present in ' + ca.get('present_in_gov', '') + ' governance' if ca.get('present_in_gov') else ''}")
+            print(
+                f"    {ca['brain_id']} in {ca['config_symbol']} config"
+                f"{' — ' + ca.get('prefix_match', '') if ca.get('prefix_match') else ''}"
+                f"{' — present in ' + ca.get('present_in_gov', '') + ' governance' if ca.get('present_in_gov') else ''}"
+            )
         flags.append(f"FAIL|cross_asset|{len(cross_asset)}_contaminated_brains")
     else:
         print("\n  ✅ No cross-asset brain contamination detected")
-
 
     mismatches = alignment.get("mismatches", {})
     for sym in DATA_DIRS:
@@ -770,6 +844,7 @@ def _print_section_6(alignment: dict) -> list[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # VERDICT Aggregation
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def compute_verdict(all_flags: list[str]) -> dict:
     """Aggregate flags into VERDICT.
@@ -797,6 +872,7 @@ def compute_verdict(all_flags: list[str]) -> dict:
 # Section 6b: Candidate Signal Diversity (FIX-20260613-078)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _check_signal_diversity(data: dict, portfolios: dict) -> list[str]:
     """Detect candidate/probation brains with >90% directional agreement.
 
@@ -807,6 +883,7 @@ def _check_signal_diversity(data: dict, portfolios: dict) -> list[str]:
     flags: list[str] = []
     print("\n── 6b. CANDIDATE SIGNAL DIVERSITY ──")
     from collections import Counter as _Counter
+
     for sym in DATA_DIRS:
         events = data.get(sym, {}).get("ledger_events", [])
         if isinstance(events, dict):
@@ -818,8 +895,11 @@ def _check_signal_diversity(data: dict, portfolios: dict) -> list[str]:
                 d = e.get("direction", "")
                 if bid and d:
                     brain_dirs.setdefault(bid, []).append(d)
-        candidates = [b for b in portfolios.get(sym, [])
-                      if b["status"] in ("candidate", "probation") and b["trades"] >= 20]
+        candidates = [
+            b
+            for b in portfolios.get(sym, [])
+            if b["status"] in ("candidate", "probation") and b["trades"] >= 20
+        ]
         found = 0
         for i in range(len(candidates)):
             for j in range(i + 1, len(candidates)):
@@ -834,9 +914,13 @@ def _check_signal_diversity(data: dict, portfolios: dict) -> list[str]:
                     agree_a = a_top[1] / len(a_dirs) * 100
                     agree_b = b_top[1] / len(b_dirs) * 100
                     if agree_a > 90 and agree_b > 90:
-                        print(f"  ⚠ {sym}: {a['brain_id']} & {b['brain_id']} "
-                              f"both {min(agree_a, agree_b):.0f}%+ {a_top[0]} — near-identical, low diversity")
-                        flags.append(f"WARN|{sym}|candidate_signal_cloning:{a['brain_id']}+{b['brain_id']}")
+                        print(
+                            f"  ⚠ {sym}: {a['brain_id']} & {b['brain_id']} "
+                            f"both {min(agree_a, agree_b):.0f}%+ {a_top[0]} — near-identical, low diversity"
+                        )
+                        flags.append(
+                            f"WARN|{sym}|candidate_signal_cloning:{a['brain_id']}+{b['brain_id']}"
+                        )
                         found += 1
         if found == 0:
             print(f"  {sym}: ✅ No candidate signal cloning detected")
@@ -846,6 +930,7 @@ def _check_signal_diversity(data: dict, portfolios: dict) -> list[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def main() -> int:
     print("=" * 80)
@@ -890,7 +975,9 @@ def main() -> int:
     verdict = compute_verdict(all_flags)
     print(f"\n{'=' * 80}")
     print(f"  VERDICT: {verdict['verdict']}")
-    print(f"  FAILs: {len(verdict['fails'])} | WARNs: {len(verdict['warns'])} | OKs: {len(verdict['oks'])}")
+    print(
+        f"  FAILs: {len(verdict['fails'])} | WARNs: {len(verdict['warns'])} | OKs: {len(verdict['oks'])}"
+    )
     for f in verdict["fails"]:
         print(f"    ❌ {f}")
     for w in verdict["warns"]:

@@ -29,8 +29,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # On Windows, subprocess defaults to the system ANSI code-page (e.g. GBK).
@@ -241,9 +239,11 @@ def check_omega() -> bool:
         print("[pre-push] Omega: TIMEOUT (>30s)")
         return False
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("hook_pre_push:check_omega"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
             return False
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -268,9 +268,11 @@ def main() -> int:
             print(f"[pre-push] {name}: TIMEOUT (>120s)")
             failures.append(name)
         except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-            with fail_open_guard("hook_pre_push:main"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 print(f"[pre-push] {name}: INTERNAL ERROR — {exc}")
                 failures.append(name)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     if failures:
         print(f"\n[pre-push] BLOCKED — {len(failures)} check(s) failed: {', '.join(failures)}")
         print("[pre-push] Fix the errors above locally, then re-commit and push.")

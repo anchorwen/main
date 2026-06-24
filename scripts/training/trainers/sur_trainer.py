@@ -31,7 +31,6 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 SCRIPTS_DIR = Path(__file__).resolve().parent  # scripts/training/trainers/
 PROJECT_ROOT = SCRIPTS_DIR.parent.parent.parent  # future/
@@ -123,7 +122,6 @@ sys.path.insert(0, r"{trainer_root}")
 
 # Redirect pd.read_csv to use the specified dataset CSV
 import pandas as _pd
-from core.runtime.fault_handler import fail_open_guard
 _release_read_csv = _pd.read_csv
 def _patched_read_csv(filepath_or_buffer, *args, **kwargs):
     return _release_read_csv(r"{dataset_csv}", *args, **kwargs)
@@ -170,18 +168,16 @@ def main(argv: list[str] | None = None) -> int:
     # other UTF-8 characters in subprocess output don't cause crashes.
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("sur_trainer:main"):
-            import io
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        import io
 
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     try:
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("sur_trainer:main"):
-            import io
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        import io
 
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
 
     manifest = load_manifest(args.manifest_path)

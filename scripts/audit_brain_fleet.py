@@ -17,7 +17,6 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from core.runtime.fault_handler import fail_open_guard
 
 
 def main(data_dir: str) -> int:
@@ -35,9 +34,8 @@ def main(data_dir: str) -> int:
         try:
             with open(summary_path) as f:
                 d = json.load(f)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("audit_brain_fleet:main"):
-                continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            continue
         cv = d.get("cv_summary", {})
         if not cv:
             continue
@@ -70,10 +68,9 @@ def main(data_dir: str) -> int:
             try:
                 with open(cfg_file, encoding="utf-8") as f:
                     d = json.load(f)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("audit_brain_fleet:main"):
-                    config_status[bid] = {"status": "CORRUPT", "path": str(cfg_file)}
-                    continue
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                config_status[bid] = {"status": "CORRUPT", "path": str(cfg_file)}
+                continue
             bt = d.get("brain_type", "?")
             tf = d.get("timeframe", "?")
             mp = d.get("model_path", "")
@@ -93,7 +90,9 @@ def main(data_dir: str) -> int:
 
     for bid in sorted(config_status.keys()):
         s = config_status[bid]
-        print(f"  [{s['status'].upper()}] {bid}: type={s['brain_type']} tf={s['timeframe']} weight={'OK' if s['weight_exists'] else 'MISSING'}")
+        print(
+            f"  [{s['status'].upper()}] {bid}: type={s['brain_type']} tf={s['timeframe']} weight={'OK' if s['weight_exists'] else 'MISSING'}"
+        )
 
     # ── 3. Per-Brain Signal Accuracy (SignalSettled — SSOT) ──
     # WARNING: Journal brain_ids shows voting PARTICIPATION, NOT accuracy.
@@ -128,7 +127,9 @@ def main(data_dir: str) -> int:
                 elif pnl_r < 0:
                     ss["losses"] += 1
 
-    print(f"  {'Brain':<40} {'Signals':>7} {'Wins':>6} {'Losses':>6} {'WR':>7} {'PnL(R)':>10} {'Status'}")
+    print(
+        f"  {'Brain':<40} {'Signals':>7} {'Wins':>6} {'Losses':>6} {'WR':>7} {'PnL(R)':>10} {'Status'}"
+    )
     print(f"  {'-'*40} {'-'*7} {'-'*6} {'-'*6} {'-'*7} {'-'*10} {'-'*10}")
     for bid in sorted(signal_stats.keys(), key=lambda b: signal_stats[b]["signals"], reverse=True):
         ss = signal_stats[bid]
@@ -176,7 +177,9 @@ def main(data_dir: str) -> int:
         wins = sum(1 for c in ticket_close.values() if float(c.get("pnl", 0) or 0) > 0)
         losses = sum(1 for c in ticket_close.values() if float(c.get("pnl", 0) or 0) < 0)
         wr = wins / (wins + losses) * 100 if (wins + losses) > 0 else 0
-        print(f"  Strategy Total: {total_trades} trades, {wins}W/{losses}L, WR={wr:.1f}%, PnL=\${total_pnl:.2f}")
+        print(
+            f"  Strategy Total: {total_trades} trades, {wins}W/{losses}L, WR={wr:.1f}%, PnL=\${total_pnl:.2f}"
+        )
         print("  WARNING: brain_ids in journal = voting coalition, NOT individual accuracy")
 
     # ── 4. CROSS-REFERENCE MATRIX ──
@@ -187,12 +190,16 @@ def main(data_dir: str) -> int:
     print(f"  {'Brain':<35} {'Train':>8} {'Deploy':>8} {'LiveWR':>8} {'LivePnL':>9} {'Verdict'}")
     print(f"  {'-'*35} {'-'*8} {'-'*8} {'-'*8} {'-'*9} {'-'*10}")
 
-    all_bids = set(list(training_reports.keys()) + list(config_status.keys()) + list(signal_stats.keys()))
+    all_bids = set(
+        list(training_reports.keys()) + list(config_status.keys()) + list(signal_stats.keys())
+    )
     for bid in sorted(all_bids):
         # Map config name to training name
         train_key = None
         for tk in training_reports:
-            if bid.lower().replace("_survival", "").replace("btc_", "") in tk.lower().replace("_survival", ""):
+            if bid.lower().replace("_survival", "").replace("btc_", "") in tk.lower().replace(
+                "_survival", ""
+            ):
                 train_key = tk
                 break
             # Direct match
@@ -202,16 +209,18 @@ def main(data_dir: str) -> int:
 
         train_wr = None
         if train_key:
-            best_wr = max(
-                (m["val_wr"] for m in training_reports[train_key].values()), default=None
-            )
+            best_wr = max((m["val_wr"] for m in training_reports[train_key].values()), default=None)
             train_wr = best_wr
 
         cfg = config_status.get(bid, {})
         deploy_status = cfg.get("status", "NONE")
         bs = signal_stats.get(bid, {})
         live_trades = bs.get("signals", 0)
-        live_wr = bs["wins"] / (bs["wins"] + bs["losses"]) * 100 if (bs.get("wins", 0) + bs.get("losses", 0)) > 0 else 0
+        live_wr = (
+            bs["wins"] / (bs["wins"] + bs["losses"]) * 100
+            if (bs.get("wins", 0) + bs.get("losses", 0)) > 0
+            else 0
+        )
         live_pnl = bs.get("pnl_r", 0)
 
         train_str = f"{train_wr:.1%}" if train_wr is not None else "N/A"
@@ -233,7 +242,9 @@ def main(data_dir: str) -> int:
         else:
             verdict = "OK"
 
-        print(f"  {bid:<35} {train_str:>8} {deploy_status:>8} {live_wr_str:>8} {live_pnl:>9.2f}  {verdict}")
+        print(
+            f"  {bid:<35} {train_str:>8} {deploy_status:>8} {live_wr_str:>8} {live_pnl:>9.2f}  {verdict}"
+        )
 
     # ── 5. FINAL VERDICT ──
     print()
@@ -258,7 +269,9 @@ def main(data_dir: str) -> int:
         best = max(m["val_wr"] for m in training_reports["btc_v10_m15_survival"].values())
         folds = list(training_reports["btc_v10_m15_survival"].values())[0]["folds"]
         if best > 0.80:
-            issues.append(f"[!!] FLAG: btc_v10_m15 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias")
+            issues.append(
+                f"[!!] FLAG: btc_v10_m15 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias"
+            )
         if folds < 5:
             issues.append(f"[!!] FLAG: btc_v10_m15 only {folds} folds — low statistical confidence")
 
@@ -267,7 +280,9 @@ def main(data_dir: str) -> int:
         best = max(m["val_wr"] for m in training_reports["btc_swing_v9_h1"].values())
         folds = list(training_reports["btc_swing_v9_h1"].values())[0]["folds"]
         if best > 0.80:
-            issues.append(f"[!!] FLAG: btc_swing_v9_h1 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias")
+            issues.append(
+                f"[!!] FLAG: btc_swing_v9_h1 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias"
+            )
 
     for issue in issues:
         print(f"  {issue}")

@@ -28,7 +28,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from core.runtime.fault_handler import fail_open_guard
 
 # ── Feature computation constants (must match v9_live_computer.py) ──────────
 ATR_PERIOD = 14
@@ -351,9 +350,8 @@ def load_ohlc_arrays(csv_path: Path) -> dict[str, np.ndarray]:
                 if ts_dt.tzinfo is not None:
                     ts_dt = ts_dt.tz_convert(None)
                 timestamp_epochs.append(ts_dt.timestamp())
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("build_calibrated_dataset:load_ohlc_arrays"):
-                    timestamp_epochs.append(0.0)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                timestamp_epochs.append(0.0)
     return {
         "open": np.array(opens, dtype=np.float64),
         "high": np.array(highs, dtype=np.float64),

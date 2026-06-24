@@ -31,7 +31,6 @@ import os
 import sys
 from datetime import UTC, datetime
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 
 def parse_args() -> argparse.Namespace:
@@ -139,10 +138,9 @@ def extract_features(pair: dict[str, Any]) -> dict[str, Any]:
         ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
         entry_hour = float(ts.hour)
         entry_dow = float(ts.weekday())
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("train_exit_metamodel:extract_features"):
-            entry_hour = 12.0
-            entry_dow = 3.0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        entry_hour = 12.0
+        entry_dow = 3.0
     # PnL and outcome
     pnl = float(c.get("pnl") or 0)
     detail = c.get("detail")

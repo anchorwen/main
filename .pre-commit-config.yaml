@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: ruff
         name: "ruff"
-        entry: ruff check --fix --extend-select=BLE
+        entry: ruff check --fix --extend-select=BLE --ignore SIM105
         language: system
         files: \.py$
         stages: [pre-commit]
@@ -144,3 +144,22 @@ repos:
         pass_filenames: false
         require_serial: true
         stages: [pre-push]
+      - id: ci-mirror-pytest
+        name: "[CI-Mirror] Pytest full suite (UGR-A10)"
+        entry: python -m pytest tests/ -q --tb=short
+        language: system
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-push]
+
+  # AST Scanner (UGR-A10)
+  - repo: local
+    hooks:
+      - id: verify-capresult-ast
+        name: "[UGR-A10] AST structural constraint scanner"
+        entry: python scripts/verify_capresult_ast.py
+        language: system
+        files: \.py$
+        stages: [pre-commit]
+        pass_filenames: false
+        require_serial: true

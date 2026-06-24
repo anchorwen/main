@@ -15,7 +15,6 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from core.runtime.fault_handler import fail_open_guard
 
 _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root) not in sys.path:
@@ -31,10 +30,13 @@ def _age_minutes(ts: str | None) -> float:
         return -1
     try:
         dt = datetime.fromisoformat(str(ts)[:19])
-        return (datetime.now(UTC).replace(tzinfo=None) - dt.replace(tzinfo=None)).total_seconds() / 60
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("system_health:_age_minutes"):
-            return -1
+        return (
+            datetime.now(UTC).replace(tzinfo=None) - dt.replace(tzinfo=None)
+        ).total_seconds() / 60
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return -1
+
+
 def check_symbol(base_dir: str, label: str) -> dict:
     """Run all health checks for one symbol."""
     base = Path(base_dir)
@@ -59,9 +61,8 @@ def check_symbol(base_dir: str, label: str) -> dict:
                     ts = evt.get("timestamp", "")
                     if ts:
                         last_ts = ts
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("system_health:check_symbol"):
-                        pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
         result["stream"] = {
             "exists": True,
             "total_events": lines,
@@ -91,9 +92,8 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 for bid, m in active[-3:]
             ],
         }
-    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
-        with fail_open_guard("system_health:check_symbol"):
-            result["projection"] = {"error": str(e)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+        result["projection"] = {"error": str(e)}
     # ── 3. Degradation status ──
     dh_path = base / "state" / "data_health_state.json"
     if dh_path.exists():
@@ -113,9 +113,8 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 "fails": fails[:5],
                 "warns": warns[:5],
             }
-        except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
-            with fail_open_guard("system_health:check_symbol"):
-                result["degradation"] = {"error": str(e)}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+            result["degradation"] = {"error": str(e)}
     # ── 4. Governance status ──
     gov_path = base / "governance_state.json"
     if gov_path.exists():
@@ -132,9 +131,8 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 "status_counts": status_counts,
                 "live_brains": live_brains,
             }
-        except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
-            with fail_open_guard("system_health:check_symbol"):
-                result["governance"] = {"error": str(e)}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+            result["governance"] = {"error": str(e)}
     # ── 5. Data freshness ──
     key_files = {
         "execution_state": base / "state" / "execution_state.json",
@@ -183,19 +181,30 @@ def print_report(results: list[dict], *, partial: bool = False) -> None:
             print(f"  Projection: {p['active_brains']}/{p['total_brains']} brains active")
             if p.get("top3"):
                 top = p["top3"][0]
-                print(f"    Top: {top['id']} — {top['trades']}t, {top['wr']:.1%} WR, {top['pnl']:+.1f}R")
+                print(
+                    f"    Top: {top['id']} — {top['trades']}t, {top['wr']:.1%} WR, {top['pnl']:+.1f}R"
+                )
             if p.get("bottom3"):
                 bot = p["bottom3"][-1]
-                print(f"    Bottom: {bot['id']} — {bot['trades']}t, {bot['wr']:.1%} WR, {bot['pnl']:+.1f}R")
+                print(
+                    f"    Bottom: {bot['id']} — {bot['trades']}t, {bot['wr']:.1%} WR, {bot['pnl']:+.1f}R"
+                )
 
         # Degradation
         d = r.get("degradation", {})
         if d:
             level = d.get("staleness_level", "?")
-            icon = {"NORMAL": "[NORMAL]", "YELLOW": "[YELLOW]", "ORANGE": "[ORANGE]", "RED": "[RED]"}.get(level, "[?]")
+            icon = {
+                "NORMAL": "[NORMAL]",
+                "YELLOW": "[YELLOW]",
+                "ORANGE": "[ORANGE]",
+                "RED": "[RED]",
+            }.get(level, "[?]")
             print(f"  Degradation: {icon} staleness={level} (data_health={d.get('overall','?')})")
             if level == "NORMAL" and d.get("overall") == "CRITICAL":
-                print("    Note: Data stale/quality issues exist but key sources are fresh — trading allowed")
+                print(
+                    "    Note: Data stale/quality issues exist but key sources are fresh — trading allowed"
+                )
             if d.get("fails"):
                 print(f"    Fails: {', '.join(d['fails'][:3])}")
             if d.get("warns"):
@@ -233,7 +242,9 @@ def print_report(results: list[dict], *, partial: bool = False) -> None:
         gm_age = (r.get("freshness", {}) or {}).get("golden_master")
         gm_ok = gm_age is not None and gm_age < 15
         status = "OK" if (stream_ok and gm_ok) else "DEGRADED"
-        print(f"  {label:4s}  stream={'fresh' if stream_ok else 'stale':6s}  gm={'fresh' if gm_ok else 'stale':6s}  degradation={deg_level:6s}  → {status}")
+        print(
+            f"  {label:4s}  stream={'fresh' if stream_ok else 'stale':6s}  gm={'fresh' if gm_ok else 'stale':6s}  degradation={deg_level:6s}  → {status}"
+        )
 
     print(f"\n{'=' * 70}")
     print("  END OF REPORT")
@@ -244,10 +255,15 @@ def main() -> int:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
     parser = argparse.ArgumentParser(description="System health overview")
-    parser.add_argument("--base-dir", nargs="+", default=["data", "data_btc"],
-                        help="Base directories (default: data data_btc)")
-    parser.add_argument("--label", nargs="+", default=["XAU", "BTC"],
-                        help="Labels (default: XAU BTC)")
+    parser.add_argument(
+        "--base-dir",
+        nargs="+",
+        default=["data", "data_btc"],
+        help="Base directories (default: data data_btc)",
+    )
+    parser.add_argument(
+        "--label", nargs="+", default=["XAU", "BTC"], help="Labels (default: XAU BTC)"
+    )
     args = parser.parse_args()
 
     # ── FIX-20260612-009: partial-view warning ──
@@ -259,7 +275,9 @@ def main() -> int:
     _unchecked = {d: l for d, l in _all_known.items() if d not in _checked}
     if _unchecked:
         _missing = ", ".join(f"{l} ({d})" for d, l in _unchecked.items())
-        print(f"\n  [PARTIAL VIEW] Only checking: {', '.join(f'{l} ({d})' for d, l in _checked.items())}")
+        print(
+            f"\n  [PARTIAL VIEW] Only checking: {', '.join(f'{l} ({d})' for d, l in _checked.items())}"
+        )
         print(f"  [PARTIAL VIEW] NOT checked: {_missing}")
         print("  [PARTIAL VIEW] Run without --base-dir/--label for full picture.\n")
 

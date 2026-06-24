@@ -4,8 +4,6 @@ import json
 import os
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -26,10 +24,9 @@ def main():
         try:
             with open(f) as fh:
                 d = json.load(fh)
-        except Exception as e:  # BLE001:FOG
-            with fail_open_guard("model_inventory:main"):
-                print(f"{f.name}: ERROR {e}")
-                continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+            print(f"{f.name}: ERROR {e}")
+            continue
         artifact = d.get("artifact_path", "?")
         exists = (
             "Y" if artifact and Path(artifact).exists() else ("MISSING" if artifact else "NONE")

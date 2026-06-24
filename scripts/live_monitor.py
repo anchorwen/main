@@ -19,8 +19,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 SCHEMA_VERSION = "live_monitor.v1"
 
 
@@ -218,9 +216,8 @@ def _check_positions(mt5_terminal_path: str | None, symbol: str) -> dict[str, An
         result["total_pnl"] = round(total_pnl, 2)
         result["available"] = True
         mt5.shutdown()
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_monitor:_check_positions"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     return result
 
 
@@ -459,14 +456,13 @@ def main(argv: list[str] | None = None) -> int:
                 lookback_hours=args.lookback_hours,
             )
             print(json.dumps(snapshot, ensure_ascii=False, default=str), flush=True)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("live_monitor:main"):
-                error_event = {
-                    "event": "monitor_error",
-                    "time": _utc_now_iso(),
-                    "error": str(exc)[:500],
-                }
-                print(json.dumps(error_event, ensure_ascii=False), flush=True)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            error_event = {
+                "event": "monitor_error",
+                "time": _utc_now_iso(),
+                "error": str(exc)[:500],
+            }
+            print(json.dumps(error_event, ensure_ascii=False), flush=True)
         if args.once:
             break
 

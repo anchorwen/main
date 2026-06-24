@@ -19,8 +19,6 @@ import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -104,17 +102,16 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             _log("Bridge supervisor stopped by user (Ctrl+C)", args.log_path)
             return 0
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("bridge_supervisor:main"):
-                restart_count += 1
-                total_cycles += 1
-                _log(
-                    f"Worker crashed (restart {restart_count}/{args.max_restarts}): {traceback.format_exc()}",
-                    args.log_path,
-                )
-                if args.max_restarts > 0 and restart_count >= args.max_restarts:
-                    _log(f"Max restarts ({args.max_restarts}) reached — giving up", args.log_path)
-                    return 1
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            restart_count += 1
+            total_cycles += 1
+            _log(
+                f"Worker crashed (restart {restart_count}/{args.max_restarts}): {traceback.format_exc()}",
+                args.log_path,
+            )
+            if args.max_restarts > 0 and restart_count >= args.max_restarts:
+                _log(f"Max restarts ({args.max_restarts}) reached — giving up", args.log_path)
+                return 1
         time.sleep(args.interval)
 
     return 0

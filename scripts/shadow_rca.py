@@ -32,23 +32,19 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 ROOT = Path(__file__).resolve().parents[1]
 
 logger = logging.getLogger("shadow_rca")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 
 # ── Constants ──────────────────────────────────────────────────────────────
-TRACEBACK_HEAD_CHARS = 1000   # Keep first N chars (entry point)
-TRACEBACK_TAIL_CHARS = 2000   # Keep last N chars (final exception)
-GIT_LOG_DEPTH = 5             # Recent FIX commits to include in context
-LLM_TIMEOUT = 30              # Seconds before LLM call is abandoned
+TRACEBACK_HEAD_CHARS = 1000  # Keep first N chars (entry point)
+TRACEBACK_TAIL_CHARS = 2000  # Keep last N chars (final exception)
+GIT_LOG_DEPTH = 5  # Recent FIX commits to include in context
+LLM_TIMEOUT = 30  # Seconds before LLM call is abandoned
 
 # Known RC categories from FIX_REGISTRY.md (for validation)
-VALID_RC_CATEGORIES = {
-    f"RC-{i:02d}" for i in range(1, 13)
-}  # RC-01 through RC-12
+VALID_RC_CATEGORIES = {f"RC-{i:02d}" for i in range(1, 13)}  # RC-01 through RC-12
 
 # ── Context collection ─────────────────────────────────────────────────────
 
@@ -68,8 +64,12 @@ def _git_blame(file_path: str, line: int) -> str:
     try:
         result = subprocess.run(
             ["git", "blame", "-L", f"{line},{line}", "--", file_path],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=str(ROOT), timeout=10,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(ROOT),
+            timeout=10,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired):
@@ -81,8 +81,12 @@ def _git_recent_fixes(file_path: str, n: int = GIT_LOG_DEPTH) -> list[dict]:
     try:
         result = subprocess.run(
             ["git", "log", "--oneline", f"-{n}", "--follow", "--", file_path],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=str(ROOT), timeout=10,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(ROOT),
+            timeout=10,
         )
     except (OSError, subprocess.TimeoutExpired):
         return []
@@ -100,8 +104,12 @@ def _git_recent_fixes(file_path: str, n: int = GIT_LOG_DEPTH) -> list[dict]:
         try:
             msg_r = subprocess.run(
                 ["git", "log", "-1", "--format=%B", hsh],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                cwd=str(ROOT), timeout=5,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(ROOT),
+                timeout=5,
             )
         except (OSError, subprocess.TimeoutExpired):
             continue
@@ -222,12 +230,14 @@ def _call_anthropic(prompt: str) -> dict | None:
     try:
         import urllib.request
 
-        body = json.dumps({
-            "model": "claude-sonnet-4-6",
-            "max_tokens": 1024,
-            "temperature": 0.0,
-            "messages": [{"role": "user", "content": prompt}],
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 1024,
+                "temperature": 0.0,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        ).encode("utf-8")
 
         req = urllib.request.Request(
             "https://api.anthropic.com/v1/messages",
@@ -255,12 +265,14 @@ def _call_openai(prompt: str) -> dict | None:
     try:
         import urllib.request
 
-        body = json.dumps({
-            "model": "gpt-4o",
-            "max_tokens": 1024,
-            "temperature": 0.0,
-            "messages": [{"role": "user", "content": prompt}],
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "model": "gpt-4o",
+                "max_tokens": 1024,
+                "temperature": 0.0,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        ).encode("utf-8")
 
         req = urllib.request.Request(
             "https://api.openai.com/v1/chat/completions",
@@ -362,9 +374,9 @@ def _dispatch_result(parsed: dict, data_dir: str) -> None:
     # Low-confidence → log warning, don't auto-fill data_loss
     if parsed.get("confidence", 0) < 0.5:
         logger.warning(
-            "LOW CONFIDENCE RCA (%.2f) — human review required. "
-            "See %s for details.",
-            parsed["confidence"], shadow_log,
+            "LOW CONFIDENCE RCA (%.2f) — human review required. " "See %s for details.",
+            parsed["confidence"],
+            shadow_log,
         )
 
 
@@ -374,9 +386,7 @@ def _dispatch_result(parsed: dict, data_dir: str) -> None:
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Ω Shadow RCA — LLM-powered root cause analysis"
-    )
+    parser = argparse.ArgumentParser(description="Ω Shadow RCA — LLM-powered root cause analysis")
     parser.add_argument("--alert-json", default="", help="Alert JSON string")
     parser.add_argument("--traceback", default="", help="Error traceback string")
     parser.add_argument("--file", default="", help="Source file path")
@@ -384,9 +394,7 @@ def main() -> int:
     parser.add_argument(
         "--data-dir", default="data_btc", help="Data directory for shadow log output"
     )
-    parser.add_argument(
-        "--stdin", action="store_true", help="Read input JSON from stdin"
-    )
+    parser.add_argument("--stdin", action="store_true", help="Read input JSON from stdin")
     args = parser.parse_args()
 
     # ── Parse input ──
@@ -408,16 +416,20 @@ def main() -> int:
             pass
 
     if not alert_json and not traceback:
-        print(json.dumps({
-            "error": "No input provided. Use --alert-json, --traceback, or stdin.",
-            "l_level": "L2",
-            "rc_category": "RC-NEW",
-            "is_recurrence": False,
-            "related_fix_ids": [],
-            "root_cause": "Insufficient context for RCA.",
-            "suggested_action": "Provide alert JSON or traceback for analysis.",
-            "confidence": 0.0,
-        }))
+        print(
+            json.dumps(
+                {
+                    "error": "No input provided. Use --alert-json, --traceback, or stdin.",
+                    "l_level": "L2",
+                    "rc_category": "RC-NEW",
+                    "is_recurrence": False,
+                    "related_fix_ids": [],
+                    "root_cause": "Insufficient context for RCA.",
+                    "suggested_action": "Provide alert JSON or traceback for analysis.",
+                    "confidence": 0.0,
+                }
+            )
+        )
         return 1
 
     # ── Collect context ──
@@ -452,10 +464,10 @@ def main() -> int:
             "is_recurrence": False,
             "related_fix_ids": list(valid_fix_ids)[:3],
             "root_cause": "LLM UNAVAILABLE — manual RCA required. "
-                          f"Review traceback/alert and recent FIX history "
-                          f"({len(valid_fix_ids)} FIX IDs found in context).",
+            f"Review traceback/alert and recent FIX history "
+            f"({len(valid_fix_ids)} FIX IDs found in context).",
             "suggested_action": "LLM unavailable. Manually classify root cause "
-                               "using Iron Law #12 protocol (STOP→LOOKUP→DIG→MAP→PLAN).",
+            "using Iron Law #12 protocol (STOP→LOOKUP→DIG→MAP→PLAN).",
             "confidence": 0.0,
             "llm_unavailable": True,
         }
@@ -474,16 +486,19 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("shadow_rca:main"):
-            print(json.dumps({
-                "error": "shadow_rca internal failure",
-                "l_level": "L2",
-                "rc_category": "RC-NEW",
-                "is_recurrence": False,
-                "related_fix_ids": [],
-                "root_cause": "shadow_rca crashed — see logs.",
-                "suggested_action": "Diagnose shadow_rca failure, then manually classify.",
-                "confidence": 0.0,
-            }))
-            sys.exit(0)  # Fail-open: don't block caller
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        print(
+            json.dumps(
+                {
+                    "error": "shadow_rca internal failure",
+                    "l_level": "L2",
+                    "rc_category": "RC-NEW",
+                    "is_recurrence": False,
+                    "related_fix_ids": [],
+                    "root_cause": "shadow_rca crashed — see logs.",
+                    "suggested_action": "Diagnose shadow_rca failure, then manually classify.",
+                    "confidence": 0.0,
+                }
+            )
+        )
+        sys.exit(0)  # Fail-open: don't block caller

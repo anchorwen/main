@@ -28,7 +28,6 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -160,9 +159,10 @@ def _resolve_features_for_schema(feature_schema_id: str) -> list[str] | None:
         if feature_schema_id not in SCHEMA_DIMENSIONS:
             return None
         return get_schema_feature_names(feature_schema_id)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("generate_brain_config:_resolve_features_for_schema"):
-            return None
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return None
+
+
 def make_brain_config(
     model_path: Path,
     brain_type: str,

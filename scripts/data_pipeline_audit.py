@@ -1,13 +1,12 @@
 # type: ignore
 #!/usr/bin/env python
 """BTC data pipeline integrity audit — Iron Law #11 compliant"""
+
 from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
-from core.runtime.fault_handler import fail_open_guard
 
 ROOT = Path(__file__).resolve().parent.parent
 NOW = datetime.now(UTC)
@@ -65,12 +64,22 @@ print(f"  Total closes:            {closes_all}")
 print(f"  Opens (24h):             {opens_24h}")
 print(f"  Closes (24h):            {closes_24h}")
 if opens_all:
-    print(f"  Opens w/ entry_context:  {opens_with_ctx}/{opens_all} ({opens_with_ctx/opens_all*100:.0f}%)")
+    print(
+        f"  Opens w/ entry_context:  {opens_with_ctx}/{opens_all} ({opens_with_ctx/opens_all*100:.0f}%)"
+    )
 print(f"  Missing feature vector:  {opens_missing_vec}")
 
 # ── 2. FEATURE STORE ──
 print("\n── 2. Feature Store (M5) ──")
-fs = ROOT / "data_btc" / "feature_store" / "records" / "symbol=BTCUSDc" / "timeframe=M5" / "features.jsonl"
+fs = (
+    ROOT
+    / "data_btc"
+    / "feature_store"
+    / "records"
+    / "symbol=BTCUSDc"
+    / "timeframe=M5"
+    / "features.jsonl"
+)
 fs_total = 0
 fs_24h = 0
 fs_7d = 0
@@ -192,9 +201,8 @@ if ofi.exists():
         print(f"  OFI_Total_Volume:        {od.get('OFI_Total_Volume', 'N/A')}")
         print(f"  OFI_ZScore_20:           {od.get('OFI_ZScore_20', 'N/A')}")
         print(f"  OFI_Cumulative_1H:       {od.get('OFI_Cumulative_1H', 'N/A')}")
-    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
-        with fail_open_guard("data_pipeline_audit:L193"):
-            print(f"  Status:                  CORRUPTED ({e})")
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+        print(f"  Status:                  CORRUPTED ({e})")
 else:
     print("  Status:                  MISSING")
 
@@ -275,9 +283,8 @@ if bh.exists():
         print(f"  PID:                     {bd.get('pid', 'N/A')}")
         print(f"  Transport:               {bd.get('transport', 'N/A')}")
         print(f"  Outbox pending:          {bd.get('outbox_pending', 'N/A')}")
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("data_pipeline_audit:L275"):
-            print("  CORRUPTED")
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        print("  CORRUPTED")
 else:
     print("  MISSING")
 

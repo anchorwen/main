@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T06:57:35Z
+> **自动生成**: 2026-06-24T08:37:52Z
 > **扫描模块数**: 663
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -57,13 +57,13 @@
 | `execution_simulator.py` | ✅ active | SimulatedFill, ExecutionSimulator | 8 | 105 | — | |
 | `metrics.py` | ✅ active | — | 1 | 72 | — | |
 | `portfolio.py` | ✅ active | VirtualPosition, VirtualPortfolio | 13 | 186 | — | |
-| `strategy_adapter.py` | ✅ active | StrategyLineAdapter | 9 | 266 | — | |
+| `strategy_adapter.py` | ✅ active | StrategyLineAdapter | 9 | 264 | — | |
 
 ## core/brains
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `brain_registry.py` | ✅ active | BrainEntry, BrainRegistry | 16 | 177 | — | |
+| `brain_registry.py` | ✅ active | BrainEntry, BrainRegistry | 16 | 174 | — | |
 | `online_mlp_model.py` | ✅ active | OnlineMLP, _TorchOnlineMLP, _Module | 15 | 269 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 
@@ -72,29 +72,29 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `base_adapter.py` | ✅ active | BaseBrainAdapter | 13 | 250 | — | |
-| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 210 | — | |
+| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 207 | — | |
 | `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
-| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 599 | — | |
-| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 270 | — | |
-| `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 288 | — | |
-| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 314 | — | |
-| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 294 | — | |
+| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 594 | — | |
+| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 268 | — | |
+| `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 285 | — | |
+| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 311 | — | |
+| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 291 | — | |
 
 ## core/brains/services
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `ab_test.py` | ✅ active | ExperimentConfig, TrafficSplitter, ExperimentResult, ExperimentTracker | 11 | 305 | — | |
-| `brain_attribution_service.py` | ✅ active | BrainAttribution, AttributionReport, BrainAttributionService | 11 | 330 | — | |
-| `brain_factory.py` | ✅ active | BrainFactory | 1 | 171 | — | |
-| `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 10 | 365 | — | |
-| `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 523 | — | |
+| `brain_attribution_service.py` | ✅ active | BrainAttribution, AttributionReport, BrainAttributionService | 11 | 327 | — | |
+| `brain_factory.py` | ✅ active | BrainFactory | 1 | 169 | — | |
+| `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 10 | 362 | — | |
+| `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 520 | — | |
 | `brain_registry_loader.py` | ✅ active | BrainRegistryLoader | 1 | 7 | — | |
 | `brain_registry_service.py` | ✅ active | BrainRegistryService | 7 | 117 | — | |
-| `brain_run_service.py` | ✅ active | BrainRunService | 15 | 270 | — | |
-| `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 424 | — | |
-| `inference_guard.py` | ✅ active | InferenceGuard | 11 | 226 | — | |
-| `onnx_worker.py` | ✅ active | — | 1 | 81 | — | |
+| `brain_run_service.py` | ✅ active | BrainRunService | 15 | 264 | — | |
+| `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 420 | — | |
+| `inference_guard.py` | ✅ active | InferenceGuard | 11 | 220 | — | |
+| `onnx_worker.py` | ✅ active | — | 1 | 77 | — | |
 | `stability_monitor.py` | ✅ active | StabilityReport | 4 | 201 | — | |
 
 ## core/config
@@ -107,7 +107,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `adapters.py` | ✅ active | — | 11 | 209 | — | |
+| `adapters.py` | ✅ active | — | 11 | 208 | — | |
 | `calibrator_contract.py` | ✅ active | CalibratorHistoryEntry, CalibratorState | 3 | 116 | — | |
 | `cap_result.py` | ✅ active | CapProofExpired, CapProofReused, _SuccessProof, CapResult, Kernel | 19 | 289 | — | |
 | `domain_keys.py` | 📄 config | — | 0 | 979 | — | |
@@ -116,7 +116,7 @@
 | `exceptions.py` | ✅ active | DomainError, RiskError, RiskPolicyViolation, GovernanceError, InvalidTransitionError, BrainNotFoundError, ExecutionError, OrderNotFoundError, DuplicateOrderError, ProtocolError, DispatchError, IdempotencyError, ConfigurationError, ContractViolationError, DataIntegrityError | 10 | 159 | — | |
 | `ids.py` | ✅ active | — | 14 | 57 | — | |
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 218 | — | |
-| `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 44 | 908 | — | |
+| `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 940 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 150 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
 | `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
@@ -163,7 +163,7 @@
 | `projections.py` | ✅ active | — | 7 | 271 | — | |
 | `ticket_resolver.py` | ✅ active | TicketResolutionError | 3 | 101 | — | |
 | `wap.py` | ✅ active | WAPStore | 11 | 219 | — | |
-| `write_ahead_log.py` | ✅ active | WALConfig, WALRecord, WriteAheadLog | 19 | 498 | — | |
+| `write_ahead_log.py` | ✅ active | WALConfig, WALRecord, WriteAheadLog | 21 | 526 | — | |
 
 ## core/deployment
 
@@ -221,14 +221,14 @@
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 468 | — | |
 | `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 11 | 460 | — | |
-| `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 828 | — | |
+| `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 822 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
-| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 568 | — | |
+| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 269 | — | |
-| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 11 | 598 | — | |
+| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 11 | 597 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
 | `fix_execution_mapper.py` | ✅ active | FixExecutionReportMapper | 5 | 75 | — | |
@@ -237,26 +237,26 @@
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 397 | — | |
-| `managed_close.py` | ✅ active | — | 2 | 391 | — | |
+| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 398 | — | |
+| `managed_close.py` | ✅ active | — | 2 | 387 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
-| `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 511 | — | |
+| `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 507 | — | |
 | `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 220 | — | |
-| `meta_filter_routing.py` | ✅ active | — | 1 | 250 | — | |
+| `meta_filter_routing.py` | ✅ active | — | 1 | 248 | — | |
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 490 | — | |
-| `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 955 | — | |
-| `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 88 | — | |
+| `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 978 | — | |
+| `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 86 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 12 | 159 | — | |
-| `mt5_worker.py` | ✅ active | MT5Worker | 20 | 407 | — | |
+| `mt5_worker.py` | ✅ active | MT5Worker | 20 | 406 | — | |
 | `net_out_close_handler.py` | ✅ active | — | 1 | 177 | — | |
 | `ofi_gate.py` | ✅ active | — | 1 | 90 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
-| `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 535 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2087 | — | |
+| `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2085 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
-| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 515 | — | |
+| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 512 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 571 | — | |
@@ -267,11 +267,11 @@
 | `session_detector.py` | ✅ active | SessionDetector | 3 | 182 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
-| `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 92 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1825 | — | |
+| `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1823 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 316 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 196 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 212 | — | |
@@ -282,11 +282,11 @@
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
 | `feature_assembler.py` | ✅ active | — | 3 | 256 | — | |
-| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 3 | 229 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 387 | — | |
+| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 3 | 227 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 380 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
-| `meta_feature_builder.py` | ✅ active | — | 1 | 136 | — | |
+| `meta_feature_builder.py` | ✅ active | — | 1 | 135 | — | |
 | `ofi_collector.py` | ✅ active | OFICollector | 5 | 178 | — | |
 | `rolling_normalizer.py` | ✅ active | RollingNormalizer | 15 | 234 | — | |
 | `store_contracts.py` | ✅ active | FeatureSchema, FeatureRecord, FeatureQuery, FeatureStore | 8 | 87 | — | |
@@ -303,12 +303,12 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 384 | — | |
+| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 379 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
-| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 228 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 582 | — | |
-| `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 342 | — | |
-| `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 100 | — | |
+| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 223 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 573 | — | |
+| `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 339 | — | |
+| `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 97 | — | |
 
 ## core/features/schemas
 
@@ -333,7 +333,7 @@
 | `experience_replay.py` | ✅ active | ExperienceReplayBuffer | 10 | 246 | — | |
 | `feedback_loop.py` | ✅ active | FeedbackLoop | 4 | 110 | — | |
 | `live_journal_metrics.py` | ✅ active | — | 2 | 225 | — | |
-| `online_feedback_hook.py` | ✅ active | OnlineFeedbackHook | 11 | 467 | — | |
+| `online_feedback_hook.py` | ✅ active | OnlineFeedbackHook | 11 | 459 | — | |
 | `outcome_collector.py` | ✅ active | OutcomeCollector | 4 | 111 | — | |
 | `param_optimizer.py` | ✅ active | — | 5 | 283 | — | |
 | `performance_analytics.py` | ✅ active | PerformanceAnalytics | 12 | 194 | — | |
@@ -350,7 +350,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `distributed_lock.py` | 🧪 stub | LockAcquireResult, BaseLock, FileLock, DirectoryLock | 25 | 465 | — | |
+| `distributed_lock.py` | 🧪 stub | LockAcquireResult, BaseLock, FileLock, DirectoryLock | 25 | 456 | — | |
 
 ## core/ledger
 
@@ -377,7 +377,7 @@
 | `execution_event_writer.py` | ✅ active | ExecutionEventWriter | 3 | 47 | — | |
 | `execution_reconciliation_service.py` | ✅ active | ExecutionReconciliationService | 9 | 264 | — | |
 | `gate_decision_refs.py` | ✅ active | — | 4 | 30 | — | |
-| `journal_cleanup.py` | ✅ active | — | 13 | 802 | — | |
+| `journal_cleanup.py` | ✅ active | — | 13 | 795 | — | |
 | `replay_execution_reader.py` | ✅ active | ReplayExecutionReader | 5 | 35 | — | |
 | `replay_execution_writer.py` | ✅ active | ReplayExecutionWriter | 2 | 26 | — | |
 | `replay_plan_refs.py` | ✅ active | — | 11 | 85 | — | |
@@ -412,27 +412,27 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `_health_helpers.py` | ✅ active | — | 6 | 145 | — | |
-| `alert_channels.py` | ✅ active | SlackAlertChannel, DingTalkAlertChannel, CompositeAlertChannel | 12 | 351 | — | |
+| `_health_helpers.py` | ✅ active | — | 6 | 139 | — | |
+| `alert_channels.py` | ✅ active | SlackAlertChannel, DingTalkAlertChannel, CompositeAlertChannel | 12 | 347 | — | |
 | `alert_runbook_bridge.py` | ✅ active | RunbookAction, RunbookSOP, AlertRunbookBridge | 10 | 502 | — | |
-| `alert_service.py` | 🧪 stub | AlertRule, AlertChannel, LogAlertChannel, InMemoryAlertChannel, BatchingAlertChannel, SeverityRouter, AlertService | 28 | 482 | — | |
+| `alert_service.py` | 🧪 stub | AlertRule, AlertChannel, LogAlertChannel, InMemoryAlertChannel, BatchingAlertChannel, SeverityRouter, AlertService | 28 | 479 | — | |
 | `audit_log.py` | ✅ active | StructuredAuditLog | 11 | 180 | — | |
 | `data_health_schema.py` | ✅ active | Tier, SourceStatus, SourceCheckResult, CrossCheckResult, OrphanFinding, BehavioralMetrics, HealthReport, HealthCheckMeta, SourceHealthRecord | 5 | 293 | — | |
-| `data_health_service.py` | ✅ active | DataHealthService | 9 | 317 | — | |
+| `data_health_service.py` | ✅ active | DataHealthService | 9 | 315 | — | |
 | `data_loss.py` | ✅ active | — | 1 | 103 | — | |
 | `degradation.py` | ✅ active | DegradationLevel, DegradationConstraints | 4 | 267 | — | |
 | `diagnostics_dashboard.py` | ✅ active | DiagnosticsDashboard | 7 | 149 | — | |
-| `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 210 | — | |
-| `event_bus.py` | ✅ active | EventBus | 7 | 66 | — | |
+| `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
+| `event_bus.py` | ✅ active | EventBus | 7 | 63 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | 🧪 stub | HealthCheckMethods | 40 | 2747 | — | |
-| `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 554 | — | |
-| `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 931 | — | |
+| `health_checks.py` | 🧪 stub | HealthCheckMethods | 40 | 2731 | — | |
+| `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
+| `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 927 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
-| `message_broker.py` | ✅ active | Message, MessageBroker, InProcessBroker, RedisStreamsBroker | 23 | 280 | — | |
+| `message_broker.py` | ✅ active | Message, MessageBroker, InProcessBroker, RedisStreamsBroker | 23 | 275 | — | |
 | `metric_names.py` | ✅ active | — | 2 | 56 | — | |
 | `metrics_collector.py` | ✅ active | MetricsCollector | 10 | 96 | — | |
-| `mlflow_bridge.py` | ✅ active | — | 4 | 145 | — | |
+| `mlflow_bridge.py` | ✅ active | — | 4 | 141 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `slo_service.py` | ✅ active | SloService | 9 | 191 | — | |
 | `tracing.py` | ✅ active | Span, TracingContext | 18 | 128 | — | |
@@ -441,8 +441,8 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 787 | — | |
-| `group_consensus.py` | ✅ active | — | 1 | 165 | — | |
+| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 791 | — | |
+| `group_consensus.py` | ✅ active | — | 1 | 166 | — | |
 | `parliament_service.py` | ✅ active | ParliamentService | 11 | 312 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 
@@ -450,7 +450,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 13 | 713 | — | |
+| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 13 | 698 | — | |
 | `live_execution_contract.py` | ✅ active | — | 5 | 74 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 8 | — | |
 
@@ -460,11 +460,11 @@
 |------|------|----|------|------|------|------|
 | `communication_adapter.py` | ✅ active | CommunicationAdapter | 1 | 7 | — | |
 | `communication_adapter_registry.py` | ✅ active | CommunicationAdapterRegistry | 3 | 61 | — | |
-| `communication_dispatcher.py` | ✅ active | CommunicationDispatcher | 4 | 367 | — | |
+| `communication_dispatcher.py` | ✅ active | CommunicationDispatcher | 4 | 363 | — | |
 | `decision_compiler.py` | ✅ active | DecisionCompiler | 5 | 118 | — | |
 | `file_queue_communication_adapter.py` | ✅ active | FileQueueCommunicationAdapter | 2 | 55 | — | |
 | `file_queue_receipt_reader.py` | ✅ active | FileQueueReceiptReader | 5 | 28 | — | |
-| `fix_communication_adapter.py` | ✅ active | FixCommunicationAdapter | 6 | 118 | — | |
+| `fix_communication_adapter.py` | ✅ active | FixCommunicationAdapter | 6 | 116 | — | |
 | `idempotency.py` | ✅ active | IdempotencyStore, DuplicateDetector | 10 | 111 | — | |
 | `intent_message_builder.py` | ✅ active | IntentMessageBuilder | 3 | 60 | — | |
 | `mt5_communication_adapter.py` | ✅ active | MT5CommunicationAdapter | 2 | 81 | — | |
@@ -472,7 +472,7 @@
 | `resilience.py` | ✅ active | CircuitState, CircuitBreaker, RateLimiter | 13 | 153 | — | |
 | `stub_communication_adapter.py` | ✅ active | StubCommunicationAdapter | 2 | 23 | — | |
 | `venue_router.py` | 🧪 stub | VenueAdapter, StubVenueAdapter, VenueRouter | 14 | 116 | — | |
-| `zmq_communication_adapter.py` | ✅ active | CircuitBreakerOpenError, ZMQCommunicationAdapter | 6 | 236 | — | |
+| `zmq_communication_adapter.py` | ✅ active | CircuitBreakerOpenError, ZMQCommunicationAdapter | 6 | 234 | — | |
 | `zmq_receipt_listener.py` | ✅ active | ZMQReceiptListener | 9 | 232 | — | |
 
 ## core/risk
@@ -542,7 +542,7 @@
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 2 | 872 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
-| `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 15 | 411 | — | |
+| `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
@@ -603,7 +603,7 @@
 | `cpcv.py` | ✅ active | CPCVFold, CPCVResult | 9 | 252 | — | |
 | `custom_objectives.py` | ✅ active | — | 11 | 338 | — | |
 | `dataset.py` | ✅ active | TrainingDataset | 17 | 429 | — | |
-| `evaluation_report.py` | ✅ active | SHAPReport, TrainingEvalReport | 11 | 457 | — | |
+| `evaluation_report.py` | ✅ active | SHAPReport, TrainingEvalReport | 11 | 454 | — | |
 | `experiment_tracker.py` | ✅ active | RunInfo, ExperimentTracker | 13 | 265 | — | |
 | `model_card.py` | ✅ active | ModelCard, ModelCardGenerator | 6 | 225 | — | |
 | `model_hashing.py` | ✅ active | — | 3 | 45 | — | |
@@ -617,12 +617,12 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 211 | — | |
+| `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `analyze_dual_symbol_trades.py` | ✅ active | — | 4 | 275 | — | |
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
-| `analyze_feature_shift.py` | ✅ active | — | 5 | 275 | — | |
+| `analyze_feature_shift.py` | ✅ active | — | 5 | 323 | — | |
 | `analyze_live_brain_performance.py` | ✅ active | — | 6 | 672 | — | |
 | `analyze_live_journal.py` | ✅ active | — | 6 | 521 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
@@ -632,15 +632,15 @@
 | `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 460 | — | |
 | `assess_system_health.py` | 📄 config | — | 0 | 229 | — | |
 | `audit_2day.py` | ✅ active | — | 1 | 207 | — | |
-| `audit_behavior_compliance.py` | ✅ active | — | 5 | 417 | — | |
-| `audit_brain_fleet.py` | ✅ active | — | 1 | 292 | — | |
+| `audit_behavior_compliance.py` | ✅ active | — | 5 | 437 | — | |
+| `audit_brain_fleet.py` | ✅ active | — | 1 | 307 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
-| `audit_data_final.py` | ✅ active | — | 5 | 201 | — | |
+| `audit_data_final.py` | ✅ active | — | 5 | 246 | — | |
 | `audit_data_health_journal.py` | ✅ active | — | 2 | 170 | — | |
-| `audit_data_integrity.py` | ✅ active | — | 12 | 923 | — | |
+| `audit_data_integrity.py` | ✅ active | — | 12 | 1002 | — | |
 | `audit_data_module.py` | ✅ active | — | 3 | 358 | — | |
 | `audit_deferred_tasks.py` | ✅ active | TriggerCondition, TaskAssessment | 11 | 577 | — | |
 | `audit_entry_spread.py` | ✅ active | — | 2 | 108 | — | |
@@ -656,24 +656,24 @@
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
 | `augment_journal_strategy.py` | ✅ active | — | 4 | 182 | — | |
-| `backfill_journal_pnl.py` | ✅ active | — | 7 | 349 | — | |
-| `backtest_runner.py` | ✅ active | — | 3 | 275 | — | |
+| `backfill_journal_pnl.py` | ✅ active | — | 7 | 353 | — | |
+| `backtest_runner.py` | ✅ active | — | 3 | 271 | — | |
 | `backtest_structural_swing.py` | ✅ active | — | 5 | 340 | — | |
-| `benchmark_zmq_latency.py` | ✅ active | — | 5 | 192 | — | |
+| `benchmark_zmq_latency.py` | ✅ active | — | 5 | 189 | — | |
 | `ble001_phase3b_migrate_hotpath.py` | ✅ active | — | 5 | 162 | — | |
 | `ble001_phase3c_fog_wrap.py` | ✅ active | — | 4 | 159 | — | |
 | `ble001_phase3d_coldpath_fog_wrap.py` | ✅ active | — | 5 | 227 | — | |
 | `ble001_phase3e_deferred_fog_wrap.py` | ✅ active | — | 4 | 231 | — | |
-| `brain.py` | ✅ active | — | 13 | 767 | — | |
-| `bridge_supervisor.py` | ✅ active | — | 4 | 124 | — | |
+| `brain.py` | ✅ active | — | 13 | 786 | — | |
+| `bridge_supervisor.py` | ✅ active | — | 4 | 121 | — | |
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
-| `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
+| `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 655 | — | |
-| `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 660 | — | |
+| `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
-| `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |
-| `check_preconditions.py` | ✅ active | — | 12 | 433 | — | |
+| `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
+| `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1010 | — | |
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
@@ -686,10 +686,10 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 35 | 2697 | — | |
-| `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
+| `daily_ops.py` | ✅ active | — | 35 | 2811 | — | |
+| `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
-| `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |
+| `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 169 | — | |
 | `deep_audit_live_data.py` | ✅ active | — | 15 | 875 | — | |
 | `deep_audit_probes.py` | ✅ active | — | 7 | 363 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
@@ -698,51 +698,51 @@
 | `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
-| `dqaf_collect.py` | ✅ active | — | 12 | 567 | — | |
+| `dqaf_collect.py` | ✅ active | — | 12 | 564 | — | |
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
 | `generate_btc_empirical_scaler.py` | ✅ active | — | 3 | 221 | — | |
 | `generate_micro_scaler.py` | ✅ active | — | 5 | 320 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
-| `guard_git_stash.py` | ✅ active | — | 3 | 113 | — | |
+| `guard_git_stash.py` | ✅ active | — | 3 | 111 | — | |
 | `hook_architecture_gate.py` | ✅ active | — | 6 | 397 | — | |
-| `hook_blueprint_precheck.py` | ✅ active | — | 1 | 76 | — | |
-| `hook_mypy_check.py` | ✅ active | — | 1 | 101 | — | |
-| `hook_pre_push.py` | ✅ active | — | 6 | 285 | — | |
+| `hook_blueprint_precheck.py` | ✅ active | — | 1 | 75 | — | |
+| `hook_mypy_check.py` | ✅ active | — | 1 | 98 | — | |
+| `hook_pre_push.py` | ✅ active | — | 6 | 287 | — | |
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
 | `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
-| `live_auto_healthcheck.py` | ✅ active | — | 11 | 234 | — | |
-| `live_daily_recap.py` | ✅ active | — | 25 | 941 | — | |
-| `live_dashboard.py` | ✅ active | — | 16 | 540 | — | |
-| `live_data_quality_report.py` | ✅ active | — | 13 | 371 | — | |
+| `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
+| `live_daily_recap.py` | ✅ active | — | 25 | 940 | — | |
+| `live_dashboard.py` | ✅ active | — | 16 | 538 | — | |
+| `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2723 | — | |
-| `live_launcher.py` | ✅ active | — | 13 | 992 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2808 | — | |
+| `live_launcher.py` | ✅ active | — | 13 | 1027 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
-| `live_monitor.py` | ✅ active | — | 12 | 486 | — | |
+| `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |
-| `live_shadow_ensemble.py` | ✅ active | — | 12 | 556 | — | |
-| `live_shadow_intent_producer.py` | ✅ active | — | 7 | 264 | — | |
+| `live_shadow_ensemble.py` | ✅ active | — | 12 | 551 | — | |
+| `live_shadow_intent_producer.py` | ✅ active | — | 7 | 260 | — | |
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
 | `migrate_fog_live_cycle.py` | ✅ active | — | 3 | 112 | — | |
-| `monitor_feature_drift.py` | ✅ active | — | 11 | 712 | — | |
+| `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 33 | 1985 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 33 | 2001 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
-| `normalize_journal_pnl.py` | ✅ active | — | 1 | 180 | — | |
-| `omega_crash_snapshot.py` | ✅ active | — | 4 | 156 | — | |
+| `normalize_journal_pnl.py` | ✅ active | — | 1 | 185 | — | |
+| `omega_crash_snapshot.py` | ✅ active | — | 4 | 158 | — | |
 | `omega_gate.py` | ✅ active | — | 4 | 562 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
-| `paper_trade_simulator.py` | ✅ active | — | 13 | 784 | — | |
-| `position_query.py` | ✅ active | — | 6 | 196 | — | |
+| `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
+| `position_query.py` | ✅ active | — | 6 | 193 | — | |
 | `position_snapshot.py` | ✅ active | — | 3 | 176 | — | |
 | `pre_commit_mypy.py` | ✅ active | — | 5 | 162 | — | |
 | `probe_xau_signal_generation.py` | ✅ active | — | 7 | 362 | — | |
@@ -750,49 +750,49 @@
 | `reconcile_fix_registry.py` | ✅ active | — | 6 | 361 | — | |
 | `register_fix.py` | ✅ active | — | 8 | 329 | — | |
 | `repair_brain_configs.py` | ✅ active | — | 4 | 141 | — | |
-| `restore_btc_schema_41.py` | ✅ active | — | 4 | 178 | — | |
+| `restore_btc_schema_41.py` | ✅ active | — | 4 | 177 | — | |
 | `run_data_health.py` | ✅ active | — | 3 | 172 | — | |
 | `runtime_protection_guard.py` | ✅ active | — | 1 | 22 | — | |
-| `send_data_health_alert.py` | ✅ active | — | 6 | 218 | — | |
+| `send_data_health_alert.py` | ✅ active | — | 6 | 231 | — | |
 | `send_live_order.py` | ✅ active | — | 4 | 148 | — | |
 | `shadow_decision_recorder.py` | ✅ active | — | 7 | 199 | — | |
 | `shadow_live_compare_report.py` | ✅ active | — | 9 | 218 | — | |
-| `shadow_pnl_loop.py` | ✅ active | — | 9 | 807 | — | |
-| `shadow_rca.py` | ✅ active | — | 12 | 489 | — | |
-| `smoke_test_e2e.py` | ✅ active | — | 15 | 389 | — | |
-| `system_health.py` | ✅ active | — | 5 | 275 | — | |
-| `system_trust_report.py` | ✅ active | — | 20 | 905 | — | |
+| `shadow_pnl_loop.py` | ✅ active | — | 9 | 812 | — | |
+| `shadow_rca.py` | ✅ active | — | 12 | 504 | — | |
+| `smoke_test_e2e.py` | ✅ active | — | 15 | 381 | — | |
+| `system_health.py` | ✅ active | — | 5 | 293 | — | |
+| `system_trust_report.py` | ✅ active | — | 20 | 992 | — | |
 | `test_io_pipeline.py` | ✅ active | — | 3 | 198 | — | |
 | `test_meta_pipeline.py` | ✅ active | — | 6 | 295 | — | |
 | `tombstone_orphans.py` | ✅ active | — | 2 | 161 | — | |
 | `trade_quality_report.py` | ✅ active | — | 6 | 113 | — | |
 | `train_btc_metafilter_v2.py` | ✅ active | — | 7 | 343 | — | |
-| `train_metafilter_path_b.py` | ✅ active | — | 3 | 213 | — | |
-| `train_regime_aware_btc.py` | ✅ active | — | 3 | 226 | — | |
+| `train_metafilter_path_b.py` | ✅ active | — | 3 | 223 | — | |
+| `train_regime_aware_btc.py` | ✅ active | — | 3 | 256 | — | |
 | `training_strategy_report.py` | ⬜ empty | — | 0 | 172 | — | |
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
-| `validate_blueprints.py` | ✅ active | — | 7 | 300 | — | |
-| `validate_brain_before_deploy.py` | ✅ active | — | 12 | 397 | — | |
+| `validate_blueprints.py` | ✅ active | — | 7 | 297 | — | |
+| `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 418 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
-| `verify.py` | ✅ active | — | 15 | 987 | — | |
-| `verify_all_brains.py` | ✅ active | — | 1 | 92 | — | |
+| `verify.py` | ✅ active | — | 15 | 992 | — | |
+| `verify_all_brains.py` | ✅ active | — | 1 | 90 | — | |
 | `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector, CapResultOkPlacementDetector, RawAccessDetector, FailOpenGuardDetector, ProofLeakDetector | 31 | 650 | ✅ | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
-| `verify_event_stream.py` | ✅ active | — | 3 | 202 | — | |
+| `verify_event_stream.py` | ✅ active | — | 3 | 200 | — | |
 | `verify_health_check_coverage.py` | ✅ active | — | 2 | 143 | — | |
 | `verify_phantom_contracts.py` | ✅ active | Violation, VerificationReport | 7 | 437 | — | |
 | `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 292 | — | |
 | `verify_training_serving_parity.py` | ✅ active | — | 7 | 492 | — | |
-| `watchdog_daily_ops.py` | ✅ active | — | 3 | 94 | — | |
+| `watchdog_daily_ops.py` | ✅ active | — | 3 | 110 | — | |
 
 ## scripts/audit
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `model_inventory.py` | ✅ active | — | 1 | 78 | — | |
+| `model_inventory.py` | ✅ active | — | 1 | 75 | — | |
 | `reference_integrity.py` | ✅ active | — | 2 | 168 | — | |
 
 ## scripts/backtest
@@ -815,7 +815,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `feature_store_warmer.py` | ✅ active | — | 14 | 387 | — | |
+| `feature_store_warmer.py` | ✅ active | — | 14 | 383 | — | |
 
 ## scripts/guards
 
@@ -835,8 +835,8 @@
 |------|------|----|------|------|------|------|
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
-| `brain_promotion_runner.py` | ✅ active | — | 6 | 204 | — | |
-| `build_calibrated_dataset.py` | ✅ active | — | 19 | 773 | — | |
+| `brain_promotion_runner.py` | ✅ active | — | 6 | 203 | — | |
+| `build_calibrated_dataset.py` | ✅ active | — | 19 | 771 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 251 | — | |
 | `build_meta_features.py` | ✅ active | — | 7 | 801 | — | |
 | `build_meta_labeling_dataset.py` | ✅ active | — | 8 | 819 | — | |
@@ -846,7 +846,7 @@
 | `build_micro_flat_features.py` | ✅ active | — | 3 | 151 | — | |
 | `build_profitable_labels.py` | ✅ active | — | 5 | 611 | — | |
 | `build_s1_regression_dataset.py` | ✅ active | — | 3 | 181 | — | |
-| `build_swing_enhanced_dataset.py` | ✅ active | — | 8 | 929 | — | |
+| `build_swing_enhanced_dataset.py` | ✅ active | — | 8 | 927 | — | |
 | `build_v9_micro_dataset.py` | ✅ active | — | 2 | 257 | — | |
 | `calibrate_labels.py` | ✅ active | — | 4 | 298 | — | |
 | `calibrate_meta_filter.py` | ✅ active | — | 4 | 218 | — | |
@@ -855,8 +855,8 @@
 | `crt_manifest.py` | ✅ active | CRTManifestV1 | 9 | 159 | — | |
 | `dataset_builder.py` | ✅ active | — | 14 | 569 | — | |
 | `dataset_builder_d1.py` | ✅ active | — | 6 | 452 | — | |
-| `download_mt5_ohlc.py` | ✅ active | — | 2 | 115 | — | |
-| `e2e_pipeline_validation.py` | ✅ active | — | 9 | 540 | — | |
+| `download_mt5_ohlc.py` | ✅ active | — | 2 | 116 | — | |
+| `e2e_pipeline_validation.py` | ✅ active | — | 9 | 538 | — | |
 | `eval_alignment.py` | ✅ active | — | 9 | 318 | — | |
 | `eval_ensemble_baselines.py` | ✅ active | — | 2 | 147 | — | |
 | `eval_regime.py` | ✅ active | — | 8 | 361 | — | |
@@ -864,11 +864,11 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 6 | 564 | — | |
-| `label_builder.py` | ✅ active | — | 19 | 1035 | — | |
+| `governance_scheduler.py` | ✅ active | — | 6 | 558 | — | |
+| `label_builder.py` | ✅ active | — | 19 | 1044 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
-| `monitor_training.py` | ✅ active | — | 18 | 424 | — | |
-| `optimize_ensemble_weights.py` | ✅ active | — | 4 | 166 | — | |
+| `monitor_training.py` | ✅ active | — | 18 | 421 | — | |
+| `optimize_ensemble_weights.py` | ✅ active | — | 4 | 164 | — | |
 | `optimize_meta_threshold.py` | ✅ active | — | 4 | 242 | — | |
 | `quality_gate.py` | ✅ active | — | 9 | 318 | — | |
 | `reactivate_brains.py` | ✅ active | — | 3 | 232 | — | |
@@ -877,15 +877,15 @@
 | `register_brain.py` | ✅ active | — | 6 | 171 | — | |
 | `retraining_trigger.py` | ✅ active | — | 9 | 474 | — | |
 | `run_promotion.py` | ✅ active | — | 6 | 285 | — | |
-| `run_train_batch.py` | ✅ active | — | 6 | 277 | — | |
+| `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
 | `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2075 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 956 | — | |
-| `train_daily_swing.py` | ✅ active | — | 10 | 644 | — | |
-| `train_exit_metamodel.py` | ✅ active | — | 7 | 344 | — | |
-| `train_from_csv.py` | ✅ active | MLP | 10 | 716 | — | |
+| `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
+| `train_exit_metamodel.py` | ✅ active | — | 7 | 342 | — | |
+| `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |
 | `train_meta_filter.py` | ✅ active | — | 5 | 332 | — | |
 | `train_meta_model.py` | ✅ active | — | 6 | 384 | — | |
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
@@ -909,12 +909,12 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `arb_trainer.py` | ✅ active | — | 5 | 275 | — | |
+| `arb_trainer.py` | ✅ active | — | 5 | 273 | — | |
 | `deep_res_mlp_trainer.py` | ✅ active | ResBlock, DeepResMLP, _Block, _Model | 14 | 565 | — | |
 | `lgb_trainer.py` | ✅ active | — | 9 | 505 | — | |
 | `mtx_trainer.py` | ✅ active | — | 7 | 392 | — | |
 | `online_mlp_trainer.py` | ✅ active | — | 6 | 285 | — | |
-| `sur_trainer.py` | ✅ active | — | 5 | 316 | — | |
+| `sur_trainer.py` | ✅ active | — | 5 | 312 | — | |
 | `transformer_trainer.py` | ✅ active | UpgradedQuantTransformer, _Model | 13 | 784 | — | |
 | `xgb_trainer.py` | ✅ active | — | 9 | 625 | — | |
 

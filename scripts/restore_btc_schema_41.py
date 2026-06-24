@@ -19,8 +19,6 @@ import json
 import sys
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 REGISTRY_PATH = PROJECT_ROOT / "core" / "features" / "schemas" / "registry.py"
@@ -51,22 +49,22 @@ def check_model_dim(brain_cfg: dict) -> tuple[bool, int]:
     try:
         if "lightgbm" in brain_type:
             import lightgbm as lgb
+
             booster = lgb.Booster(model_file=artifact_path)
             nf = booster.num_feature()
         elif "xgboost" in brain_type:
             model_data = json.loads(open(artifact_path).read())
             nf = int(
-                model_data.get("learner", {})
-                .get("learner_model_param", {})
-                .get("num_feature", "0")
+                model_data.get("learner", {}).get("learner_model_param", {}).get("num_feature", "0")
             )
         else:
             return False, 0
         return nf == 41, nf
-    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
-        with fail_open_guard("restore_btc_schema_41:check_model_dim"):
-            print(f"  [ERROR] Failed to read model {artifact_path}: {exc}")
-            return False, 0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        print(f"  [ERROR] Failed to read model {artifact_path}: {exc}")
+        return False, 0
+
+
 def update_registry() -> None:
     """Update SCHEMA_DIMENSIONS: btc_macro_enhanced_37 37→41."""
     content = REGISTRY_PATH.read_text(encoding="utf-8")
@@ -157,6 +155,7 @@ def main() -> None:
     # ── Phase 4: Verify ──
     print("\n[Phase 4] Final verification...")
     from core.features.schemas.registry import SCHEMA_DIMENSIONS
+
     reg = SCHEMA_DIMENSIONS.get("btc_macro_enhanced_37", "MISSING")
     print(f"  Registry: btc_macro_enhanced_37 = {reg}")
 

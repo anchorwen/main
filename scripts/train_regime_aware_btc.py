@@ -22,14 +22,21 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from core.runtime.fault_handler import fail_open_guard
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 ROOT = Path(__file__).resolve().parent.parent
 LABELS_PATH = ROOT / "data_btc" / "reports" / "labels_with_regime.jsonl"
-FS_PATH = ROOT / "data_btc" / "feature_store" / "records" / "symbol=BTCUSDc" / "timeframe=M5" / "features.jsonl"
+FS_PATH = (
+    ROOT
+    / "data_btc"
+    / "feature_store"
+    / "records"
+    / "symbol=BTCUSDc"
+    / "timeframe=M5"
+    / "features.jsonl"
+)
 OUT_DIR = ROOT / "data_btc" / "models" / "regime_aware_v12"
 
 REGIME_KEYS = [
@@ -39,6 +46,7 @@ REGIME_KEYS = [
     "atr_percentile",
     "hurst",
 ]
+
 
 # Fallback ADX when not in snapshot
 def _regime_vector(regime_ctx: dict) -> list[float]:
@@ -50,7 +58,7 @@ def _regime_vector(regime_ctx: dict) -> list[float]:
     return [
         trend_num,
         float(regime_ctx.get("trend_strength", 0.0) or 0.0),
-        float(regime_ctx.get("adx", 15.0) or 15.0),   # neutral/ranging
+        float(regime_ctx.get("adx", 15.0) or 15.0),  # neutral/ranging
         float(regime_ctx.get("atr_percentile", 0.5) or 0.5),
         float(regime_ctx.get("hurst", 0.5) or 0.5),
     ]
@@ -116,14 +124,16 @@ def main() -> int:
         direction = str(label.get("side", "?")).lower()
         dir_label = 1 if direction == "long" else 0
 
-        samples.append({
-            "features_45": full_45,
-            "features_40": v9_vec,
-            "is_win": is_win,
-            "direction": direction,
-            "dir_label": dir_label,
-            "pnl": pnl,
-        })
+        samples.append(
+            {
+                "features_45": full_45,
+                "features_40": v9_vec,
+                "is_win": is_win,
+                "direction": direction,
+                "dir_label": dir_label,
+                "pnl": pnl,
+            }
+        )
 
     print(f"\nTraining samples: {len(samples)}")
     wins = sum(1 for s in samples if s["is_win"])
@@ -151,9 +161,14 @@ def main() -> int:
     # ── Variant 1: RegimeFull (45-dim) ──
     print("\n── V12_RegimeFull (45-dim: 40 V9 + 5 regime) ──")
     m1 = LGBMClassifier(
-        n_estimators=100, max_depth=4, min_data_in_leaf=20,
-        subsample=0.8, colsample_bytree=0.6, class_weight="balanced",
-        random_state=42, verbose=-1,
+        n_estimators=100,
+        max_depth=4,
+        min_data_in_leaf=20,
+        subsample=0.8,
+        colsample_bytree=0.6,
+        class_weight="balanced",
+        random_state=42,
+        verbose=-1,
     )
     oof1 = np.zeros(len(samples))
     for _fold, (tr, vl) in enumerate(cv.split(X_45)):
@@ -164,16 +179,25 @@ def main() -> int:
     m1.fit(X_45, y_win)  # retrain on all
     dir_preds = m1.predict(X_45)
     long_pred_pct = dir_preds.sum() / len(dir_preds) * 100
-    print(f"  AUC: {auc1:.3f} | direction_balance: LONG={long_pred_pct:.0f}% SHORT={100-long_pred_pct:.0f}%")
-    print(f"  {'✅ PASS' if long_pred_pct <= 70 and long_pred_pct >= 30 else '❌ FAIL (still direction-locked)'}"  )
+    print(
+        f"  AUC: {auc1:.3f} | direction_balance: LONG={long_pred_pct:.0f}% SHORT={100-long_pred_pct:.0f}%"
+    )
+    print(
+        f"  {'✅ PASS' if long_pred_pct <= 70 and long_pred_pct >= 30 else '❌ FAIL (still direction-locked)'}"
+    )
     m1.booster_.save_model(str(OUT_DIR / "V12_RegimeFull_45dim.txt"))
 
     # ── Variant 2: NoRegime (40-dim control) ──
     print("\n── V12_NoRegime (40-dim V9 only, control) ──")
     m2 = LGBMClassifier(
-        n_estimators=100, max_depth=4, min_data_in_leaf=20,
-        subsample=0.8, colsample_bytree=0.6, class_weight="balanced",
-        random_state=42, verbose=-1,
+        n_estimators=100,
+        max_depth=4,
+        min_data_in_leaf=20,
+        subsample=0.8,
+        colsample_bytree=0.6,
+        class_weight="balanced",
+        random_state=42,
+        verbose=-1,
     )
     oof2 = np.zeros(len(samples))
     for _fold, (tr, vl) in enumerate(cv.split(X_40)):
@@ -183,8 +207,12 @@ def main() -> int:
     m2.fit(X_40, y_win)
     dir_preds2 = m2.predict(X_40)
     long_pct2 = dir_preds2.sum() / len(dir_preds2) * 100
-    print(f"  AUC: {auc2:.3f} | direction_balance: LONG={long_pct2:.0f}% SHORT={100-long_pct2:.0f}%")
-    print(f"  {'✅ PASS' if long_pct2 <= 70 and long_pct2 >= 30 else '❌ FAIL (still direction-locked)'}"  )
+    print(
+        f"  AUC: {auc2:.3f} | direction_balance: LONG={long_pct2:.0f}% SHORT={100-long_pct2:.0f}%"
+    )
+    print(
+        f"  {'✅ PASS' if long_pct2 <= 70 and long_pct2 >= 30 else '❌ FAIL (still direction-locked)'}"
+    )
     m2.booster_.save_model(str(OUT_DIR / "V12_NoRegime_40dim.txt"))
 
     # ── Comparison ──
@@ -218,9 +246,11 @@ def main() -> int:
 def _auc(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     try:
         from sklearn.metrics import roc_auc_score
+
         return float(roc_auc_score(y_true, y_pred))
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("train_regime_aware_btc:_auc"):
-            return 0.0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return 0.0
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

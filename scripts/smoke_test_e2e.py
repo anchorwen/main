@@ -15,8 +15,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent
 
@@ -51,9 +49,10 @@ def _check_no_exception(step: str, fn, *args, **kwargs) -> dict[str, Any]:
     try:
         fn(*args, **kwargs)
         return _check(step, True)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:_check_no_exception"):
-            return _check(step, False, f"{type(exc).__name__}: {exc}")
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return _check(step, False, f"{type(exc).__name__}: {exc}")
+
+
 # ── Tests ──
 
 
@@ -135,9 +134,8 @@ def test_feature_store(base_dir: str) -> list[dict[str, Any]]:
             FeatureQuery(symbol="XAUUSDc", timeframe="M5", schema_name="v9_institutional_40")
         )
         results.append(_check("feature_query", len(records) > 0, f"{len(records)} returned"))
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:test_feature_store"):
-            results.append(_check("feature_query", False, str(exc)[:100]))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        results.append(_check("feature_query", False, str(exc)[:100]))
     return results
 
 
@@ -182,9 +180,8 @@ def test_shadow_ensemble(base_dir: str) -> list[dict[str, Any]]:
             results.append(
                 {"step": f"brain_{e.get('brain_id')}", "result": result, "detail": detail}
             )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:test_shadow_ensemble"):
-            results.append(_check("ensemble", False, str(exc)[:100]))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        results.append(_check("ensemble", False, str(exc)[:100]))
     return results
 
 
@@ -212,9 +209,8 @@ def test_feedback_loop(base_dir: str) -> list[dict[str, Any]]:
                 f"{len(tracker.get_brain_ids())} brains tracked",
             )
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:test_feedback_loop"):
-            results.append(_check("feedback", False, str(exc)[:100]))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        results.append(_check("feedback", False, str(exc)[:100]))
     return results
 
 
@@ -246,9 +242,8 @@ def test_governance(base_dir: str) -> list[dict[str, Any]]:
                 f"{len(gov.get_all_states())} registered",
             )
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:test_governance"):
-            results.append(_check("governance", False, str(exc)[:100]))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        results.append(_check("governance", False, str(exc)[:100]))
     return results
 
 
@@ -276,9 +271,8 @@ def test_decision_recorder(base_dir: str) -> list[dict[str, Any]]:
         # Verify store exists and writes correctly
         JsonlLedgerStore(base_dir)
         results.append(_check("ledger_store", True, "created"))
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:test_decision_recorder"):
-            results.append(_check("recorder", False, str(exc)[:100]))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        results.append(_check("recorder", False, str(exc)[:100]))
     return results
 
 
@@ -309,9 +303,8 @@ def test_training_pipeline(base_dir: str) -> list[dict[str, Any]]:
                 f"{matched} matched, {joined['unmatched']} unmatched",
             )
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:test_training_pipeline"):
-            results.append(_check("training", False, str(exc)[:100]))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        results.append(_check("training", False, str(exc)[:100]))
     return results
 
 
@@ -332,9 +325,8 @@ def test_daily_ops_integration(base_dir: str) -> list[dict[str, Any]]:
         results.append(
             _check("daily_ops_errors", report["errors"] == 0, f"{report['errors']} errors")
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("smoke_test_e2e:test_daily_ops_integration"):
-            results.append(_check("daily_ops", False, str(exc)[:100]))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        results.append(_check("daily_ops", False, str(exc)[:100]))
     return results
 
 

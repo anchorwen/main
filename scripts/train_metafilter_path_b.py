@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from core.runtime.fault_handler import fail_open_guard
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
@@ -79,6 +78,7 @@ def main() -> int:
 
     # Purged time-series split (5 folds)
     from sklearn.model_selection import TimeSeriesSplit
+
     cv = TimeSeriesSplit(n_splits=5)
     from lightgbm import LGBMClassifier
 
@@ -115,18 +115,24 @@ def main() -> int:
 
     # Probability distribution
     print("\nOOF p_win distribution:")
-    print(f"  min={oof_preds.min():.3f} p25={np.percentile(oof_preds,25):.3f} median={np.median(oof_preds):.3f} p75={np.percentile(oof_preds,75):.3f} max={oof_preds.max():.3f}")
+    print(
+        f"  min={oof_preds.min():.3f} p25={np.percentile(oof_preds,25):.3f} median={np.median(oof_preds):.3f} p75={np.percentile(oof_preds,75):.3f} max={oof_preds.max():.3f}"
+    )
 
     # Percentile-based threshold recommendation
     for pct in [30, 40, 50, 60, 70]:
         threshold = np.percentile(oof_preds, pct)
         blocked = (oof_preds <= threshold).sum()
         blocked_wins = ((oof_preds <= threshold) & (y == 1)).sum()
-        print(f"  Threshold p{pct}={threshold:.3f}: blocks {blocked}/{len(y)} trades, kills {blocked_wins} wins")
+        print(
+            f"  Threshold p{pct}={threshold:.3f}: blocks {blocked}/{len(y)} trades, kills {blocked_wins} wins"
+        )
 
     # ── FIX-20260616-093: Precision/Recall calibration matrix ──
     print("\n=== Calibration Report: Precision/Recall Matrix ===")
-    print(f"  {'Threshold':<12s} {'Blocked':>7s} {'KillsWins':>10s} {'Recall':>8s} {'Precision':>10s} {'F1':>8s}")
+    print(
+        f"  {'Threshold':<12s} {'Blocked':>7s} {'KillsWins':>10s} {'Recall':>8s} {'Precision':>10s} {'F1':>8s}"
+    )
     print(f"  {'-'*12} {'-'*7} {'-'*10} {'-'*8} {'-'*10} {'-'*8}")
     for pct in [25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75]:
         threshold = round(float(np.percentile(oof_preds, pct)), 3)
@@ -137,7 +143,9 @@ def main() -> int:
         recall = blocked_losses / max(total_losses, 1) * 100  # % of losses caught
         precision = (blocked - killed_wins) / max(blocked, 1) * 100  # % of blocks that were correct
         f1 = 2 * recall * precision / max(recall + precision, 1)
-        print(f"  {threshold:<12.3f} {blocked:>7d} {killed_wins:>10d} {recall:>7.1f}% {precision:>9.1f}% {f1:>7.1f}%")
+        print(
+            f"  {threshold:<12.3f} {blocked:>7d} {killed_wins:>10d} {recall:>7.1f}% {precision:>9.1f}% {f1:>7.1f}%"
+        )
 
     # Recommendation
     print("\n=== Recommendation ===")
@@ -205,9 +213,11 @@ def main() -> int:
 def _roc_auc(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     try:
         from sklearn.metrics import roc_auc_score
+
         return float(roc_auc_score(y_true, y_pred))
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("train_metafilter_path_b:_roc_auc"):
-            return 0.0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return 0.0
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

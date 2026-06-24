@@ -26,7 +26,6 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
-from core.runtime.fault_handler import fail_open_guard
 
 # ── Constants ──
 
@@ -62,7 +61,9 @@ def get_staged_files() -> list[str]:
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return [f.strip() for f in result.stdout.splitlines() if f.strip()]
     except subprocess.CalledProcessError:
@@ -74,7 +75,9 @@ def get_staged_diff() -> str:
     try:
         result = subprocess.run(
             ["git", "diff", "--cached"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return result.stdout
     except subprocess.CalledProcessError:
@@ -106,8 +109,7 @@ def is_pure_mechanical(diff: str, commit_msg: str) -> bool:
     # Check if only .md files changed
     lines = diff.splitlines()
     changed_files = {
-        line[6:] for line in lines
-        if line.startswith("+++ b/") or line.startswith("--- a/")
+        line[6:] for line in lines if line.startswith("+++ b/") or line.startswith("--- a/")
     }
     non_md = {f for f in changed_files if Path(f).suffix != ".md"}
     if not non_md:
@@ -125,11 +127,13 @@ def check_commit_msg(commit_msg: str) -> list[Violation]:
     has_routing = bool(OMEGA_ROUTING_PATTERN.search(commit_msg))
 
     if not has_fix and not has_dqaf:
-        violations.append(Violation(
-            file="(commit message)",
-            reason="Missing FIX-YYYYMMDD-NNN or DQAF-YYYYMMDD-NNN marker. "
-                   "All .py/.yaml/.json changes require a docket ID per Iron Law #0."
-        ))
+        violations.append(
+            Violation(
+                file="(commit message)",
+                reason="Missing FIX-YYYYMMDD-NNN or DQAF-YYYYMMDD-NNN marker. "
+                "All .py/.yaml/.json changes require a docket ID per Iron Law #0.",
+            )
+        )
 
     return violations
 
@@ -142,8 +146,7 @@ def check_hot_path(files: list[str], diff: str) -> list[Violation]:
             # Check if the diff removes any # BLE001:REVIEWED
             diff_lines = [l for l in diff.splitlines() if f in l]
             ble001_removed = any(
-                "-# BLE001:REVIEWED" in l or "-    # BLE001:REVIEWED" in l
-                for l in diff_lines
+                "-# BLE001:REVIEWED" in l or "-    # BLE001:REVIEWED" in l for l in diff_lines
             )
             if ble001_removed:
                 # Good — at least one BLE001 was replaced
@@ -164,9 +167,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.commit_msg_file:
         try:
             commit_msg = Path(args.commit_msg_file).read_text(encoding="utf-8")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("check_omega_compliance:main"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     # Get changed files
     staged = get_staged_files()
     covered = [f for f in staged if is_covered_file(f)]
@@ -176,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         # No covered files changed — pass
         if args.json:
             import json
+
             print(json.dumps({"status": "pass", "reason": "no covered files"}))
         return 0
 
@@ -183,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     if is_pure_mechanical(diff, commit_msg):
         if args.json:
             import json
+
             print(json.dumps({"status": "pass", "reason": "pure mechanical exemption"}))
         return 0
 
@@ -195,10 +199,15 @@ def main(argv: list[str] | None = None) -> int:
     if violations:
         if args.json:
             import json
-            print(json.dumps({
-                "status": "blocked",
-                "violations": [{"file": v.file, "reason": v.reason} for v in violations],
-            }))
+
+            print(
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "violations": [{"file": v.file, "reason": v.reason} for v in violations],
+                    }
+                )
+            )
         else:
             print("\n" + "=" * 70)
             print("  Ω IRON LAW COMPLIANCE GATE — COMMIT BLOCKED")
@@ -216,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     # All checks passed
     if args.json:
         import json
+
         print(json.dumps({"status": "pass", "files_checked": len(covered)}))
     return 0
 

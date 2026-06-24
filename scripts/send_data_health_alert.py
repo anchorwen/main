@@ -27,8 +27,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Data Health DingTalk Alert Adapter")
@@ -45,22 +43,29 @@ def load_webhook_url(base_dir: str, override: str | None = None) -> str:
     if override:
         return override
     import os
+
     env_url = os.environ.get("QUANTOS_DINGTALK_WEBHOOK_URL", "")
     if env_url:
         return env_url
     try:
         config_path = Path(base_dir).parent / "configs" / "live_btc.yaml"
-        if base_dir.rstrip("/\\").endswith("data") and not base_dir.rstrip("/\\").endswith("data_btc"):
+        if base_dir.rstrip("/\\").endswith("data") and not base_dir.rstrip("/\\").endswith(
+            "data_btc"
+        ):
             config_path = Path(base_dir).parent / "configs" / "live.yaml"
         import yaml
+
         with open(config_path, encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         return str(cfg.get("alert", {}).get("channels", {}).get("dingtalk_webhook_url", ""))
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("send_data_health_alert:load_webhook_url"):
-            return ""
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return ""
+
+
 def _emoji(status: str) -> str:
-    return {"pass": "🟢", "warn": "🟡", "fail": "🔴", "missing": "⚫", "skipped": "⚪"}.get(status, "❓")
+    return {"pass": "🟢", "warn": "🟡", "fail": "🔴", "missing": "⚫", "skipped": "⚪"}.get(
+        status, "❓"
+    )
 
 
 def format_health_report(report: dict[str, Any], symbol: str, mode: str) -> dict[str, str]:
@@ -158,10 +163,11 @@ def send_dingtalk(webhook_url: str, title: str, text: str) -> bool:
             else:
                 print(f"DingTalk: error {result.get('errcode')} — {result.get('errmsg', '')}")
             return ok
-    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
-        with fail_open_guard("send_data_health_alert:send_dingtalk"):
-            print(f"DingTalk send failed: {exc}")
-            return False
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        print(f"DingTalk send failed: {exc}")
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -185,7 +191,12 @@ def main(argv: list[str] | None = None) -> int:
         "aggregated": report_obj.aggregated,
         "primary_codes": report_obj.primary_codes,
         "sources": [
-            {"source": s.source, "status": s.status.value, "primary_code": s.primary_code, "message": s.message}
+            {
+                "source": s.source,
+                "status": s.status.value,
+                "primary_code": s.primary_code,
+                "message": s.message,
+            }
             for s in report_obj.sources
         ],
         "cross_checks": [
@@ -207,7 +218,9 @@ def main(argv: list[str] | None = None) -> int:
 
     webhook_url = load_webhook_url(args.base_dir, args.webhook_url)
     if not webhook_url:
-        print("ERROR: No DingTalk webhook URL found. Set QUANTOS_DINGTALK_WEBHOOK_URL or pass --webhook-url.")
+        print(
+            "ERROR: No DingTalk webhook URL found. Set QUANTOS_DINGTALK_WEBHOOK_URL or pass --webhook-url."
+        )
         return 1
 
     ok = send_dingtalk(webhook_url, msg["title"], msg["text"])

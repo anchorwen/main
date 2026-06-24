@@ -23,12 +23,12 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from core.runtime.fault_handler import fail_open_guard
 
 UTC = timezone.utc
 
 
 # ── Q1: Concurrent position count vs max_positions ──────────────────────
+
 
 def audit_concurrent_positions(data_dir: Path, max_allowed: int) -> dict:
     """Scan intent log for open/close events; compute peak concurrency."""
@@ -39,7 +39,7 @@ def audit_concurrent_positions(data_dir: Path, max_allowed: int) -> dict:
 
     latest_log = intent_logs[-1]
 
-    opens: list[dict] = []   # {ticket, time, side, volume}
+    opens: list[dict] = []  # {ticket, time, side, volume}
     closes: list[dict] = []  # {ticket, time}
     trail_moves: list[dict] = []
 
@@ -56,32 +56,38 @@ def audit_concurrent_positions(data_dir: Path, max_allowed: int) -> dict:
             etype = evt.get("event", "")
 
             if etype == "position_registered_for_mgmt":
-                opens.append({
-                    "ticket": evt.get("ticket"),
-                    "time": evt.get("time", ""),
-                    "side": evt.get("side", ""),
-                    "entry_price": evt.get("entry_price", 0),
-                })
+                opens.append(
+                    {
+                        "ticket": evt.get("ticket"),
+                        "time": evt.get("time", ""),
+                        "side": evt.get("side", ""),
+                        "entry_price": evt.get("entry_price", 0),
+                    }
+                )
 
             elif etype in ("intent_dispatched",):
                 # Only count OPEN actions
                 side = evt.get("side")
                 if side in ("long", "short"):
-                    opens.append({
-                        "ticket": None,  # ticket assigned after MT5 ack
-                        "time": evt.get("time", ""),
-                        "side": side,
-                        "entry_price": evt.get("reference_used", 0),
-                        "dispatch_intent_id": evt.get("dispatch", {}).get("intent_id", ""),
-                    })
+                    opens.append(
+                        {
+                            "ticket": None,  # ticket assigned after MT5 ack
+                            "time": evt.get("time", ""),
+                            "side": side,
+                            "entry_price": evt.get("reference_used", 0),
+                            "dispatch_intent_id": evt.get("dispatch", {}).get("intent_id", ""),
+                        }
+                    )
 
             elif etype == "trail_stop_moved":
-                trail_moves.append({
-                    "ticket": evt.get("ticket"),
-                    "time": evt.get("time", ""),
-                    "old_sl": evt.get("old_sl", 0),
-                    "new_sl": evt.get("new_sl", 0),
-                })
+                trail_moves.append(
+                    {
+                        "ticket": evt.get("ticket"),
+                        "time": evt.get("time", ""),
+                        "old_sl": evt.get("old_sl", 0),
+                        "new_sl": evt.get("new_sl", 0),
+                    }
+                )
 
     # ── Build timeline of open/close events ──
     # Use management_phase_diag to track per-ticket state
@@ -126,6 +132,7 @@ def audit_concurrent_positions(data_dir: Path, max_allowed: int) -> dict:
 
 # ── Q2: Inter-trade interval vs reentry cooldown ────────────────────────
 
+
 def audit_reentry_intervals(data_dir: Path, min_cooldown_s: float = 300) -> dict:
     """Measure time between consecutive same-direction opens."""
     log_path = data_dir / "logs"
@@ -160,14 +167,16 @@ def audit_reentry_intervals(data_dir: Path, min_cooldown_s: float = 300) -> dict
                 delta_s = (t_curr - t_prev).total_seconds()
                 intervals.append(delta_s)
                 if delta_s < min_cooldown_s:
-                    violations.append({
-                        "prev_ticket": prev.get("ticket"),
-                        "curr_ticket": curr.get("ticket"),
-                        "prev_time": prev["time"],
-                        "curr_time": curr["time"],
-                        "interval_s": delta_s,
-                        "min_required_s": min_cooldown_s,
-                    })
+                    violations.append(
+                        {
+                            "prev_ticket": prev.get("ticket"),
+                            "curr_ticket": curr.get("ticket"),
+                            "prev_time": prev["time"],
+                            "curr_time": curr["time"],
+                            "interval_s": delta_s,
+                            "min_required_s": min_cooldown_s,
+                        }
+                    )
             except (ValueError, KeyError):
                 pass
 
@@ -184,6 +193,7 @@ def audit_reentry_intervals(data_dir: Path, min_cooldown_s: float = 300) -> dict
 
 # ── Q3: Phase 10 gate path vs main eval gate path ───────────────────────
 
+
 def audit_dispatch_gate_paths(data_dir: Path) -> dict:
     """Compare safety gate decisions between main eval and Phase 10 dispatch.
 
@@ -197,7 +207,7 @@ def audit_dispatch_gate_paths(data_dir: Path) -> dict:
 
     latest_log = intent_logs[-1]
 
-    cycle_evals: dict[str, dict] = {}   # cycle_time → eval result
+    cycle_evals: dict[str, dict] = {}  # cycle_time → eval result
     cycle_dispatches: dict[str, list] = {}  # cycle_time → dispatch events
 
     with open(latest_log, encoding="utf-8") as f:
@@ -229,22 +239,26 @@ def audit_dispatch_gate_paths(data_dir: Path) -> dict:
                     "reason": evt.get("reason"),
                 }
             elif etype == "intent_dispatched":
-                cycle_dispatches.setdefault(evt_time, []).append({
-                    "side": evt.get("side"),
-                    "confidence": evt.get("confidence"),
-                    "intent_id": evt.get("dispatch", {}).get("intent_id", ""),
-                })
+                cycle_dispatches.setdefault(evt_time, []).append(
+                    {
+                        "side": evt.get("side"),
+                        "confidence": evt.get("confidence"),
+                        "intent_id": evt.get("dispatch", {}).get("intent_id", ""),
+                    }
+                )
 
     # Find cycles where dispatch happened but main eval said should_trade=False
     gate_bypass_events = []
     for ct, eval_result in cycle_evals.items():
         dispatches = cycle_dispatches.get(ct, [])
         if dispatches and not eval_result.get("should_trade", False):
-            gate_bypass_events.append({
-                "cycle_time": ct,
-                "main_eval": eval_result,
-                "phase10_dispatches": dispatches,
-            })
+            gate_bypass_events.append(
+                {
+                    "cycle_time": ct,
+                    "main_eval": eval_result,
+                    "phase10_dispatches": dispatches,
+                }
+            )
 
     return {
         "passed": len(gate_bypass_events) == 0,
@@ -256,6 +270,7 @@ def audit_dispatch_gate_paths(data_dir: Path) -> dict:
 
 
 # ── Q4: Code-level max_positions enforcement audit ─────────────────────
+
 
 def audit_max_positions_code() -> dict:
     """Static analysis: trace where max_positions is read and where dispatch
@@ -272,18 +287,16 @@ def audit_max_positions_code() -> dict:
                 for i, line in enumerate(f, 1):
                     if "max_positions" in line:
                         refs.append(f"{py_file}:{i}: {line.rstrip()}")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("audit_behavior_compliance:audit_max_positions_code"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     for py_file in sorted(root.glob("scripts/**/*.py")):
         try:
             with open(py_file, encoding="utf-8") as f:
                 for i, line in enumerate(f, 1):
                     if "max_positions" in line:
                         refs.append(f"{py_file}:{i}: {line.rstrip()}")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("audit_behavior_compliance:audit_max_positions_code"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     # Find Phase 10 dispatch path
     phase10_lines = []
     with open(root / "core" / "runtime" / "live_cycle.py", encoding="utf-8") as f:
@@ -301,14 +314,13 @@ def audit_max_positions_code() -> dict:
                 break
 
     return {
-        "max_positions_references": [
-            r for r in refs if "__pycache__" not in r
-        ],
+        "max_positions_references": [r for r in refs if "__pycache__" not in r],
         "phase10_dispatch_path": phase10_lines[:40],
     }
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Behavior Compliance Audit")
@@ -334,13 +346,17 @@ def main() -> int:
         print(f"  ERROR: {q1['error']}")
     else:
         status = "PASS" if q1["passed"] else "FAIL"
-        print(f"  [{status}] Peak concurrent: {q1['peak_concurrent']} "
-              f"(limit: {q1['max_allowed']})")
+        print(
+            f"  [{status}] Peak concurrent: {q1['peak_concurrent']} "
+            f"(limit: {q1['max_allowed']})"
+        )
         print(f"  Active tickets: {q1['active_tickets']}")
         for t, d in q1["ticket_details"].items():
-            print(f"    ticket={t} side={d.get('side')} entry={d.get('entry')} "
-                  f"cycles={d.get('cycles_held')} breakeven={d.get('breakeven_fired')} "
-                  f"highest={d.get('highest_high')} lowest={d.get('lowest_low')}")
+            print(
+                f"    ticket={t} side={d.get('side')} entry={d.get('entry')} "
+                f"cycles={d.get('cycles_held')} breakeven={d.get('breakeven_fired')} "
+                f"highest={d.get('highest_high')} lowest={d.get('lowest_low')}"
+            )
         if not q1["passed"]:
             all_passed = False
 
@@ -360,8 +376,10 @@ def main() -> int:
         print(f"  Min interval: {q2['min_interval_s']}s")
         if q2["violations"]:
             for v in q2["violations"]:
-                print(f"  VIOLATION: ticket {v['prev_ticket']} → {v['curr_ticket']} "
-                      f"interval={v['interval_s']:.0f}s < {v['min_required_s']}s")
+                print(
+                    f"  VIOLATION: ticket {v['prev_ticket']} → {v['curr_ticket']} "
+                    f"interval={v['interval_s']:.0f}s < {v['min_required_s']}s"
+                )
         if not q2["passed"]:
             all_passed = False
 
@@ -382,11 +400,13 @@ def main() -> int:
         if q3["gate_bypass_details"]:
             for gb in q3["gate_bypass_details"]:
                 print(f"  BYPASS at {gb['cycle_time']}:")
-                print(f"    Main eval: should_trade={gb['main_eval'].get('should_trade')} "
-                      f"reason={gb['main_eval'].get('reason','')}")
-                if gb['main_eval'].get('reentry_blocked'):
+                print(
+                    f"    Main eval: should_trade={gb['main_eval'].get('should_trade')} "
+                    f"reason={gb['main_eval'].get('reason','')}"
+                )
+                if gb["main_eval"].get("reentry_blocked"):
                     print(f"    Reentry blocked: {gb['main_eval']['reentry_blocked']}")
-                for d in gb['phase10_dispatches']:
+                for d in gb["phase10_dispatches"]:
                     print(f"    Phase10 dispatch: {d['side']} conf={d['confidence']}")
         if not q3["passed"]:
             all_passed = False

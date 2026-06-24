@@ -17,15 +17,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 # Fix garbled Chinese output on Windows (QO-0015)
 if sys.stdout.encoding != "utf-8":
     try:  # noqa: SIM105
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:L24"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
 SCHEMA_VERSION = "live_daily_recap.v1"
 
 
@@ -54,26 +51,26 @@ def _run_quality_report(base_dir: Path, date_key: str) -> dict[str, Any]:
     """Call live_data_quality_report.build_report in-process."""
     try:
         from scripts.live_data_quality_report import build_report as build_dq
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_quality_report"):
-            return {"error": "import_dq_failed"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"error": "import_dq_failed"}
     try:
         return build_dq(base_dir, date_filter=date_key)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_quality_report"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _run_trade_quality_report(journal_path: Path, date_key: str) -> dict[str, Any]:
     """Call trade_quality_report.build_report in-process."""
     try:
         from scripts.trade_quality_report import build_report as build_tq
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_trade_quality_report"):
-            return {"error": "import_tq_failed"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"error": "import_tq_failed"}
     try:
         return build_tq(journal_path=str(journal_path), date_key=date_key)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_trade_quality_report"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _run_mt5_pnl_snapshot(
     base_dir: Path,
     symbol: str,
@@ -104,9 +101,10 @@ def _run_mt5_pnl_snapshot(
         return {"error": f"subprocess_exit_{cp.returncode}", "stderr": cp.stderr[:500]}
     except subprocess.TimeoutExpired:
         return {"error": "pnl_snapshot_timeout"}
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_mt5_pnl_snapshot"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _effective_pnl(entry: dict[str, Any]) -> float:
     """Extract realized P&L from a journal entry, falling back to detail.pnl."""
     pnl = entry.get("pnl")
@@ -488,9 +486,8 @@ def _run_shadow_compare(
     """Call shadow_live_compare_report.build_report_payload in-process."""
     try:
         from scripts.shadow_live_compare_report import build_report_payload as build_shadow
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_shadow_compare"):
-            return {"error": "import_shadow_compare_failed"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"error": "import_shadow_compare_failed"}
     try:
         return build_shadow(
             date_key=date_key,
@@ -499,9 +496,10 @@ def _run_shadow_compare(
             shadow_baseline_json=None,
             base_dir=base_dir,
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_shadow_compare"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _run_shadow_ensemble(
     brains_dir: Path,
     *,
@@ -511,9 +509,8 @@ def _run_shadow_ensemble(
     """Call live_shadow_ensemble.build_report in-process (parallel multi-model inference)."""
     try:
         from scripts.live_shadow_ensemble import build_report as build_ensemble
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_shadow_ensemble"):
-            return {"error": "import_shadow_ensemble_failed"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"error": "import_shadow_ensemble_failed"}
     try:
         return build_ensemble(
             brains_dir=brains_dir,
@@ -521,9 +518,10 @@ def _run_shadow_ensemble(
             feature_dim=feature_dim,
             parallel=True,
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_shadow_ensemble"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _run_feature_quality(
     store_dir: Path,
     norm_config_path: Path,
@@ -534,9 +532,8 @@ def _run_feature_quality(
     """Call live_feature_quality_report.build_report in-process."""
     try:
         from scripts.live_feature_quality_report import build_report as build_fq
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_feature_quality"):
-            return {"error": "import_feature_quality_failed"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"error": "import_feature_quality_failed"}
     try:
         return build_fq(
             store_dir=store_dir,
@@ -544,9 +541,10 @@ def _run_feature_quality(
             symbol=symbol,
             date_filter=date_filter,
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_feature_quality"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _run_eval_alignment(
     labels_path: Path,
     backtest_path: Path,
@@ -554,14 +552,14 @@ def _run_eval_alignment(
     """Call eval_alignment.build_report in-process (live P&L vs backtest)."""
     try:
         from scripts.training.eval_alignment import build_report as build_align
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_eval_alignment"):
-            return {"error": "import_eval_alignment_failed"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"error": "import_eval_alignment_failed"}
     try:
         return build_align(labels_path, backtest_path)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_eval_alignment"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _run_brain_leaderboard(
     decisions_dir: Path,
     *,
@@ -571,14 +569,14 @@ def _run_brain_leaderboard(
     """Call brain_leaderboard.build_report in-process."""
     try:
         from scripts.training.brain_leaderboard import build_report as build_bl
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_brain_leaderboard"):
-            return {"error": "import_brain_leaderboard_failed"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"error": "import_brain_leaderboard_failed"}
     try:
         return build_bl(decisions_dir, date_filter=date_filter, labels_path=labels_path)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_brain_leaderboard"):
-            return {"error": str(exc)}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)}
+
+
 def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
     """Generate PnL-based leaderboard using BrainPnLStore + GovernanceService."""
     try:
@@ -601,6 +599,7 @@ def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
         try:
             from core.brains.brain_registry import load_brain_registry
             from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
+
             _perf_path = base_dir / "brain_performance.json"
             if _perf_path.exists():
                 _registry = load_brain_registry(base_dir=str(base_dir))
@@ -611,9 +610,8 @@ def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
                         pnl_store=pnl_store,
                     )
                     _vote_weights = _dw.get_weights()
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("live_daily_recap:_run_pnl_leaderboard"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
         rankings = lb.rank(
             pnl_store.get_all_metrics(),
             governance_states=governance.get_all_states(),
@@ -626,27 +624,30 @@ def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
             "rankings": lb.to_records(rankings),
             "table": lb.format_table(rankings),
         }
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_pnl_leaderboard"):
-            return {"error": str(exc)[:500]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"error": str(exc)[:500]}
+
+
 def _run_governance_snapshot(base_dir: Path, *, dry_run: bool = True) -> dict[str, Any]:
     """Run governance cycle from persisted tracker data and return summary."""
     try:
         from scripts.daily_ops import _step_governance
 
         return _step_governance(str(base_dir), dry_run=dry_run)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_governance_snapshot"):
-            return {"step": "governance", "status": "error", "error": str(exc)[:500]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"step": "governance", "status": "error", "error": str(exc)[:500]}
+
+
 def _run_champion_challenger_snapshot(base_dir: Path, *, dry_run: bool = True) -> dict[str, Any]:
     """Run champion/challenger from persisted tracker data and return summary."""
     try:
         from scripts.daily_ops import _step_champion_challenger
 
         return _step_champion_challenger(str(base_dir), dry_run=dry_run)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:_run_champion_challenger_snapshot"):
-            return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
+
+
 def _write_evolution_plan_update(
     plan_path: Path,
     block_content: str,
@@ -774,9 +775,8 @@ def build_report(
             pnl_ledger_path=pnl_ledger_path if pnl_ledger_path.exists() else None,
         )
         brain_attribution = attr_svc.quick_summary()
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_daily_recap:build_report"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     # ── Build training dataset (Phase B) ──
     training_dataset: dict[str, Any] = {}
     if build_dataset_flag:
@@ -790,9 +790,8 @@ def build_report(
                 output_dir=base_dir / "training",
                 symbol=symbol.rstrip("c"),
             )
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("live_daily_recap:build_report"):
-                training_dataset = {"error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            training_dataset = {"error": str(exc)[:500]}
     run_state = _derive_run_state(trade_quality, data_quality, flag_present)
 
     evolution_result: dict[str, Any] = {}

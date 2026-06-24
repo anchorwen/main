@@ -28,7 +28,6 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 NOW = datetime.now(timezone.utc)
 NOW_ISO = NOW.isoformat()[:19] + "Z"
@@ -62,6 +61,7 @@ def is_market_closed(data_dir: str) -> bool:
         return True
 
     return False
+
 
 # ── Symbol precision requirements ──────────────────────────────────────
 SYMBOL_PRECISION: dict[str, dict[str, Any]] = {
@@ -110,7 +110,10 @@ def reconcile_journal_vs_ledger(data_dir: str) -> dict[str, Any]:
                     continue
                 try:
                     e = json.loads(line)
-                    if e.get("event_type") == "SignalSettled" and (e.get("position_ticket") or 0) > 0:
+                    if (
+                        e.get("event_type") == "SignalSettled"
+                        and (e.get("position_ticket") or 0) > 0
+                    ):
                         pnl_r = e.get("pnl_r", 0) or 0
                         ledger_pnl_r += float(pnl_r)
                         ledger_count += 1
@@ -219,6 +222,7 @@ def reconcile_snapshots_vs_journal(data_dir: str) -> dict[str, Any]:
         "snapshot_era_start": snapshot_era_start,
         "note": f"pre-era gap ({len(pre_era_missing)} tickets before {snapshot_era_start}) exempted",
     }
+
 
 def check_active_position_state(data_dir: str) -> dict[str, Any]:
     """Ensure active_position.json always exists with valid state (even empty)."""
@@ -375,18 +379,18 @@ def check_bridge_micro_health(data_dir: str) -> dict[str, Any]:
                                     break
                             except ValueError:
                                 continue
-                    except Exception:  # BLE001:FOG
-                        with fail_open_guard("audit_data_integrity:check_bridge_micro_health"):
-                            pass
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
             if latencies:
                 latencies.sort()
                 p99_latency = latencies[int(len(latencies) * 0.99)]
             log_entries = len(lines)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("audit_data_integrity:check_bridge_micro_health"):
-                pass
-    sev = "OK" if connected and outbox == 0 and age_s < 30 else (
-        "Sev2" if age_s > 60 or outbox > 10 else "Sev1" if not connected else "Sev3"
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
+    sev = (
+        "OK"
+        if connected and outbox == 0 and age_s < 30
+        else ("Sev2" if age_s > 60 or outbox > 10 else "Sev1" if not connected else "Sev3")
     )
 
     result: dict[str, Any] = {
@@ -437,37 +441,66 @@ def check_tick_precision(data_dir: str) -> dict[str, Any]:
                 # Sample: first, middle, last 100 records
                 sample = lines[:50] + lines[len(lines) // 2 : len(lines) // 2 + 50] + lines[-50:]
                 # Derived/normalized features that are NOT raw prices — skip precision check
-                DERIVED_PATTERNS = ("ZScore", "MACD", "RSI", "OU_", "Hurst", "Corr",
-                                     "Body_Ratio", "Vol_", "Ret_", "_return", "Bollinger",
-                                     "ADX", "Trend_Strength", "ATR_Ratio", "ATR_",
-                                     "Divergence", "Alignment", "Spread", "OIM", "tick_",
-                                     "hl_ratio", "co_ratio", "Derived_", "Cross_", "TF_",
-                                     "avg_spread", "velocity")
+                DERIVED_PATTERNS = (
+                    "ZScore",
+                    "MACD",
+                    "RSI",
+                    "OU_",
+                    "Hurst",
+                    "Corr",
+                    "Body_Ratio",
+                    "Vol_",
+                    "Ret_",
+                    "_return",
+                    "Bollinger",
+                    "ADX",
+                    "Trend_Strength",
+                    "ATR_Ratio",
+                    "ATR_",
+                    "Divergence",
+                    "Alignment",
+                    "Spread",
+                    "OIM",
+                    "tick_",
+                    "hl_ratio",
+                    "co_ratio",
+                    "Derived_",
+                    "Cross_",
+                    "TF_",
+                    "avg_spread",
+                    "velocity",
+                )
                 for rec in sample:
                     vals = rec.get("values", {})
                     for k, v in vals.items():
                         if not isinstance(v, (int, float)):
                             continue
                         # Skip ATR (moving average, not raw price) and all derived features
-                        if k.startswith("M5_ATR") or k.startswith("M15_ATR") or k.startswith("M30_ATR") or k.startswith("H1_ATR"):
+                        if (
+                            k.startswith("M5_ATR")
+                            or k.startswith("M15_ATR")
+                            or k.startswith("M30_ATR")
+                            or k.startswith("H1_ATR")
+                        ):
                             continue
                         is_derived = any(p in k for p in DERIVED_PATTERNS)
                         if is_derived:
                             continue
                         remainder = abs(float(v)) % tick
                         if remainder > tick * 0.01 and remainder < tick * 0.99:
-                            violations.append({
-                                "symbol": sym,
-                                "timeframe": tf_dir.name.replace("timeframe=", ""),
-                                "feature": k,
-                                "value": float(v),
-                                "expected_tick": tick,
-                                "remainder": round(remainder, 10),
-                            })
+                            violations.append(
+                                {
+                                    "symbol": sym,
+                                    "timeframe": tf_dir.name.replace("timeframe=", ""),
+                                    "feature": k,
+                                    "value": float(v),
+                                    "expected_tick": tick,
+                                    "remainder": round(remainder, 10),
+                                }
+                            )
                     checked += 1
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("audit_data_integrity:check_tick_precision"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     sev = "OK" if not violations else "Sev2" if len(violations) < 10 else "Sev1"
     return {
         "passed": len(violations) == 0,
@@ -552,8 +585,16 @@ def check_journal_integrity(data_dir: str) -> dict[str, Any]:
                 if ts < PNL_CHECK_CUTOFF:
                     pnl_skipped_old += 1
                     continue
-                entry_p = o.get("detail", {}).get("request", {}).get("price") if isinstance(o.get("detail"), dict) else None
-                exit_p = c.get("detail", {}).get("close_price") if isinstance(c.get("detail"), dict) else None
+                entry_p = (
+                    o.get("detail", {}).get("request", {}).get("price")
+                    if isinstance(o.get("detail"), dict)
+                    else None
+                )
+                exit_p = (
+                    c.get("detail", {}).get("close_price")
+                    if isinstance(c.get("detail"), dict)
+                    else None
+                )
                 if entry_p and exit_p and entry_p > 0 and exit_p > 0:
                     sym = o.get("symbol", "XAUUSDc")
                     cfg = SYM_CONFIG.get(sym, SYM_CONFIG["XAUUSDc"])
@@ -608,16 +649,17 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
     # Read config for MT5 path
     mt5_path = None
     try:
-        cfg_path = Path("configs/live.yaml") if data_dir == "data" else Path("configs/live_btc.yaml")
+        cfg_path = (
+            Path("configs/live.yaml") if data_dir == "data" else Path("configs/live_btc.yaml")
+        )
         if cfg_path.exists():
             with open(cfg_path, encoding="utf-8") as f:
                 for line in f:
                     if "terminal_path:" in line:
                         mt5_path = line.split(":", 1)[1].strip()
                         break
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     # Also check live.yaml for XAU default
     if not mt5_path:
         try:
@@ -628,18 +670,20 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
                         if "terminal_path:" in line:
                             mt5_path = line.split(":", 1)[1].strip()
                             break
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     if not mt5_path:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 terminal path in config"}
 
     try:
         if not mt5.initialize(path=mt5_path):
-            return {"passed": True, "severity": "SKIP", "reason": f"MT5 init failed: {mt5.last_error()}"}
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
-            return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
+            return {
+                "passed": True,
+                "severity": "SKIP",
+                "reason": f"MT5 init failed: {mt5.last_error()}",
+            }
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
     try:
         info = mt5.account_info()
         if not info:
@@ -686,14 +730,14 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
             "pnl_pct_of_balance": round(pnl_ratio, 4),
             "note": "full reconciliation needs daily equity snapshots; this is informational",
         }
-    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
-        with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
-            try:
-                mt5.shutdown()
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
-                    pass
-            return {"passed": True, "severity": "SKIP", "reason": f"MT5 error: {e}"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+        try:
+            mt5.shutdown()
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
+        return {"passed": True, "severity": "SKIP", "reason": f"MT5 error: {e}"}
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 8. THREE-WAY RECONCILIATION (Journal ↔ Ledger ↔ Snapshots)
 # ═══════════════════════════════════════════════════════════════════════
@@ -724,7 +768,10 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
         "data_btc": r"D:\MetaTrader 5\terminal64.exe",
     }
     mt5_path = DEFAULT_PATHS.get(data_dir, DEFAULT_PATHS["data"])
-    for cfg_file in [f"configs/{'live' if data_dir == 'data' else 'live_btc'}.yaml", "configs/live.yaml"]:
+    for cfg_file in [
+        f"configs/{'live' if data_dir == 'data' else 'live_btc'}.yaml",
+        "configs/live.yaml",
+    ]:
         try:
             p = Path(cfg_file)
             if p.exists():
@@ -733,62 +780,68 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
                         if "terminal_path:" in line:
                             mt5_path = line.split(":", 1)[1].strip()
                             break
-            if mt5_path: break
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
-                pass
+            if mt5_path:
+                break
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     if not mt5_path:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 terminal path"}
 
     try:
         if not mt5.initialize(path=mt5_path):
-            try: mt5.shutdown()
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
-                    pass
+            try:
+                mt5.shutdown()
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
             return {"passed": True, "severity": "SKIP", "reason": "MT5 init failed"}
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
-            return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
     deals_by_pos: dict[int, Any] = {}
     try:
         for days in [90, 180]:
-            deals = mt5.history_deals_get(datetime.now(timezone.utc) - timedelta(days=days), datetime.now(timezone.utc))
+            deals = mt5.history_deals_get(
+                datetime.now(timezone.utc) - timedelta(days=days), datetime.now(timezone.utc)
+            )
             if deals:
                 for d in deals:
                     if d.position_id and d.profit != 0:
                         deals_by_pos[d.position_id] = d
                 break
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     finally:
-        try: mt5.shutdown()
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
-                pass
+        try:
+            mt5.shutdown()
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     if not deals_by_pos:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 deals"}
 
     journal_closes: dict[int, dict] = {}
     with open(jp, encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             try:
                 e = json.loads(line)
                 if e.get("action") == "close":
                     tkt = e.get("position_ticket")
-                    if tkt: journal_closes[int(tkt)] = e
-            except json.JSONDecodeError: pass
+                    if tkt:
+                        journal_closes[int(tkt)] = e
+            except json.JSONDecodeError:
+                pass
 
     matched = exact = mismatch = 0
     for tkt, jc in journal_closes.items():
-        if tkt not in deals_by_pos: continue
+        if tkt not in deals_by_pos:
+            continue
         matched += 1
         jp_ = jc.get("pnl", 0) or 0
         mp_ = float(deals_by_pos[tkt].profit)
-        if abs(jp_ - mp_) < 0.01: exact += 1
-        else: mismatch += 1
+        if abs(jp_ - mp_) < 0.01:
+            exact += 1
+        else:
+            mismatch += 1
 
     pct = exact / max(matched, 1) * 100
     sev = "OK" if pct > 90 else "Sev2" if pct > 40 else "Sev3"  # 40% for cross-terminal fallback
@@ -799,11 +852,16 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
         sev = "OK"
 
     return {
-        "passed": pct > 90, "severity": sev,
-        "matched_trades": matched, "exact_match": exact, "mismatch": mismatch,
-        "match_pct": round(pct, 1), "mt5_deals_available": len(deals_by_pos),
+        "passed": pct > 90,
+        "severity": sev,
+        "matched_trades": matched,
+        "exact_match": exact,
+        "mismatch": mismatch,
+        "match_pct": round(pct, 1),
+        "mt5_deals_available": len(deals_by_pos),
         "note": f"MT5-authoritative: {exact}/{matched} ({pct:.0f}%) exact matches. Ledger excluded — binary signal, not PnL (DQAF-005 root-cause)",
     }
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # 9. REPORT GENERATION + DINGTALK PUSH
@@ -821,17 +879,31 @@ def generate_report(all_results: dict[str, dict[str, Any]]) -> str:
     sections.append("## Summary")
     sections.append("| Check | XAU | BTC |")
     sections.append("|-------|-----|-----|")
-    for check_name in ["reconciliation_journal_ledger", "snapshots_journal", "active_position",
-                        "orphan_entries", "bridge_micro_health", "tick_precision",
-                        "journal_integrity", "mt5_equity", "journal_mt5"]:
+    for check_name in [
+        "reconciliation_journal_ledger",
+        "snapshots_journal",
+        "active_position",
+        "orphan_entries",
+        "bridge_micro_health",
+        "tick_precision",
+        "journal_integrity",
+        "mt5_equity",
+        "journal_mt5",
+    ]:
         xau_status = all_results.get("data", {}).get(check_name, {}).get("severity", "?")
         btc_status = all_results.get("data_btc", {}).get(check_name, {}).get("severity", "?")
-        xau_icon = "[OK]" if xau_status == "OK" else "[WARN]" if "Sev" in str(xau_status) else "[SKIP]"
-        btc_icon = "[OK]" if btc_status == "OK" else "[WARN]" if "Sev" in str(btc_status) else "[SKIP]"
+        xau_icon = (
+            "[OK]" if xau_status == "OK" else "[WARN]" if "Sev" in str(xau_status) else "[SKIP]"
+        )
+        btc_icon = (
+            "[OK]" if btc_status == "OK" else "[WARN]" if "Sev" in str(btc_status) else "[SKIP]"
+        )
         sections.append(f"| {check_name} | {xau_icon} {xau_status} | {btc_icon} {btc_status} |")
 
     sections.append("")
-    sections.append(f"**Compute checksum**: `{hashlib.sha256(str(NOW_ISO).encode()).hexdigest()[:16]}`")
+    sections.append(
+        f"**Compute checksum**: `{hashlib.sha256(str(NOW_ISO).encode()).hexdigest()[:16]}`"
+    )
     sections.append("")
     sections.append("*Generated by audit_data_integrity.py — Iron Law #11 compliant*")
 
@@ -845,16 +917,24 @@ def generate_report(all_results: dict[str, dict[str, Any]]) -> str:
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="audit_data_integrity")
-    p.add_argument("--data-dir", type=str, default=None,
-                   help="Single data dir to audit (default: both data/ and data_btc/)")
-    p.add_argument("--json", action="store_true",
-                   help="Output results as JSON instead of Markdown")
-    p.add_argument("--webhook-url", type=str, default=None,
-                   help="Override DingTalk webhook URL")
-    p.add_argument("--quiet", action="store_true",
-                   help="Suppress stdout output (for scheduled silent monitoring)")
-    p.add_argument("--alert", action="store_true",
-                   help="Push DingTalk alert on Sev1/Sev2 (for scheduled silent monitoring)")
+    p.add_argument(
+        "--data-dir",
+        type=str,
+        default=None,
+        help="Single data dir to audit (default: both data/ and data_btc/)",
+    )
+    p.add_argument("--json", action="store_true", help="Output results as JSON instead of Markdown")
+    p.add_argument("--webhook-url", type=str, default=None, help="Override DingTalk webhook URL")
+    p.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress stdout output (for scheduled silent monitoring)",
+    )
+    p.add_argument(
+        "--alert",
+        action="store_true",
+        help="Push DingTalk alert on Sev1/Sev2 (for scheduled silent monitoring)",
+    )
     args = p.parse_args()
 
     data_dirs = [args.data_dir] if args.data_dir else ["data", "data_btc"]
@@ -909,9 +989,8 @@ def main() -> int:
                 checks=alert_checks,
             )
             dispatch_alert(card)
-        except Exception:  # BLE001:FOG — alert failure must not crash audit
-            with fail_open_guard("audit_data_integrity:main"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     # ── Determine exit code ──
     if has_sev1_or_sev2:
         has_sev1 = any(v == "Sev1" for v in alert_checks.values())

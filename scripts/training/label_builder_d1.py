@@ -34,7 +34,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from core.runtime.fault_handler import fail_open_guard
 
 # ── Contract definitions ──
 
@@ -179,9 +178,10 @@ def _load_h4_csv(
         return None
     try:
         return _load_d1_csv(csv_path)  # same OHLC format
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("label_builder_d1:_load_h4_csv"):
-            return None
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return None
+
+
 # ── ATR computation ──
 
 

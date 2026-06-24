@@ -28,7 +28,6 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPTS_DIR.parent.parent.parent
@@ -205,14 +204,13 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout,
         )
         exit_code = 0
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("arb_trainer:main"):
-            print(f"[arb_trainer] Optimization failed: {type(exc).__name__}: {exc}", file=sys.stderr)
-            import traceback
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        print(f"[arb_trainer] Optimization failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        import traceback
 
-            traceback.print_exc()
-            artifact = {}
-            exit_code = 1
+        traceback.print_exc()
+        artifact = {}
+        exit_code = 1
     best_metrics = artifact.get("metrics", {})
     search_meta = artifact.get("search_meta", {})
     result: dict[str, Any] = {

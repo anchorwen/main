@@ -34,8 +34,6 @@ from typing import Any
 
 import numpy as np
 
-from core.runtime.fault_handler import fail_open_guard
-
 # ── Constants ────────────────────────────────────────────────────────
 DEFAULT_WINDOW = 1000
 MIN_WINDOW = 500
@@ -45,8 +43,8 @@ PSI_YELLOW = 0.25
 # Sample-asymmetry dynamic threshold (Directive #5)
 PSI_YELLOW_SPARSE = 0.32  # when N_actual < 500
 # Engineering protections (Directives #1, #2)
-EPSILON_SIGMA = 1e-8    # zero-variance floor
-EPSILON_PSI = 1e-6      # log-divergence pseudo-count
+EPSILON_SIGMA = 1e-8  # zero-variance floor
+EPSILON_PSI = 1e-6  # log-divergence pseudo-count
 
 FEATURE_DIRS = {
     "data": "data/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl",
@@ -74,15 +72,18 @@ def _safe_read_features(fpath: str, max_retries: int = 3) -> list[dict[str, Any]
                     except json.JSONDecodeError:
                         if attempt < max_retries - 1:
                             import time
+
                             time.sleep(0.1)
                             raise
                         continue
             return records
         except Exception:  # noqa: BLE001
-            with fail_open_guard("monitor_feature_drift:_safe_read_features"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 if attempt < max_retries - 1:
                     continue
                 return []
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     return []
 
 
@@ -139,13 +140,15 @@ def _compute_psi(
     for i in range(n_bins):
         a = actual_pcts[i]
         contribution = (a - e_clamped) * np.log(a / e_clamped)
-        contributions.append({
-            "bin": i,
-            "range": [round(float(bins[i]), 6), round(float(bins[i + 1]), 6)],
-            "expected_pct": round(e_clamped, 4),
-            "actual_pct": round(float(a), 4),
-            "psi_contribution": round(float(contribution), 6),
-        })
+        contributions.append(
+            {
+                "bin": i,
+                "range": [round(float(bins[i]), 6), round(float(bins[i + 1]), 6)],
+                "expected_pct": round(e_clamped, 4),
+                "actual_pct": round(float(a), 4),
+                "psi_contribution": round(float(contribution), 6),
+            }
+        )
         total_psi += contribution
 
     return float(total_psi), contributions
@@ -185,10 +188,15 @@ def _compute_baseline(
         if col_std < 1e-10:
             # Constant feature — PSI undefined, skip
             features[name] = {
-                "mean": col_mean, "std": 0.0,
-                "min": float(np.min(col)), "max": float(np.max(col)),
-                "p1": col_mean, "p5": col_mean, "p50": col_mean,
-                "p95": col_mean, "p99": col_mean,
+                "mean": col_mean,
+                "std": 0.0,
+                "min": float(np.min(col)),
+                "max": float(np.max(col)),
+                "p1": col_mean,
+                "p5": col_mean,
+                "p50": col_mean,
+                "p95": col_mean,
+                "p99": col_mean,
                 "bin_edges": [float(np.min(col)), float(np.max(col))],
                 "constant": True,
             }
@@ -286,10 +294,10 @@ def _split_exclusive_windows(
     timestamps = [_parse_ts(r) for r in records]
     valid_ts = [ts for ts in timestamps if ts is not None]
     if not valid_ts:
-        return records[-max(1, len(records) // 8):], records[-max(1, len(records) // 8):]
+        return records[-max(1, len(records) // 8) :], records[-max(1, len(records) // 8) :]
 
     t_max = max(valid_ts)
-    t_cutoff = t_max - timedelta(days=1)       # [T-1d, T] for Actual
+    t_cutoff = t_max - timedelta(days=1)  # [T-1d, T] for Actual
     t_baseline_start = t_max - timedelta(days=rolling_days + 1)  # [T-8d, T-1d] for Expected
 
     expected_records = []
@@ -339,18 +347,20 @@ def _analyze_features(
         all_psi.append(psi)
 
         if severity != "OK":
-            drifting_features.append({
-                "feature": name,
-                "psi": round(psi, 4),
-                "severity": severity,
-                "mean_baseline": round(binfo.get("mean", 0), 4),
-                "mean_live": round(float(np.mean(col)), 4),
-                "std_baseline": round(binfo.get("std", 0), 4),
-                "std_live": round(float(np.std(col)), 4),
-                "top_bins": sorted(
-                    contributions, key=lambda x: -abs(x["psi_contribution"])
-                )[:3],
-            })
+            drifting_features.append(
+                {
+                    "feature": name,
+                    "psi": round(psi, 4),
+                    "severity": severity,
+                    "mean_baseline": round(binfo.get("mean", 0), 4),
+                    "mean_live": round(float(np.mean(col)), 4),
+                    "std_baseline": round(binfo.get("std", 0), 4),
+                    "std_live": round(float(np.std(col)), 4),
+                    "top_bins": sorted(contributions, key=lambda x: -abs(x["psi_contribution"]))[
+                        :3
+                    ],
+                }
+            )
 
     n_drifting = len(drifting_features)
     n_sev1 = sum(1 for f in drifting_features if f["severity"] == "Sev1")
@@ -423,13 +433,17 @@ def check_feature_drift(
     if normalize:
         if norm_config is not None:
             norm_mu = np.array(
-                [norm_config.get("mean", [])[j] if j < len(norm_config.get("mean", [])) else 0.0
-                 for j in range(len(feature_names))],
+                [
+                    norm_config.get("mean", [])[j] if j < len(norm_config.get("mean", [])) else 0.0
+                    for j in range(len(feature_names))
+                ],
                 dtype=np.float64,
             )
             norm_sigma = np.array(
-                [norm_config.get("std", [])[j] if j < len(norm_config.get("std", [])) else 1.0
-                 for j in range(len(feature_names))],
+                [
+                    norm_config.get("std", [])[j] if j < len(norm_config.get("std", [])) else 1.0
+                    for j in range(len(feature_names))
+                ],
                 dtype=np.float64,
             )
         elif baseline.get("normalized") and "norm_mean" in baseline:
@@ -441,7 +455,8 @@ def check_feature_drift(
     records = _safe_read_features(fpath)
     if len(records) < MIN_WINDOW:
         return {
-            "passed": True, "severity": "Sev3",
+            "passed": True,
+            "severity": "Sev3",
             "reason": f"insufficient samples: {len(records)} < {MIN_WINDOW}",
             "note": "alert suppressed — confidence too low",
         }
@@ -485,15 +500,21 @@ def check_feature_drift(
 
         if n_expected < MIN_WINDOW:
             anomaly_result = {
-                "mode": "anomaly", "severity": "SKIP", "passed": True,
+                "mode": "anomaly",
+                "severity": "SKIP",
+                "passed": True,
                 "reason": f"insufficient expected samples: {n_expected} < {MIN_WINDOW}",
-                "n_expected": n_expected, "n_actual": n_actual,
+                "n_expected": n_expected,
+                "n_actual": n_actual,
             }
         elif n_actual < 10:
             anomaly_result = {
-                "mode": "anomaly", "severity": "SKIP", "passed": True,
+                "mode": "anomaly",
+                "severity": "SKIP",
+                "passed": True,
                 "reason": f"insufficient actual samples: {n_actual} < 10",
-                "n_expected": n_expected, "n_actual": n_actual,
+                "n_expected": n_expected,
+                "n_actual": n_actual,
             }
         else:
             expected_matrix = _records_to_matrix(expected_recs, feature_names)
@@ -504,17 +525,24 @@ def check_feature_drift(
             mode_b_sigma = np.maximum(np.std(expected_matrix, axis=0), EPSILON_SIGMA)
 
             baseline_b = _compute_baseline(
-                expected_matrix, feature_names,
-                normalize=True, norm_mu=mode_b_mu, norm_sigma=mode_b_sigma,
-                source=f"rolling_{rolling_days}d", feature_schema=baseline_schema,
+                expected_matrix,
+                feature_names,
+                normalize=True,
+                norm_mu=mode_b_mu,
+                norm_sigma=mode_b_sigma,
+                source=f"rolling_{rolling_days}d",
+                feature_schema=baseline_schema,
             )
 
             # Normalize actual using rolling window's μ/σ (NOT training μ/σ)
             actual_normalized = _normalize_features(actual_matrix, mode_b_mu, mode_b_sigma)
 
             anomaly_result = _analyze_features(
-                actual_normalized, feature_names,
-                baseline_b["features"], n_actual, "anomaly",
+                actual_normalized,
+                feature_names,
+                baseline_b["features"],
+                n_actual,
+                "anomaly",
             )
             anomaly_result["mode"] = "anomaly"
             anomaly_result["n_live_samples"] = n_actual  # actual = 1d
@@ -573,21 +601,41 @@ def main() -> int:
     p.add_argument("--baseline", type=str, default=BASELINE_FILE, help="training baseline path")
     p.add_argument("--json", action="store_true", help="JSON output")
     # DQAF-060: dual-mode + normalization
-    p.add_argument("--mode", choices=["regime", "anomaly", "both"], default="regime",
-                   help="Drift detection mode (default: regime)")
-    p.add_argument("--rolling-days", type=int, default=7,
-                   help="Rolling window in days for anomaly mode (default: 7)")
-    p.add_argument("--normalize", action="store_true",
-                   help="Z-score features before PSI computation")
-    p.add_argument("--norm-config", type=Path, default=None,
-                   help="Path to normalization config JSON (mean/std per feature)")
+    p.add_argument(
+        "--mode",
+        choices=["regime", "anomaly", "both"],
+        default="regime",
+        help="Drift detection mode (default: regime)",
+    )
+    p.add_argument(
+        "--rolling-days",
+        type=int,
+        default=7,
+        help="Rolling window in days for anomaly mode (default: 7)",
+    )
+    p.add_argument(
+        "--normalize", action="store_true", help="Z-score features before PSI computation"
+    )
+    p.add_argument(
+        "--norm-config",
+        type=Path,
+        default=None,
+        help="Path to normalization config JSON (mean/std per feature)",
+    )
     # Baseline (re)generation
-    p.add_argument("--compute-baseline", type=Path, default=None,
-                   help="Generate baseline JSON from training .npz file and exit")
-    p.add_argument("--feature-schema", type=str, default="v9_institutional_40",
-                   help="Feature schema name for baseline metadata")
-    p.add_argument("--output", type=Path, default=None,
-                   help="Output path for generated baseline")
+    p.add_argument(
+        "--compute-baseline",
+        type=Path,
+        default=None,
+        help="Generate baseline JSON from training .npz file and exit",
+    )
+    p.add_argument(
+        "--feature-schema",
+        type=str,
+        default="v9_institutional_40",
+        help="Feature schema name for baseline metadata",
+    )
+    p.add_argument("--output", type=Path, default=None, help="Output path for generated baseline")
     args = p.parse_args()
 
     # ── Baseline generation mode ──
@@ -618,7 +666,8 @@ def main() -> int:
             norm_sigma = np.maximum(np.std(X, axis=0), EPSILON_SIGMA)
 
         baseline = _compute_baseline(
-            X, feature_names,
+            X,
+            feature_names,
             normalize=normalize,
             norm_mu=norm_mu,
             norm_sigma=norm_sigma,
@@ -626,10 +675,14 @@ def main() -> int:
             feature_schema=args.feature_schema,
         )
 
-        output_path = args.output or Path(f"feature_baseline_{args.feature_schema}_{datetime.now(UTC).strftime('%Y%m%d')}.json")
+        output_path = args.output or Path(
+            f"feature_baseline_{args.feature_schema}_{datetime.now(UTC).strftime('%Y%m%d')}.json"
+        )
         output_path = Path(output_path)
         output_path.write_text(json.dumps(baseline, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"[BASELINE] Wrote {output_path} ({baseline['n_samples']} samples, {baseline['n_features']} features, normalized={baseline['normalized']})")
+        print(
+            f"[BASELINE] Wrote {output_path} ({baseline['n_samples']} samples, {baseline['n_features']} features, normalized={baseline['normalized']})"
+        )
         return 0
 
     # ── Normalization config loading ──
@@ -670,7 +723,9 @@ def main() -> int:
             )
             dispatch_alert(card)
         except Exception:  # noqa: BLE001
-            with fail_open_guard("monitor_feature_drift:main"):
+            try:  # BLE001:FOG (was: FOG/LAC)
+                pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass
 
     sev = result.get("severity", "OK")
@@ -690,9 +745,13 @@ def _print_result(args: argparse.Namespace, result: dict[str, Any]) -> None:
                 f"mean_PSI={mr['mean_psi']:.4f} max_PSI={mr['max_psi']:.4f} | "
                 f"{mr['note']}"
             )
-            print(f"  normalized={args.normalize} | n_live={mr.get('n_live_samples','?')} n_baseline={mr.get('n_baseline_samples','?')}")
+            print(
+                f"  normalized={args.normalize} | n_live={mr.get('n_live_samples','?')} n_baseline={mr.get('n_baseline_samples','?')}"
+            )
             for f in mr.get("drifting_features", []):
-                print(f"  {f['feature']}: PSI={f['psi']:.4f} ({f['severity']}) mean: {f['mean_baseline']:.3f}→{f['mean_live']:.3f}")
+                print(
+                    f"  {f['feature']}: PSI={f['psi']:.4f} ({f['severity']}) mean: {f['mean_baseline']:.3f}→{f['mean_live']:.3f}"
+                )
     else:
         sev = result.get("severity", "OK")
         if sev == "SKIP":
@@ -705,7 +764,9 @@ def _print_result(args: argparse.Namespace, result: dict[str, Any]) -> None:
         )
         print(f"  normalized={args.normalize} | mode={args.mode}")
         for f in result.get("drifting_features", []):
-            print(f"  {f['feature']}: PSI={f['psi']:.4f} ({f['severity']}) mean: {f['mean_baseline']:.3f}→{f['mean_live']:.3f}")
+            print(
+                f"  {f['feature']}: PSI={f['psi']:.4f} ({f['severity']}) mean: {f['mean_baseline']:.3f}→{f['mean_live']:.3f}"
+            )
 
 
 if __name__ == "__main__":

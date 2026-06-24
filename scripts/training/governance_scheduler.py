@@ -28,8 +28,7 @@ from typing import Any
 
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from core.feedback.brain_pnl_ledger import BrainPnLMetrics
-from core.runtime.fault_handler import fail_open_guard
-from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
+from core.feedback.brain_pnl_ledger import BrainPnLStore
 from core.governance.governance_service import GovernanceService
 
 SCHEMA_VERSION = "governance_scheduler.v2"
@@ -176,8 +175,7 @@ def _enforce_3d_override_expiry(
                 if metrics is not None and metrics.sample_count > 0:
                     if metrics.cumulative_pnl < max_dd:
                         triggered = (
-                            f"3D:drawdown_breach(cum_pnl={metrics.cumulative_pnl:.2f}"
-                            f"<{max_dd})"
+                            f"3D:drawdown_breach(cum_pnl={metrics.cumulative_pnl:.2f}" f"<{max_dd})"
                         )
 
         # ── Dimension 1: Trade count expiry (needs PnL ledger) ──
@@ -186,9 +184,7 @@ def _enforce_3d_override_expiry(
             if expires_trades is not None:
                 metrics = pnl_store.get_metrics(brain_id)
                 if metrics is not None and metrics.sample_count >= expires_trades:
-                    triggered = (
-                        f"3D:trades_reached({metrics.sample_count}>={expires_trades})"
-                    )
+                    triggered = f"3D:trades_reached({metrics.sample_count}>={expires_trades})"
 
         if triggered:
             result = governance.transition(brain_id, "candidate", reason=triggered)
@@ -301,19 +297,17 @@ def run_governance_cycle(
                     # Brain in journal but with 0 trades — register as
                     # BrainPnLMetrics with zeroed metrics (no backtest leak)
                     all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _jm)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("governance_scheduler:journal_metrics"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
         # FIX-20260621-043: Post-augmentation type assertion.
         # Verify no raw dicts leaked into all_metrics after journal augmentation.
         # A dict in all_metrics will cause AttributeError downstream
         # (metrics.win_rate on dict → crash → silent governance failure).
-        _dict_leaks = [
-            k for k, v in all_metrics.items() if isinstance(v, dict)
-        ]
+        _dict_leaks = [k for k, v in all_metrics.items() if isinstance(v, dict)]
         if _dict_leaks:
             import logging as _inj_log
+
             _inj_log.getLogger(__name__).error(
                 "FIX-043 TYPE_LEAK: dict metrics found in all_metrics after "
                 "journal augmentation: %s — converting to BrainPnLMetrics",

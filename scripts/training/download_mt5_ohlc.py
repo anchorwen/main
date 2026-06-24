@@ -15,7 +15,6 @@ from pathlib import Path
 
 import MetaTrader5 as mt5
 import pandas as pd
-from core.runtime.fault_handler import fail_open_guard
 
 SYMBOLS = ["XAUUSDc", "BTCUSDc", "EURUSDc", "USDJPYc", "XAGUSDc", "AUDJPYc"]
 
@@ -73,7 +72,10 @@ def download_ohlc(
 def main():
     parser = argparse.ArgumentParser(prog="download_mt5_ohlc")
     parser.add_argument(
-        "--timeframe", type=str, default="M5,D1,H4", help="Comma-separated timeframes (default: M5,D1,H4)"
+        "--timeframe",
+        type=str,
+        default="M5,D1,H4",
+        help="Comma-separated timeframes (default: M5,D1,H4)",
     )
     parser.add_argument(
         "--symbols",
@@ -103,9 +105,8 @@ def main():
         for sym in symbols:
             try:
                 download_ohlc(sym, tf_str, args.output_dir, args.max_bars)
-            except Exception as e:  # BLE001:FOG
-                with fail_open_guard("download_mt5_ohlc:main"):
-                    print(f"[MT5] FAILED: {sym} {tf_str}: {e}")
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+                print(f"[MT5] FAILED: {sym} {tf_str}: {e}")
     mt5.shutdown()
     print("[MT5] Done.")
     return 0

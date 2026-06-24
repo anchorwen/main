@@ -20,8 +20,6 @@ import json
 import sys
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
@@ -41,7 +39,14 @@ def main() -> int:
         data_dir = ROOT / data_dir
 
     journal_path = data_dir / "live_trade_journal.jsonl"
-    fs_path = data_dir / "feature_store" / "records" / "symbol=BTCUSDc" / "timeframe=M5" / "features.jsonl"
+    fs_path = (
+        data_dir
+        / "feature_store"
+        / "records"
+        / "symbol=BTCUSDc"
+        / "timeframe=M5"
+        / "features.jsonl"
+    )
     out_path = data_dir / "models" / "metafilter_path_b_train.jsonl"
 
     print("=" * 60)
@@ -129,6 +134,7 @@ def main() -> int:
 
         # Verify dimension via Router contract (FIX-092)
         from core.features.feature_router import FeatureRouter
+
         _router = FeatureRouter()
         _lake = _router.build_lake(legacy_v9_vector=vec)
         try:
@@ -136,10 +142,9 @@ def main() -> int:
             if len(_tensor) != 40:
                 skipped_dim += 1
                 continue  # dimension mismatch, skip
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("build_metafilter_dataset:main"):
-                skipped_dim += 1
-                continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            skipped_dim += 1
+            continue
 
         # Feature 41: entry_spread (cost of entry)
         entry_spread = 0.0
@@ -165,35 +170,49 @@ def main() -> int:
         # Label
         is_win = 1 if pnl > 0 else 0
 
-        samples.append({
-            "ticket": ticket,
-            "features": vec,
-            "feature_names": feature_names + ["entry_spread", "brain_confidence"],
-            "is_win": is_win,
-            "pnl": pnl,
-            "side": open_entry.get("side", "?"),
-            "brain_ids": open_entry.get("brain_ids", []),
-        })
+        samples.append(
+            {
+                "ticket": ticket,
+                "features": vec,
+                "feature_names": feature_names + ["entry_spread", "brain_confidence"],
+                "is_win": is_win,
+                "pnl": pnl,
+                "side": open_entry.get("side", "?"),
+                "brain_ids": open_entry.get("brain_ids", []),
+            }
+        )
 
     print(f"\nSamples built: {len(samples)}")
-    print(f"Filtered: {skipped_noise} noise, {skipped_abnormal} abnormal, "
-          f"{skipped_no_fs} no-fs-match, {skipped_dim} dim-mismatch")
+    print(
+        f"Filtered: {skipped_noise} noise, {skipped_abnormal} abnormal, "
+        f"{skipped_no_fs} no-fs-match, {skipped_dim} dim-mismatch"
+    )
     wins = sum(1 for s in samples if s["is_win"])
     losses = len(samples) - wins
-    print(f"Wins: {wins}, Losses: {losses}, WR: {wins/len(samples)*100:.1f}%" if samples else "Wins: 0, Losses: 0")
+    print(
+        f"Wins: {wins}, Losses: {losses}, WR: {wins/len(samples)*100:.1f}%"
+        if samples
+        else "Wins: 0, Losses: 0"
+    )
 
     # By side
     long_samples = [s for s in samples if s["side"] == "long"]
     short_samples = [s for s in samples if s["side"] == "short"]
     print(f"LONG:  {len(long_samples)} samples, wins={sum(1 for s in long_samples if s['is_win'])}")
-    print(f"SHORT: {len(short_samples)} samples, wins={sum(1 for s in short_samples if s['is_win'])}")
+    print(
+        f"SHORT: {len(short_samples)} samples, wins={sum(1 for s in short_samples if s['is_win'])}"
+    )
 
     # Save
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         for s in samples:
             f.write(json.dumps(s, ensure_ascii=False) + "\n")
-    print(f"\nSaved: {out_path} ({len(samples)} samples, {len(samples[0]['features'])}-dim)" if samples else "\nNo samples saved.")
+    print(
+        f"\nSaved: {out_path} ({len(samples)} samples, {len(samples[0]['features'])}-dim)"
+        if samples
+        else "\nNo samples saved."
+    )
 
     print("\n[DONE] All statistics above are the sole source of truth.")
     return 0

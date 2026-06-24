@@ -21,16 +21,22 @@ import sys
 import time
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 ROOT = Path(__file__).resolve().parent.parent
 STAMP_FILE = ROOT / ".verify_stamp.json"
 
 # ── DEBT time-bomb scanner exclusions ─────────────────────────────────────
-_DEBT_EXCLUDE_DIRS: frozenset[str] = frozenset({
-    ".venv", ".git", "__pycache__", "node_modules",
-    ".mypy_cache", ".ruff_cache", ".tox", ".egg-info",
-})
+_DEBT_EXCLUDE_DIRS: frozenset[str] = frozenset(
+    {
+        ".venv",
+        ".git",
+        "__pycache__",
+        "node_modules",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        ".egg-info",
+    }
+)
 _DEBT_RE = re.compile(
     r"(?:DEBT|TODO).*?(?:EXPIRE|EXPIRES):\s*(\d{4}-\d{2}-\d{2})",
     re.IGNORECASE,
@@ -72,9 +78,10 @@ def _changed_py_files() -> list[str]:
                     if line.endswith(".py"):
                         files.add(line)
         return sorted(files)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("verify:_changed_py_files"):
-            return []
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return []
+
+
 def _current_commit_hash() -> str:
     try:
         result = subprocess.run(
@@ -85,9 +92,10 @@ def _current_commit_hash() -> str:
             timeout=5,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("verify:_current_commit_hash"):
-            return ""
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return ""
+
+
 def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
     """Run mypy on specified targets. Returns (passed, output)."""
     if targets is None:
@@ -109,9 +117,10 @@ def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "mypy timed out"
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("verify:run_mypy"):
-            return False, str(exc)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return False, str(exc)
+
+
 def run_ruff(targets: list[str] | None = None) -> tuple[bool, str]:
     """Run ruff check. Returns (passed, output)."""
     if targets is None:
@@ -133,9 +142,10 @@ def run_ruff(targets: list[str] | None = None) -> tuple[bool, str]:
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "ruff timed out"
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("verify:run_ruff"):
-            return False, str(exc)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return False, str(exc)
+
+
 def run_pytest() -> tuple[bool, str]:
     """Run full test suite. Returns (passed, output summary).
 
@@ -155,9 +165,10 @@ def run_pytest() -> tuple[bool, str]:
         return False, "pytest interrupted (Ctrl+C)"
     except subprocess.TimeoutExpired:
         return False, "pytest timed out (300s)"
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("verify:run_pytest"):
-            return False, str(exc)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return False, str(exc)
+
+
 def _compute_file_hash() -> str:
     """Simple hash of tracked .py file sizes+mtimes for change detection."""
     try:
@@ -179,9 +190,10 @@ def _compute_file_hash() -> str:
                 st = fp.stat()
                 items.append(f"{f}:{st.st_mtime}:{st.st_size}")
         return str(hash("\n".join(sorted(items))))
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("verify:_compute_file_hash"):
-            return ""
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return ""
+
+
 def update_stamp(passed: bool, details: str) -> str:
     """Write verification stamp. Returns status message."""
     stamp = {
@@ -207,9 +219,8 @@ def check_stamp() -> tuple[bool, str]:
     try:
         with open(STAMP_FILE, encoding="utf-8") as f:
             stamp = json.load(f)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("verify:check_stamp"):
-            return False, "Stamp corrupt. Re-run: python scripts/verify.py --full --stamp"
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return False, "Stamp corrupt. Re-run: python scripts/verify.py --full --stamp"
     if not stamp.get("passed"):
         return False, "Last verification FAILED. Fix errors and re-run with --stamp."
     if stamp.get("file_hash") != _compute_file_hash():
@@ -238,7 +249,10 @@ def _check_registry_gate() -> tuple[bool, list[str]]:
     try:
         staged = subprocess.run(
             ["git", "diff", "--name-only", "--cached"],
-            capture_output=True, text=True, cwd=str(ROOT), timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT),
+            timeout=10,
         )
     except (OSError, subprocess.TimeoutExpired):
         return True, []  # can't check, don't block
@@ -263,10 +277,7 @@ def _check_registry_gate() -> tuple[bool, list[str]]:
     staged_all = staged.stdout.strip().split("\n")
     staged_set = {f.strip().replace("\\", "/") for f in staged_all if f.strip()}
 
-    registry_updates = [
-        f for f in staged_set
-        if "FIX_REGISTRY" in f or f.startswith("blueprints/")
-    ]
+    registry_updates = [f for f in staged_set if "FIX_REGISTRY" in f or f.startswith("blueprints/")]
     if registry_updates:
         return True, []
 
@@ -275,7 +286,10 @@ def _check_registry_gate() -> tuple[bool, list[str]]:
         # Check if there's a recent commit (within this session) with bypass
         log = subprocess.run(
             ["git", "log", "-1", "--format=%B"],
-            capture_output=True, text=True, cwd=str(ROOT), timeout=5,
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT),
+            timeout=5,
         )
         if log.returncode == 0 and log.stdout:
             msg = log.stdout
@@ -344,10 +358,9 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
                 data = json.load(f)
             brain_cache[brain_path_str] = data
             return data
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("verify:_load_brain"):
-                brain_cache[brain_path_str] = {}
-                return None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            brain_cache[brain_path_str] = {}
+            return None
 
     # ── Pre-load all live YAML configs + strategy_lines for SL/TP cross-ref ──
     live_config_cache: dict[str, dict] = {}
@@ -355,9 +368,8 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
         try:
             with open(config_path, encoding="utf-8") as f:
                 live_config_cache[config_path.name] = yaml.safe_load(f) or {}
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("verify:_check_config_consistency"):
-                live_config_cache[config_path.name] = {}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            live_config_cache[config_path.name] = {}
 
     for config_path in live_configs:
         asset = _asset_from_path(config_path)
@@ -487,13 +499,12 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
     if _daily_ops_path.exists():
         _dops_text = _daily_ops_path.read_text(encoding="utf-8")
         import re
-        _builder_calls = list(re.finditer(
-            r'_step_label_builder\([^)]*\)', _dops_text
-        ))
+
+        _builder_calls = list(re.finditer(r"_step_label_builder\([^)]*\)", _dops_text))
         for _match in _builder_calls:
             _call_text = _match.group()
-            if 'contract_path' not in _call_text:
-                _lineno = _dops_text[:_match.start()].count('\n') + 1
+            if "contract_path" not in _call_text:
+                _lineno = _dops_text[: _match.start()].count("\n") + 1
                 warnings.append(
                     f"daily_ops.py:{_lineno}: _step_label_builder() called "
                     f"without contract_path — label barrier defense layer "
@@ -645,9 +656,7 @@ def scan_debt_bombs() -> tuple[bool, list[str]]:
 
     for dirpath, dirnames, filenames in os.walk(str(ROOT)):
         # ── Directory whitelist: prune noise ──
-        dirnames[:] = [
-            d for d in dirnames if d not in _DEBT_EXCLUDE_DIRS
-        ]
+        dirnames[:] = [d for d in dirnames if d not in _DEBT_EXCLUDE_DIRS]
 
         for fn in filenames:
             if not fn.endswith(".py"):
@@ -662,9 +671,7 @@ def scan_debt_bombs() -> tuple[bool, list[str]]:
                         total_found += 1
                         expire_str = m.group(1)
                         try:
-                            expire_date = datetime.strptime(
-                                expire_str, "%Y-%m-%d"
-                            ).date()
+                            expire_date = datetime.strptime(expire_str, "%Y-%m-%d").date()
                         except ValueError:
                             continue  # malformed date — skip
                         if expire_date < today:
@@ -672,8 +679,7 @@ def scan_debt_bombs() -> tuple[bool, list[str]]:
                             desc = line.strip().lstrip("#").strip()
                             overdue = (today - expire_date).days
                             expired.append(
-                                f"  {rel}:{lineno}  {desc[:100]} "
-                                f"(OVERDUE {overdue} days)"
+                                f"  {rel}:{lineno}  {desc[:100]} " f"(OVERDUE {overdue} days)"
                             )
             except (OSError, UnicodeDecodeError):
                 continue  # can't read — skip
@@ -693,7 +699,9 @@ def scan_debt_bombs() -> tuple[bool, list[str]]:
         return False, expired
 
     if total_found:
-        print(f"[Ω-DEBT-BOMB] PASSED: {total_found} DEBT annotation(s), none expired (UTC {today}).")
+        print(
+            f"[Ω-DEBT-BOMB] PASSED: {total_found} DEBT annotation(s), none expired (UTC {today})."
+        )
     return True, []
 
 
@@ -739,10 +747,9 @@ def main() -> int:
             if result.stderr and result.stderr.strip():
                 print(result.stderr.strip())
             return result.returncode
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("verify:main"):
-                print(f"Blueprint validation error: {exc}")
-                return 1
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            print(f"Blueprint validation error: {exc}")
+            return 1
     # --golden-master: replay-validation of recorded cycles
     if args.golden_master:
         return _run_golden_master_check()
@@ -810,14 +817,17 @@ def main() -> int:
                     print(result.stderr.strip())
                 if result.returncode != 0:
                     all_passed = False
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("verify:main"):
-                    print(f"[FAIL] blueprint compliance check error: {exc}")
-                    all_passed = False
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(f"[FAIL] blueprint compliance check error: {exc}")
+                all_passed = False
             print(">>> import boundaries (Iron Law #3)...")
             try:
                 result = subprocess.run(
-                    [sys.executable, str(ROOT / "scripts" / "check_import_boundaries.py"), "--quiet"],
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts" / "check_import_boundaries.py"),
+                        "--quiet",
+                    ],
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
@@ -830,10 +840,9 @@ def main() -> int:
                     all_passed = False
                 else:
                     print("[PASS] Import boundaries enforced")
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("verify:main"):
-                    print(f"[FAIL] import-linter error: {exc}")
-                    all_passed = False
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(f"[FAIL] import-linter error: {exc}")
+                all_passed = False
             print(">>> artifact parameter contract...")
             try:
                 result = subprocess.run(
@@ -850,10 +859,9 @@ def main() -> int:
                     print(result.stderr.strip())
                 if result.returncode != 0:
                     all_passed = False
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("verify:main"):
-                    print(f"[FAIL] artifact validation error: {exc}")
-                    all_passed = False
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(f"[FAIL] artifact validation error: {exc}")
+                all_passed = False
             print(">>> config consistency (FIX-20260610-002)...")
             cfg_ok, cfg_errs = _check_config_consistency()
             if not cfg_ok:
@@ -910,10 +918,9 @@ def main() -> int:
                 print(result.stderr.strip())
             if result.returncode != 0:
                 all_passed = False
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("verify:main"):
-                print(f"[FAIL] blueprint compliance check error: {exc}")
-                all_passed = False
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            print(f"[FAIL] blueprint compliance check error: {exc}")
+            all_passed = False
         print(">>> import boundaries (Iron Law #3)...")
         try:
             result = subprocess.run(
@@ -930,10 +937,9 @@ def main() -> int:
                 all_passed = False
             else:
                 print("[PASS] Import boundaries enforced")
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("verify:main"):
-                print(f"[FAIL] import-linter error: {exc}")
-                all_passed = False
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            print(f"[FAIL] import-linter error: {exc}")
+            all_passed = False
         print(">>> artifact parameter contract...")
         try:
             result = subprocess.run(
@@ -950,10 +956,9 @@ def main() -> int:
                 print(result.stderr.strip())
             if result.returncode != 0:
                 all_passed = False
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("verify:main"):
-                print(f"[FAIL] artifact validation error: {exc}")
-                all_passed = False
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            print(f"[FAIL] artifact validation error: {exc}")
+            all_passed = False
         print(">>> config consistency (FIX-20260610-002)...")
         cfg_ok, cfg_errs = _check_config_consistency()
         if not cfg_ok:

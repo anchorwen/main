@@ -17,8 +17,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -69,8 +67,9 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(f"[blueprint] {file_path}: check timed out")
         return 1
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("hook_blueprint_precheck:main"):
-            return 0  # silent on infrastructure failures
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return 0  # silent on infrastructure failures
+
+
 if __name__ == "__main__":
     sys.exit(main())

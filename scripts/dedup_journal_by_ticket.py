@@ -22,18 +22,19 @@ import json
 import os
 from collections import Counter
 from pathlib import Path
-from core.runtime.fault_handler import fail_open_guard
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Dedup journal close entries by position_ticket")
     p.add_argument("--data-dir", default="data_btc", help="Data directory (default: data_btc)")
-    p.add_argument("--max-dupes", type=int, default=3,
-                   help="Only dedup tickets with >= N close entries (default: 3)")
-    p.add_argument("--dry-run", action="store_true", default=True,
-                   help="Dry run (default: True)")
-    p.add_argument("--execute", action="store_true",
-                   help="Actually execute the dedup")
+    p.add_argument(
+        "--max-dupes",
+        type=int,
+        default=3,
+        help="Only dedup tickets with >= N close entries (default: 3)",
+    )
+    p.add_argument("--dry-run", action="store_true", default=True, help="Dry run (default: True)")
+    p.add_argument("--execute", action="store_true", help="Actually execute the dedup")
     return p.parse_args()
 
 
@@ -86,9 +87,12 @@ def main() -> int:
         for idx, recorded, entry in sorted_closes[:-1]:
             to_remove.append(idx)
             if ticket not in stats:
-                stats[ticket] = {"total": len(closes), "removed": 0,
-                                 "kept_recorded": sorted_closes[-1][1],
-                                 "pnl_values": set()}
+                stats[ticket] = {
+                    "total": len(closes),
+                    "removed": 0,
+                    "kept_recorded": sorted_closes[-1][1],
+                    "pnl_values": set(),
+                }
             stats[ticket]["removed"] += 1
             pnl = entry.get("pnl")
             if pnl is not None:
@@ -100,9 +104,11 @@ def main() -> int:
 
     print(f"\n=== Tickets with >= {args.max_dupes} close entries ===")
     for ticket, s in sorted(stats.items(), key=lambda x: -x[1]["total"]):
-        print(f"  ticket={ticket}: {s['total']} closes → remove {s['removed']}, "
-              f"keep last at {s['kept_recorded']}, "
-              f"PnL values seen: {sorted(s['pnl_values'])}")
+        print(
+            f"  ticket={ticket}: {s['total']} closes → remove {s['removed']}, "
+            f"keep last at {s['kept_recorded']}, "
+            f"PnL values seen: {sorted(s['pnl_values'])}"
+        )
 
     total_removed = len(to_remove)
     print(f"\nTotal entries to remove: {total_removed}")
@@ -113,11 +119,11 @@ def main() -> int:
         lock_dir = Path(args.data_dir) / "locks"
         try:
             from core.infrastructure.distributed_lock import FileLock
+
             lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
             acquired = lock.acquire(blocking=True, timeout_seconds=5)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("dedup_journal_by_ticket:main"):
-                acquired = None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            acquired = None
         try:
             # ── Remove marked entries ──
             remove_set = set(to_remove)
@@ -136,7 +142,8 @@ def main() -> int:
             # Verify
             verify = _load_journal(journal_path)
             close_counts = Counter(
-                e.get("position_ticket") for e in verify
+                e.get("position_ticket")
+                for e in verify
                 if e.get("action") == "close" and e.get("position_ticket")
             )
             multi = {k: v for k, v in close_counts.items() if v >= args.max_dupes}

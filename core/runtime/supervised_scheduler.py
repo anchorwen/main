@@ -172,6 +172,53 @@ class SupervisedScheduler:
             self._process_tasks[name] = task
         return task
 
+    # ── WAL Integrity Spot Check (UGR-A10) ────────────────────────────────
+
+    def register_wal_integrity_check(
+        self,
+        wal: object,
+        *,
+        interval_seconds: float = 14400.0,  # default: 4 hours
+        wal_label: str = "default",
+    ) -> ThreadTask:
+        """Register a periodic WAL integrity check as a low-priority THREAD task.
+
+        Runs wal.verify_integrity() every `interval_seconds`.  On failure,
+        fires a critical alert through the scheduler's alert callback.
+
+        Args:
+            wal: A WriteAheadLog instance to verify.
+            interval_seconds: How often to run the check (default 4h).
+            wal_label: Human-readable label for this WAL (used in alerts).
+        """
+
+        def _integrity_loop() -> None:
+            while not self._shutdown_event.is_set():
+                self._shutdown_event.wait(timeout=interval_seconds)
+                if self._shutdown_event.is_set():
+                    break
+                try:
+                    ok, reason = wal.verify_integrity()  # type: ignore[attr-defined]
+                    if not ok:
+                        self._on_alert(
+                            "wal_integrity",
+                            "hash_chain_broken",
+                            {"wal": wal_label, "reason": reason},
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    self._on_alert(
+                        "wal_integrity",
+                        "check_failed",
+                        {"wal": wal_label, "error": str(exc)[:500]},
+                    )
+                self.heartbeat(f"wal_check.{wal_label}")
+
+        return self.add_thread_task(
+            name=f"wal_check.{wal_label}",
+            target=_integrity_loop,
+            heartbeat_interval=interval_seconds * 2.5,  # generous: 2.5× the check interval
+        )
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def start(self) -> None:

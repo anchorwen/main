@@ -26,7 +26,7 @@ from core.config.asset_registry import get_asset
 from core.features.rolling_normalizer import RollingNormalizer
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from core.risk.regime_detector import RegimeDetector
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.live_cycle import (
     LiveCycleConfig,
     LiveCycleState,
@@ -369,22 +369,27 @@ def main(argv: list[str] | None = None) -> int:
                     from core.runtime.live_cycle import apply_timeframe_scaling
 
                     apply_timeframe_scaling(strategy_configs)
-                except Exception as _ts_exc:  # BLE001:FOG
-                    with fail_open_guard("live_intent_loop:main"):
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "timeframe_scaling_error",
-                                    "time": _utc_iso(),
-                                    "error": str(_ts_exc),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+                except (
+                    RuntimeError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                    OSError,
+                ) as _ts_exc:  # BLE001:FOG
+                    print(
+                        json.dumps(
+                            {
+                                "event": "timeframe_scaling_error",
+                                "time": _utc_iso(),
+                                "error": str(_ts_exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
             # Validate per-strategy exit configs for unknown keys (RC-09 config drift)
             if strategy_configs:
-                with fail_open_guard("LiveIntentLoop:ValidateExitConfigs"):
+                try:  # BLE001:FOG (was: FOG/LAC)
                     from core.runtime.live_cycle import validate_strategy_exit_configs
 
                     exit_warnings = validate_strategy_exit_configs(strategy_configs)
@@ -400,19 +405,20 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             flush=True,
                         )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
 
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                import sys as _sys
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            import sys as _sys
 
-                print(
-                    json.dumps(
-                        {"event": "strategy_configs_load_fatal", "error": str(exc)},
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                _sys.exit(1)
+            print(
+                json.dumps(
+                    {"event": "strategy_configs_load_fatal", "error": str(exc)},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            _sys.exit(1)
     # ── Startup integrity check ──
     try:
         from core.deployment.brain_lifecycle_manager import BrainLifecycleManager
@@ -475,15 +481,14 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_intent_loop:main"):
-            print(
-                json.dumps(
-                    {"event": "startup_integrity_error", "error": str(exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        print(
+            json.dumps(
+                {"event": "startup_integrity_error", "error": str(exc)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
     _position_state_path = str(Path(args.base_dir) / "state" / "active_position.json")
     config = LiveCycleConfig(
         symbol=args.symbol,
@@ -567,14 +572,13 @@ def main(argv: list[str] | None = None) -> int:
     # ── Load configs ──
     try:
         norm_config = load_normalization_config(args.normalization_config)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_intent_loop:main"):
-            print(
-                json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
-            )
-            if mt5_worker is not None:
-                mt5_worker.stop()
-            return 2
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        print(
+            json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
+        )
+        if mt5_worker is not None:
+            mt5_worker.stop()
+        return 2
     # ── Initialize rolling normalizer ──
     rolling_norm: Any = None
     normalize_enabled = norm_config.get("normalize", True)
@@ -601,19 +605,18 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("live_intent_loop:main"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "rolling_norm_state_load_error",
-                                "time": _utc_iso(),
-                                "error": str(exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(
+                    json.dumps(
+                        {
+                            "event": "rolling_norm_state_load_error",
+                            "time": _utc_iso(),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── Initialize regime detector ──
     regime_detector: Any = None
     if not args.no_mt5:
@@ -637,19 +640,18 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("live_intent_loop:main"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "regime_detector_state_load_error",
-                                "time": _utc_iso(),
-                                "error": str(exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(
+                    json.dumps(
+                        {
+                            "event": "regime_detector_state_load_error",
+                            "time": _utc_iso(),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         needs_bootstrap = not regime_detector.is_warmed_up or regime_detector.atr_mean < 0.1
         if needs_bootstrap:
             bootstrapped = _bootstrap_regime_detector(mt5_worker, args.symbol, regime_detector)
@@ -672,9 +674,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.multi_brain:
         try:
             brain_entry = load_brain_entry(args.brain_entry)
-        except Exception as exc:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("LiveIntentLoop:MT5Shutdown"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            raise
             print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
             if mt5_worker is not None:
                 mt5_worker.stop()
@@ -727,9 +728,8 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                tracker = BrainPerformanceTracker(window_size=100)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            tracker = BrainPerformanceTracker(window_size=100)
     else:
         tracker = BrainPerformanceTracker(window_size=100)
 
@@ -749,14 +749,18 @@ def main(argv: list[str] | None = None) -> int:
     # Fall back to old JSON load() for backward compat.
     _loaded_from = "none"
     if _stream_path.exists():
-        with fail_open_guard("LiveIntentLoop:L828"):
-                pnl_ledger = BrainPnLStore.load_from_stream(_stream_path, event_writer=_event_writer)
-                _loaded_from = "event_stream"
+        try:  # BLE001:FOG (was: FOG/LAC)
+            pnl_ledger = BrainPnLStore.load_from_stream(_stream_path, event_writer=_event_writer)
+            _loaded_from = "event_stream"
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
     if pnl_ledger is None and pnl_ledger_path.exists():
-        with fail_open_guard("LiveIntentLoop:L835"):
-                pnl_ledger = BrainPnLStore.load(pnl_ledger_path, event_writer=_event_writer)
-                _loaded_from = "old_json"
+        try:  # BLE001:FOG (was: FOG/LAC)
+            pnl_ledger = BrainPnLStore.load(pnl_ledger_path, event_writer=_event_writer)
+            _loaded_from = "old_json"
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
     if pnl_ledger is None:
         pnl_ledger = BrainPnLStore(window_size=100, event_writer=_event_writer)
@@ -789,78 +793,80 @@ def main(argv: list[str] | None = None) -> int:
     from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
     if _journal_path.exists():
-        with fail_open_guard("LiveIntentLoop:L861"):
-                _journal_lines = _journal_path.read_text(encoding="utf-8").splitlines()
+        try:  # BLE001:FOG (was: FOG/LAC)
+            _journal_lines = _journal_path.read_text(encoding="utf-8").splitlines()
 
-                # Pass 1: collect closed tickets (close-match filter)
-                _closed_tickets: set[int] = set()
-                for _line in _journal_lines:
-                    _line = _line.strip()
-                    if not _line:
-                        continue
-                    try:
-                        _rec = json.loads(_line)
-                    except json.JSONDecodeError:
-                        continue
-                    if _rec.get("action") == "close":
-                        _ct = _rec.get("position_ticket")
-                        if _ct is not None and isinstance(_ct, int) and _ct > 0:
-                            _closed_tickets.add(_ct)
+            # Pass 1: collect closed tickets (close-match filter)
+            _closed_tickets: set[int] = set()
+            for _line in _journal_lines:
+                _line = _line.strip()
+                if not _line:
+                    continue
+                try:
+                    _rec = json.loads(_line)
+                except json.JSONDecodeError:
+                    continue
+                if _rec.get("action") == "close":
+                    _ct = _rec.get("position_ticket")
+                    if _ct is not None and isinstance(_ct, int) and _ct > 0:
+                        _closed_tickets.add(_ct)
 
-                # Pass 2: load open entries with age + close-match guards
-                _now = datetime.now(UTC)
-                _max_age_days = 7
-                _loaded_count = 0
-                _skipped_stale = 0
-                _skipped_closed = 0
+            # Pass 2: load open entries with age + close-match guards
+            _now = datetime.now(UTC)
+            _max_age_days = 7
+            _loaded_count = 0
+            _skipped_stale = 0
+            _skipped_closed = 0
 
-                for line in _journal_lines:
-                    line = line.strip()
-                    if not line:
+            for line in _journal_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("action") == "open" and rec.get("ack_status") == "accepted":
+                    ticket = rec.get("position_ticket")
+                    if ticket is None or not isinstance(ticket, int) or ticket <= 0:
                         continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
+                    # Guard 1: skip if already closed
+                    if ticket in _closed_tickets:
+                        _skipped_closed += 1
                         continue
-                    if rec.get("action") == "open" and rec.get("ack_status") == "accepted":
-                        ticket = rec.get("position_ticket")
-                        if ticket is None or not isinstance(ticket, int) or ticket <= 0:
-                            continue
-                        # Guard 1: skip if already closed
-                        if ticket in _closed_tickets:
-                            _skipped_closed += 1
-                            continue
-                        # Guard 2: skip if >7 days old (MT5 history window)
-                        _ts_str = rec.get("recorded_at", "")
-                        if _ts_str:
-                            try:
-                                _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00"))
-                                if (_now - _ts).days > _max_age_days:
-                                    _skipped_stale += 1
-                                    continue
-                            except (ValueError, TypeError):
-                                pass
-                        # Enrich with strategy name for management-phase lookup
-                        _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
-                        rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
-                        known_open_tickets[ticket] = rec
-                        _loaded_count += 1
+                    # Guard 2: skip if >7 days old (MT5 history window)
+                    _ts_str = rec.get("recorded_at", "")
+                    if _ts_str:
+                        try:
+                            _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00"))
+                            if (_now - _ts).days > _max_age_days:
+                                _skipped_stale += 1
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                    # Enrich with strategy name for management-phase lookup
+                    _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
+                    rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
+                    known_open_tickets[ticket] = rec
+                    _loaded_count += 1
 
-                print(
-                    json.dumps(
-                        {
-                            "event": "journal_open_loaded",
-                            "time": _now.isoformat().replace("+00:00", "Z"),
-                            "loaded": _loaded_count,
-                            "skipped_stale_days_gt": _max_age_days,
-                            "skipped_stale": _skipped_stale,
-                            "skipped_closed": _skipped_closed,
-                            "total_journal_lines": len(_journal_lines),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            print(
+                json.dumps(
+                    {
+                        "event": "journal_open_loaded",
+                        "time": _now.isoformat().replace("+00:00", "Z"),
+                        "loaded": _loaded_count,
+                        "skipped_stale_days_gt": _max_age_days,
+                        "skipped_stale": _skipped_stale,
+                        "skipped_closed": _skipped_closed,
+                        "total_journal_lines": len(_journal_lines),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
     # ── Initialize brain adapter(s) ──
     brains: list[dict[str, Any]] = []
@@ -880,21 +886,23 @@ def main(argv: list[str] | None = None) -> int:
 
         # ── Filter disabled brains (live.yaml brain_registry_entries enabled:false) ──
         _disabled_paths: set[str] = set()
-        with fail_open_guard("LiveIntentLoop:L895"):
-                import yaml as _yaml
+        try:  # BLE001:FOG (was: FOG/LAC)
+            import yaml as _yaml
 
-                _live_cfg_path = (
-                    Path(args.config) if args.config else PROJECT_ROOT / "configs" / "live.yaml"
-                )
-                if _live_cfg_path.exists():
-                    with open(_live_cfg_path, encoding="utf-8") as _fh:
-                        _live_cfg = _yaml.safe_load(_fh)
-                    for _reg_entry in (_live_cfg.get("brains") or {}).get("registry_entries", []) or []:
-                        if not _reg_entry.get("enabled", True):
-                            _rp = Path(_reg_entry["path"])
-                            if not _rp.is_absolute():
-                                _rp = (PROJECT_ROOT / _rp).resolve()
-                            _disabled_paths.add(str(_rp.resolve()))
+            _live_cfg_path = (
+                Path(args.config) if args.config else PROJECT_ROOT / "configs" / "live.yaml"
+            )
+            if _live_cfg_path.exists():
+                with open(_live_cfg_path, encoding="utf-8") as _fh:
+                    _live_cfg = _yaml.safe_load(_fh)
+                for _reg_entry in (_live_cfg.get("brains") or {}).get("registry_entries", []) or []:
+                    if not _reg_entry.get("enabled", True):
+                        _rp = Path(_reg_entry["path"])
+                        if not _rp.is_absolute():
+                            _rp = (PROJECT_ROOT / _rp).resolve()
+                        _disabled_paths.add(str(_rp.resolve()))
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
         if _disabled_paths:
             _before = len(entries)
@@ -948,19 +956,18 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-        except Exception as _vex:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "schema_validation_error",
-                            "time": _utc_iso(),
-                            "error": str(_vex),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _vex:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "schema_validation_error",
+                        "time": _utc_iso(),
+                        "error": str(_vex),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         entries, gov_report = _apply_governance_filter(entries, args.base_dir)
 
         from core.brains.services.brain_factory import BrainFactory
@@ -987,19 +994,18 @@ def main(argv: list[str] | None = None) -> int:
                         "normalization_config_path": entry.get("normalization_config_path"),
                     }
                 )
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("live_intent_loop:main"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "brain_build_skip",
-                                "brain_id": entry.get("brain_id", "unknown"),
-                                "error": str(exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(
+                    json.dumps(
+                        {
+                            "event": "brain_build_skip",
+                            "brain_id": entry.get("brain_id", "unknown"),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         if not brains:
             print(json.dumps({"error": "no_brains_loaded", "dir": args.brains_dir}, indent=2))
             if mt5_worker is not None:
@@ -1075,20 +1081,25 @@ def main(argv: list[str] | None = None) -> int:
                 model_path=meta_model or "data/models/meta_exit_model.txt",
                 urgency_threshold=getattr(args, "meta_exit_threshold", 0.65),
             )
-        except Exception as _meta_exit_exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "meta_exit_engine_load_failed",
-                            "time": _utc_iso(),
-                            "error": str(_meta_exit_exc),
-                            "action": "continuing_without_meta_exit",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (
+            RuntimeError,
+            ValueError,
+            KeyError,
+            TypeError,
+            OSError,
+        ) as _meta_exit_exc:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "meta_exit_engine_load_failed",
+                        "time": _utc_iso(),
+                        "error": str(_meta_exit_exc),
+                        "action": "continuing_without_meta_exit",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── Initialize ActivePositionManager with restart recovery ──
     position_manager: Any = None
     _pos_state_path = Path(args.base_dir) / "state" / "active_position.json"
@@ -1101,13 +1112,15 @@ def main(argv: list[str] | None = None) -> int:
         # hardcoded to TrailPolicy default (1.0) ignoring YAML (0.3).
         _yaml_trail_activation_atr = args.exit_trail_activation_atr
         if hasattr(args, "config") and args.config:
-            with fail_open_guard("LiveIntentLoop:L1123"):
-                    import yaml as _yaml_exit
+            try:  # BLE001:FOG (was: FOG/LAC)
+                import yaml as _yaml_exit
 
-                    with open(args.config, encoding="utf-8") as _fh_exit:
-                        _exit_cfg = _yaml_exit.safe_load(_fh_exit).get("exit_management", {})
-                    if isinstance(_exit_cfg, dict) and "trail_activation_atr" in _exit_cfg:
-                        _yaml_trail_activation_atr = float(_exit_cfg["trail_activation_atr"])
+                with open(args.config, encoding="utf-8") as _fh_exit:
+                    _exit_cfg = _yaml_exit.safe_load(_fh_exit).get("exit_management", {})
+                if isinstance(_exit_cfg, dict) and "trail_activation_atr" in _exit_cfg:
+                    _yaml_trail_activation_atr = float(_exit_cfg["trail_activation_atr"])
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
         position_manager = ActivePositionManager(
             trail_atr_mult=args.exit_trail_atr_mult,
@@ -1131,9 +1144,8 @@ def main(argv: list[str] | None = None) -> int:
         managed_tickets: set[int] = set()
         try:
             restored = position_manager.load_state(_pos_state_path)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                restored = None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            restored = None
         if restored is not None:
             # Verify ALL restored positions still exist on MT5.
             # For v3 SSOT positions, backfill physical-state fields from MT5 ground truth.
@@ -1212,20 +1224,25 @@ def main(argv: list[str] | None = None) -> int:
             # ── Fallback: reconstruct ALL positions from MT5 (basic recovery, no trail state) ──
             try:
                 open_positions = _broker.get_open_positions_detail(args.symbol)
-            except Exception as _recovery_exc:  # BLE001:FOG
-                with fail_open_guard("live_intent_loop:main"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "position_recovery_error",
-                                "time": _utc_iso(),
-                                "error": str(_recovery_exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                    open_positions = None
+            except (
+                RuntimeError,
+                ValueError,
+                KeyError,
+                TypeError,
+                OSError,
+            ) as _recovery_exc:  # BLE001:FOG
+                print(
+                    json.dumps(
+                        {
+                            "event": "position_recovery_error",
+                            "time": _utc_iso(),
+                            "error": str(_recovery_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                open_positions = None
             if open_positions:
                 recovery_atr = (
                     _broker.fetch_current_atr(args.symbol) if _broker is not None else 2.31
@@ -1263,14 +1280,22 @@ def main(argv: list[str] | None = None) -> int:
                             line = line.strip()
                             if not line:
                                 continue
-                            with fail_open_guard("LiveIntentLoop:L1272"):
-                                    rec = json.loads(line)
-                                    if (
-                                        rec.get("position_ticket") == ticket
-                                        and rec.get("action") == "open"
-                                    ):
-                                        recovered_supporting = rec.get("brain_ids", [])
-                                        break
+                            try:  # BLE001:FOG (was: FOG/LAC)
+                                rec = json.loads(line)
+                                if (
+                                    rec.get("position_ticket") == ticket
+                                    and rec.get("action") == "open"
+                                ):
+                                    recovered_supporting = rec.get("brain_ids", [])
+                                    break
+                            except (
+                                RuntimeError,
+                                ValueError,
+                                KeyError,
+                                TypeError,
+                                OSError,
+                            ):  # BLE001:FOG
+                                pass
 
                     current_high = max(entry_price, float(mp.price_current))
 
@@ -1448,10 +1473,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── Initialize GroupCorrelationTracker ──
     correlation_tracker: Any = None
-    with fail_open_guard("LiveIntentLoop:L1467"):
-            from core.execution.capital_allocator import GroupCorrelationTracker
+    try:  # BLE001:FOG (was: FOG/LAC)
+        from core.execution.capital_allocator import GroupCorrelationTracker
 
-            correlation_tracker = GroupCorrelationTracker(ema_alpha=0.05)
+        correlation_tracker = GroupCorrelationTracker(ema_alpha=0.05)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
 
     # ── Initialize MetaSignalFilter (V3 Stage 2: LGB+MLP + Platt + Conformal) ──
     meta_signal_filter: Any = None
@@ -1572,9 +1599,8 @@ def main(argv: list[str] | None = None) -> int:
                                         f"Model missing {len(_missing)} V9 features: "
                                         f"{sorted(list(_missing))[:5]}..."
                                     )
-                    except Exception:  # BLE001:FOG
-                        with fail_open_guard("live_intent_loop:main"):
-                            pass  # schema file may not exist; skip check
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass  # schema file may not exist; skip check
                     if not _mf_feature_ok:
                         print(
                             json.dumps(
@@ -1623,15 +1649,14 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
                     meta_signal_filter = None
-        except Exception as _mf_exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {"event": "meta_filter_init_error", "time": _utc_iso(), "error": str(_mf_exc)},
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _mf_exc:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {"event": "meta_filter_init_error", "time": _utc_iso(), "error": str(_mf_exc)},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── FIX-20260610-007: Direction-specific MetaFilter models ──
     # XAU directional asymmetry: SHORT cascades vs LONG grinds.
     # Separate models capture different feature importance patterns.
@@ -1640,27 +1665,29 @@ def main(argv: list[str] | None = None) -> int:
     for _dir_label, _dir_model in [("long", "lgb_xau_long_v1"), ("short", "lgb_xau_short_v1")]:
         _dir_model_path = str(_base_dir / "models" / f"meta_stage2_{_dir_model}.txt")
         if Path(_dir_model_path).exists():
-            with fail_open_guard("LiveIntentLoop:L1639"):
-                    _dir_filter = MetaSignalFilter(
-                        model_path=_dir_model_path,
-                        threshold=0.55,
-                        enabled=True,
-                        mode="binary",
+            try:  # BLE001:FOG (was: FOG/LAC)
+                _dir_filter = MetaSignalFilter(
+                    model_path=_dir_model_path,
+                    threshold=0.55,
+                    enabled=True,
+                    mode="binary",
+                )
+                if _dir_filter.load():
+                    setattr(config, f"meta_filter_{_dir_label}", _dir_filter)
+                    print(
+                        json.dumps(
+                            {
+                                "event": f"meta_filter_{_dir_label}_loaded",
+                                "time": _utc_iso(),
+                                "model": _dir_model_path,
+                                "features": len(_dir_filter._feature_names),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
                     )
-                    if _dir_filter.load():
-                        setattr(config, f"meta_filter_{_dir_label}", _dir_filter)
-                        print(
-                            json.dumps(
-                                {
-                                    "event": f"meta_filter_{_dir_label}_loaded",
-                                    "time": _utc_iso(),
-                                    "model": _dir_model_path,
-                                    "features": len(_dir_filter._feature_names),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
     # ── Initial state ──
     state = LiveCycleState(
@@ -1699,20 +1726,25 @@ def main(argv: list[str] | None = None) -> int:
 
             hot_reload = ConfigHotReload(str(_hot_path))
             hot_reload.load()
-        except Exception as _hot_reload_exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "config_hot_reload_failed",
-                            "time": _utc_iso(),
-                            "error": str(_hot_reload_exc),
-                            "action": "continuing_without_hot_reload",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (
+            RuntimeError,
+            ValueError,
+            KeyError,
+            TypeError,
+            OSError,
+        ) as _hot_reload_exc:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "config_hot_reload_failed",
+                        "time": _utc_iso(),
+                        "error": str(_hot_reload_exc),
+                        "action": "continuing_without_hot_reload",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── Initialize BarSyncPoller (event-driven M5 bar detection) ──
     bar_sync: Any = None
     if args.bar_sync and not args.no_mt5 and mt5_worker is not None:
@@ -1742,19 +1774,18 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _bs_exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "bar_sync_init_failed",
-                            "time": _utc_iso(),
-                            "error": str(_bs_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _bs_exc:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "bar_sync_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_bs_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── Initialize ExitWatchdog (heartbeat-protected exit dispatch) ──
     # FIX-20260613-086: watchdog_config from live YAML for structural triggers
     exit_watchdog: Any = None
@@ -1787,19 +1818,18 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ew_exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "exit_watchdog_init_failed",
-                            "time": _utc_iso(),
-                            "error": str(_ew_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _ew_exc:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "exit_watchdog_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_ew_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── Initialize LimitOrderMonitor (spread-aware limit order tracking) ──
     limit_monitor: Any = None
     if args.use_limit_orders:
@@ -1817,19 +1847,18 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _lm_exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "limit_monitor_init_failed",
-                            "time": _utc_iso(),
-                            "error": str(_lm_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _lm_exc:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "limit_monitor_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_lm_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── Initialize LiveAlertHub (unified alerting: rules → circuit breaker → Slack/DingTalk/Log) ──
     alert_hub: Any = None
     if args.alert:
@@ -1840,7 +1869,7 @@ def main(argv: list[str] | None = None) -> int:
             _thresholds: dict[str, float] = {}
             _rules_config: list[dict[str, Any]] | None = None
             if args.config:
-                with fail_open_guard("AlertConfigLoader"):
+                try:  # BLE001:FOG (was: FOG/LAC)
                     import yaml as _yaml_full
 
                     with open(args.config, encoding="utf-8") as _fh_full:
@@ -1852,6 +1881,8 @@ def main(argv: list[str] | None = None) -> int:
                         _alert_sys = _full_cfg.get("alert_system", {})
                         if isinstance(_alert_sys, dict):
                             _rules_config = _alert_sys.get("rules", None)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
 
             # Derive symbol for alert instance fingerprinting:
             # prefer explicit --symbol, fall back to base_dir heuristic
@@ -1881,19 +1912,18 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ah_exc:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:main"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "alert_hub_init_failed",
-                            "time": _utc_iso(),
-                            "error": str(_ah_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _ah_exc:  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "alert_hub_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_ah_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── Global crash hook: capture ALL exits including C-level crashes ──
     import sys as _sys
     import traceback as _traceback
@@ -1911,9 +1941,8 @@ def main(argv: list[str] | None = None) -> int:
             msg["traceback"] = "".join(_traceback.format_tb(exc_tb))[-2000:]
         try:
             print(json.dumps(msg, ensure_ascii=False), flush=True)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:_global_excepthook"):
-                print(f"FATAL: {exc_type}: {exc_value}", flush=True)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            print(f"FATAL: {exc_type}: {exc_value}", flush=True)
         _sys.__excepthook__(exc_type, exc_value, exc_tb)
 
     _sys.excepthook = _global_excepthook
@@ -1999,21 +2028,26 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                            except Exception as _wsexc:  # BLE001:FOG
-                                with fail_open_guard("live_intent_loop:_background_warm_start"):
-                                    print(
-                                        json.dumps(
-                                            {
-                                                "event": "warm_start_background_error",
-                                                "time": _utc_iso(),
-                                                "brain_id": b_info["brain_id"],
-                                                "brain_type": btype,
-                                                "error": str(_wsexc),
-                                            },
-                                            ensure_ascii=False,
-                                        ),
-                                        flush=True,
-                                    )
+                            except (
+                                RuntimeError,
+                                ValueError,
+                                KeyError,
+                                TypeError,
+                                OSError,
+                            ) as _wsexc:  # BLE001:FOG
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "warm_start_background_error",
+                                            "time": _utc_iso(),
+                                            "brain_id": b_info["brain_id"],
+                                            "brain_type": btype,
+                                            "error": str(_wsexc),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
                     elif btype == "transformer_v4.3":
                         try:
                             if (
@@ -2034,21 +2068,27 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                        except Exception as _wsexc:  # BLE001:FOG
-                            with fail_open_guard("live_intent_loop:_background_warm_start"):
-                                print(
-                                    json.dumps(
-                                        {
-                                            "event": "warm_start_background_error",
-                                            "time": _utc_iso(),
-                                            "brain_id": b_info["brain_id"],
-                                            "brain_type": btype,
-                                            "error": str(_wsexc),
-                                        },
-                                        ensure_ascii=False,
-                                    ),
-                                    flush=True,
-                                )
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ) as _wsexc:  # BLE001:FOG
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "warm_start_background_error",
+                                        "time": _utc_iso(),
+                                        "brain_id": b_info["brain_id"],
+                                        "brain_type": btype,
+                                        "error": str(_wsexc),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+
             _warm_start_thread = _threading.Thread(
                 target=_background_warm_start, daemon=True, name="warm-start"
             )
@@ -2143,24 +2183,26 @@ def main(argv: list[str] | None = None) -> int:
             _bridge_health_path = Path(args.base_dir) / "reports" / "mt5_bridge_health.json"
             _bridge_ready = False
             for _retry in range(30):  # 30 × 1s = 30s max wait
-                with fail_open_guard("LiveIntentLoop:L2142"):
-                        if _bridge_health_path.exists():
-                            _hb = json.loads(_bridge_health_path.read_text(encoding="utf-8"))
-                            if _hb.get("transport") == "zmq" and _hb.get("mt5_connected"):
-                                _bridge_ready = True
-                                print(
-                                    json.dumps(
-                                        {
-                                            "event": "bridge_ready",
-                                            "time": _utc_iso(),
-                                            "pid": _hb.get("pid"),
-                                            "transport": "zmq",
-                                        },
-                                        ensure_ascii=False,
-                                    ),
-                                    flush=True,
-                                )
-                                break
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    if _bridge_health_path.exists():
+                        _hb = json.loads(_bridge_health_path.read_text(encoding="utf-8"))
+                        if _hb.get("transport") == "zmq" and _hb.get("mt5_connected"):
+                            _bridge_ready = True
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "bridge_ready",
+                                        "time": _utc_iso(),
+                                        "pid": _hb.get("pid"),
+                                        "transport": "zmq",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            break
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
                 time.sleep(1.0)
             if not _bridge_ready:
                 print(
@@ -2183,9 +2225,8 @@ def main(argv: list[str] | None = None) -> int:
             from core.observability.entry_context_guard import start_entry_context_guard
 
             start_entry_context_guard(Path(args.base_dir), symbol=args.symbol)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("live_intent_loop:_watchdog_loop"):
-                pass  # Guard failure must never prevent the main loop from starting
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass  # Guard failure must never prevent the main loop from starting
         while True:
             state.last_heartbeat = time.time()
             if _shutdown_flag[0]:
@@ -2235,94 +2276,100 @@ def main(argv: list[str] | None = None) -> int:
                 state._consecutive_cycle_errors = 0
                 # Reload tracker if daily_ops enriched it with realized P&L
                 if state._tracker_reload_pending:
-                    with fail_open_guard("LiveIntentLoop:L2246"):
-                            tracker = BrainPerformanceTracker.load(tracker_path)
-                            state._tracker_reload_pending = False
+                    try:  # BLE001:FOG (was: FOG/LAC)
+                        tracker = BrainPerformanceTracker.load(tracker_path)
+                        state._tracker_reload_pending = False
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
                 if not should_continue:
                     break
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("live_intent_loop:_watchdog_loop"):
-                    # ── FIX-20260607-140: Fail-Closed on dispatch pipeline crash ──
-                    # ExecutionQueueFatalError means the dispatch pipeline is broken.
-                    # Trip the circuit breaker IMMEDIATELY — do NOT continue the
-                    # cycle without a functioning dispatch path (Fail-Open→Fail-Closed).
-                    if isinstance(
-                        exc,
-                        __import__(
-                            "core.execution.execution_queue", fromlist=["ExecutionQueueFatalError"]
-                        ).ExecutionQueueFatalError,
-                    ):
-                        state._circuit_breaker_tripped = True
-                        state._circuit_breaker_tripped_at = time.time()
-                        state.block_new_entries = True
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                # ── FIX-20260607-140: Fail-Closed on dispatch pipeline crash ──
+                # ExecutionQueueFatalError means the dispatch pipeline is broken.
+                # Trip the circuit breaker IMMEDIATELY — do NOT continue the
+                # cycle without a functioning dispatch path (Fail-Open→Fail-Closed).
+                if isinstance(
+                    exc,
+                    __import__(
+                        "core.execution.execution_queue", fromlist=["ExecutionQueueFatalError"]
+                    ).ExecutionQueueFatalError,
+                ):
+                    state._circuit_breaker_tripped = True
+                    state._circuit_breaker_tripped_at = time.time()
+                    state.block_new_entries = True
 
-                    # ── DQAF-20260616-002/P0.1: Consecutive cycle error fuse ──────
-                    # A single swallowed exception can corrupt the state machine and
-                    # cause all subsequent cycles to silently skip the trading path
-                    # (zombie state — heartbeat alive, no trades).  This fuse counts
-                    # consecutive failing cycles and force-kills the process after 5,
-                    # letting the launcher restart with a clean state.
-                    # Persisted on state so it survives across loop iterations.
-                    _consec = getattr(state, "_consecutive_cycle_errors", 0) + 1
-                    state._consecutive_cycle_errors = _consec
-                    _tb = traceback.format_exc()
-                    print(
-                        json.dumps(
-                            {
-                                "event": "cycle_error",
-                                "time": _utc_iso(),
-                                "error": str(exc),
-                                "error_type": type(exc).__name__,
-                                "traceback": _tb,
-                                "circuit_breaker_tripped": state._circuit_breaker_tripped,
-                                "consecutive_cycle_errors": _consec,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
+                # ── DQAF-20260616-002/P0.1: Consecutive cycle error fuse ──────
+                # A single swallowed exception can corrupt the state machine and
+                # cause all subsequent cycles to silently skip the trading path
+                # (zombie state — heartbeat alive, no trades).  This fuse counts
+                # consecutive failing cycles and force-kills the process after 5,
+                # letting the launcher restart with a clean state.
+                # Persisted on state so it survives across loop iterations.
+                _consec = getattr(state, "_consecutive_cycle_errors", 0) + 1
+                state._consecutive_cycle_errors = _consec
+                _tb = traceback.format_exc()
+                print(
+                    json.dumps(
+                        {
+                            "event": "cycle_error",
+                            "time": _utc_iso(),
+                            "error": str(exc),
+                            "error_type": type(exc).__name__,
+                            "traceback": _tb,
+                            "circuit_breaker_tripped": state._circuit_breaker_tripped,
+                            "consecutive_cycle_errors": _consec,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                if _consec >= 5:
+                    # ── Fuse blown: log final traceback to alert_audit ──
+                    _fuse_msg = (
+                        f"[DQAF-20260616-002] ZOMBIE_CYCLE_FUSE_BLOWN: "
+                        f"{_consec} consecutive cycle failures. "
+                        f"Last error: {type(exc).__name__}: {exc!s:.500}. "
+                        f"Force-exiting to break silent-degrade loop."
                     )
-                    if _consec >= 5:
-                        # ── Fuse blown: log final traceback to alert_audit ──
-                        _fuse_msg = (
-                            f"[DQAF-20260616-002] ZOMBIE_CYCLE_FUSE_BLOWN: "
-                            f"{_consec} consecutive cycle failures. "
-                            f"Last error: {type(exc).__name__}: {exc!s:.500}. "
-                            f"Force-exiting to break silent-degrade loop."
-                        )
-                        with fail_open_guard("LiveIntentLoop:ZombieFuseAlert"):
-                            from core.feedback.live_alert_hub import LiveAlertHub
-                            _ah = getattr(state, "_alert_hub", None)
-                            if _ah is None:
-                                _ah = LiveAlertHub(
-                                    log_dir=f"{config.base_dir}/logs",
-                                    ding_webhook_url=getattr(config, "ding_webhook_url", ""),
-                                )
-                            _ah.fire(
-                                "zombie_cycle_fuse_blown",
-                                severity="critical",
-                                title="[DQAF-002] 连续循环异常熔断触发",
-                                detail={
-                                    "consecutive_errors": _consec,
-                                    "last_error_type": type(exc).__name__,
-                                    "last_error": str(exc)[:500],
-                                    "last_traceback": _tb[:2000],
-                                    "cycle_count": getattr(state, "cycle_count", -1),
-                                },
+                    try:  # BLE001:FOG (was: FOG/LAC)
+                        from core.feedback.live_alert_hub import LiveAlertHub
+
+                        _ah = getattr(state, "_alert_hub", None)
+                        if _ah is None:
+                            _ah = LiveAlertHub(
+                                log_dir=f"{config.base_dir}/logs",
+                                ding_webhook_url=getattr(config, "ding_webhook_url", ""),
                             )
-                        # Write kill log (same pattern as watchdog for diagnostics)
-                        try:
-                            with open("watchdog_kill.log", "a", encoding="utf-8") as _wf:
-                                _wf.write(
-                                    f"[{_utc_iso()}] ZOMBIE_CYCLE_FUSE PID={_os_module.getpid()}. "
-                                    f"consecutive_errors={_consec}. "
-                                    f"last_error={type(exc).__name__}: {exc!s:.300}\n"
-                                    f"traceback_head={_tb[:1000]}\n"
-                                )
-                        except OSError:
-                            pass
-                        _os_module._exit(3)  # exit code 3 = zombie cycle fuse (distinct from watchdog=1)
-                    if args.once:
-                        break
+                        _ah.fire(
+                            "zombie_cycle_fuse_blown",
+                            severity="critical",
+                            title="[DQAF-002] 连续循环异常熔断触发",
+                            detail={
+                                "consecutive_errors": _consec,
+                                "last_error_type": type(exc).__name__,
+                                "last_error": str(exc)[:500],
+                                "last_traceback": _tb[:2000],
+                                "cycle_count": getattr(state, "cycle_count", -1),
+                            },
+                        )
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
+                    # Write kill log (same pattern as watchdog for diagnostics)
+                    try:
+                        with open("watchdog_kill.log", "a", encoding="utf-8") as _wf:
+                            _wf.write(
+                                f"[{_utc_iso()}] ZOMBIE_CYCLE_FUSE PID={_os_module.getpid()}. "
+                                f"consecutive_errors={_consec}. "
+                                f"last_error={type(exc).__name__}: {exc!s:.300}\n"
+                                f"traceback_head={_tb[:1000]}\n"
+                            )
+                    except OSError:
+                        pass
+                    _os_module._exit(
+                        3
+                    )  # exit code 3 = zombie cycle fuse (distinct from watchdog=1)
+                if args.once:
+                    break
             # ── Persist state every ~1 hour + check config hot-reload ──
             state.cycle_count += 1
 
@@ -2406,41 +2453,52 @@ def main(argv: list[str] | None = None) -> int:
                                     "reasons": _d.reasons,
                                 }
                                 print(json.dumps(_gevt, ensure_ascii=False), flush=True)
-                                with fail_open_guard("GovEventLog:append"):
+                                try:  # BLE001:FOG (was: FOG/LAC)
                                     with open(_gov_events_path, "a", encoding="utf-8") as _gf:
                                         _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("live_intent_loop:_watchdog_loop"):
-                        with fail_open_guard("BrainPromotionBridge"):
-                            raise  # surface hidden bugs instead of silent pass
+                                except (
+                                    RuntimeError,
+                                    ValueError,
+                                    KeyError,
+                                    TypeError,
+                                    OSError,
+                                ):  # BLE001:FOG
+                                    pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    try:  # BLE001:FOG (was: FOG/LAC)
+                        raise  # surface hidden bugs instead of silent pass
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
             if hot_reload is not None and state.loop_iteration % 30 == 0:
-                with fail_open_guard("LiveIntentLoop:L2417"):
-                        changes = hot_reload.check_and_reload()
-                        if changes:
-                            # ── Apply regime_map hot-reload ──
-                            _new_regime_cfg = changes.get("regime_gate", {})
-                            if isinstance(_new_regime_cfg, dict):
-                                _new_regime_map = _new_regime_cfg.get("regime_map")
-                                if isinstance(_new_regime_map, dict) and state.regime_gate is not None:
-                                    state.regime_gate.regime_map = _new_regime_map
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "config_hot_reloaded",
-                                        "time": _utc_iso(),
-                                        "changes": list(changes.keys()),
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    changes = hot_reload.check_and_reload()
+                    if changes:
+                        # ── Apply regime_map hot-reload ──
+                        _new_regime_cfg = changes.get("regime_gate", {})
+                        if isinstance(_new_regime_cfg, dict):
+                            _new_regime_map = _new_regime_cfg.get("regime_map")
+                            if isinstance(_new_regime_map, dict) and state.regime_gate is not None:
+                                state.regime_gate.regime_map = _new_regime_map
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "config_hot_reloaded",
+                                    "time": _utc_iso(),
+                                    "changes": list(changes.keys()),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
             # ── FIX-20260603-075: persist execution guard state EVERY cycle ──
             # DQAF-20260620-002: removed _strategies guard — breaker state,
             # counter values, and saved_at_utc must be persisted every cycle
             # even when strategies haven't been built yet (COLD_START, early
             # gate blocks).  Previously the save was silently skipped for N
             # cycles → stale execution_state.json → EXEC_STATE_STALE alert.
-            with fail_open_guard("LiveIntentLoop:PersistExecutionState"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 from core.runtime.execution_state import save_execution_state
 
                 _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
@@ -2454,19 +2512,17 @@ def main(argv: list[str] | None = None) -> int:
                     sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
                     consecutive_degraded=state._consecutive_degraded_cycles,
                     circuit_breaker_tripped=state._circuit_breaker_tripped,
-                    circuit_breaker_tripped_at=getattr(
-                        state, "_circuit_breaker_tripped_at", 0.0
-                    ),
+                    circuit_breaker_tripped_at=getattr(state, "_circuit_breaker_tripped_at", 0.0),
                     intraday_dd_active=state.block_new_entries,
                     # ── DQAF-20260608-003: full counter persistence ──
                     consecutive_stale_cycles=state._consecutive_stale_cycles,
                     consecutive_stale_features=state._consecutive_stale_features,
-                    circuit_breaker_trip_reason=getattr(
-                        state, "_circuit_breaker_trip_reason", ""
-                    ),
+                    circuit_breaker_trip_reason=getattr(state, "_circuit_breaker_trip_reason", ""),
                     # ── DQAF-20260615-004 ──
                     known_open_tickets=getattr(state, "known_open_tickets", None),
                 )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
             # ── FIX-20260604-077: persist PnL ledger EVERY cycle ──
             # Same root cause as FIX-075: 60-cycle save interval means recent
@@ -2476,10 +2532,12 @@ def main(argv: list[str] | None = None) -> int:
             # Set _EVENT_STREAM_MODE=False to restore dual-write for debugging.
             _EVENT_STREAM_MODE = True
             if pnl_ledger is not None:
-                with fail_open_guard("LiveIntentLoop:L2491"):
-                        if not _EVENT_STREAM_MODE:
-                            pnl_ledger.save(pnl_ledger_path)
-                        _inject_performance_metrics(pnl_ledger, args.base_dir)
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    if not _EVENT_STREAM_MODE:
+                        pnl_ledger.save(pnl_ledger_path)
+                    _inject_performance_metrics(pnl_ledger, args.base_dir)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
 
             # ── FIX-20260604-079: data health monitor ──
             # Runs every 60 cycles.  Checks feature store freshness,
@@ -2487,37 +2545,45 @@ def main(argv: list[str] | None = None) -> int:
             # Alerts via LiveAlertHub when data quality degrades.
             # Bootstrap on first cycle to create state file immediately.
             if state.loop_iteration == 1 or state.loop_iteration % config.state_save_interval == 0:
-                with fail_open_guard("LiveIntentLoop:L2488"):
-                        from core.runtime.data_health_monitor import check_data_health
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    from core.runtime.data_health_monitor import check_data_health
 
-                        _health = check_data_health(
-                            base_dir=args.base_dir,
-                            symbol=config.symbol,
-                            alert_hub=alert_hub,
-                            position_manager=getattr(state, "position_manager", None),
+                    _health = check_data_health(
+                        base_dir=args.base_dir,
+                        symbol=config.symbol,
+                        alert_hub=alert_hub,
+                        position_manager=getattr(state, "position_manager", None),
+                    )
+                    if _health.get("alerts") or _health.get("checks", {}).get("training_ready"):
+                        print(
+                            json.dumps(
+                                {"event": "data_health_report", **_health},
+                                ensure_ascii=False,
+                                default=str,
+                            ),
+                            flush=True,
                         )
-                        if _health.get("alerts") or _health.get("checks", {}).get("training_ready"):
-                            print(
-                                json.dumps(
-                                    {"event": "data_health_report", **_health},
-                                    ensure_ascii=False,
-                                    default=str,
-                                ),
-                                flush=True,
-                            )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
 
             if state.loop_iteration % config.state_save_interval == 0:
                 if rolling_norm is not None:
-                    with fail_open_guard("LiveIntentLoop:RollingNormSaveState"):
+                    try:  # BLE001:FOG (was: FOG/LAC)
                         _state_path = Path(args.base_dir) / "rolling_norm_state.json"
                         rolling_norm.save_state(_state_path)
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
                 if regime_detector is not None:
-                    with fail_open_guard("LiveIntentLoop:RegimeDetectorSaveState"):
+                    try:  # BLE001:FOG (was: FOG/LAC)
                         _regime_path = Path(args.base_dir) / "regime_detector_state.json"
                         regime_detector.save_state(_regime_path)
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
                 if meta_signal_filter is not None:
-                    with fail_open_guard("LiveIntentLoop:MetaSignalFilterSaveState"):
+                    try:  # BLE001:FOG (was: FOG/LAC)
                         meta_signal_filter.save_state(str(_mf_state_path))
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
 
             # ── Wait for next cycle: event-driven bar sync or interval sleep ──
             try:
@@ -2570,25 +2636,32 @@ def main(argv: list[str] | None = None) -> int:
                             time.sleep(args.interval_seconds)
                 else:
                     time.sleep(args.interval_seconds)
-            except Exception as _bar_exc:  # BLE001:FOG
-                with fail_open_guard("live_intent_loop:_watchdog_loop"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "bar_sync_crash",
-                                "time": _utc_iso(),
-                                "error": str(_bar_exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                    time.sleep(args.interval_seconds)
+            except (
+                RuntimeError,
+                ValueError,
+                KeyError,
+                TypeError,
+                OSError,
+            ) as _bar_exc:  # BLE001:FOG
+                print(
+                    json.dumps(
+                        {
+                            "event": "bar_sync_crash",
+                            "time": _utc_iso(),
+                            "error": str(_bar_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                time.sleep(args.interval_seconds)
     finally:
         # ── Release distributed lock ──
         if _live_lock is not None:
-            with fail_open_guard("LiveIntentLoop:LiveLockRelease"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 _live_lock.release()
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         # ── Graceful shutdown: persist all state ──
         print(
             json.dumps({"event": "shutdown_start", "time": _utc_iso()}, ensure_ascii=False),
@@ -2603,43 +2676,48 @@ def main(argv: list[str] | None = None) -> int:
         _old_sigterm = signal.signal(signal.SIGTERM, signal.SIG_IGN)
         try:
             if position_manager is not None and position_manager.has_position():
-                with fail_open_guard("LiveIntentLoop:L2607"):
-                        _pos_path = Path(args.base_dir) / "state" / "active_position.json"
-                        position_manager.save_state(str(_pos_path))
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "position_state_saved",
-                                    "time": _utc_iso(),
-                                    "ticket": position_manager.get_position().ticket
-                                    if position_manager.get_position()
-                                    else 0,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-
-            if rolling_norm is not None:
-                with fail_open_guard("LiveIntentLoop:L2649"):
-                        _state_path = Path(args.base_dir) / "rolling_norm_state.json"
-                        rolling_norm.save_state(_state_path)
-            if regime_detector is not None:
-                with fail_open_guard("LiveIntentLoop:L2655"):
-                        _regime_path = Path(args.base_dir) / "regime_detector_state.json"
-                        regime_detector.save_state(_regime_path)
-            try:
-                save_path = Path(args.base_dir) / "brain_performance.json"
-                tracker.save(save_path)
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("live_intent_loop:_watchdog_loop"):
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    _pos_path = Path(args.base_dir) / "state" / "active_position.json"
+                    position_manager.save_state(str(_pos_path))
                     print(
                         json.dumps(
-                            {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
+                            {
+                                "event": "position_state_saved",
+                                "time": _utc_iso(),
+                                "ticket": position_manager.get_position().ticket
+                                if position_manager.get_position()
+                                else 0,
+                            },
                             ensure_ascii=False,
                         ),
                         flush=True,
                     )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
+
+            if rolling_norm is not None:
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    _state_path = Path(args.base_dir) / "rolling_norm_state.json"
+                    rolling_norm.save_state(_state_path)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
+            if regime_detector is not None:
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    _regime_path = Path(args.base_dir) / "regime_detector_state.json"
+                    regime_detector.save_state(_regime_path)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
+            try:
+                save_path = Path(args.base_dir) / "brain_performance.json"
+                tracker.save(save_path)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(
+                    json.dumps(
+                        {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
             if pnl_ledger is not None:
                 try:
                     if not _EVENT_STREAM_MODE:
@@ -2655,59 +2733,66 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                         flush=True,
                     )
-                except Exception as exc:  # BLE001:FOG
-                    with fail_open_guard("live_intent_loop:_watchdog_loop"):
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "pnl_ledger_save_error",
-                                    "time": _utc_iso(),
-                                    "error": str(exc),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+                except (
+                    RuntimeError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                    OSError,
+                ) as exc:  # BLE001:FOG
+                    print(
+                        json.dumps(
+                            {
+                                "event": "pnl_ledger_save_error",
+                                "time": _utc_iso(),
+                                "error": str(exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
             if meta_signal_filter is not None:
-                with fail_open_guard("LiveIntentLoop:MetaFilterSaveState"):
+                try:  # BLE001:FOG (was: FOG/LAC)
                     meta_signal_filter.save_state(str(_mf_state_path))
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
             # ── FIX-20260603-072: persist execution guard state on shutdown ──
             # DQAF-20260620-002: removed _strategies guard — same fix as per-cycle save above
-            with fail_open_guard("LiveIntentLoop:L2680"):
-                    from core.runtime.execution_state import save_execution_state
+            try:  # BLE001:FOG (was: FOG/LAC)
+                from core.runtime.execution_state import save_execution_state
 
-                    _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
-                    _strategies = getattr(state, "_strategies", None) or {}
-                    save_execution_state(
-                        str(_exec_path),
-                        _strategies,
-                        getattr(state, "_cooldown_registry", None),
-                        getattr(state, "_family_entry_tracker", None),
-                        sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
-                        sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
-                        consecutive_degraded=state._consecutive_degraded_cycles,
-                        circuit_breaker_tripped=state._circuit_breaker_tripped,
-                        circuit_breaker_tripped_at=getattr(
-                            state, "_circuit_breaker_tripped_at", 0.0
-                        ),
-                        intraday_dd_active=state.block_new_entries,
-                        # ── DQAF-20260608-003: full counter persistence ──
-                        consecutive_stale_cycles=state._consecutive_stale_cycles,
-                        consecutive_stale_features=state._consecutive_stale_features,
-                        circuit_breaker_trip_reason=getattr(
-                            state, "_circuit_breaker_trip_reason", ""
-                        ),
-                        # ── DQAF-20260615-004 ──
-                        known_open_tickets=getattr(state, "known_open_tickets", None),
-                    )
+                _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
+                _strategies = getattr(state, "_strategies", None) or {}
+                save_execution_state(
+                    str(_exec_path),
+                    _strategies,
+                    getattr(state, "_cooldown_registry", None),
+                    getattr(state, "_family_entry_tracker", None),
+                    sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
+                    sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
+                    consecutive_degraded=state._consecutive_degraded_cycles,
+                    circuit_breaker_tripped=state._circuit_breaker_tripped,
+                    circuit_breaker_tripped_at=getattr(state, "_circuit_breaker_tripped_at", 0.0),
+                    intraday_dd_active=state.block_new_entries,
+                    # ── DQAF-20260608-003: full counter persistence ──
+                    consecutive_stale_cycles=state._consecutive_stale_cycles,
+                    consecutive_stale_features=state._consecutive_stale_features,
+                    circuit_breaker_trip_reason=getattr(state, "_circuit_breaker_trip_reason", ""),
+                    # ── DQAF-20260615-004 ──
+                    known_open_tickets=getattr(state, "known_open_tickets", None),
+                )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         finally:
             signal.signal(signal.SIGINT, _old_sigint)
             signal.signal(signal.SIGTERM, _old_sigterm)
 
         # ── Shutdown alert hub (护栏6: graceful drain of queued alerts) ──
         if alert_hub is not None:
-            with fail_open_guard("LiveIntentLoop:AlertHubShutdown"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 alert_hub.shutdown()
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
         if mt5_worker is not None:
             mt5_worker.stop()

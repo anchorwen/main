@@ -14,8 +14,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="position_query")
@@ -47,10 +45,9 @@ def run(symbol: str | None = None, terminal_path: str | None = None) -> dict[str
 
     try:
         import MetaTrader5 as mt5
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("position_query:run"):
-            result["error"] = f"MetaTrader5 import failed: {exc}"
-            return result
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        result["error"] = f"MetaTrader5 import failed: {exc}"
+        return result
     kw: dict[str, Any] = {}
     if terminal_path:
         p = Path(terminal_path)

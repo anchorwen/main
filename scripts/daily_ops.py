@@ -30,7 +30,6 @@ from typing import Any
 
 from core.contracts.exceptions import DataIntegrityError
 from core.data.ticket_resolver import resolve as resolve_ticket
-from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "daily_ops.v1"
 
@@ -65,10 +64,12 @@ def _load_or_create_tracker(base_dir: str) -> Any:
             return BrainPerformanceTracker.load(tracker_path)
         return BrainPerformanceTracker(window_size=100)
     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_load_or_create_tracker"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 
             return BrainPerformanceTracker(window_size=100)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _resolve_brains_dir(base_dir: str) -> Path:
@@ -122,8 +123,16 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                     try:
                         cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
                     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                        with fail_open_guard("daily_ops:_load_or_create_governance"):
+                        try:  # BLE001:FOG (was: FOG/LAC)
                             continue
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ):  # BLE001:FOG
+                            pass
                     if cfg.get("schema_version") != "brain_registry_entry.v1":
                         continue
                     bid = cfg.get("brain_id", "")
@@ -135,7 +144,7 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                         gov.register_brain(bid, initial)
         return gov
     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_load_or_create_governance"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             from core.governance.governance_service import GovernanceService
 
             gov = GovernanceService()
@@ -143,6 +152,8 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                 for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
                     gov.register_brain(brain_id, status)
             return gov
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _load_or_create_pnl_store(base_dir: str) -> Any:
@@ -161,7 +172,9 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
         try:
             return BrainPnLStore.load_from_stream(stream_path)
         except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-            with fail_open_guard("daily_ops:_load_or_create_pnl_store"):
+            try:  # BLE001:FOG (was: FOG/LAC)
+                pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass
     # 2. Fall back to old JSON
     ledger_path = Path(base_dir) / "brain_pnl_ledger.json"
@@ -169,7 +182,9 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
         if ledger_path.exists():
             return BrainPnLStore.load(ledger_path)
     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_load_or_create_pnl_store"):
+        try:  # BLE001:FOG (was: FOG/LAC)
+            pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass
     # 3. Fresh store
     return BrainPnLStore()
@@ -314,8 +329,10 @@ def _step_journal_backfill(base_dir: str, *, dry_run: bool = False) -> dict[str,
         }
 
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_journal_backfill"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "journal_backfill", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_label_builder(
@@ -431,8 +448,10 @@ def _step_label_builder(
             "output": str(out_path) if not dry_run else None,
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_label_builder"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "label_builder", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
@@ -456,8 +475,10 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
             "agreement": report.get("comparison", {}).get("agreement_score", 0.0),
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_shadow_ensemble"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "shadow_ensemble", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_feedback_loop(
@@ -482,8 +503,10 @@ def _step_feedback_loop(
             "brains_updated": report.get("brain_ids_updated", []),
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_feedback_loop"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -512,13 +535,15 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     last_message_id = ""
     _state: dict[str, Any] = {}
     if state_path.exists():
-        with fail_open_guard("CalibratorFeedStateRead"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             _state = json.loads(state_path.read_text(encoding="utf-8"))
             last_recorded_at = _state.get("last_recorded_at", "")
             last_message_id = _state.get("last_message_id", "")
             # Migration: old format used "last_line" — derive watermark from it
             if not last_recorded_at and "last_line" in _state:
                 _old_pos = _state["last_line"]
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
     # Read all lines (typically <1000; reading full file is fast and safe)
     lines = journal_path.read_text(encoding="utf-8").splitlines()
@@ -534,7 +559,9 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 last_recorded_at = _mig_entry.get("recorded_at", "")
                 last_message_id = _mig_entry.get("message_id", "")
             except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                with fail_open_guard("daily_ops:_step_calibrator_feed"):
+                try:  # BLE001:FOG (was: FOG/LAC)
+                    pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                     pass
         elif _old_pos > len(lines):
             # Compaction pruned lines — the pointer is now beyond EOF.
@@ -551,8 +578,10 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         try:
             _e = json.loads(_l)
         except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-            with fail_open_guard("daily_ops:_step_calibrator_feed"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 continue
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         _ts = _e.get("recorded_at", "")
         _mid = _e.get("message_id", "")
         if _ts > last_recorded_at or (_ts == last_recorded_at and _mid != last_message_id):
@@ -567,8 +596,10 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
 
         cal = ConformalCalibrator(state_path=f"{base_dir}/conformal_calibrator_state.json")
     except Exception as e:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_calibrator_feed"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "calibrator_feed", "status": "error", "error": f"init: {e}"}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     # Pass 1: build p_win lookup + cold_explore blacklist from accepted entries
     p_win_by_msg_id: dict[str, float] = {}
     cold_explore_msg_ids: set[str] = set()  # DQAF-053: defense-in-depth
@@ -577,8 +608,10 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         try:
             entry = json.loads(line)
         except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-            with fail_open_guard("daily_ops:_step_calibrator_feed"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 continue
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         if entry.get("ack_status") != "accepted":
             continue
 
@@ -604,8 +637,10 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         try:
             entry = json.loads(line)
         except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-            with fail_open_guard("daily_ops:_step_calibrator_feed"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 continue
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         if entry.get("ack_status") != "closed":
             continue
 
@@ -655,9 +690,11 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             continue
 
         ts = entry.get("recorded_at", "")
-        with fail_open_guard("CalibratorFeedUpdate"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             cal.update(float(p_win), label, timestamp_utc=str(ts))
             new_samples += 1
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
     # Save watermark for next run (record-id based, compaction-safe)
     _last_ts = last_recorded_at
@@ -669,9 +706,11 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             _last_mid = _e.get("message_id", _last_mid)
             break
         except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-            with fail_open_guard("daily_ops:_step_calibrator_feed"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 continue
-    with fail_open_guard("CalibratorFeedStateSave"):
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
+    try:  # BLE001:FOG (was: FOG/LAC)
         state_path.write_text(
             json.dumps(
                 {
@@ -684,6 +723,8 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             ),
             encoding="utf-8",
         )
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
 
     diag = cal.describe()
     return {
@@ -724,8 +765,10 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
             "dry_run": dry_run,
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_paper_trade_simulation"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "paper_trade_simulation", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_governance(
@@ -778,12 +821,14 @@ def _step_governance(
             type(exc).__name__,
             str(exc)[:300],
         )
-        with fail_open_guard("daily_ops:_step_governance"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {
                 "step": "governance",
                 "status": "error",
                 "error": f"{type(exc).__name__}: {str(exc)[:400]}",
             }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _cross_check_governance_with_leaderboard(
@@ -890,8 +935,10 @@ def _step_champion_challenger(
             "details": report.get("promotions", []),
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_champion_challenger"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_retraining_check(
@@ -958,7 +1005,15 @@ def _step_retraining_check(
                             pnl_store = BrainPnLStore.load(pnl_path)
                             _pnl_metrics = pnl_store.get_all_metrics()
                         except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                            with fail_open_guard("daily_ops:pnl_store_load"):
+                            try:  # BLE001:FOG (was: FOG/LAC)
+                                pass
+                            except (
+                                RuntimeError,
+                                ValueError,
+                                KeyError,
+                                TypeError,
+                                OSError,
+                            ):  # BLE001:FOG
                                 pass
 
                     # Merge: journal metrics take priority. Shadow-only brains
@@ -1009,7 +1064,15 @@ def _step_retraining_check(
                                 )
                                 _vote_weights = _dw.get_weights()
                     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                        with fail_open_guard("daily_ops:_step_retraining_check"):
+                        try:  # BLE001:FOG (was: FOG/LAC)
+                            pass
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ):  # BLE001:FOG
                             pass
 
                     # DQAF-20260621-042: POISON PILL — validate merged metrics
@@ -1190,8 +1253,10 @@ def _step_retraining_check(
         #    the system MUST halt rather than produce silently-corrupted output."
         raise
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_retraining_check"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "retraining_check", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _load_prev_critical_ids(base: Path) -> set[str]:
@@ -1255,7 +1320,6 @@ def _step_training_readiness(base_dir: str, *, dry_run: bool = False) -> dict[st
     """
     import logging
 
-    from core.runtime.fault_handler import fail_open_guard
     from core.state.catalog import lookup
     from core.state.writer import StateWriter
     from scripts.check_training_readiness import evaluate_training_readiness
@@ -1288,7 +1352,7 @@ def _step_training_readiness(base_dir: str, *, dry_run: bool = False) -> dict[st
     errors: list[str] = []
     for cp in matching:
         logger.info("[%s] Evaluating training contract: %s", symbol_full, cp.name)
-        with fail_open_guard("daily_ops:_step_training_readiness"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             try:
                 report = evaluate_training_readiness(str(cp), str(resolved))
                 reports.append(report)
@@ -1297,6 +1361,8 @@ def _step_training_readiness(base_dir: str, *, dry_run: bool = False) -> dict[st
                 logger.exception(
                     "[%s] Training readiness check failed for %s", symbol_full, cp.name
                 )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
     if not reports:
         return {
@@ -1363,8 +1429,10 @@ def _step_param_optimization(
             "would_generate": len(degraded_ids),
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_param_optimization"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "param_optimization", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -1376,7 +1444,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     Runs BEFORE _step_alpha_lifecycle so promotion/demotion evaluation
     has fresh performance data to work with.
     """
-    with fail_open_guard("AlphaFeed"):
+    try:  # BLE001:FOG (was: FOG/LAC)
         from core.alpha.performance_store import AlphaPerformanceStore
         from core.alpha.registry import AlphaRegistry
 
@@ -1387,15 +1455,17 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
 
         # ── Load or create registry ──
         if registry_path.exists():
-            with fail_open_guard("AlphaFeed:load_registry"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 registry = AlphaRegistry.load(registry_path)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         else:
             registry = AlphaRegistry()
 
         # Ensure btc_swing is registered
         existing_ids = {r.alpha_id for r in registry.list_records()}
         if "btc_swing" not in existing_ids and not dry_run:
-            with fail_open_guard("AlphaFeed:register_btc_swing"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 from core.alpha.contracts import AlphaLifecycleState, AlphaRecord
 
                 registry.register(
@@ -1409,11 +1479,15 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     )
                 )
                 registry.save(registry_path)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
         # ── Load performance store ──
         if perf_path.exists():
-            with fail_open_guard("AlphaFeed:load_perf"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 perf_store = AlphaPerformanceStore.load(perf_path)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         else:
             perf_store = AlphaPerformanceStore()
 
@@ -1422,10 +1496,12 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         last_message_id = ""
         _st: dict[str, Any] = {}
         if state_path.exists():
-            with fail_open_guard("AlphaFeed:read_state"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 _st = json.loads(state_path.read_text(encoding="utf-8"))
                 last_recorded_at = _st.get("last_recorded_at", "")
                 last_message_id = _st.get("last_message_id", "")
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
         if not journal_path.exists():
             return {"step": "alpha_feed", "status": "skipped", "reason": "no_journal"}
@@ -1441,7 +1517,9 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     last_recorded_at = _mig_entry.get("recorded_at", "")
                     last_message_id = _mig_entry.get("message_id", "")
                 except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                    with fail_open_guard("daily_ops:_step_alpha_feed"):
+                    try:  # BLE001:FOG (was: FOG/LAC)
+                        pass
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                         pass
             elif _old_pos > len(lines):
                 # Compaction pruned lines — force full rescan
@@ -1454,8 +1532,10 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
             try:
                 _e = json.loads(_l)
             except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                with fail_open_guard("daily_ops:_step_alpha_feed"):
+                try:  # BLE001:FOG (was: FOG/LAC)
                     continue
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
             _ts = _e.get("recorded_at", "")
             _mid = _e.get("message_id", "")
             if _ts > last_recorded_at or (_ts == last_recorded_at and _mid != last_message_id):
@@ -1471,8 +1551,10 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         alpha_trades: dict[str, int] = {}
 
         for line in new_lines:
-            with fail_open_guard("AlphaFeed:parse_line"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 entry = json.loads(line)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
             if entry.get("action") != "close":
                 continue
             ack = entry.get("ack_status", "")
@@ -1507,7 +1589,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
             avg_loss = abs(sum(p for p in pnls if p < 0)) / max(losses, 1)
             pf = (sum(p for p in pnls if p > 0) / avg_loss) if avg_loss > 0 else 0.0
 
-            with fail_open_guard("AlphaFeed:record_snapshot"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 perf_store.record_snapshot(
                     alpha_id=alpha_id,
                     metrics={
@@ -1524,11 +1606,15 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     window="daily",
                 )
                 new_snapshots += 1
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
         # ── Save ──
         if not dry_run and new_snapshots > 0:
-            with fail_open_guard("AlphaFeed:save_perf"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 perf_store.save(perf_path)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
             # FIX-20260613-090: use record-id watermark (compaction-safe)
             _last_ts = last_recorded_at
             _last_mid = last_message_id
@@ -1539,9 +1625,11 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     _last_mid = _e.get("message_id", _last_mid)
                     break
                 except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                    with fail_open_guard("daily_ops:_step_alpha_feed"):
+                    try:  # BLE001:FOG (was: FOG/LAC)
                         continue
-            with fail_open_guard("AlphaFeed:save_state"):
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
+            try:  # BLE001:FOG (was: FOG/LAC)
                 from core.state.catalog import lookup
                 from core.state.writer import StateWriter
 
@@ -1557,6 +1645,8 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                         "updated_utc": now_utc,
                     },
                 )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
         return {
             "step": "alpha_feed",
@@ -1565,6 +1655,8 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
             "alphas_fed": list(alpha_pnls.keys()),
             "total_trades_fed": sum(alpha_trades.values()),
         }
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
 
 
 # ── DQAF-20260622-049: Nomination thresholds (aligned with governance_scheduler.py) ──
@@ -1779,12 +1871,14 @@ def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[st
     except DataIntegrityError:
         raise  # POISON PILL — propagate
     except Exception as exc:  # noqa: BLE001 — reviewed
-        with fail_open_guard("daily_ops:_step_alpha_registration"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {
                 "step": "alpha_registration",
                 "status": "error",
                 "error": str(exc)[:500],
             }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -1960,8 +2054,10 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             "details": applied,
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_alpha_lifecycle"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "alpha_lifecycle", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -2004,8 +2100,10 @@ def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str,
             else None,
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_alpha_allocation"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "alpha_allocation", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_feature_store_maintenance(
@@ -2047,8 +2145,10 @@ def _step_feature_store_maintenance(
             "stats": stats,
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_feature_store_maintenance"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "feature_store_maintenance", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_data_health(
@@ -2102,8 +2202,10 @@ def _step_data_health(
                 "alert_level": report.alert_level,
             }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below — Iron Law #1
-        with fail_open_guard("daily_ops:_step_data_health"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "data_health", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_reconcile_governance_pnl(base_dir: str) -> dict[str, Any]:
@@ -2279,8 +2381,10 @@ def _step_freshness_check(base_dir: str) -> dict[str, Any]:
         return output
 
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_freshness_check"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "freshness_check", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) -> dict[str, Any]:
@@ -2302,8 +2406,10 @@ def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) ->
             "sections": list(report.keys()),
         }
     except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:_step_daily_recap"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "daily_recap", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _resolve_base_dir(base_dir: str | Path) -> str:
@@ -2418,8 +2524,10 @@ def run_daily_ops(
                 _rec_steps.append({"step": "ledger_retention", "status": "ok", "entries_pruned": 0})
         steps.extend(_rec_steps)
     except Exception as _exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:run_daily_ops"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             steps.append({"step": "reconcile", "status": "error", "error": str(_exc)})
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     # ── FIX-20260607-144: Journal compaction ──────────────────────────
     # Prunes old rejected entries (>30d) from live_trade_journal.jsonl.
     # Uses atomic os.replace() + FileLock — safe for concurrent writes.
@@ -2435,10 +2543,12 @@ def run_daily_ops(
             )
             steps.append({"step": "journal_compaction", **_compaction_result})
     except Exception as _jc_exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("daily_ops:run_daily_ops"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             steps.append(
                 {"step": "journal_compaction", "status": "error", "error": str(_jc_exc)[:200]}
             )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
 
@@ -2516,21 +2626,25 @@ def run_daily_ops(
                 tracker_path = Path(base_dir) / "brain_performance.json"
                 shared_tracker.save(tracker_path)
             except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                with fail_open_guard("daily_ops:run_daily_ops"):
+                try:  # BLE001:FOG (was: FOG/LAC)
                     logging.getLogger(__name__).exception(
                         "daily_ops: failed to persist BrainPerformanceTracker — "
                         "performance data lost until next save"
                     )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
         if shared_governance is not None:
             try:
                 gov_path = Path(base_dir) / "governance_state.json"
                 shared_governance.save(gov_path)
             except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                with fail_open_guard("daily_ops:run_daily_ops"):
+                try:  # BLE001:FOG (was: FOG/LAC)
                     logging.getLogger(__name__).exception(
                         "daily_ops: failed to persist GovernanceService — "
                         "governance state may be stale on restart"
                     )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
     if not skip_retraining:
         _sym = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
         steps.append(

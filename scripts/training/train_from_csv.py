@@ -304,7 +304,6 @@ def build_barrier_labels_from_csv(
 # V9_FEATURE_NAMES is kept for backward compat; new code should import
 # get_schema_feature_names("v9_institutional_40") from core.features.schemas.registry.
 from core.features.schemas.registry import get_schema_feature_names as _get_schema_feature_names
-from core.runtime.fault_handler import fail_open_guard
 
 V9_FEATURE_NAMES = _get_schema_feature_names("v9_institutional_40")
 
@@ -665,13 +664,12 @@ def main() -> int:
             dynamo=False,
         )
         print(f"  ONNX exported: {onnx_path} ({onnx_path.stat().st_size / 1024:.1f} KB)")
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("train_from_csv:main"):
-            print(f"  ONNX export failed: {exc}")
-            import torch
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        print(f"  ONNX export failed: {exc}")
+        import torch
 
-            torch.save(model.state_dict(), str(output_dir / "model.pt"))
-            print(f"  Saved PyTorch model: {output_dir / 'model.pt'}")
+        torch.save(model.state_dict(), str(output_dir / "model.pt"))
+        print(f"  Saved PyTorch model: {output_dir / 'model.pt'}")
     # ── Save manifest ──
     manifest = {
         "schema_version": "crt_model_manifest.v1",

@@ -24,29 +24,73 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from core.runtime.fault_handler import fail_open_guard
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 ROOT = Path(__file__).resolve().parent.parent
-XAU_FS = ROOT / "data" / "feature_store" / "records" / "symbol=XAUUSDc" / "timeframe=M5" / "features.jsonl"
-BTC_FS = ROOT / "data_btc" / "feature_store" / "records" / "symbol=BTCUSDc" / "timeframe=M5" / "features.jsonl"
+XAU_FS = (
+    ROOT
+    / "data"
+    / "feature_store"
+    / "records"
+    / "symbol=XAUUSDc"
+    / "timeframe=M5"
+    / "features.jsonl"
+)
+BTC_FS = (
+    ROOT
+    / "data_btc"
+    / "feature_store"
+    / "records"
+    / "symbol=BTCUSDc"
+    / "timeframe=M5"
+    / "features.jsonl"
+)
 
 # Feature names (V9 40-dim schema)
 FEATURE_NAMES = [
-    "mid_price", "spread_bps", "log_return_1", "log_return_5", "log_return_25",
-    "realized_vol_5", "realized_vol_25", "volume_ratio", "trade_count_ratio",
-    "bid_ask_imbalance", "orderbook_depth_ratio", "vwap_deviation",
-    "rsi_14", "macd_diff", "bb_position", "atr_ratio",
-    "adx", "plus_di", "minus_di", "hurst_exponent",
-    "D1_return_1", "D1_return_5", "D1_atr_ratio", "D1_rsi",
-    "H1_return_1", "H1_return_5", "H1_atr_ratio", "H1_rsi",
-    "M30_return_1", "M30_atr_ratio", "M30_rsi",
-    "M15_return_1", "M15_atr_ratio", "M15_rsi",
-    "cross_btc_xau_corr", "cross_equity_corr",
-    "tf_hurst_diff", "tf_vol_ratio",
-    "micro_ofi", "micro_cis", "micro_corr",
+    "mid_price",
+    "spread_bps",
+    "log_return_1",
+    "log_return_5",
+    "log_return_25",
+    "realized_vol_5",
+    "realized_vol_25",
+    "volume_ratio",
+    "trade_count_ratio",
+    "bid_ask_imbalance",
+    "orderbook_depth_ratio",
+    "vwap_deviation",
+    "rsi_14",
+    "macd_diff",
+    "bb_position",
+    "atr_ratio",
+    "adx",
+    "plus_di",
+    "minus_di",
+    "hurst_exponent",
+    "D1_return_1",
+    "D1_return_5",
+    "D1_atr_ratio",
+    "D1_rsi",
+    "H1_return_1",
+    "H1_return_5",
+    "H1_atr_ratio",
+    "H1_rsi",
+    "M30_return_1",
+    "M30_atr_ratio",
+    "M30_rsi",
+    "M15_return_1",
+    "M15_atr_ratio",
+    "M15_rsi",
+    "cross_btc_xau_corr",
+    "cross_equity_corr",
+    "tf_hurst_diff",
+    "tf_vol_ratio",
+    "micro_ofi",
+    "micro_cis",
+    "micro_corr",
 ]
 
 
@@ -79,12 +123,14 @@ def _load_features(path: Path, max_samples: int = 30000) -> tuple[np.ndarray, li
 def _ks_test_pvalue(a: np.ndarray, b: np.ndarray) -> float:
     """Kolmogorov-Smirnov test — simplified for large samples."""
     from scipy.stats import ks_2samp
+
     try:
         _, pvalue = ks_2samp(a, b)
         return float(pvalue)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("analyze_feature_shift:_ks_test_pvalue"):
-            return 0.0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return 0.0
+
+
 def _wasserstein(a: np.ndarray, b: np.ndarray) -> float:
     """1D Wasserstein distance (Earth Mover's Distance)."""
     a_sorted = np.sort(a)
@@ -106,7 +152,7 @@ def _hurst_exponent(ts: np.ndarray, max_lag: int = 100) -> float:
             continue
         rs = []
         for i in range(segments):
-            segment = ts[i * lag:(i + 1) * lag]
+            segment = ts[i * lag : (i + 1) * lag]
             if len(segment) < 10:
                 continue
             mean = np.mean(segment)
@@ -181,7 +227,9 @@ def main() -> int:
         if a_std < 1e-10 and b_std < 1e-10:
             classification = "GREEN"
             green += 1
-            per_feature.append({"name": feature_names[i][:30], "class": classification, "ks_p": 1.0, "ws": 0.0})
+            per_feature.append(
+                {"name": feature_names[i][:30], "class": classification, "ks_p": 1.0, "ws": 0.0}
+            )
             continue
 
         ks_p = _ks_test_pvalue(a_clean[:1000], b_clean[:1000])
@@ -212,9 +260,9 @@ def main() -> int:
     ret_idx = None
     hurst_idx = None
     for i, name in enumerate(feature_names):
-        if 'M5_Ret_1' in name and ret_idx is None:
+        if "M5_Ret_1" in name and ret_idx is None:
             ret_idx = i
-        if 'M5_Hurst' in name or 'hurst' in name.lower():
+        if "M5_Hurst" in name or "hurst" in name.lower():
             hurst_idx = i
     if ret_idx is None:
         ret_idx = 0

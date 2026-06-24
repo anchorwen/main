@@ -49,7 +49,6 @@ from core.features.schemas.microstructure_schema import build_microstructure_sch
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 from core.features.store_contracts import FeatureRecord
 from core.feedback.brain_pnl_ledger import BrainPnLStore
-from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "shadow_pnl_loop.v1"
 
@@ -96,9 +95,8 @@ def _build_brains(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             )
             print(f"  [shadow_pnl] loaded {bid} [{entry.get('brain_type', '?')}]", flush=True)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("shadow_pnl_loop:_build_brains"):
-                print(f"  [shadow_pnl] SKIP {bid}: {exc}", flush=True)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            print(f"  [shadow_pnl] SKIP {bid}: {exc}", flush=True)
     return brains
 
 
@@ -115,9 +113,8 @@ def _get_prices(mt5: Any, symbol: str) -> tuple[float, float, float, float] | No
         mid = (bid + ask) / 2.0
         spread = ask - bid
         return (bid, ask, mid, spread)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("shadow_pnl_loop:_get_prices"):
-            return None
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return None
 
 
 def _run_brain_inference(
@@ -143,16 +140,15 @@ def _run_brain_inference(
             "down_probability": round(float(pred.get("down_probability", 0.5)), 6),
             "confidence": round(float(pred.get("confidence", 0.0)), 6),
         }
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("shadow_pnl_loop:_run_brain_inference"):
-            elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-            return {
-                "brain_id": brain_id,
-                "brain_type": brain_type,
-                "status": "error",
-                "runtime_ms": elapsed_ms,
-                "error": str(exc)[:500],
-            }
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+        return {
+            "brain_id": brain_id,
+            "brain_type": brain_type,
+            "status": "error",
+            "runtime_ms": elapsed_ms,
+            "error": str(exc)[:500],
+        }
 
 
 def _compare_directions(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -206,9 +202,8 @@ def _write_decision_records(
             symbol=symbol,
             store=store,
         )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("shadow_pnl_loop:_write_decision_records"):
-            return {"written": False, "error": str(exc)[:500]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"written": False, "error": str(exc)[:500]}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -239,10 +234,9 @@ def main(argv: list[str] | None = None) -> int:
     # ── MT5 ──
     try:
         import MetaTrader5 as mt5_mod
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("shadow_pnl_loop:main"):
-            print(json.dumps({"error": "MetaTrader5 package required"}), flush=True)
-            return 2
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        print(json.dumps({"error": "MetaTrader5 package required"}), flush=True)
+        return 2
     mt5 = mt5_mod
     if not mt5.initialize(path=args.mt5_terminal_path):
         print(json.dumps({"error": "mt5_initialize_failed", "detail": str(mt5.last_error())}))
@@ -292,9 +286,8 @@ def main(argv: list[str] | None = None) -> int:
         if rn_path.exists():
             try:  # noqa: SIM105
                 rolling_norm.load_state(rn_path)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("shadow_pnl_loop:main"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     # ── Load brains ──
     print(f"[shadow_pnl] Loading brains from {args.brains_dir}...", flush=True)
     entries = _load_brain_entries(args.brains_dir)
@@ -330,9 +323,8 @@ def main(argv: list[str] | None = None) -> int:
                 _stream_path, event_writer=_shadow_event_writer, event_source="shadow"
             )
             _loaded_from = "event_stream"
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("shadow_pnl_loop:main"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     if pnl_ledger is None:
         pnl_path = (
             Path(args.pnl_ledger_path)
@@ -345,9 +337,8 @@ def main(argv: list[str] | None = None) -> int:
                     pnl_path, event_writer=_shadow_event_writer, event_source="shadow"
                 )
                 _loaded_from = "old_json"
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("shadow_pnl_loop:main"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     if pnl_ledger is None:
         pnl_ledger = BrainPnLStore(
             window_size=5000, event_writer=_shadow_event_writer, event_source="shadow"
@@ -391,9 +382,8 @@ def main(argv: list[str] | None = None) -> int:
                     f"{sorted(retired_ids)}",
                     flush=True,
                 )
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("shadow_pnl_loop:main"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     # ── Regime detector ──
     from core.risk.regime_detector import RegimeDetector
 
@@ -416,9 +406,8 @@ def main(argv: list[str] | None = None) -> int:
                 atr_val = float(np.mean(tr))
                 if atr_val > 0.01:
                     regime_detector.update(atr_val)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("shadow_pnl_loop:main"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     # ── Cycle state ──
     cycle_count = 0
     last_save_cycle = 0
@@ -475,9 +464,8 @@ def main(argv: list[str] | None = None) -> int:
                                 ),
                                 flush=True,
                             )
-                    except Exception:  # BLE001:FOG
-                        with fail_open_guard("shadow_pnl_loop:main"):
-                            pass
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
                 # ── 3. Compute features ──
                 feature_source = v9_computer.compute_all()
                 raw_features = np.array(
@@ -496,9 +484,8 @@ def main(argv: list[str] | None = None) -> int:
                 micro_sequences: dict[str, np.ndarray] = {}
                 try:  # noqa: SIM105
                     micro_sequences = micro_computer.compute_all_sequences(32)
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("shadow_pnl_loop:main"):
-                        pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
                 # ── 4. Persist features to store ──
                 try:
                     from datetime import UTC
@@ -534,9 +521,8 @@ def main(argv: list[str] | None = None) -> int:
                         )
                     if _records:
                         feature_store.write_records(_records)
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("shadow_pnl_loop:main"):
-                        pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
                 # ── 5. Run all brains ──
                 results: list[dict[str, Any]] = []
                 for b in brains:
@@ -576,44 +562,50 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     "confidence": round(float(pred.get("confidence", 0.0)), 6),
                                 }
-                            except Exception:  # BLE001:FOG
-                                with fail_open_guard("shadow_pnl_loop:main"):
-                                    # Fallback: zero-padded (32,9) sequence to match 288-dim model
-                                    fallback_seq = np.zeros((32, 9), dtype=np.float32)
-                                    try:
-                                        prop = b["adapter"].run(None, fallback_seq)
-                                        pred = (
-                                            prop.prediction if hasattr(prop, "prediction") else {}
+                            except (
+                                RuntimeError,
+                                ValueError,
+                                KeyError,
+                                TypeError,
+                                OSError,
+                            ):  # BLE001:FOG
+                                # Fallback: zero-padded (32,9) sequence to match 288-dim model
+                                fallback_seq = np.zeros((32, 9), dtype=np.float32)
+                                try:
+                                    prop = b["adapter"].run(None, fallback_seq)
+                                    pred = prop.prediction if hasattr(prop, "prediction") else {}
+                                    result = {
+                                        "brain_id": b["brain_id"],
+                                        "brain_type": btype,
+                                        "status": "fallback",
+                                        "runtime_ms": round(
+                                            float(getattr(prop.health, "runtime_ms", 0)), 2
                                         )
-                                        result = {
-                                            "brain_id": b["brain_id"],
-                                            "brain_type": btype,
-                                            "status": "fallback",
-                                            "runtime_ms": round(
-                                                float(getattr(prop.health, "runtime_ms", 0)), 2
-                                            )
-                                            if hasattr(prop, "health")
-                                            else 0,
-                                            "direction_bias": pred.get("direction_bias", "neutral"),
-                                            "up_probability": round(
-                                                float(pred.get("up_probability", 0.5)), 6
-                                            ),
-                                            "down_probability": round(
-                                                float(pred.get("down_probability", 0.5)), 6
-                                            ),
-                                            "confidence": round(
-                                                float(pred.get("confidence", 0.0)), 6
-                                            ),
-                                        }
-                                    except Exception:  # BLE001:FOG
-                                        with fail_open_guard("shadow_pnl_loop:main"):
-                                            result = {
-                                                "brain_id": b["brain_id"],
-                                                "brain_type": btype,
-                                                "status": "error",
-                                                "runtime_ms": 0,
-                                                "error": "adapter.run failed even with fallback sequence",
-                                            }
+                                        if hasattr(prop, "health")
+                                        else 0,
+                                        "direction_bias": pred.get("direction_bias", "neutral"),
+                                        "up_probability": round(
+                                            float(pred.get("up_probability", 0.5)), 6
+                                        ),
+                                        "down_probability": round(
+                                            float(pred.get("down_probability", 0.5)), 6
+                                        ),
+                                        "confidence": round(float(pred.get("confidence", 0.0)), 6),
+                                    }
+                                except (
+                                    RuntimeError,
+                                    ValueError,
+                                    KeyError,
+                                    TypeError,
+                                    OSError,
+                                ):  # BLE001:FOG
+                                    result = {
+                                        "brain_id": b["brain_id"],
+                                        "brain_type": btype,
+                                        "status": "error",
+                                        "runtime_ms": 0,
+                                        "error": "adapter.run failed even with fallback sequence",
+                                    }
                         else:
                             # Cold start: zero-padded sequence for correct dimensionality
                             fallback_seq = np.zeros((32, 9), dtype=np.float32)
@@ -638,15 +630,20 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     "confidence": round(float(pred.get("confidence", 0.0)), 6),
                                 }
-                            except Exception:  # BLE001:FOG
-                                with fail_open_guard("shadow_pnl_loop:main"):
-                                    result = {
-                                        "brain_id": b["brain_id"],
-                                        "brain_type": btype,
-                                        "status": "error",
-                                        "runtime_ms": 0,
-                                        "error": "seq unavailable and adapter.run failed",
-                                    }
+                            except (
+                                RuntimeError,
+                                ValueError,
+                                KeyError,
+                                TypeError,
+                                OSError,
+                            ):  # BLE001:FOG
+                                result = {
+                                    "brain_id": b["brain_id"],
+                                    "brain_type": btype,
+                                    "status": "error",
+                                    "runtime_ms": 0,
+                                    "error": "seq unavailable and adapter.run failed",
+                                }
                     else:
                         result = _run_brain_inference(
                             b["adapter"],
@@ -681,9 +678,14 @@ def main(argv: list[str] | None = None) -> int:
                                 entry_spread=live_spread,
                                 entry_slippage=0.10,
                             )
-                        except Exception:  # BLE001:FOG
-                            with fail_open_guard("shadow_pnl_loop:main"):
-                                pass
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ):  # BLE001:FOG
+                            pass
                 # ── 6. Compute consensus ──
                 consensus = _compare_directions(results)
 
@@ -743,28 +745,32 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             flush=True,
                         )
-                    except Exception as exc:  # BLE001:FOG
-                        with fail_open_guard("shadow_pnl_loop:main"):
-                            print(
-                                json.dumps(
-                                    {"event": "save_error", "error": str(exc)}, ensure_ascii=False
-                                ),
-                                flush=True,
-                            )
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("shadow_pnl_loop:main"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "cycle_error",
-                                "time": _utc_iso(),
-                                "cycle": cycle_count,
-                                "error": str(exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                    except (
+                        RuntimeError,
+                        ValueError,
+                        KeyError,
+                        TypeError,
+                        OSError,
+                    ) as exc:  # BLE001:FOG
+                        print(
+                            json.dumps(
+                                {"event": "save_error", "error": str(exc)}, ensure_ascii=False
+                            ),
+                            flush=True,
+                        )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(
+                    json.dumps(
+                        {
+                            "event": "cycle_error",
+                            "time": _utc_iso(),
+                            "cycle": cycle_count,
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
             if args.once:
                 break
 
@@ -792,12 +798,11 @@ def main(argv: list[str] | None = None) -> int:
         if rolling_norm is not None:
             try:  # noqa: SIM105
                 rolling_norm.save_state(base_dir / "rolling_norm_state.json")
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("shadow_pnl_loop:main"):
-                    logging.getLogger(__name__).warning(
-                        "shadow_pnl_loop: failed to persist rolling normalizer state — "
-                        "feature normalization may reset on restart"
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                logging.getLogger(__name__).warning(
+                    "shadow_pnl_loop: failed to persist rolling normalizer state — "
+                    "feature normalization may reset on restart"
+                )
         mt5.shutdown()
 
     return 0

@@ -26,8 +26,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="normalize_journal_pnl")
@@ -53,7 +51,9 @@ def main() -> int:
             except json.JSONDecodeError:
                 entries.append({"_raw": line})
 
-    close_indices = [i for i, e in enumerate(entries) if e.get("action") == "close" and not e.get("_raw")]
+    close_indices = [
+        i for i, e in enumerate(entries) if e.get("action") == "close" and not e.get("_raw")
+    ]
     print(f"Journal: {jp} ({len(entries)} entries, {len(close_indices)} closes)")
 
     # ── Connect MT5 ──
@@ -76,11 +76,12 @@ def main() -> int:
                 for d in deals:
                     if d.position_id and d.profit != 0:
                         deals_by_pos[d.position_id] = d
-                print(f"MT5: {len(deals)} deals loaded ({days}d range), {len(deals_by_pos)} with profit")
+                print(
+                    f"MT5: {len(deals)} deals loaded ({days}d range), {len(deals_by_pos)} with profit"
+                )
                 break
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("normalize_journal_pnl:main"):
-                continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            continue
     if not deals_by_pos:
         print("[WARN] No MT5 deals found — nothing to normalize")
         mt5.shutdown()
@@ -116,13 +117,15 @@ def main() -> int:
             e["_pnl_normalized"] = True
             e["_pnl_old"] = old_pnl
             fixed += 1
-            details.append({
-                "ticket": tkt,
-                "label": e.get("label", "?"),
-                "old_pnl": old_pnl,
-                "new_pnl": mt5_profit,
-                "ratio": round(mt5_profit / max(abs(old_pnl), 0.0001), 1),
-            })
+            details.append(
+                {
+                    "ticket": tkt,
+                    "label": e.get("label", "?"),
+                    "old_pnl": old_pnl,
+                    "new_pnl": mt5_profit,
+                    "ratio": round(mt5_profit / max(abs(old_pnl), 0.0001), 1),
+                }
+            )
 
     mt5.shutdown()
 
@@ -151,7 +154,9 @@ def main() -> int:
         if details[:5]:
             print("Sample fixes:")
             for d in details[:5]:
-                print(f"  ticket={d['ticket']} {d['label']}: {d['old_pnl']} -> {d['new_pnl']} ({d['ratio']:.0f}x)")
+                print(
+                    f"  ticket={d['ticket']} {d['label']}: {d['old_pnl']} -> {d['new_pnl']} ({d['ratio']:.0f}x)"
+                )
         return 0
 
     if fixed == 0:

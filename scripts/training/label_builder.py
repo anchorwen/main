@@ -38,7 +38,6 @@ import numpy as np
 
 from core.contracts.training.label_contract import BarrierResult, LabelContract
 from core.data.ticket_resolver import resolve as resolve_ticket
-from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "training_label.v1"
 
@@ -230,9 +229,11 @@ def _load_ohlc_cached(
         _OHLC_CACHE[cache_key] = (opens, highs, lows, closes, timestamps)
         return _OHLC_CACHE[cache_key]
     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        with fail_open_guard("label_builder:_load_ohlc_cached"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             _OHLC_CACHE[cache_key] = None
             return None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
 
 def _infer_symbol_from_journal_path(journal_path: Path) -> str:
@@ -348,8 +349,16 @@ def resolve_brain_contracts(
                         result[brain_id] = LabelContract.from_file(_contract_path)
                         continue
                     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-                        with fail_open_guard("label_builder:resolve_brain_contracts"):
+                        try:  # BLE001:FOG (was: FOG/LAC)
                             pass  # fall through to next priority
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ):  # BLE001:FOG
+                            pass
 
             # Priority 2: dict with inline sl_atr_mult / tp_atr_mult
             if isinstance(label_contract, dict):

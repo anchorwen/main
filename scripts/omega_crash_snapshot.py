@@ -11,10 +11,9 @@ Usage (in live_intent_loop / live_launcher crash handler)::
     from scripts.omega_crash_snapshot import capture_crash_snapshot
     try:
         main_loop()
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("omega_crash_snapshot:L14"):
-            capture_crash_snapshot("data", "live_intent_loop", sys.exc_info())
-            raise
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        capture_crash_snapshot("data", "live_intent_loop", sys.exc_info())
+        raise
 """
 
 from __future__ import annotations
@@ -25,8 +24,6 @@ import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-from core.runtime.fault_handler import fail_open_guard
 
 
 def _utc_iso() -> str:
@@ -95,10 +92,11 @@ def capture_crash_snapshot(
                 # Truncate to last 4KB
                 if len(content) > 4096:
                     content = "...(truncated)\n" + content[-4096:]
-                state_snapshots[name] = json.loads(content) if content.strip().startswith("{") else content[:2000]
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("omega_crash_snapshot:capture_crash_snapshot"):
-                    state_snapshots[name] = "(unreadable)"
+                state_snapshots[name] = (
+                    json.loads(content) if content.strip().startswith("{") else content[:2000]
+                )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                state_snapshots[name] = "(unreadable)"
     snapshot["state_snapshots"] = state_snapshots
 
     # ── Extra context ──
@@ -107,7 +105,9 @@ def capture_crash_snapshot(
 
     # ── Write atomically ──
     tmp_path = snapshot_path.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    tmp_path.write_text(
+        json.dumps(snapshot, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
     os.replace(str(tmp_path), str(snapshot_path))
 
     print(f"[Ω-CRASH] Evidence snapshot saved: {snapshot_path}", flush=True)
@@ -136,7 +136,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ω Crash Forensics")
     parser.add_argument("--base-dir", nargs="+", default=["data", "data_btc"])
     parser.add_argument("--check", action="store_true", help="List pending crash snapshots")
-    parser.add_argument("--auto-dqaf", action="store_true", help="Auto-run dqaf_collect for pending crashes")
+    parser.add_argument(
+        "--auto-dqaf", action="store_true", help="Auto-run dqaf_collect for pending crashes"
+    )
     args = parser.parse_args()
 
     for base_dir in args.base_dir:

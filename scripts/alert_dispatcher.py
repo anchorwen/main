@@ -31,8 +31,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 # ── Cooling state (persisted to disk for cross-invocation memory) ──
 COOLING_FILE = Path(__file__).resolve().parent.parent / "data" / "state" / "alert_cooling.json"
 COOLING_WINDOW = 3  # consecutive alerts before escalation
@@ -49,7 +47,9 @@ class AlertCard:
     checks: dict[str, str] = field(default_factory=dict)  # check_name -> severity
     details: dict[str, Any] = field(default_factory=dict)  # extra context
     affected_consumers: list[str] | None = None  # DLR-001: consumers impacted by this alert
-    timestamp: str = field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None).isoformat())
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None).isoformat()
+    )
 
 
 # ── Sanitization ──
@@ -107,7 +107,10 @@ def _check_cooling(source: str, severity: str, check_key: str) -> tuple[bool, st
     elapsed_since_last = now - entry.get("last_sent_at", 0)
     if elapsed_since_last < COOLING_ESCALATION_SEC:
         _save_cooling_state(state)
-        return True, f"cooling: {entry['count']} consecutive, next allowed in {COOLING_ESCALATION_SEC - elapsed_since_last:.0f}s"
+        return (
+            True,
+            f"cooling: {entry['count']} consecutive, next allowed in {COOLING_ESCALATION_SEC - elapsed_since_last:.0f}s",
+        )
 
     entry["last_sent_at"] = now
     state[key] = entry
@@ -131,9 +134,8 @@ def _get_webhook_url() -> str | None:
                 for line in f:
                     if "dingtalk_webhook_url:" in line:
                         return line.split(":", 1)[1].strip()
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("alert_dispatcher:_get_webhook_url"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     return None
 
 
@@ -196,16 +198,19 @@ def dispatch_alert(card: AlertCard, *, dry_run: bool = False) -> bool:
         print(markdown[:500])
         return True
 
-    payload = json.dumps({
-        "msgtype": "markdown",
-        "markdown": {"title": f"[{card.source}] {card.title}", "text": markdown},
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "msgtype": "markdown",
+            "markdown": {"title": f"[{card.source}] {card.title}", "text": markdown},
+        }
+    ).encode("utf-8")
 
     try:
-        req = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            webhook, data=payload, headers={"Content-Type": "application/json"}
+        )
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             return result.get("errcode") == 0
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("alert_dispatcher:dispatch_alert"):
-            return False
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return False

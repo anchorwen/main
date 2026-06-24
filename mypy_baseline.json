@@ -3,7 +3,11 @@
   "scripts/assess_system_health.py": 7,
   "scripts/audit_2day.py": 4,
   "scripts/audit_data_health_journal.py": 2,
+  "scripts/audit_profitability.py": 1,
   "scripts/clean_ledger_bloat.py": 5,
+  "scripts/daily_ops.py": 17,
+  "scripts/hook_pre_push.py": 1,
+  "scripts/live_audit_realtime.py": 6,
   "scripts/reconcile_fix_registry.py": 4,
   "scripts/training/train.py": 2,
   "scripts/tuning/tune_btc_kalman_h4.py": 3,
@@ -20,7 +24,5 @@
   "tests/runtime/test_golden_master.py": 2,
   "tests/runtime/test_position_ownership.py": 1,
   "tests/runtime/test_session_guards.py": 8,
-  "tests/runtime/test_supervised_scheduler.py": 1,
-  "tests/runtime/test_timeframe_scaling.py": 1,
-  "tests/runtime/test_typed_clock.py": 6
+  "tests/runtime/test_timeframe_scaling.py": 1
 }

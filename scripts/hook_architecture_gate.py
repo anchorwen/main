@@ -41,8 +41,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 ROOT = Path(__file__).resolve().parents[1]
 
 # ── Regex patterns (tolerant of whitespace/case variations) ────────────────
@@ -391,7 +389,9 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception:  # noqa: BLE001
-        with fail_open_guard("hook_architecture_gate:main"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             # Non-blocking on script failure — don't block dev workflow
             print("[Ω-ARCH-GATE] Internal error — gate bypassed (fail-open).")
             sys.exit(0)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass

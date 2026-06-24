@@ -67,6 +67,7 @@ class WALConfig:
     rotate_on_size_mb: int | None = DEFAULT_ROTATION_SIZE_MB
     rotate_on_entries: int | None = DEFAULT_ROTATION_ENTRIES
     archive_dir: Path | None = None  # Directory for rotated segment files
+    disk_quota_mb: int | None = None  # UGR-A10: hard quota; reject append if exceeded
 
 
 @dataclass(slots=True)
@@ -210,6 +211,33 @@ class WriteAheadLog:
     def __iter__(self) -> Iterator[WALRecord]:
         """Iterate over all records in order."""
         return self._scan()
+
+    # ── Quota (UGR-A10) ─────────────────────────────────────────────────
+
+    @property
+    def size_mb(self) -> float:
+        """Current WAL file size in megabytes."""
+        if not self._config.path.exists():
+            return 0.0
+        return self._config.path.stat().st_size / (1024 * 1024)
+
+    def check_quota(self) -> tuple[bool, str]:
+        """Check whether the WAL is within its disk quota.
+
+        Returns:
+            (True, "") if within quota or no quota configured.
+            (False, reason) if quota exceeded.
+        """
+        quota_mb = self._config.disk_quota_mb
+        if quota_mb is None:
+            return True, ""
+        current_mb = self.size_mb
+        if current_mb >= quota_mb:
+            return False, (
+                f"WAL disk quota exceeded: {current_mb:.1f} MiB "
+                f"(limit: {quota_mb} MiB) at {self._config.path}"
+            )
+        return True, ""
 
     # ── Integrity ───────────────────────────────────────────────────────
 

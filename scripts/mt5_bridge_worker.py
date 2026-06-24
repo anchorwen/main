@@ -28,8 +28,6 @@ from core.runtime.fault_handler import (
     _MT5_TIMEOUT_SENTINEL,
     FaultLevel,
     FaultTolerantContext,
-    fail_open_guard,
-    log_and_continue,
     mt5_call_with_timeout,
 )
 
@@ -343,20 +341,19 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 ),
                 flush=True,
             )
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("mt5_bridge_worker:_append_journal"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "journal_overflow_failed",
-                            "message_id": record.get("message_id", ""),
-                            "overflow_path": str(overflow_path),
-                            "error": "overflow write failed — journal entry LOST",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "journal_overflow_failed",
+                        "message_id": record.get("message_id", ""),
+                        "overflow_path": str(overflow_path),
+                        "error": "overflow write failed — journal entry LOST",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         return
     try:
         mid = record.get("message_id", "")
@@ -365,9 +362,8 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 for line in journal_path.read_text(encoding="utf-8").splitlines():
                     if mid in line:
                         return  # duplicate, skip
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("mt5_bridge_worker:_append_journal"):
-                    pass  # journal dedup is best-effort
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass  # journal dedup is best-effort
         with journal_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     finally:
@@ -756,9 +752,8 @@ def _mt5_close_position(
                     _deal_reason = getattr(last_exit, "reason", -1)
                     if _deal_reason is not None and int(_deal_reason) >= 0:
                         detail["deal_reason"] = int(_deal_reason)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("mt5_bridge_worker:_mt5_close_position"):
-                pass  # Non-blocking: estimated PnL survives as fallback
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass  # Non-blocking: estimated PnL survives as fallback
         # 陷阱二: Partial close creates new ticket — capture via identifier
         if close_vol < pos_vol - 1e-9:
             for _ in range(5):
@@ -985,10 +980,12 @@ def process_one(
         detail = {**detail, "reason": _comment}
     _magic = order_magic
     _strategy = ""
-    with log_and_continue(component="Bridge:magic_resolve"):
+    try:  # BLE001:FOG (was: FOG/LAC)
         from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
         _strategy = MAGIC_TO_STRATEGY.get(_magic, "")
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     _open_msg_id = msg_payload.get("open_message_id", "")
     position_ticket = detail.get("order") or coerce_position_ticket(msg_payload)
     # ── FIX-20260612-004: Prefer actual fill PnL over mid-price estimate ──
@@ -1055,9 +1052,8 @@ def _check_mt5_heartbeat(mt5: Any) -> bool:
     try:
         info = mt5.terminal_info()
         return info is not None
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("mt5_bridge_worker:_check_mt5_heartbeat"):
-            return False
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return False
 
 
 def _reconnect_mt5(mt5_module: Any, terminal_path: str, *, symbol: str = "XAUUSDc") -> bool:
@@ -1079,8 +1075,10 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str, *, symbol: str = "XAUUSD
             flush=True,
         )
         time.sleep(delay + random.uniform(0, 1.0))  # jitter: break rate-limit sync
-        with log_and_continue(component="Bridge:shutdown"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             mt5_module.shutdown()
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
         try:
             if mt5_module.initialize(path=terminal_path):
                 print(
@@ -1095,12 +1093,13 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str, *, symbol: str = "XAUUSD
                     flush=True,
                 )
                 # Re-select symbol after reconnect (config-driven, not hardcoded)
-                with log_and_continue(component="Bridge:symbol_select"):
+                try:  # BLE001:FOG (was: FOG/LAC)
                     mt5_module.symbol_select(symbol, True)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
                 return True
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("mt5_bridge_worker:_reconnect_mt5"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     return False
 
 
@@ -1123,9 +1122,8 @@ def run_worker(args: argparse.Namespace) -> int:
                 print(f"[bridge] MT5 initialized: {terminal_path}", flush=True)
             else:
                 print(f"[bridge] WARN: MT5 init failed: {_mt5.last_error()}", flush=True)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("mt5_bridge_worker:run_worker"):
-                print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
     health_path = (
         Path(args.health_path)
         if args.health_path
@@ -1167,9 +1165,8 @@ def run_worker(args: argparse.Namespace) -> int:
                                 ask=float(getattr(_t, "ask", 0) or 0),
                                 volume=float(getattr(_t, "volume", 0) or 0),
                             )
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("mt5_bridge_worker:_ofi_poller"):
-                        pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
                 _ev.wait(1.0)
 
         _thr2.Thread(target=_ofi_poller, daemon=True, name="ofi-tick-poller").start()
@@ -1196,15 +1193,20 @@ def run_worker(args: argparse.Namespace) -> int:
                             mt5=mt5,
                         )
                     )
-                except Exception as exc:  # BLE001:FOG
-                    with fail_open_guard("mt5_bridge_worker:_ofi_poller"):
-                        processed.append(
-                            {
-                                "message_id": path.stem,
-                                "ack_status": "error",
-                                "reason": f"{type(exc).__name__}: {str(exc)[:200]}",
-                            }
-                        )
+                except (
+                    RuntimeError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                    OSError,
+                ) as exc:  # BLE001:FOG
+                    processed.append(
+                        {
+                            "message_id": path.stem,
+                            "ack_status": "error",
+                            "reason": f"{type(exc).__name__}: {str(exc)[:200]}",
+                        }
+                    )
             if processed:
                 print(json.dumps({"processed": processed}, ensure_ascii=False, default=str))
 
@@ -1311,9 +1313,11 @@ def run_worker(args: argparse.Namespace) -> int:
             time.sleep(args.poll_seconds)
     finally:
         if mt5 is not None:
-            with log_and_continue(component="Bridge:final_shutdown"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 mt5.shutdown()
                 print("[bridge] MT5 shutdown", flush=True)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1401,7 +1405,7 @@ def _write_zmq_journal_entry(
     _FALLBACK_TIMEOUT = 3.0  # seconds — shorter than default since this is a cold backup
     if not _strategy and mt5 is not None and position_ticket is not None:
         _fallback_magic: int | None = None
-        with log_and_continue(component="DQAF058:mt5_magic_fallback"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             # Tier 1: live position lookup (timeout-guarded)
             _live_positions = mt5_call_with_timeout(
                 mt5.positions_get,
@@ -1453,6 +1457,8 @@ def _write_zmq_journal_entry(
                         ),
                         flush=True,
                     )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     _label = _derive_label(action, msg_payload, detail) if detail else None
     _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
     _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
@@ -1596,9 +1602,8 @@ def run_zmq_worker(
                                 ask=float(getattr(_t, "ask", 0) or 0),
                                 volume=float(getattr(_t, "volume", 0) or 0),
                             )
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("mt5_bridge_worker:_ofi_poller_zmq"):
-                        pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
                 _ev.wait(1.0)
 
         _thr3.Thread(target=_ofi_poller_zmq, daemon=True, name="ofi-tick-poller-zmq").start()
@@ -1701,31 +1706,34 @@ def run_zmq_worker(
                             # ── DQAF-20260621-034 Phase 1: Persist + track processed ID ──
                             _processed_ids.add(msg_id)
                             _persist_processed_id(_wal_processed_path, msg_id)
-                        except Exception as exc:  # BLE001:FOG
-                            with fail_open_guard("mt5_bridge_worker:_ofi_poller_zmq"):
-                                _zmq_send_ack(
-                                    pub,
-                                    msg_id,
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ) as exc:  # BLE001:FOG
+                            _zmq_send_ack(
+                                pub,
+                                msg_id,
+                                {
+                                    "ack_status": "error",
+                                    "detail": {"reason": f"{type(exc).__name__}: {str(exc)[:200]}"},
+                                    "received_at": _utc_now(),
+                                },
+                            )
+                            print(
+                                json.dumps(
                                     {
-                                        "ack_status": "error",
-                                        "detail": {
-                                            "reason": f"{type(exc).__name__}: {str(exc)[:200]}"
-                                        },
-                                        "received_at": _utc_now(),
+                                        "zmq_error": {
+                                            "message_id": msg_id,
+                                            "error": str(exc)[:200],
+                                        }
                                     },
-                                )
-                                print(
-                                    json.dumps(
-                                        {
-                                            "zmq_error": {
-                                                "message_id": msg_id,
-                                                "error": str(exc)[:200],
-                                            }
-                                        },
-                                        ensure_ascii=False,
-                                    ),
-                                    flush=True,
-                                )
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
             # ── Phase 3: File outbox fallback — 5s slow poll ─────────────
             # Picks up orders that were WAL-persisted to the file outbox but
             # never arrived via ZMQ (crash, breaker OPEN, network partition).
@@ -1813,20 +1821,25 @@ def run_zmq_worker(
                                 ),
                                 flush=True,
                             )
-                        except Exception as _f_exc:  # BLE001:FOG (Sev 4, Phase 3b)
-                            with fail_open_guard("mt5_bridge_worker:_ofi_poller_zmq"):
-                                print(
-                                    json.dumps(
-                                        {
-                                            "file_fallback_error": {
-                                                "message_id": _f_msg_id,
-                                                "error": str(_f_exc)[:200],
-                                            }
-                                        },
-                                        ensure_ascii=False,
-                                    ),
-                                    flush=True,
-                                )
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ) as _f_exc:  # BLE001:FOG
+                            print(
+                                json.dumps(
+                                    {
+                                        "file_fallback_error": {
+                                            "message_id": _f_msg_id,
+                                            "error": str(_f_exc)[:200],
+                                        }
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
             # ── DQAF-20260621-034 Phase 1: Periodic WAL truncation ─────
             if _now - _last_wal_truncate > 600:  # every 10 minutes
                 _truncate_processed_wal(_wal_processed_path)
@@ -1911,13 +1924,17 @@ def run_zmq_worker(
                 return 0
 
     finally:
-        with log_and_continue(component="ZMQBridge:cleanup"):
+        try:  # BLE001:FOG (was: FOG/LAC)
             pull.close()
             pub.close()
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
         if mt5 is not None:
-            with log_and_continue(component="ZMQBridge:mt5_shutdown"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 mt5.shutdown()
                 print("[zmq_bridge] MT5 shutdown", flush=True)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1949,9 +1966,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"[zmq_bridge] MT5 initialized: {terminal_path}", flush=True)
                 else:
                     print(f"[zmq_bridge] WARN: MT5 init failed: {_mt5.last_error()}", flush=True)
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("mt5_bridge_worker:main"):
-                    print(f"[zmq_bridge] WARN: MT5 unavailable: {exc}", flush=True)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                print(f"[zmq_bridge] WARN: MT5 unavailable: {exc}", flush=True)
         health_path = (
             Path(args.health_path)
             if args.health_path

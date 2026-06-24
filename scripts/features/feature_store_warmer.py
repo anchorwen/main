@@ -23,7 +23,6 @@ import pandas as pd
 from core.features.local_feature_store import LocalFeatureStore
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 from core.features.store_contracts import FeatureRecord, FeatureSchema
-from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_NAME = "v9_institutional_40"
 SCHEMA_VERSION_STORE = "1.0.0"
@@ -251,9 +250,8 @@ def warm_store(
     )
     try:  # noqa: SIM105
         store.register_schema(schema)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("feature_store_warmer:warm_store"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     # Generate time index (M5 bars from CSV start)
     base_time = datetime(2026, 1, 1, 0, 0, tzinfo=UTC).replace(tzinfo=None)
     time_col = None
@@ -268,9 +266,8 @@ def warm_store(
                 base_time = ts.to_pydatetime()
             else:
                 base_time = ts
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("feature_store_warmer:warm_store"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     # Pre-build resampled OHLC for each timeframe
     tf_factors = {"M5": 1, "M15": 3, "M30": 6, "H1": 12}
     tf_dfs = {label: _resample_ohlc(df, factor) for label, factor in tf_factors.items()}
@@ -296,9 +293,8 @@ def warm_store(
     if time_col and time_col in df.columns:
         try:
             timestamps = pd.to_datetime(df[time_col]).to_list()
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("feature_store_warmer:warm_store"):
-                timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n_rows)]
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n_rows)]
     else:
         timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n_rows)]
 

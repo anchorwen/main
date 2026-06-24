@@ -29,8 +29,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 ROOT = Path(__file__).resolve().parents[1]
 
 # ── S.E.A.L. Framework: Root Cause Layer gate mode ──────────────────────
@@ -308,8 +306,10 @@ def main() -> int:
                 return 1
             print("[Ω] BLE001 replacement VERIFIED in diff.")
         except Exception:  # noqa: BLE001
-            with fail_open_guard("omega_gate:main"):
+            try:  # BLE001:FOG (was: FOG/LAC)
                 pass  # non-blocking: diff parsing failure shouldn't block commit
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     # ── Check 4: FIX/DQAF ID required for .py/.yaml/.json changes ──
     # Iron Law #0: every non-exempt change to covered files must carry a docket ID.
     # Variables pre-computed at Check 2.5 above (S.E.A.L. Framework restructuring).

@@ -8,8 +8,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mt5_positions_snapshot")
@@ -41,10 +39,12 @@ def build_snapshot(*, mt5_terminal_path: str | None, symbol: str | None) -> dict
     }
     try:
         import MetaTrader5 as mt5
-    except Exception as exc:  # pragma: no cover  # BLE001:FOG
-        with fail_open_guard("mt5_positions_snapshot:build_snapshot"):
+    except Exception as exc:  # pragma: no cover  # noqa: BLE001
+        try:  # noqa: BLE001 (was: FOG/LAC)
             payload["error"] = f"metaTrader5_import_failed:{exc}"
             return payload
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # noqa: BLE001
+            pass
     kwargs: dict[str, Any] = {}
     if mt5_terminal_path:
         p = Path(mt5_terminal_path)

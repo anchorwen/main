@@ -19,8 +19,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 SCHEMA_VERSION = "live_dashboard.v1"
 
 THIS_DIR = Path(__file__).resolve().parent
@@ -141,9 +139,10 @@ def _collect_tracker(base_dir: Path) -> dict[str, Any]:
             "brains": summaries,
             "path": str(tracker_path),
         }
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:_collect_tracker"):
-            return {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"exists": False, "error": str(exc)[:200]}
+
+
 def _collect_governance(base_dir: Path) -> dict[str, Any]:
     """Load governance brain states."""
     gov_path = base_dir / "governance_state.json"
@@ -162,9 +161,10 @@ def _collect_governance(base_dir: Path) -> dict[str, Any]:
             "recent_transitions": transitions[-5:] if transitions else [],
             "path": str(gov_path),
         }
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:_collect_governance"):
-            return {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"exists": False, "error": str(exc)[:200]}
+
+
 def _collect_leaderboard(base_dir: Path, date_key: str) -> dict[str, Any]:
     """Run brain leaderboard aggregation."""
     decisions_dir = base_dir / "decisions"
@@ -187,9 +187,10 @@ def _collect_leaderboard(base_dir: Path, date_key: str) -> dict[str, Any]:
             "total_brains": len(lb),
             "brains": lb,
         }
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:_collect_leaderboard"):
-            return {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"exists": False, "error": str(exc)[:200]}
+
+
 def _collect_features(base_dir: Path) -> dict[str, Any]:
     """Check feature store status."""
     fs_dir = base_dir / "feature_store"
@@ -212,9 +213,10 @@ def _collect_features(base_dir: Path) -> dict[str, Any]:
             "row_count": row_count,
             "latest_event_time": getattr(latest, "event_time", "") if latest else "",
         }
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:_collect_features"):
-            return {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        return {"exists": False, "error": str(exc)[:200]}
+
+
 def _collect_flag(base_dir: Path) -> dict[str, Any]:
     """Check dispatch block flag."""
     flag_path = base_dir / "live_dispatch_block.flag"
@@ -461,28 +463,24 @@ def build_dashboard(
 
     try:
         sections["tracker"] = _collect_tracker(base)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:build_dashboard"):
-            errors.append(f"tracker: {exc}")
-            sections["tracker"] = {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        errors.append(f"tracker: {exc}")
+        sections["tracker"] = {"exists": False, "error": str(exc)[:200]}
     try:
         sections["governance"] = _collect_governance(base)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:build_dashboard"):
-            errors.append(f"governance: {exc}")
-            sections["governance"] = {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        errors.append(f"governance: {exc}")
+        sections["governance"] = {"exists": False, "error": str(exc)[:200]}
     try:
         sections["leaderboard"] = _collect_leaderboard(base, date)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:build_dashboard"):
-            errors.append(f"leaderboard: {exc}")
-            sections["leaderboard"] = {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        errors.append(f"leaderboard: {exc}")
+        sections["leaderboard"] = {"exists": False, "error": str(exc)[:200]}
     try:
         sections["features"] = _collect_features(base)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_dashboard:build_dashboard"):
-            errors.append(f"features: {exc}")
-            sections["features"] = {"exists": False, "error": str(exc)[:200]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        errors.append(f"features: {exc}")
+        sections["features"] = {"exists": False, "error": str(exc)[:200]}
     sections["dispatch_flag"] = _collect_flag(base)
 
     report: dict[str, Any] = {

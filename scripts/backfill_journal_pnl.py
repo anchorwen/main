@@ -30,7 +30,6 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 
 def _load_journal(path: Path) -> list[dict[str, Any]]:
@@ -46,9 +45,7 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
     return entries
 
 
-def _find_open_for_ticket(
-    entries: list[dict[str, Any]], ticket: int
-) -> dict[str, Any] | None:
+def _find_open_for_ticket(entries: list[dict[str, Any]], ticket: int) -> dict[str, Any] | None:
     """Find the open journal entry for a position ticket."""
     for e in entries:
         if e.get("action") == "open" and e.get("position_ticket") == ticket:
@@ -158,7 +155,13 @@ def _backfill_from_mt5(
     mt5_terminal_path: str | None = None,
 ) -> dict[str, Any]:
     """Strategy B: query MT5 deal history for close_accepted entries."""
-    report = {"strategy": "B_mt5_history", "fixed": 0, "skipped": 0, "mt5_available": False, "details": []}
+    report = {
+        "strategy": "B_mt5_history",
+        "fixed": 0,
+        "skipped": 0,
+        "mt5_available": False,
+        "details": [],
+    }
 
     # Try to connect to MT5
     mt5 = None
@@ -178,10 +181,9 @@ def _backfill_from_mt5(
     except ImportError:
         report["reason"] = "MetaTrader5 module not installed"
         return report
-    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
-        with fail_open_guard("backfill_journal_pnl:_backfill_from_mt5"):
-            report["reason"] = f"mt5_init_exception: {exc}"
-            return report
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        report["reason"] = f"mt5_init_exception: {exc}"
+        return report
     try:
         for e in entries:
             if e.get("action") != "close":
@@ -197,9 +199,7 @@ def _backfill_from_mt5(
             deals = mt5.history_deals_get(position=int(ticket))
             if not deals or len(deals) == 0:
                 report["skipped"] += 1
-                report["details"].append(
-                    {"ticket": ticket, "reason": "no_deals_found"}
-                )
+                report["details"].append({"ticket": ticket, "reason": "no_deals_found"})
                 continue
 
             # Find exit deal(s) — entry=1 means exit (out)
@@ -238,9 +238,7 @@ def _backfill_from_mt5(
                 )
             else:
                 report["skipped"] += 1
-                report["details"].append(
-                    {"ticket": ticket, "reason": "no_profit_in_deal"}
-                )
+                report["details"].append({"ticket": ticket, "reason": "no_profit_in_deal"})
     finally:
         if mt5:
             mt5.shutdown()
@@ -303,7 +301,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Strategy A (close_price calc): fixed={report_a['fixed']} skipped={report_a['skipped']}")
     for d in report_a.get("details", []):
         if d.get("method"):
-            print(f"  OK ticket={d['ticket']} {d.get('side','')} entry={d.get('entry')} close={d.get('close')} pnl={d.get('pnl')}")
+            print(
+                f"  OK ticket={d['ticket']} {d.get('side','')} entry={d.get('entry')} close={d.get('close')} pnl={d.get('pnl')}"
+            )
         else:
             print(f"  SKIP ticket={d.get('ticket')} reason={d.get('reason')}")
 
@@ -314,12 +314,16 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             mt5_terminal_path=args.mt5_terminal_path,
         )
-        print(f"\nStrategy B (MT5 history): fixed={report_b['fixed']} skipped={report_b['skipped']} mt5={report_b['mt5_available']}")
+        print(
+            f"\nStrategy B (MT5 history): fixed={report_b['fixed']} skipped={report_b['skipped']} mt5={report_b['mt5_available']}"
+        )
         if not report_b["mt5_available"]:
             print(f"  ⚠️  MT5 not available: {report_b.get('reason', 'unknown')}")
         for d in report_b.get("details", []):
             if d.get("method"):
-                print(f"  [FIX] ticket={d['ticket']} pnl={d.get('pnl')} close={d.get('close_price')}")
+                print(
+                    f"  [FIX] ticket={d['ticket']} pnl={d.get('pnl')} close={d.get('close_price')}"
+                )
             else:
                 print(f"  SKIP ticket={d.get('ticket')} reason={d.get('reason')}")
     else:

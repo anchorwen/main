@@ -27,7 +27,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent  # D:\future
@@ -107,11 +106,10 @@ def collect_manifests(batch_dir: Path, lane_filter: str, limit: int) -> list[Pat
                 m = json.loads(p.read_text(encoding="utf-8"))
                 if m.get("lane") == lane_filter:
                     filtered.append(p)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("run_train_batch:collect_manifests"):
-                    # Include files we can't parse; they'll fail later
-                    if f".{lane_filter}." in p.name:
-                        filtered.append(p)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                # Include files we can't parse; they'll fail later
+                if f".{lane_filter}." in p.name:
+                    filtered.append(p)
         paths = filtered
 
     if limit > 0:
@@ -164,9 +162,8 @@ def run_one(
         m = json.loads(manifest_path.read_text(encoding="utf-8"))
         record["model_id"] = str(m.get("model_id", ""))
         record["lane"] = str(m.get("lane", ""))
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("run_train_batch:run_one"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     if not execute:
         record["exit_code"] = 0
         return record
@@ -191,10 +188,9 @@ def run_one(
         record["exit_code"] = -1
         record["error"] = f"Timeout after {timeout}s"
         record["stderr_tail"] = str(e)[:3000]
-    except Exception as e:  # BLE001:FOG
-        with fail_open_guard("run_train_batch:run_one"):
-            record["exit_code"] = -2
-            record["error"] = str(e)[:3000]
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:  # BLE001:FOG
+        record["exit_code"] = -2
+        record["error"] = str(e)[:3000]
     finally:
         record["duration_seconds"] = round(time.perf_counter() - t0, 3)
 

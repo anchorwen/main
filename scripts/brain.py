@@ -43,8 +43,6 @@ import json
 import sys
 from pathlib import Path
 
-from core.runtime.fault_handler import fail_open_guard
-
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent
 
@@ -55,7 +53,15 @@ def _utc_now_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat()
 
 
-_STATUS_RANK = {"shadow": 0, "candidate": 1, "probation": 2, "live": 3, "frozen": -1, "retired": -2, "archived": -2}
+_STATUS_RANK = {
+    "shadow": 0,
+    "candidate": 1,
+    "probation": 2,
+    "live": 3,
+    "frozen": -1,
+    "retired": -2,
+    "archived": -2,
+}
 
 
 def _status_rank(status: str | None) -> int:
@@ -538,8 +544,10 @@ def cmd_reconcile(
             # Runtime governance owns the lifecycle.  Log drift for human review
             # but do NOT auto-correct.
             direction = "↑" if _status_rank(gov_status) > _status_rank(cfg_status) else "↓"
-            print(f"  INFO: {bid} gov={gov_status} cfg={cfg_status} {direction}"
-                  f" — governance owns lifecycle, not auto-correcting")
+            print(
+                f"  INFO: {bid} gov={gov_status} cfg={cfg_status} {direction}"
+                f" — governance owns lifecycle, not auto-correcting"
+            )
             # Vote weight sync: only apply if gov has no explicit vote_weight
             gov_vw = gov_state.get("vote_weight")
             if gov_vw is None and cfg_vw != 0.5:
@@ -554,7 +562,12 @@ def cmd_reconcile(
         cfg_status = info["config"].get("status", "")
         fname = info["fname"]
         if cfg_status in ("frozen", "retired"):
-            is_enabled = f"configs/brains/{fname}" in live_yaml and "enabled: true" in live_yaml.split(f"configs/brains/{fname}")[1][:30] if f"configs/brains/{fname}" in live_yaml else False
+            is_enabled = (
+                f"configs/brains/{fname}" in live_yaml
+                and "enabled: true" in live_yaml.split(f"configs/brains/{fname}")[1][:30]
+                if f"configs/brains/{fname}" in live_yaml
+                else False
+            )
             should_be = "enabled: false"
             if auto_fix and is_enabled:
                 print(f"  FIX: {bid} ({cfg_status}) → setting enabled: false")
@@ -600,7 +613,9 @@ def cmd_reconcile(
             for bid in zombies:
                 retired_data[bid] = settled.pop(bid)
             if auto_fix:
-                retired_path.write_text(json.dumps(retired_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                retired_path.write_text(
+                    json.dumps(retired_data, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
                 ledger_data["settled"] = settled
                 print(f"  Moved {len(zombies)} zombie brains to {retired_path}")
 
@@ -620,19 +635,23 @@ def cmd_reconcile(
         # FIX-20260604-088 + FIX-20260613-076: locked, atomic write via GovernanceService
         # Preserve transition_log from the original file (don't wipe promotion history)
         from core.governance.governance_service import GovernanceService
+
         _svc = GovernanceService()
         _svc._brain_states = gov_states
         try:
             _existing = GovernanceService.load(str(gov_path))
             _svc._transition_log = _existing._transition_log
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("brain:cmd_reconcile"):
-                pass  # No existing transition log to preserve
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass  # No existing transition log to preserve
         _svc.save(str(gov_path), lock_timeout=30.0)
         live_path.write_text(live_yaml, encoding="utf-8")
         if cleanup_ledger:
-            ledger_path.write_text(json.dumps(ledger_data, indent=2, ensure_ascii=False), encoding="utf-8")
-            perf_path.write_text(json.dumps(perf_data, indent=2, ensure_ascii=False), encoding="utf-8")
+            ledger_path.write_text(
+                json.dumps(ledger_data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            perf_path.write_text(
+                json.dumps(perf_data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
         print(f"[reconcile] DONE: {issues_fixed} issue(s) fixed.")
     elif not auto_fix:
         print(f"\n[reconcile] DRY-RUN complete. {issues_fixed} issue(s) would be fixed.")
