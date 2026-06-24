@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T15:49:39Z
+> **自动生成**: 2026-06-24T17:11:06Z
 
 ## Package-Level Dependencies
 
@@ -203,6 +203,7 @@
 - `fix_gateway_adapter.py` → `core.execution.fix_contracts`, `core.execution.fix_execution_mapper`, `core.execution.fix_message_builder`, `core.execution.gateway_contracts`, `core.execution.order_state_machine`
 - `fix_message_builder.py` → `core.execution.fix_contracts`, `core.execution.gateway_contracts`
 - `gateway_contracts.py` → (无内部依赖)
+- `gods_eye.py` → (无内部依赖)
 - `kelly_sizer.py` → `core.execution.pwin_chain`
 - `limit_order_monitor.py` → (无内部依赖)
 - `live_order_sender.py` → `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.contracts.strategy_magic`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.execution.broker_adapter`, `core.execution.mt5_broker_adapter`, `core.execution.mt5_worker`, `core.protocol.live_execution_contract`, `core.protocol.schema_versions`, `core.protocol.services.zmq_receipt_listener`
@@ -685,6 +686,8 @@
 - `smoke_test_e2e.py` → `core.features.local_feature_store`, `core.features.store_contracts`, `core.feedback.brain_performance_tracker`, `core.governance.governance_service`, `core.ledger.storage.jsonl_ledger_store`, `scripts.daily_ops`, `scripts.feedback_loop`, `scripts.live_shadow_ensemble`, `scripts.shadow_decision_recorder`, `scripts.training.dataset_builder`, `scripts.training.governance_scheduler`
 - `system_health.py` → `core.data.projections`, `core.observability.degradation`
 - `system_trust_report.py` → `core.execution.pre_trade_guards`
+- `task_a_directional_closure.py` → `scripts.training.build_calibrated_dataset`
+- `task_b_regime_baseline.py` → `scripts.training.build_calibrated_dataset`
 - `test_io_pipeline.py` → (无内部依赖)
 - `test_meta_pipeline.py` → `core.execution.meta_signal_filter`
 - `tombstone_orphans.py` → (无内部依赖)
