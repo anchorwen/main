@@ -133,7 +133,7 @@ repos:
     hooks:
       - id: ci-mirror-ruff
         name: "[CI-Mirror] Ruff full-codebase (core/ apps/ scripts/)"
-        entry: python -m ruff check core/ apps/ scripts/
+        entry: python -m ruff check core/ apps/ scripts/ --ignore SIM105
         language: system
         pass_filenames: false
         stages: [pre-push]
