@@ -219,12 +219,14 @@ class MetaSignalFilter:
 
                 self._model = lgb.Booster(model_file=self.model_path)
                 if not self._feature_names:
-                    with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    with contextlib.suppress(
+                        RuntimeError, ValueError, KeyError, TypeError, OSError
+                    ):
                         self._feature_names = self._model.feature_name()
                 self._load_mlp_model()
                 self._load_calibrator()
                 _loaded = True
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError, ImportError):
             pass
         if not _loaded:
             return False
@@ -264,6 +266,7 @@ class MetaSignalFilter:
                 + "\n"
             )
             self._calibrator = None
+
     def _load_mlp_model(self) -> None:
         """Load the optional MLP ensemble model for probability averaging."""
         if not self.mlp_model_path or not os.path.exists(self.mlp_model_path):
@@ -374,8 +377,11 @@ class MetaSignalFilter:
                         if all(abs(v - current_atr) < 1e-8 for v in _recent_5):
                             if not self._atr_frozen:
                                 self._atr_frozen = True
-                                self._atr_frozen_detected_at = str(timestamp_utc) if timestamp_utc else ""
+                                self._atr_frozen_detected_at = (
+                                    str(timestamp_utc) if timestamp_utc else ""
+                                )
                                 import json as _json_atr
+
                                 print(
                                     _json_atr.dumps(
                                         {
@@ -632,6 +638,7 @@ class MetaSignalFilter:
 
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             pass
+
     def _predict_proba(self, feat_vec: list[float]) -> float:
         """Compute ensemble P(TP|signal) = w_lgb * prob_lgb + w_mlp * prob_mlp.
 
