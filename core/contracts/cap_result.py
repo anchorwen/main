@@ -28,6 +28,7 @@ Design constraints (Iron Law #1 — cannot be bypassed):
 from __future__ import annotations
 
 import secrets
+import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Generic, TypeVar
@@ -70,7 +71,7 @@ class _SuccessProof:
     The leading underscore marks this as a private implementation detail.
     """
 
-    __slots__ = ("_nonce", "_valid")
+    __slots__ = ("_nonce", "_valid", "_thread_id")
 
     def __init__(self) -> None:
         raise TypeError(
@@ -84,11 +85,23 @@ class _SuccessProof:
         proof = object.__new__(cls)
         proof._nonce = nonce  # type: ignore[attr-defined]
         proof._valid = True
+        proof._thread_id = threading.current_thread().ident  # type: ignore[attr-defined]
         return proof
 
     def _invalidate(self) -> None:
         """Mark this proof as expired. Called by Kernel on scope exit."""
         self._valid = False
+
+    def _verify_thread(self) -> None:
+        """Debug guard: verify this proof is used from its creating thread."""
+        if __debug__:
+            caller_tid = threading.current_thread().ident
+            if self._thread_id != caller_tid:  # type: ignore[attr-defined]
+                raise CapProofExpired(
+                    f"_SuccessProof used from wrong thread: "
+                    f"created in {self._thread_id}, "  # type: ignore[attr-defined]
+                    f"used in {caller_tid}"
+                )
 
     @property
     def is_valid(self) -> bool:
@@ -144,6 +157,7 @@ class CapResult(Generic[T]):
                 "CapResult.ok() must be called inside "
                 "'with Kernel.success_scope() as proof:'"
             )
+        proof._verify_thread()
         instance = object.__new__(cls)
         instance._value = value  # type: ignore[attr-defined]
         instance._error = None  # type: ignore[attr-defined]
@@ -191,6 +205,7 @@ class CapResult(Generic[T]):
         """Transform the ok value. Keeps the proof chain intact."""
         if not proof.is_valid:
             raise CapProofExpired("_SuccessProof has left its success_scope")
+        proof._verify_thread()
         if self._is_ok:  # type: ignore[attr-defined]
             return CapResult.ok(fn(self._value), proof)  # type: ignore[attr-defined]
         return CapResult.err(self._error)  # type: ignore[attr-defined]
@@ -199,6 +214,7 @@ class CapResult(Generic[T]):
         """Chain a fallible operation. Keeps the proof chain intact."""
         if not proof.is_valid:
             raise CapProofExpired("_SuccessProof has left its success_scope")
+        proof._verify_thread()
         if self._is_ok:  # type: ignore[attr-defined]
             return fn(self._value)  # type: ignore[attr-defined]
         return CapResult.err(self._error)  # type: ignore[attr-defined]

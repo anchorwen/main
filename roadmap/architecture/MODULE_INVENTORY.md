@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T04:08:54Z
+> **自动生成**: 2026-06-24T04:23:37Z
 > **扫描模块数**: 662
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -109,7 +109,7 @@
 |------|------|----|------|------|------|------|
 | `adapters.py` | ✅ active | — | 11 | 209 | — | |
 | `calibrator_contract.py` | ✅ active | CalibratorHistoryEntry, CalibratorState | 3 | 116 | — | |
-| `cap_result.py` | ✅ active | CapProofExpired, CapProofReused, _SuccessProof, CapResult, Kernel | 18 | 273 | — | |
+| `cap_result.py` | ✅ active | CapProofExpired, CapProofReused, _SuccessProof, CapResult, Kernel | 19 | 289 | — | |
 | `domain_keys.py` | 📄 config | — | 0 | 979 | — | |
 | `enums.py` | ✅ active | BrainRole, BrainStatus, DecisionAction, DecisionSide, RiskDecisionStatus, SystemMode, OverrideStatus, CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision, ExecutionEventType, ReconciliationStatus | 0 | 109 | — | |
 | `events.py` | ✅ active | DataSource, EventType, PnLEvent, GovernanceTransitionEvent | 0 | 168 | — | |

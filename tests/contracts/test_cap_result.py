@@ -357,3 +357,103 @@ class TestGenericTyping:
         float_result = CapResult.err("nope")  # type: ignore[var-annotated]
         number: float = float_result.match(ok=lambda v: float(v), err=lambda e: 0.0)
         assert number == 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cross-thread protection — UGR v3.1 §修正2 审核补丁
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSuccessProofThreadAffinity:
+    """_SuccessProof cross-thread protection: proof must be used from creating thread.
+
+    In __debug__ mode, CapResult.ok/map/flat_map verify that the proof's
+    creating thread matches the calling thread.  In production (-O),
+    the check is skipped (zero cost).
+    """
+
+    def test_same_thread_passes(self) -> None:
+        """Proof created and used in the same thread passes thread check."""
+        with Kernel.success_scope() as proof:
+            result = CapResult.ok(42, proof)
+        assert result.is_ok()
+
+    def test_cross_thread_blocked_in_ok(self) -> None:
+        """Proof created in one thread, used in another → CapProofExpired."""
+        import threading
+
+        error_container: dict[str, Exception | None] = {"error": None}
+
+        def cross_thread_use(proof: _SuccessProof) -> None:
+            try:
+                CapResult.ok(99, proof)
+            except CapProofExpired as e:
+                error_container["error"] = e
+
+        with Kernel.success_scope() as proof:
+            t = threading.Thread(target=cross_thread_use, args=(proof,))
+            t.start()
+            t.join()
+
+        assert error_container["error"] is not None
+        assert "wrong thread" in str(error_container["error"])
+
+    def test_cross_thread_blocked_in_map(self) -> None:
+        """Cross-thread proof rejected in map() too."""
+        import threading
+
+        error_container: dict[str, Exception | None] = {"error": None}
+
+        def cross_thread_map(proof: _SuccessProof) -> None:
+            with Kernel.success_scope() as local_proof:
+                result = CapResult.ok(1, local_proof)
+                try:
+                    result.map(lambda x: x * 2, proof)
+                except CapProofExpired as e:
+                    error_container["error"] = e
+
+        with Kernel.success_scope() as proof:
+            t = threading.Thread(target=cross_thread_map, args=(proof,))
+            t.start()
+            t.join()
+
+        assert error_container["error"] is not None
+        assert "wrong thread" in str(error_container["error"])
+
+    def test_cross_thread_blocked_in_flat_map(self) -> None:
+        """Cross-thread proof rejected in flat_map() too."""
+        import threading
+
+        error_container: dict[str, Exception | None] = {"error": None}
+
+        def cross_thread_flat_map(proof: _SuccessProof) -> None:
+            with Kernel.success_scope() as local_proof:
+                result = CapResult.ok(1, local_proof)
+                try:
+
+                    def chain(x: int) -> CapResult[int]:
+                        return CapResult.ok(x * 2, proof)
+
+                    result.flat_map(chain, proof)
+                except CapProofExpired as e:
+                    error_container["error"] = e
+
+        with Kernel.success_scope() as proof:
+            t = threading.Thread(target=cross_thread_flat_map, args=(proof,))
+            t.start()
+            t.join()
+
+        assert error_container["error"] is not None
+        assert "wrong thread" in str(error_container["error"])
+
+    def test_same_thread_map_flat_map_pass(self) -> None:
+        """map() and flat_map() with same-thread proof work correctly."""
+        with Kernel.success_scope() as proof:
+            r1 = CapResult.ok(5, proof)
+            r2 = r1.map(lambda x: x * 10, proof)
+            assert r2.is_ok()
+            assert r2.match(ok=lambda v: str(v), err=lambda e: e) == "50"
+
+            r3 = r2.flat_map(lambda x: CapResult.ok(x / 2, proof), proof)
+            assert r3.is_ok()
+            assert r3.match(ok=lambda v: str(v), err=lambda e: e) == "25.0"

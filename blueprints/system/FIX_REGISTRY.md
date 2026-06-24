@@ -4228,3 +4228,16 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: L1 — incorrect API assumption: _alert_violation assumed LiveAlertHub follows singleton pattern (.instance()), but it uses constructor-based init
 - **Prevention**: N/A (L1 typo-class error, no architectural change needed)
 - **Dependents Checked**: All 66 phantom_contract tests pass; ruff clean; mypy baseline unchanged
+
+### FIX-20260624-099
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: contracts-resilience
+- **Files**: core/contracts/cap_result.py, tests/contracts/test_cap_result.py
+- **Description**: _SuccessProof cross-thread protection. _create() records thread_id via threading.current_thread().ident. New _verify_thread() method checks caller thread matches creator thread in __debug__ mode (zero-cost in production -O). Integrated into CapResult.ok(), map(), and flat_map() — each validates thread affinity before using the proof. Prevents proof leakage across thread boundaries. 13 lines added to cap_result.py, 5 new tests (38 total).
+- **Root Cause**: L2 — logic gap: _SuccessProof valid flag prevents post-scope use but doesn't prevent cross-thread use within scope lifetime
+- **Prevention**: _verify_thread() called at all 3 proof-consumption entry points; debug-mode enforcement (zero production overhead); AST scanner ProofLeakDetector covers static analysis path
+- **Dependents Checked**: All 38 cap_result tests pass; ruff clean; mypy baseline unchanged
+- **Dependents Checked**: All 66 phantom_contract tests pass; ruff clean; mypy baseline unchanged
