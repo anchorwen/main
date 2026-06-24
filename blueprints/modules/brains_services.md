@@ -20,18 +20,32 @@ Brain lifecycle services: factory construction, inference orchestration, leaderb
 
 ## Data Flow
 ```
-BrainRegistryService → brain_entries → BrainFactory → adapters
-                                                      ↓
-                                              BrainRunService.run()
-                                                      ↓
-                                              BrainSignal[]
-                                                      ↓
-                    ┌─────────────────────────────────┴──────────────────────┐
-                    ↓                      ↓                                 ↓
-          DynamicBrainWeighter      BrainLeaderboard              BrainAttributionService
-          (vote weights)            (rankings)                    (P&L breakdown)
-                    ↓                      ↓
-          BrainPromotionEvaluator  →  governance_state.json
+DecisionCycleOrchestrator  ←  GovernanceService.get_all_states()
+       │                              {brain_id: status}
+       │  gov_state_filter dict       ("frozen"/"retired" excluded at source)
+       ▼
+BrainRegistryService.list_active_entries(gov_state_filter=None)
+       │
+       ▼
+  brain_entries → BrainFactory → adapters
+                                    ↓
+                            BrainRunService.run()
+                                    ↓
+                            BrainSignal[]
+                                    ↓
+                  ┌─────────────────────────────────┴──────────────────────┐
+                  ↓                      ↓                                 ↓
+        DynamicBrainWeighter      BrainLeaderboard              BrainAttributionService
+        (vote weights)            (rankings)                    (P&L breakdown)
+                  ↓                      ↓
+        BrainPromotionEvaluator  →  governance_state.json
+```
+
+**DQAF-20260624-058**: Governance status injection at water source. `gov_state_filter` dict
+built from `GovernanceService.get_all_states()` by `DecisionCycleOrchestrator`, passed
+through `RuntimeLoop` → `BrainRunService` → `BrainRegistryService.list_active_entries()`.
+Frozen/retired brains excluded from ALL inference paths (live, shadow, contract-groups).
+Zero governance import below orchestrator layer — pure dict dependency injection.
 ```
 
 ## Inbound Dependencies
@@ -89,6 +103,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 | FIX-20260524-039 | 2026-05-24 | cursor-agent | — | M4: BrainLeaderboard docstring formula fixed to match code (wr-0.35/0.55 not wr-0.40*2.0). M6: _split_sponsors_dissenters neutral vote exclusion documented. M7: brain_votes `or []` changed to explicit `is None` check to preserve empty lists. M10: apply_promotion_decisions now validates targets against VALID_TRANSITIONS before writing. H7-equivalent: pf>0 guard removed from auto-retire gate in dynamic_brain_weighter (pf==0 now caught). | boundary-error |
 | FIX-20260524-036 | 2026-05-24 | cursor-agent | — | Brain SL/TP + magic audit: barrier_12bar SL/TP corrected 2.0/3.5→3.0/1.5 to match retrained calibration (EV=0.2004R). 4 brain magic numbers aligned to strategy magic for MT5 dispatch consistency. BARRIER_GROUP contract name + description updated. | RC-09 |
 | FIX-20260620-024 | 2026-06-20 | cursor-agent | — | **DEFERRED: Governance hysteresis — promotion↔throttle oscillation prevention**: Missing hold-down period between promote and throttle allows ping-pong live↔probation transitions. Registered as L3 architecture debt; activate when any BTC brain accumulates ≥50 live trades. Trigger: `performance_metrics.trades ≥ 50` OR `2026-07-15`. | RC-12 (missing-feature) |
+| FIX-20260624-122 | 2026-06-24 | cursor-agent (IC_MANDATE) | — | **DQAF-058 (Sev 1): Frozen Brain Inference Pipeline Bypass — L3 Governance Gate at BrainRegistryService.** Ghost brains excluded at water source via dependency-injected `gov_state_filter: dict[str, str] | None` parameter. Frozen/retired brains no longer consume inference compute. ReB: `GOVERNANCE_DISCONNECT`. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

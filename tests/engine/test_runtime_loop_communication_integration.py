@@ -174,7 +174,8 @@ def test_runtime_loop_allowed_path_integrates_communication_chain(tmp_path):
                 "run_active_brains": lambda self,
                 feature_snapshot,
                 control_snapshot,
-                feature_blackboard=None: ["proposal"],
+                feature_blackboard=None,
+                gov_state_filter=None: ["proposal"],
             },
         )(),
         parliament_adapter=type(
@@ -326,7 +327,8 @@ def test_runtime_loop_uses_intent_event_date_for_operations_lookup_when_trigger_
                 "run_active_brains": lambda self,
                 feature_snapshot,
                 control_snapshot,
-                feature_blackboard=None: ["proposal"],
+                feature_blackboard=None,
+                gov_state_filter=None: ["proposal"],
             },
         )(),
         parliament_adapter=type(
@@ -465,7 +467,8 @@ def test_runtime_loop_falls_back_to_record_summary_when_operations_view_is_unava
                 "run_active_brains": lambda self,
                 feature_snapshot,
                 control_snapshot,
-                feature_blackboard=None: ["proposal"],
+                feature_blackboard=None,
+                gov_state_filter=None: ["proposal"],
             },
         )(),
         parliament_adapter=type(
@@ -597,7 +600,8 @@ def test_runtime_loop_skips_communication_when_intent_not_actionable(tmp_path):
                 "run_active_brains": lambda self,
                 feature_snapshot,
                 control_snapshot,
-                feature_blackboard=None: ["proposal"],
+                feature_blackboard=None,
+                gov_state_filter=None: ["proposal"],
             },
         )(),
         parliament_adapter=type(
@@ -741,7 +745,8 @@ def test_runtime_loop_end_to_end_communication_stack_matches_operations_view(tmp
                 "run_active_brains": lambda self,
                 feature_snapshot,
                 control_snapshot,
-                feature_blackboard=None: ["proposal"],
+                feature_blackboard=None,
+                gov_state_filter=None: ["proposal"],
             },
         )(),
         parliament_adapter=type(

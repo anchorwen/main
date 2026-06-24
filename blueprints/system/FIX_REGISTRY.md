@@ -769,6 +769,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-119 | 2026-06-24 | monitor_dashboard | **BLE001:FOG over-narrowing in EventBus.publish()** — restore except Exception for pub/sub fire-and-forget handler dispatch. 5-type tuple excluded ZeroDivisionError, crashing publisher when handler raises unlisted exception. Same class as FIX-20260624-104 (scheduler_service). | RC-05 |
 | FIX-20260624-120 | 2026-06-24 | execution_orders | **Ω-M1: Consensus Contamination Root Cause — brain_ids→supporting_brains (4 sites).** `_compute_consensus()` L1569 returned `signal.brain_ids` (ALL brains) instead of `signal.supporting_brains` (only winning-direction brains). `_compute_weighted_fallback()` L1628+L1637 neutral paths returned all `brain_ids`→`[]`; L1648 directional path `brain_ids`→`supporting`. True root cause of FIX-20260527-002 (6 patches in feedback_loop/reconciliation/journal never touched this field-selection error). ReB: `CONSENSUS_CONTAMINATION_BRAIN_IDS`. L3 deferred: rename fields to `all_participating_brains`/`winning_brains`. | RC-06 |
 | FIX-20260624-121 | 2026-06-24 | deployment_lifecycle | **Blueprint consistency 117→0 — full audit clearance.** Phase 1: Added 6 modules to EXPECTED_MODULES. Phase 2: Filled 45 missing sections across 12 blueprints. Phase 3: Fixed reconcile_fix_registry.py regex parsing bug + idempotent guard; backfilled 84 ORPHAN/MISSING FIX cross-references. Added DEPENDENCY_GRAPH entries + MODULE_SOURCE_MAP. Fixed omega_gate.py Windows GBK Unicode crash. Baseline zeroed. | RC-09 |
+| FIX-20260624-122 | 2026-06-24 | brains-services | **DQAF-058: Frozen Brain Inference Pipeline Bypass — Governance Gate at BrainRegistryService.** Frozen/retired brains (e.g. V9_H1) continued producing signals because inference pipeline checked only disk config `is_active`, not governance status. Fix: `BrainRegistryService.list_active_entries(gov_state_filter=None)` — dependency injection of `{brain_id: status}` dict. `BrainRunService.run_active_brains/run_brains_for_contract_group/run_brain_type()` → `RuntimeLoop.run_decision_cycle(gov_state_filter=...)` → `DecisionCycleOrchestrator` builds filter from `GovernanceService.get_all_states()`. Zero new imports below orchestrator layer. ReB: `GOVERNANCE_DISCONNECT` (extends FIX-083/074/072/066). | RC-06 |
 | FIX-20260624-061 | 2026-06-24 | training | **DQAF-061: analyze_live_journal.py multi-source brain data priority fallback.** `entry_context.brain_predictions` deprecated ~2026-06-20. Audit script read from single stale source → all recent entries showed `n_brains=0`. Fix: 3-tier source — `brain_votes` > `entry_context.brain_predictions` > `brain_ids`. Bare-ID entries show `dirs=['?']` / `up_probs=None` (honest unknown). | RC-09 |
 | FIX-20260602-078 | 2026-06-02 | training-pipeline | V9 institutional schema 41-dim training | RC-06 |
 | FIX-20260607-011 | 2026-06-07 | parliament-consensus | Vote weight decoupling: base_weight × dynamic_scale with fail-fast gate | RC-06 |
@@ -838,6 +839,12 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-097 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
 | FIX-20260624-098 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
 | FIX-20260624-099 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260605-119 | 2026-06-05 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260613-052 | 2026-06-13 | training | cursor-agent | RC-06 |
+| FIX-20260620-070 | 2026-06-20 | brains-validation | cursor-agent | RC-06 |
+| FIX-20260620-071 | 2026-06-20 | deployment-lifecycle | cursor-agent | RC-06 |
+| FIX-20260621-035 | 2026-06-21 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260624-100 | 2026-06-24 | runtime-live | cursor-agent | RC-06 |
 
 
 ---
@@ -4557,6 +4564,17 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: RC-06 (contract-violation) — API contract between `ContractGroupConsensus.compute()` and `_compute_consensus()` violated: `brain_ids` field used where `supporting_brains` was required. L1 fix applied; L3 rename deferred.
 - **Prevention**: L3 architecture fix: rename `brain_ids`→`all_participating_brains` and `supporting_brains`→`winning_brains` in ContractGroupConsensus to make the semantic distinction self-documenting at the type level.
 - **Dependents Checked**: `feedback_loop.py:ingest_journal_to_tracker`, `reconciliation.py:SignalSettled`, `strategy_line.py:_compute_consensus` (all 6 FIX-20260527-002 mitigation sites) — confirmed the new correct field propagates correctly through all downstream consumers.
+
+### FIX-20260624-122
+- **Date**: 2026-06-24
+- **Author**: cursor-agent (IC_MANDATE)
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: brains-services, apps-engine, core-brains
+- **Files**: `core/brains/services/brain_registry_service.py`, `core/brains/services/brain_run_service.py`, `apps/engine/runtime_loop.py`, `apps/engine/orchestrator.py`, `tests/engine/test_runtime_loop_communication_integration.py`
+- **Description**: **DQAF-058 (Sev 1): Frozen Brain Inference Pipeline Bypass — L3 Architecture Fix.** Governance state (`governance_state.json`) correctly marked `BTC_Swing_V9_H1_Survival` as `frozen`, but the frozen brain continued producing ~20 SignalRecorded events per 5-min cycle (latest: 2026-06-24T14:14:43Z). Root cause: `BrainRegistryService.list_active_entries()` only checked disk config `is_active` field — no governance cross-reference. The inference pipeline (`BrainRegistryService` → `BrainRunService` → `brain_pnl_ledger`) had zero integration with `GovernanceService`. Previous fixes (FIX-083/074/072/066) patched governance gaps at the strategy evaluation layer but never closed the inference pipeline bypass. Fix architecture (IC_MANDATE design): (1) `BrainRegistryService.list_active_entries(gov_state_filter=None)` — optional `{brain_id: governance_status}` dict parameter; entries with status `frozen`/`retired` excluded. Dependency inversion — no governance import below orchestrator. (2) Pass-through: `BrainRunService.run_active_brains/run_brains_for_contract_group/run_brain_type()` forward `gov_state_filter`. (3) `RuntimeLoop.run_decision_cycle(gov_state_filter=...)` — keyword-only optional parameter. (4) `DecisionCycleOrchestrator.run_cycle()` builds filter from `self._governance.get_all_states()` and wires downstream. ReB: `GOVERNANCE_DISCONNECT` — extends pattern family with FIX-083 (strategy evaluator dominance gate), FIX-074 (schema shape mismatch double-strip), FIX-072 (wrong dict level nullification), FIX-066 (p_win cold-start governance fallback).
+- **Root Cause**: L3 (architecture defect) — `GovernanceService` and `BrainRegistryService` designed as parallel universes with zero integration point. `ParliamentService._filter_active_proposals()` was the original integration but was deprecated for live trading; `contract_groups` replacement never replicated the governance gate. The `or not active_ids` bypass (parliament_service.py:91) silently nullified the gate when governance was present but empty.
+- **Prevention**: All future brain status changes (freeze/retire) now take immediate effect at the inference water source. Dict-based dependency injection pattern prevents circular imports and keeps `BrainRegistryService` testable without governance. The filter is rebuilt on every `run_cycle()` call — governance transitions propagate within one tick cycle.
 
 ### FIX-20260624-061
 - **Date**: 2026-06-24

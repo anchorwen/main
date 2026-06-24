@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T14:47:54Z
+> **自动生成**: 2026-06-24T15:49:39Z
 
 ## Package-Level Dependencies
 
@@ -573,6 +573,7 @@
 - `audit_xau_exits.py` → (无内部依赖)
 - `augment_journal_strategy.py` → `core.contracts.strategy_magic`
 - `backfill_journal_pnl.py` → `core.infrastructure.distributed_lock`
+- `backtest_rule_strategies.py` → `scripts.scan_barrier_params`
 - `backtest_runner.py` → `core.backtest.data_feed`, `core.backtest.engine`, `core.backtest.metrics`, `core.backtest.strategy_adapter`, `core.contracts.strategy_magic`, `core.metrics.brinson_attribution`, `core.metrics.factor_attribution`
 - `backtest_structural_swing.py` → `core.strategies.structural_swing_v1`
 - `benchmark_zmq_latency.py` → (无内部依赖)

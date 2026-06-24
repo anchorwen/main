@@ -61,17 +61,41 @@ class BrainRegistryService:
 
     # ── public API ───────────────────────────────────────────────────────
 
-    def list_active_entries(self) -> list[dict[str, Any]]:
+    # DQAF-20260624-058: frozen/retired brain IDs excluded at the water source.
+    _GOVERNANCE_EXCLUDED_STATUSES: frozenset[str] = frozenset({"frozen", "retired"})
+
+    def list_active_entries(
+        self,
+        gov_state_filter: dict[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Return all active brain entry dicts.
 
         When ``registry_entries`` is explicitly configured in live.yaml, it acts
         as an allowlist: only brains whose config path matches an enabled entry
         are returned.  When ``registry_entries`` is empty or absent, ALL active
         brains auto-discovered from ``configs/brains/`` are returned.
+
+        Args:
+            gov_state_filter: Optional ``{brain_id: governance_status}`` dict
+                injected by the caller (dependency inversion — this module does
+                NOT import GovernanceService).  Entries whose status is
+                ``frozen`` or ``retired`` are excluded from the result.
+                When ``None`` (default), no governance filtering is applied
+                (backward-compatible with tests, shadow, and diagnostics).
         """
-        if self._has_explicit_entries():
-            return self._filtered_by_allowlist()
-        return self._discover_from_disk()
+        entries = (
+            self._filtered_by_allowlist()
+            if self._has_explicit_entries()
+            else self._discover_from_disk()
+        )
+        if gov_state_filter is None:
+            return entries
+        return [
+            e
+            for e in entries
+            if gov_state_filter.get(e.get("brain_id", ""), "probation")
+            not in self._GOVERNANCE_EXCLUDED_STATUSES
+        ]
 
     def _filtered_by_allowlist(self) -> list[dict[str, Any]]:
         """Return auto-discovered entries filtered by the allowlist."""

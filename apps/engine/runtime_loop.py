@@ -83,6 +83,7 @@ def _apply_meta_filter(
     timestamp_utc = None
     if hasattr(feature_snapshot, "event_time"):
         import contextlib
+
         with contextlib.suppress(Exception):
             timestamp_utc = feature_snapshot.event_time.timestamp()
 
@@ -156,7 +157,11 @@ class RuntimeLoop:
         self._meta_signal_filter = meta_signal_filter
 
     def run_decision_cycle(
-        self, trigger, feature_source: dict | None = None
+        self,
+        trigger,
+        feature_source: dict | None = None,
+        *,
+        gov_state_filter: dict[str, str] | None = None,
     ) -> DecisionCycleResult:
         feature_snapshot = self._feature_service.build_snapshot(trigger=trigger)
 
@@ -182,6 +187,7 @@ class RuntimeLoop:
             feature_snapshot=feature_snapshot,
             control_snapshot=control_snapshot,
             feature_blackboard=feature_blackboard,
+            gov_state_filter=gov_state_filter,
         )
 
         if self._dynamic_brain_weighter is not None:

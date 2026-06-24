@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T14:47:54Z
-> **扫描模块数**: 669
+> **自动生成**: 2026-06-24T15:49:39Z
+> **扫描模块数**: 670
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -16,8 +16,8 @@
 | `communication_summary_contract.py` | ✅ active | — | 1 | 71 | — | |
 | `diagnostics_cli.py` | ✅ active | DiagnosticsCLI | 10 | 129 | — | |
 | `main_v9_shadow.py` | ✅ active | FeatureInputError, OutputPlan, StreamEnvelopePlan, SessionStreamPlan, BaselineSuiteSpec, FormalBaselineManifest, ShadowSessionManager | 91 | 2197 | — | |
-| `orchestrator.py` | ✅ active | CycleOutcome, DecisionCycleOrchestrator | 6 | 298 | — | |
-| `runtime_loop.py` | ✅ active | SimpleFeatureSnapshot, DecisionCycleResult, RuntimeLoop | 3 | 316 | — | |
+| `orchestrator.py` | ✅ active | CycleOutcome, DecisionCycleOrchestrator | 6 | 310 | — | |
+| `runtime_loop.py` | ✅ active | SimpleFeatureSnapshot, DecisionCycleResult, RuntimeLoop | 3 | 322 | — | |
 | `system_facade.py` | ✅ active | SystemFacade, SystemSelfTest | 27 | 237 | — | |
 | `v9_shadow_sse.py` | ✅ active | SessionStreamQueryError, SessionStreamResponseStartError, SessionSSEClientBuffer, ShadowSessionSSEHandler | 22 | 315 | — | |
 | `v9_shadow_support.py` | ✅ active | StubFeatureService, V9ParliamentAdapter | 2 | 66 | — | |
@@ -90,8 +90,8 @@
 | `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 10 | 362 | — | |
 | `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 520 | — | |
 | `brain_registry_loader.py` | ✅ active | BrainRegistryLoader | 1 | 7 | — | |
-| `brain_registry_service.py` | ✅ active | BrainRegistryService | 7 | 117 | — | |
-| `brain_run_service.py` | ✅ active | BrainRunService | 15 | 264 | — | |
+| `brain_registry_service.py` | ✅ active | BrainRegistryService | 7 | 141 | — | |
+| `brain_run_service.py` | ✅ active | BrainRunService | 15 | 281 | — | |
 | `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 420 | — | |
 | `inference_guard.py` | ✅ active | InferenceGuard | 11 | 220 | — | |
 | `onnx_worker.py` | ✅ active | — | 1 | 77 | — | |
@@ -657,6 +657,7 @@
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
 | `augment_journal_strategy.py` | ✅ active | — | 4 | 182 | — | |
 | `backfill_journal_pnl.py` | ✅ active | — | 7 | 353 | — | |
+| `backtest_rule_strategies.py` | ✅ active | — | 7 | 516 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 271 | — | |
 | `backtest_structural_swing.py` | ✅ active | — | 5 | 340 | — | |
 | `benchmark_zmq_latency.py` | ✅ active | — | 5 | 189 | — | |

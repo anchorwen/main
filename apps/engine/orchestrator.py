@@ -110,9 +110,21 @@ class DecisionCycleOrchestrator:
 
         try:
             decision_span = trace.start_span("runtime_loop")
-            result = self._loop.run_decision_cycle(trigger, feature_source)
+
+            # DQAF-20260624-058: Build governance status filter for brain
+            # inference pipeline.  Frozen / retired brains are excluded at
+            # the water source (BrainRegistryService) via dependency injection
+            # — no governance import below this layer.
+            gov_state_filter: dict[str, str] | None = None
+            if self._governance is not None:
+                states = self._governance.get_all_states()
+                gov_state_filter = {bid: s["status"] for bid, s in states.items()}
+
+            result = self._loop.run_decision_cycle(
+                trigger, feature_source, gov_state_filter=gov_state_filter
+            )
             trace.end_span(decision_span)
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # noqa: BLE001  # BLE001:FOG — pre-existing, wrapped in fail_open_guard
             with fail_open_guard("orchestrator:_finish"):
                 if self._metrics:
                     self._metrics.inc(CYCLES_ERRORS)

@@ -89,6 +89,7 @@ class BrainRunService:
         feature_snapshot,
         control_snapshot,
         feature_blackboard: dict[str, dict] | None = None,
+        gov_state_filter: dict[str, str] | None = None,
     ) -> list:
         """Run inference for all active brains.
 
@@ -103,11 +104,19 @@ class BrainRunService:
 
         If a schema key is missing from the blackboard the brain receives
         an empty dict — it will produce a neutral prediction.
+
+        Args:
+            gov_state_filter: Optional ``{brain_id: governance_status}`` dict
+                forwarded to ``BrainRegistryService.list_active_entries()``.
+                Brains with status ``frozen`` or ``retired`` are excluded
+                from inference (DQAF-20260624-058).
         """
         proposals = []
         blackboard = feature_blackboard or {}
 
-        for entry in self._brain_registry_service.list_active_entries():
+        for entry in self._brain_registry_service.list_active_entries(
+            gov_state_filter=gov_state_filter
+        ):
             proposal = self._run_one_entry(entry, feature_snapshot, blackboard)
             if proposal is not None:
                 proposals.append(proposal)
@@ -119,12 +128,15 @@ class BrainRunService:
         contract_group: str,
         feature_snapshot,
         feature_blackboard: dict[str, dict] | None = None,
+        gov_state_filter: dict[str, str] | None = None,
     ) -> list:
         """Run inference for brains matching a contract group (e.g. 'barrier_12bar')."""
         proposals = []
         blackboard = feature_blackboard or {}
 
-        for entry in self._brain_registry_service.list_active_entries():
+        for entry in self._brain_registry_service.list_active_entries(
+            gov_state_filter=gov_state_filter
+        ):
             if entry.get("contract_group") != contract_group:
                 continue
             proposal = self._run_one_entry(entry, feature_snapshot, blackboard)
@@ -172,17 +184,21 @@ class BrainRunService:
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             logging.exception("BrainRunService inference failed for brain_id=%s", brain_id)
             return None
+
     def run_brain_type(
         self,
         brain_type: str,
         feature_snapshot,
         feature_source: dict | None = None,
+        gov_state_filter: dict[str, str] | None = None,
     ):
         """Run inference for the first active brain matching a brain_type.
 
         Returns the first successful proposal, or None.
         """
-        for entry in self._brain_registry_service.list_active_entries():
+        for entry in self._brain_registry_service.list_active_entries(
+            gov_state_filter=gov_state_filter
+        ):
             if entry.get("brain_type") != brain_type:
                 continue
             return self.run_single_brain(
@@ -237,6 +253,7 @@ class BrainRunService:
                 brain_id,
             )
             return None
+
     def _run_one_entry(
         self,
         entry: dict,
