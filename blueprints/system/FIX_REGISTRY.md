@@ -4180,3 +4180,15 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: L1 — git add omitted
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
+
+### FIX-20260624-095
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: execution-budget, runtime-live
+- **Files**: core/execution/strategy_budget.py, core/runtime/live_cycle.py, tests/execution/test_strategy_budget.py
+- **Description**: UGR-A08 CapResult migration — StrategyBudget + live_cycle budget pipeline. Added CapResult-wrapped validated method variants (record_trade_checked, record_sl_checked, load_state_checked) with input validation. Replaced fail_open_guard("BudgetStateRestore") + 2× log_and_continue at 3 budget pipeline sites in live_cycle Phase 7 with CapResult pattern matching. Fixed pre-existing contextlib import gap. 17 new tests.
+- **Root Cause**: RC-12 — missing-feature: no CapResult integration in core budget pipeline; fail_open_guard swallowed budget restore errors indiscriminately
+- **Prevention**: CapResult pattern matching forces callers to handle both ok/err paths; input validation catches type errors before state mutation
+- **Dependents Checked**: live_cycle budget pipeline (Phase 7), execution_state budget persistence

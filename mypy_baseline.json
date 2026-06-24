@@ -15,11 +15,12 @@
   "tests/execution/test_conformal_ou_gate.py": 8,
   "tests/execution/test_exit_reason.py": 1,
   "tests/execution/test_mt5_worker.py": 12,
+  "tests/execution/test_strategy_budget.py": 9,
   "tests/runtime/test_feature_freshness.py": 5,
   "tests/runtime/test_golden_master.py": 2,
   "tests/runtime/test_position_ownership.py": 1,
   "tests/runtime/test_session_guards.py": 8,
   "tests/runtime/test_supervised_scheduler.py": 1,
   "tests/runtime/test_timeframe_scaling.py": 1,
-  "tests/runtime/test_typed_clock.py": 7
+  "tests/runtime/test_typed_clock.py": 6
 }

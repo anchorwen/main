@@ -6,6 +6,7 @@ Extracted from scripts/live_intent_loop.py to keep the CLI script thin
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -2811,21 +2812,31 @@ def execute_live_cycle(
         # The restore MUST happen before pending budget records are fed so
         # those records are ADDED to the restored cumulative state rather
         # than overwritten by it.
-        with fail_open_guard("BudgetStateRestore"):
-            from core.runtime.execution_state import load_execution_state as _load_exec
+        # ── UGR-A08: CapResult-based budget state restore ──
+        # Replaces fail_open_guard("BudgetStateRestore") + contextlib.suppress.
+        # _load_exec may fail on corrupt/missing file (I/O error) — catch at
+        # the I/O boundary.  load_state_checked() validates data integrity
+        # and returns CapResult for structured error handling.
+        from core.runtime.execution_state import load_execution_state as _load_exec
 
+        _exec_snap = None
+        try:
             _exec_snap = _load_exec(Path(config.base_dir) / "state" / "execution_state.json")
-            if _exec_snap is not None:
-                _budgets_data: dict[str, Any] = _exec_snap.get("budgets", {})
-                for _sname, _snap in _budgets_data.items():
-                    _strat = strategies.get(_sname)
-                    if _strat is not None:
-                        _budget = getattr(_strat, "budget", None)
-                        if _budget is not None and hasattr(_budget, "load_state"):
-                            import contextlib
-
-                            with contextlib.suppress(Exception):
-                                _budget.load_state(_snap)
+        except (OSError, ValueError, RuntimeError):
+            logger.warning("BudgetStateRestore: failed to load execution state", exc_info=True)
+        if _exec_snap is not None:
+            _budgets_data: dict[str, Any] = _exec_snap.get("budgets", {})
+            for _sname, _snap in _budgets_data.items():
+                _strat = strategies.get(_sname)
+                if _strat is not None:
+                    _budget = getattr(_strat, "budget", None)
+                    if _budget is not None and hasattr(_budget, "load_state_checked"):
+                        _budget.load_state_checked(_snap).match(
+                            ok=lambda _: None,
+                            err=lambda e, _sn=_sname: logger.warning(
+                                "BudgetStateRestore[%s]: %s", _sn, e
+                            ),
+                        )
 
         # ── Feed pending budget records from reconciliation ──
         if state._pending_budget_records:
@@ -2833,13 +2844,18 @@ def execute_live_cycle(
                 _sname = _rec.get("strategy", "")
                 _strat = strategies.get(_sname)
                 if _strat is not None and getattr(_strat, "budget", None) is not None:
-                    with log_and_continue(component="Budget:record_trade"):
-                        # FIX-20260615-009g: defensive defaults for breakeven (PnL=0)
-                        # edge case — some close paths may omit is_win when PnL=0.
-                        _strat.budget.record_trade(
-                            _rec.get("pnl", 0.0),
-                            _rec.get("is_win", False),
-                        )
+                    # UGR-A08: CapResult-based trade recording replaces log_and_continue
+                    # FIX-20260615-009g: defensive defaults for breakeven (PnL=0)
+                    # edge case — some close paths may omit is_win when PnL=0.
+                    _strat.budget.record_trade_checked(
+                        _rec.get("pnl", 0.0),
+                        _rec.get("is_win", False),
+                    ).match(
+                        ok=lambda _: None,
+                        err=lambda e, _sn=_sname: logger.warning(
+                            "Budget:record_trade[%s]: %s", _sn, e
+                        ),
+                    )
             state._pending_budget_records.clear()
 
         # ── Feed pending SL records for graduated per-SL cooldown ──
@@ -2848,13 +2864,20 @@ def execute_live_cycle(
                 _sname = _rec["strategy"]
                 _strat = strategies.get(_sname)
                 if _strat is not None and getattr(_strat, "budget", None) is not None:
-                    with log_and_continue(component="Budget:record_sl"):
-                        _result = _strat.budget.record_sl(_rec.get("timestamp"))
-                        if _result.get("event") != "sl_recorded":
+                    # UGR-A08: CapResult-based SL recording replaces log_and_continue
+                    _strat.budget.record_sl_checked(_rec.get("timestamp")).match(
+                        ok=lambda _result: (
                             print(
                                 json.dumps(_result, ensure_ascii=False),
                                 flush=True,
                             )
+                            if _result.get("event") != "sl_recorded"
+                            else None
+                        ),
+                        err=lambda e, _sn=_sname: logger.warning(
+                            "Budget:record_sl[%s]: %s", _sn, e
+                        ),
+                    )
             state._pending_sl_records.clear()
         elif len(state._pending_sl_records) > 100:
             # Safety valve: prevent unbounded growth in single-brain / no-strategy mode

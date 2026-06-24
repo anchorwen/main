@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T01:42:54Z
+> **自动生成**: 2026-06-24T02:09:37Z
 
 ## Package-Level Dependencies
 
@@ -234,7 +234,7 @@
 - `schema_versions.py` → (无内部依赖)
 - `session_detector.py` → (无内部依赖)
 - `statarb_strategy.py` → `core.execution.strategy_line`, `core.runtime.fault_handler`
-- `strategy_budget.py` → (无内部依赖)
+- `strategy_budget.py` → `core.contracts.cap_result`
 - `strategy_decision.py` → `core.runtime.fault_handler`
 - `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.config.asset_registry`, `core.execution.brain_gates`, `core.execution.conformal_ou_gate`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_filter_routing`, `core.execution.meta_pipeline`, `core.execution.ofi_gate`, `core.execution.pre_trade_guards`, `core.execution.pwin_chain`, `core.execution.strategy_decision`, `core.execution.trend_isolation_gates`, `core.execution.trend_volume_guard`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.shadow_recorder`
 - `strategy_type.py` → (无内部依赖)

@@ -21,7 +21,10 @@ from __future__ import annotations
 import time as _time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.contracts.cap_result import CapResult
 
 # ── Graduated per-SL cooldown ────────────────────────────────────────────
 
@@ -289,7 +292,7 @@ class StrategyBudget:
 
         # ── DQAF-20260614-001: Detect cross-day state BEFORE loading counters ──
         _saved_day = str(saved.get("last_trade_day", ""))
-        _stale_day = (_saved_day != _today)  # True if saved state is from a prior day
+        _stale_day = _saved_day != _today  # True if saved state is from a prior day
 
         if "daily_pnl_pct" in saved:
             self.daily_pnl_pct = float(saved["daily_pnl_pct"])
@@ -329,3 +332,79 @@ class StrategyBudget:
             _paused_day = bool(saved["_sl_paused_rest_of_day"])
             if _paused_day and self.last_trade_day == self._today():
                 self._sl_paused_rest_of_day = True
+
+    # ── CapResult-wrapped validated variants (UGR-A08) ─────────────────────
+
+    def record_trade_checked(self, pnl_pct: float, is_win: bool) -> CapResult[dict[str, Any]]:
+        """CapResult-wrapped variant of record_trade with input validation.
+
+        UGR-A08: Provides structured error signalling for the budget pipeline,
+        replacing the legacy ``log_and_continue`` / ``fail_open_guard`` pattern
+        in live_cycle Phase 7.
+
+        Returns:
+            CapResult.ok(dict) with the trade status on success.
+            CapResult.err(str) with the error message on invalid input or
+            unexpected failure.
+        """
+        from core.contracts.cap_result import CapResult, Kernel
+
+        if not isinstance(pnl_pct, int | float):
+            return CapResult.err(
+                f"record_trade_checked: pnl_pct must be numeric, " f"got {type(pnl_pct).__name__}"
+            )
+        try:
+            pnl = float(pnl_pct)
+            win = bool(is_win)
+            result = self.record_trade(pnl, win)
+            with Kernel.success_scope() as proof:
+                return CapResult.ok(result, proof)
+        except Exception as exc:  # noqa: BLE001 — catch-all for CapResult error conversion
+            return CapResult.err(f"record_trade_checked: {exc}")
+
+    def record_sl_checked(self, timestamp: float | None = None) -> CapResult[dict[str, Any]]:
+        """CapResult-wrapped variant of record_sl with input validation.
+
+        UGR-A08: Provides structured error signalling for the SL cooldown
+        pipeline, replacing ``log_and_continue`` in live_cycle Phase 7.
+
+        Returns:
+            CapResult.ok(dict) with the SL cooldown status on success.
+            CapResult.err(str) with the error message on failure.
+        """
+        from core.contracts.cap_result import CapResult, Kernel
+
+        if timestamp is not None and not isinstance(timestamp, int | float):
+            return CapResult.err(
+                f"record_sl_checked: timestamp must be numeric or None, "
+                f"got {type(timestamp).__name__}"
+            )
+        try:
+            ts = float(timestamp) if timestamp is not None else None
+            result = self.record_sl(ts)
+            with Kernel.success_scope() as proof:
+                return CapResult.ok(result, proof)
+        except Exception as exc:  # noqa: BLE001 — catch-all for CapResult error conversion
+            return CapResult.err(f"record_sl_checked: {exc}")
+
+    def load_state_checked(self, saved: dict[str, Any]) -> CapResult[None]:
+        """CapResult-wrapped variant of load_state with input validation.
+
+        UGR-A08: Provides structured error signalling for budget state
+        restoration, replacing ``fail_open_guard("BudgetStateRestore")``
+        + ``contextlib.suppress(Exception)`` in live_cycle Phase 7.
+
+        Returns:
+            CapResult.ok(None) on successful restoration.
+            CapResult.err(str) on invalid input or restoration failure.
+        """
+        from core.contracts.cap_result import CapResult, Kernel
+
+        if not isinstance(saved, dict):
+            return CapResult.err(f"load_state_checked: expected dict, got {type(saved).__name__}")
+        try:
+            self.load_state(saved)
+            with Kernel.success_scope() as proof:
+                return CapResult.ok(None, proof)
+        except Exception as exc:  # noqa: BLE001 — catch-all for CapResult error conversion
+            return CapResult.err(f"load_state_checked: {exc}")

@@ -123,7 +123,7 @@ class TestMonotonicInstant:
         from dataclasses import FrozenInstanceError
 
         with pytest.raises(FrozenInstanceError):
-            t._raw = 999.0  # type: ignore[misc]
+            t._raw = 999.0
 
     def test_object_setattr_is_bypassable_and_caught_by_ci(self) -> None:
         """object.__setattr__ CAN bypass frozen=True at runtime.
@@ -157,13 +157,13 @@ class TestWallInstant:
         """WallInstant has NO __sub__ → AttributeError."""
         t = WallInstant(1000.0)
         with pytest.raises(TypeError):
-            _ = t - t  # type: ignore[operator]
+            _ = t - t
 
     def test_no_addition(self) -> None:
         """WallInstant has NO __add__ → AttributeError."""
         t = WallInstant(1000.0)
         with pytest.raises(TypeError):
-            _ = t + Duration(5.0)  # type: ignore[operator]
+            _ = t + Duration(5.0)
 
     def test_comparison(self) -> None:
         """WallInstant supports ==, <, > but not arithmetic."""
@@ -201,7 +201,7 @@ class TestWallInstant:
         from dataclasses import FrozenInstanceError
 
         with pytest.raises(FrozenInstanceError):
-            t._raw = 999.0  # type: ignore[misc]
+            t._raw = 999.0
 
     def test_object_setattr_bypass_documented(self) -> None:
         """object.__setattr__ bypass — CI AST scanner is the enforcement layer."""
@@ -280,7 +280,7 @@ class TestDuration:
         from dataclasses import FrozenInstanceError
 
         with pytest.raises(FrozenInstanceError):
-            d._raw = 999.0  # type: ignore[misc]
+            d._raw = 999.0
 
     def test_object_setattr_bypass_documented(self) -> None:
         """object.__setattr__ bypass — CI AST scanner is the enforcement layer."""
@@ -315,7 +315,7 @@ class TestTypeIncompatibility:
         wall = WallInstant(1000.0)
         mono = MonotonicInstant(100.0)
         with pytest.raises(TypeError):
-            _ = wall - mono  # type: ignore[operator]
+            _ = wall - mono
 
     def test_mono_cannot_add_wall(self) -> None:
         """MonotonicInstant + WallInstant → NotImplemented."""

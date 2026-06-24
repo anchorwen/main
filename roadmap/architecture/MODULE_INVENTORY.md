@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T01:42:54Z
+> **自动生成**: 2026-06-24T02:09:37Z
 > **扫描模块数**: 662
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -266,7 +266,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `session_detector.py` | ✅ active | SessionDetector | 3 | 182 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
-| `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 331 | — | |
+| `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 92 | — | |
 | `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1825 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
@@ -513,7 +513,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 162 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4180 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4203 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 376 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1630 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |

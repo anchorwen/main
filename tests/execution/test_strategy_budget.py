@@ -148,3 +148,199 @@ class TestStrategyBudgetRecordTrade:
         # A win while paused should not unpause
         budget.record_trade(pnl_pct=0.01, is_win=True)
         assert budget.paused is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UGR-A08: CapResult-wrapped validated methods
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestStrategyBudgetRecordTradeChecked:
+    """Tests for record_trade_checked() — CapResult-wrapped record_trade."""
+
+    def test_ok_returns_capresult_ok(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.record_trade_checked(pnl_pct=0.02, is_win=True)
+        assert result.is_ok()
+        assert result.is_err() is False
+        inner = result.match(ok=lambda v: v, err=lambda e: None)
+        assert inner is not None
+        assert inner["event"] == "trade_recorded"
+
+    def test_err_on_non_numeric_pnl(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.record_trade_checked(pnl_pct="bad", is_win=True)  # type: ignore[arg-type]
+        assert result.is_err()
+        error = result.match(ok=lambda v: None, err=lambda e: e)
+        assert "pnl_pct must be numeric" in (error or "")
+
+    def test_err_on_none_pnl(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.record_trade_checked(pnl_pct=None, is_win=True)  # type: ignore[arg-type]
+        assert result.is_err()
+
+    def test_loss_count_increments_on_err(self):
+        """Error path does NOT mutate state — validation fails before mutation."""
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        initial = budget.consecutive_losses
+        budget.record_trade_checked(pnl_pct="bad", is_win=False)  # type: ignore[arg-type]
+        assert budget.consecutive_losses == initial  # no mutation on error
+
+    def test_ok_pauses_on_daily_loss_limit(self):
+        budget = StrategyBudget(
+            strategy_name="barrier_12bar",
+            daily_loss_limit_pct=-0.03,
+        )
+        result = budget.record_trade_checked(pnl_pct=-0.04, is_win=False)
+        assert result.is_ok()
+        inner = result.match(ok=lambda v: v, err=lambda e: None)
+        assert inner is not None
+        assert inner["event"] == "strategy_paused"
+        assert inner["reason"] == "daily_loss_limit"
+
+    def test_match_pattern_works(self):
+        """Verify .match() pattern works as expected for live_cycle integration."""
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        seen_ok: list[str] = []
+        seen_err: list[str] = []
+
+        budget.record_trade_checked(0.01, True).match(
+            ok=lambda v: seen_ok.append(v["event"]),
+            err=lambda e: seen_err.append(e),
+        )
+        assert len(seen_ok) == 1
+        assert seen_ok[0] == "trade_recorded"
+        assert len(seen_err) == 0
+
+        budget.record_trade_checked("bad", True).match(  # type: ignore[arg-type]
+            ok=lambda v: seen_ok.append(v["event"]),
+            err=lambda e: seen_err.append(e),
+        )
+        assert len(seen_ok) == 1  # unchanged
+        assert len(seen_err) == 1
+
+
+class TestStrategyBudgetRecordSLChecked:
+    """Tests for record_sl_checked() — CapResult-wrapped record_sl."""
+
+    def test_ok_returns_capresult_ok(self, monkeypatch):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        # Freeze time so SL cooldown is deterministic
+        monkeypatch.setattr("time.time", lambda: 1000000.0)
+        result = budget.record_sl_checked(timestamp=1000000.0)
+        assert result.is_ok()
+        inner = result.match(ok=lambda v: v, err=lambda e: None)
+        assert inner is not None
+        assert "event" in (inner or {})
+
+    def test_ok_with_none_timestamp_uses_current_time(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.record_sl_checked(timestamp=None)
+        assert result.is_ok()
+
+    def test_err_on_non_numeric_timestamp(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.record_sl_checked(timestamp="bad")  # type: ignore[arg-type]
+        assert result.is_err()
+        error = result.match(ok=lambda v: None, err=lambda e: e)
+        assert "timestamp must be numeric" in (error or "")
+
+    def test_graduated_cooldown_tiers(self, monkeypatch):
+        """4 SLs in window → rest-of-day pause."""
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        base = 1000000.0
+        monkeypatch.setattr("time.time", lambda: base)
+
+        for i in range(4):
+            result = budget.record_sl_checked(timestamp=base + i)
+            assert result.is_ok(), f"SL {i + 1} should be ok"
+
+        # 4th SL triggers rest-of-day pause
+        last = budget.record_sl_checked(timestamp=base + 4)
+        inner = last.match(ok=lambda v: v, err=lambda e: None)
+        assert inner is not None
+        assert inner["event"] == "sl_cooldown_paused_day"
+
+    def test_sl_count_not_mutated_on_error(self):
+        """Error path does NOT register an SL."""
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        initial_count = len(budget._sl_timestamps)
+        budget.record_sl_checked(timestamp="bad")  # type: ignore[arg-type]
+        assert len(budget._sl_timestamps) == initial_count
+
+
+class TestStrategyBudgetLoadStateChecked:
+    """Tests for load_state_checked() — CapResult-wrapped load_state."""
+
+    def test_ok_restores_state(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        _today = budget._today()
+        result = budget.load_state_checked(
+            {
+                "daily_pnl_pct": -0.02,
+                "consecutive_losses": 3,
+                "total_trades_today": 10,
+                "total_wins_today": 4,
+                "paused": False,
+                "last_trade_day": _today,  # same-day restore to avoid cross-day reset
+            }
+        )
+        assert result.is_ok()
+        result.match(ok=lambda _: None, err=lambda e: None)
+        assert budget.daily_pnl_pct == pytest.approx(-0.02)
+        assert budget.consecutive_losses == 3
+        assert budget.total_trades_today == 10
+
+    def test_err_on_non_dict_input(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.load_state_checked("not_a_dict")  # type: ignore[arg-type]
+        assert result.is_err()
+        error = result.match(ok=lambda v: None, err=lambda e: e)
+        assert "expected dict" in (error or "")
+
+    def test_err_on_none_input(self):
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.load_state_checked(None)  # type: ignore[arg-type]
+        assert result.is_err()
+
+    def test_state_not_mutated_on_error(self):
+        """Error path does NOT mutate budget state."""
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        budget.daily_pnl_pct = -0.01
+        original = budget.daily_pnl_pct
+        budget.load_state_checked("bad")  # type: ignore[arg-type]
+        assert budget.daily_pnl_pct == original
+
+    def test_partial_state_backward_compatible(self):
+        """Empty/partial saved dict is valid — load_state tolerates missing keys."""
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        result = budget.load_state_checked({})
+        assert result.is_ok()
+
+    def test_cross_day_reset(self, monkeypatch):
+        """Cross-day saved state triggers eager daily reset (DQAF-20260614-001)."""
+        budget = StrategyBudget(strategy_name="barrier_12bar")
+        budget.daily_pnl_pct = -0.05
+        budget.consecutive_losses = 5
+        budget.last_trade_day = "2026-01-01"
+
+        # Simulate new day
+        def _fake_now(tz=None):
+            return datetime(2026, 1, 2, 9, 0, tzinfo=UTC)
+
+        monkeypatch.setattr(
+            "core.execution.strategy_budget.datetime",
+            type("FakeDT", (), {"now": staticmethod(_fake_now)})(),
+        )
+
+        result = budget.load_state_checked(
+            {
+                "daily_pnl_pct": -0.05,
+                "consecutive_losses": 5,
+                "last_trade_day": "2026-01-01",
+            }
+        )
+        assert result.is_ok()
+        # Cross-day reset: counters zeroed
+        assert budget.daily_pnl_pct == 0.0
+        assert budget.consecutive_losses == 0
