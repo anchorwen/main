@@ -4184,7 +4184,7 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 ### FIX-20260624-095
 - **Date**: 2026-06-24
 - **Author**: cursor-agent
-- **Commit**: —
+- **Commit**: da208513
 - **Type**: feat
 - **Module**: execution-budget, runtime-live
 - **Files**: core/execution/strategy_budget.py, core/runtime/live_cycle.py, tests/execution/test_strategy_budget.py
@@ -4192,3 +4192,15 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: RC-12 — missing-feature: no CapResult integration in core budget pipeline; fail_open_guard swallowed budget restore errors indiscriminately
 - **Prevention**: CapResult pattern matching forces callers to handle both ok/err paths; input validation catches type errors before state mutation
 - **Dependents Checked**: live_cycle budget pipeline (Phase 7), execution_state budget persistence
+
+### FIX-20260624-096
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: contracts-resilience, scripts
+- **Files**: scripts/verify_capresult_ast.py, tests/scripts/test_verify_capresult_ast.py
+- **Description**: UGR-B03 AST Scanner — full enforcement mode with 5 detectors. Upgraded from baseline (DynamicCallDetector only) to full enforcement: (1) CapResultOkPlacementDetector — flags CapResult.ok() outside Kernel.success_scope(); (2) RawAccessDetector — flags ._raw access on TypedClock types outside whitelist; (3) FailOpenGuardDetector — flags fail_open_guard/log_and_continue as DEPRECATED (777 call sites tracked for UGR-A09); (4) ProofLeakDetector — flags _SuccessProof assignment to persistent storage (attribute/subscript); (5) DynamicCallDetector — retained from baseline. --enforce flag activates all 5 detectors. Whitelists: cap_result.py, adapters.py, fault_handler.py, typed_clock.py, test files. 41 tests. Enforcement scan: 0 CAPRESULT_OK_OUTSIDE_SCOPE, 0 RAW_ACCESS, 0 PROOF_LEAK — all critical detectors clean.
+- **Root Cause**: RC-12 — missing-feature: no AST-level enforcement of CapResult.ok() placement, TypedClock ._raw access, or _SuccessProof lifecycle
+- **Prevention**: CI enforcement via `--enforce` flag; each detector independently whitelisted; zero false positives on current codebase
+- **Dependents Checked**: CapResult.ok() in strategy_budget.py+adapters.py (verified inside success_scope), ._raw in typed_clock.py+adapters.py (whitelisted), fail_open_guard/log_and_continue 777 sites (DEPRECATED, UGR-A09 track)

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T02:09:37Z
+> **自动生成**: 2026-06-24T02:24:26Z
 > **扫描模块数**: 662
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -777,7 +777,7 @@
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
 | `verify.py` | ✅ active | — | 15 | 987 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 92 | — | |
-| `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector | 9 | 251 | — | |
+| `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector, CapResultOkPlacementDetector, RawAccessDetector, FailOpenGuardDetector, ProofLeakDetector | 31 | 650 | ✅ | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 | `verify_event_stream.py` | ✅ active | — | 3 | 202 | — | |

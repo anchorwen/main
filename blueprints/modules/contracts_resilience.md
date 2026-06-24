@@ -18,7 +18,7 @@ v3.1 architectural transformation described in the master plan.
 | `core/contracts/adapters.py` | Adapter bridges — CapResult ↔ legacy, TypedClock ↔ float, fault tolerance helpers | ✅ UGR-A07 |
 | `core/observability/invariant_engine.py` | 15 binary predicate invariants + WAL integrity check | ✅ UGR-A06 |
 | `core/observability/live_alert_hub.py` | AlertBus — AlertStormDetector + get_health_status (storm protection + self-monitoring) | ✅ UGR-A05 |
-| `scripts/verify_capresult_ast.py` | AST scanner: CapResult placement + dynamic call detection | ✅ UGR-P03 |
+| `scripts/verify_capresult_ast.py` | AST scanner: 5 detectors (DynamicCall, CapResultOk, RawAccess, FailOpenGuard, ProofLeak) with --enforce mode | ✅ UGR-B03 |
 | `scripts/verify_phantom_contracts.py` | Phantom offline verifier (WAL state reconstruction + replay) | ✅ UGR-B01 |
 
 ## Data Flow
@@ -66,3 +66,4 @@ verify_phantom_contracts.py (offline replay against WAL state)
 | FIX-20260624-093 | 2026-06-24 | cursor-agent | — | **UGR-P02/P03/P04: Spec docs + AST scanner baseline**. Created phantom_state_replay.md, wal_checkpoint_design.md, verify_capresult_ast.py. | RC-12 — missing artifacts for v3.1 architecture |
 | FIX-20260624-094 | 2026-06-24 | cursor-agent | — | **UGR-Phase0-1 CI Red-X repair**. Committed missing Phase 0-1 files that were created locally but never git-added. CI ImportError on cap_result + typed_clock → Red X on A05-B02 commits. Added ruff/mypy fixes. | L1 — git add omitted |
 | FIX-20260624-095 | 2026-06-24 | cursor-agent | — | **UGR-A08: CapResult migration — StrategyBudget + live_cycle budget pipeline**. Added record_trade_checked(), record_sl_checked(), load_state_checked() CapResult-wrapped methods to StrategyBudget. Replaced fail_open_guard("BudgetStateRestore") + log_and_continue at 3 budget pipeline sites in live_cycle Phase 7 with CapResult pattern matching. 17 new tests. | RC-12 — missing-feature: no CapResult integration in budget pipeline |
+| FIX-20260624-096 | 2026-06-24 | cursor-agent | — | **UGR-B03: AST Scanner full enforcement — 5 detectors**. Upgraded verify_capresult_ast.py from baseline (1 detector) to full enforcement (5 detectors): CapResultOkPlacementDetector (ok() outside success_scope→violation), RawAccessDetector (._raw on TypedClock types outside whitelist), FailOpenGuardDetector (fail_open_guard/log_and_continue DEPRECATED), ProofLeakDetector (proof stored to persistent location). 41 tests. | RC-12 — missing-feature: no AST enforcement for CapResult.ok() placement, ._raw access, or proof leakage |
