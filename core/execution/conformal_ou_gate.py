@@ -43,8 +43,6 @@ from typing import Any
 
 import numpy as np
 
-from core.runtime.fault_handler import fail_open_guard
-
 logger = logging.getLogger(__name__)
 
 # ── Constants ──
@@ -79,9 +77,8 @@ def _load_ou_params(artifact_path: str) -> dict[str, float]:
             "max_half_life": float(opt.get("max_half_life", 20)),
             "theta_min": float(opt.get("theta_min", 0.005)),
         }
-    except Exception:  # BLE001:FOG_WRAPPED
-        with fail_open_guard("ConformalOUGate:Compute"):
-            raise
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG_WRAPPED
+        raise
         logger.warning("ConformalOUGate: cannot load OU params from %s", artifact_path)
         return {
             "window": 100.0,
@@ -543,9 +540,8 @@ class ConformalOUGate:
                     entry = BrainRegistry.instance().get(brain_id)
                     if entry is not None and entry.contract_group != strategy_name:
                         continue  # brain is for a different strategy line
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("conformal_ou_gate:_extract_ou_diagnostics"):
-                        pass  # registry resolve failure is non-blocking
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass  # registry resolve failure is non-blocking
             z_score = float(getattr(p, "raw_score", 0.0) or 0.0)
             theta = float(diag.get("theta", 0.0))
             half_life = float(diag.get("half_life", float("inf")))
@@ -749,28 +745,27 @@ def apply_conformal_ou_gate(
                 return (blocked, ou_result)
             # Passed or COLD exploration bypass → proceed
             return (None, ou_result)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("strategy_line:evaluate"):
-                _sl_logger = logging.getLogger(__name__)
-                _sl_logger.warning(
-                    "OU gate evaluation failed for strategy=%s — BLOCKING trade",
-                    strategy_name,
-                    exc_info=True,
-                )
-                blocked = make_decision(
-                    should_trade=False,
-                    direction=direction,
-                    confidence=confidence,
-                    volume=0.0,
-                    sl=0.0,
-                    tp=0.0,
-                    hard_sl=0.0,
-                    brain_ids=brain_ids,
-                    supporting_count=support_count,
-                    total_count=total_count,
-                    regime_mode=regime_gate_mode,
-                    reason="ou_gate_exception_blocked",
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            _sl_logger = logging.getLogger(__name__)
+            _sl_logger.warning(
+                "OU gate evaluation failed for strategy=%s — BLOCKING trade",
+                strategy_name,
+                exc_info=True,
+            )
+            blocked = make_decision(
+                should_trade=False,
+                direction=direction,
+                confidence=confidence,
+                volume=0.0,
+                sl=0.0,
+                tp=0.0,
+                hard_sl=0.0,
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                reason="ou_gate_exception_blocked",
+            )
             return (blocked, None)
 
     # ── MetaFilter fallback ──
@@ -800,28 +795,27 @@ def apply_conformal_ou_gate(
                     reason=mf_result["reason"],
                 )
                 return (blocked, None)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("strategy_line:evaluate"):
-                _sl_logger = logging.getLogger(__name__)
-                _sl_logger.warning(
-                    "Meta-filter gate evaluation failed for strategy=%s — BLOCKING trade",
-                    strategy_name,
-                    exc_info=True,
-                )
-                blocked = make_decision(
-                    should_trade=False,
-                    direction=direction,
-                    confidence=confidence,
-                    volume=0.0,
-                    sl=0.0,
-                    tp=0.0,
-                    hard_sl=0.0,
-                    brain_ids=brain_ids,
-                    supporting_count=support_count,
-                    total_count=total_count,
-                    regime_mode=regime_gate_mode,
-                    reason="meta_filter_gate_exception_blocked",
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            _sl_logger = logging.getLogger(__name__)
+            _sl_logger.warning(
+                "Meta-filter gate evaluation failed for strategy=%s — BLOCKING trade",
+                strategy_name,
+                exc_info=True,
+            )
+            blocked = make_decision(
+                should_trade=False,
+                direction=direction,
+                confidence=confidence,
+                volume=0.0,
+                sl=0.0,
+                tp=0.0,
+                hard_sl=0.0,
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                reason="meta_filter_gate_exception_blocked",
+            )
             return (blocked, None)
 
     # Neither gate available or loaded → pass through

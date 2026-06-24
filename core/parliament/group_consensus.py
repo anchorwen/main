@@ -7,9 +7,10 @@ and returns a unified consensus result.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 
 
 def compute_contract_group_consensus(
@@ -81,7 +82,7 @@ def compute_contract_group_consensus(
 
         # Update group correlation tracker
         if correlation_tracker is not None:
-            with log_and_continue(component="CorrelationTracker:update"):
+            with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 correlation_tracker.update(group_signals)
 
         # Compute dynamic volume with correlation penalty

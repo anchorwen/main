@@ -19,8 +19,6 @@ from typing import Any
 
 import numpy as np
 
-from core.runtime.fault_handler import fail_open_guard
-
 logger = logging.getLogger(__name__)
 
 
@@ -69,9 +67,8 @@ class OnlineFeedbackHook:
             try:
                 state = json.loads(self._last_processed_path.read_text(encoding="utf-8"))
                 self._last_processed_at = state.get("last_processed_at")
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("online_feedback_hook:_load_state"):
-                    self._last_processed_at = None
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                self._last_processed_at = None
     def _save_state(self) -> None:
         self._last_processed_path.parent.mkdir(parents=True, exist_ok=True)
         self._last_processed_path.write_text(
@@ -217,9 +214,8 @@ class OnlineFeedbackHook:
             brain_entry = getattr(self._adapter, "_brain_entry", None)
             if isinstance(brain_entry, dict):
                 feature_names = brain_entry.get("features")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("online_feedback_hook:_build_feature_array"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
         if feature_names:
             return np.array(
                 [float(features.get(n, 0.0)) for n in feature_names],
@@ -366,9 +362,8 @@ class OnlineFeedbackHook:
                 if p_win is not None:
                     try:  # noqa: SIM105
                         self._calibrator.update(float(p_win), label)
-                    except Exception:  # BLE001:FOG
-                        with fail_open_guard("online_feedback_hook:process_new_trades"):
-                            pass  # non-critical — calibrator update failure must not block feedback
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass  # non-critical — calibrator update failure must not block feedback
             if self._replay is not None:
                 # ── Replay buffer path ──
                 try:
@@ -378,10 +373,9 @@ class OnlineFeedbackHook:
                     pnl, volume = self._extract_pnl_volume(entry)
                     self._replay.add(feat_arr, label, pnl, volume, trade_id=trade_id)
                     collected += 1
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("online_feedback_hook:process_new_trades"):
-                        errors += 1
-                        logger.exception("OnlineFeedbackHook: buffer add failed for trade %s", trade_id)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    errors += 1
+                    logger.exception("OnlineFeedbackHook: buffer add failed for trade %s", trade_id)
             else:
                 # ── Legacy direct partial_fit path ──
                 try:
@@ -398,10 +392,9 @@ class OnlineFeedbackHook:
                         )
                     else:
                         errors += 1
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("online_feedback_hook:process_new_trades"):
-                        errors += 1
-                        logger.exception("OnlineFeedbackHook: update failed for trade %s", trade_id)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    errors += 1
+                    logger.exception("OnlineFeedbackHook: update failed for trade %s", trade_id)
             # ── C4: datetime comparison for latest_processed tracking ──
             if entry_dt is not None and (
                 latest_processed_dt is None or entry_dt > latest_processed_dt
@@ -424,9 +417,8 @@ class OnlineFeedbackHook:
                     flushed_count,
                     len(batch),
                 )
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("online_feedback_hook:process_new_trades"):
-                    logger.exception("OnlineFeedbackHook: mini-batch flush failed")
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                logger.exception("OnlineFeedbackHook: mini-batch flush failed")
         self._last_processed_at = latest_processed
         self._save_state()
 

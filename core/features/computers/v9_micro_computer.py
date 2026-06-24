@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from core.features.computers.microstructure_computer import MicrostructureFeatureComputer
 from core.features.computers.v9_live_computer import V9LiveFeatureComputer
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
-from core.runtime.fault_handler import fail_open_guard
 
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
@@ -58,10 +57,9 @@ class V9MicroComputer:
         # ── V9 institutional features (always attempted) ──
         try:
             v9_features = self._v9.compute_all()
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("v9_micro_computer:compute_all"):
-                logging.exception("V9MicroComputer: V9 compute failed for %s", self._symbol)
-                v9_features = {}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logging.exception("V9MicroComputer: V9 compute failed for %s", self._symbol)
+            v9_features = {}
         result.update(v9_features)
 
         # ── Microstructure features (best-effort, NaN on failure) ──
@@ -83,9 +81,8 @@ class V9MicroComputer:
                 )
             else:
                 self.last_micro_ok = True
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("v9_micro_computer:compute_all"):
-                logging.exception("V9MicroComputer: micro compute failed for %s", self._symbol)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logging.exception("V9MicroComputer: micro compute failed for %s", self._symbol)
         # Fill micro slots — use 0.0 when unavailable (NaN propagates through
         # feature vectors into model inference → NaN predictions → silent rejection)
         for name in MICROSTRUCTURE_9_FEATURES:

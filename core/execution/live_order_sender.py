@@ -27,7 +27,6 @@ from core.protocol.live_execution_contract import (
     normalize_action,
 )
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE
-from core.runtime.fault_handler import fail_open_guard
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -132,11 +131,13 @@ def _validate_ack_sl_tp(
     ack_sl = None
     ack_tp = None
     ack = None
-    with fail_open_guard("LiveOrderSender:ResolveAck"):
+    try:
         from core.protocol.services.zmq_receipt_listener import resolve_ack
 
         ack = resolve_ack(intent_id, base_dir=base_dir, timeout=5.0)
 
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
     if ack is not None:
         detail = ack.get("detail", {}) if isinstance(ack, dict) else {}
         ack_sl = detail.get("confirmed_sl")

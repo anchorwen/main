@@ -32,7 +32,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.data.write_ahead_log import WriteAheadLog
-from core.runtime.fault_handler import fail_open_guard
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Types
@@ -121,15 +120,14 @@ class InvariantEngine:
                     )
                     violations.append(v)
             except (TypeError, ValueError, RuntimeError, KeyError, AttributeError):
-                with fail_open_guard("invariant_engine:check_all"):
-                    # Shadow mode: invariant failure must never propagate
-                    violations.append(
-                        InvariantViolation(
-                            invariant=inv.name,
-                            detail="Invariant evaluation raised exception",
-                            severity="warning",
-                        )
+                # Shadow mode: invariant failure must never propagate
+                violations.append(
+                    InvariantViolation(
+                        invariant=inv.name,
+                        detail="Invariant evaluation raised exception",
+                        severity="warning",
                     )
+                )
 
         self._violations_total += len(violations)
         self._last_violations = violations

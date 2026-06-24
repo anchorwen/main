@@ -17,7 +17,6 @@ from core.observability.metric_names import (
 )
 from core.protocol.schema_versions import SCHEMA_DISPATCH_REQUEST, SCHEMA_DISPATCH_RESULT
 from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
-from core.runtime.fault_handler import fail_open_guard
 
 
 class CommunicationDispatcher:
@@ -197,25 +196,24 @@ class CommunicationDispatcher:
             try:
                 wal_result = self._file_wal_adapter.dispatch(request, envelope)
             except Exception as wal_exc:  # BLE001:FOG (Sev 3, Phase 3b)
-                with fail_open_guard("communication_dispatcher:dispatch"):
-                    if self._metrics:
-                        self._metrics.inc(DISPATCH_FAILED)
-                    return DispatchResult(
-                        schema_version=SCHEMA_DISPATCH_RESULT,
-                        dispatch_id=request.dispatch_id,
-                        message_id=envelope.message_id,
-                        status=DispatchStatus.FAILED,
-                        recorded_at=request.requested_at,
-                        target=envelope.target,
-                        adapter_name="wal_guard",
-                        failure_reason=f"WAL write failed: {wal_exc}",
-                        attempts=[{
-                            "adapter_name": "wal_guard",
-                            "status": "failed",
-                            "reason": f"WAL write failed: {wal_exc}",
-                        }],
-                        trace={"wal_failed": True},
-                    )
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_FAILED)
+                return DispatchResult(
+                    schema_version=SCHEMA_DISPATCH_RESULT,
+                    dispatch_id=request.dispatch_id,
+                    message_id=envelope.message_id,
+                    status=DispatchStatus.FAILED,
+                    recorded_at=request.requested_at,
+                    target=envelope.target,
+                    adapter_name="wal_guard",
+                    failure_reason=f"WAL write failed: {wal_exc}",
+                    attempts=[{
+                        "adapter_name": "wal_guard",
+                        "status": "failed",
+                        "reason": f"WAL write failed: {wal_exc}",
+                    }],
+                    trace={"wal_failed": True},
+                )
         primary_adapter = self._resolve_adapter(
             envelope,
             route_policy=route_policy,
@@ -248,99 +246,97 @@ class CommunicationDispatcher:
                 self._metrics.inc(DISPATCH_TRANSPORT_DELIVERED)
             return result
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("communication_dispatcher:dispatch"):
+            attempts.append(
+                {
+                    "adapter_name": primary_adapter_name,
+                    "status": "failed",
+                    "reason": str(exc),
+                }
+            )
+            # ── Phase 3: If WAL succeeded, return DEGRADED instead of FAILED ──
+            # The file outbox already has the order — bridge slow poll will pick it up.
+            # ZMQ was an acceleration, not the durability guarantee.
+            if wal_result is not None:
+                wal_result.status = DispatchStatus.DEGRADED
+                wal_result.degrade_reason = f"primary={exc}; wal_persisted"
+                wal_result.fallback_adapter_name = "wal_file_outbox"
+                wal_result.attempts = attempts
+                wal_result.trace = {
+                    **wal_result.trace,
+                    "primary_adapter": primary_adapter_name,
+                    "primary_error": str(exc),
+                    "wal_persisted": True,
+                }
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_PROTOCOL_VALIDATED)
+                return wal_result
+            fallback_adapter = self._resolve_fallback_adapter(route_policy)
+            if fallback_adapter is None:
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_FAILED)
+                return DispatchResult(
+                    schema_version=SCHEMA_DISPATCH_RESULT,
+                    dispatch_id=request.dispatch_id,
+                    message_id=envelope.message_id,
+                    status=DispatchStatus.FAILED,
+                    recorded_at=request.requested_at,
+                    target=envelope.target,
+                    adapter_name=primary_adapter_name,
+                    failure_reason=str(exc),
+                    attempts=attempts,
+                    trace={"failed_adapter": primary_adapter_name},
+                )
+
+            fallback_adapter_name = getattr(
+                fallback_adapter, "adapter_name", fallback_adapter.__class__.__name__
+            )
+            try:
+                fallback_result = fallback_adapter.dispatch(request, envelope)
                 attempts.append(
                     {
-                        "adapter_name": primary_adapter_name,
+                        "adapter_name": fallback_adapter_name,
+                        "status": "degraded",
+                        "reason": "fallback_success",
+                    }
+                )
+                fallback_result.status = DispatchStatus.DEGRADED
+                fallback_result.degrade_reason = str(exc)
+                fallback_result.fallback_adapter_name = fallback_adapter_name
+                fallback_result.attempts = attempts
+                fallback_result.trace = {
+                    **fallback_result.trace,
+                    "failed_adapter": primary_adapter_name,
+                    "fallback_adapter": fallback_adapter_name,
+                }
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_PROTOCOL_VALIDATED)
+                return fallback_result
+            except Exception as fallback_exc:  # BLE001:FOG
+                attempts.append(
+                    {
+                        "adapter_name": fallback_adapter_name,
                         "status": "failed",
-                        "reason": str(exc),
+                        "reason": str(fallback_exc),
                     }
                 )
-                # ── Phase 3: If WAL succeeded, return DEGRADED instead of FAILED ──
-                # The file outbox already has the order — bridge slow poll will pick it up.
-                # ZMQ was an acceleration, not the durability guarantee.
-                if wal_result is not None:
-                    wal_result.status = DispatchStatus.DEGRADED
-                    wal_result.degrade_reason = f"primary={exc}; wal_persisted"
-                    wal_result.fallback_adapter_name = "wal_file_outbox"
-                    wal_result.attempts = attempts
-                    wal_result.trace = {
-                        **wal_result.trace,
-                        "primary_adapter": primary_adapter_name,
-                        "primary_error": str(exc),
-                        "wal_persisted": True,
-                    }
-                    if self._metrics:
-                        self._metrics.inc(DISPATCH_PROTOCOL_VALIDATED)
-                    return wal_result
-                fallback_adapter = self._resolve_fallback_adapter(route_policy)
-                if fallback_adapter is None:
-                    if self._metrics:
-                        self._metrics.inc(DISPATCH_FAILED)
-                    return DispatchResult(
-                        schema_version=SCHEMA_DISPATCH_RESULT,
-                        dispatch_id=request.dispatch_id,
-                        message_id=envelope.message_id,
-                        status=DispatchStatus.FAILED,
-                        recorded_at=request.requested_at,
-                        target=envelope.target,
-                        adapter_name=primary_adapter_name,
-                        failure_reason=str(exc),
-                        attempts=attempts,
-                        trace={"failed_adapter": primary_adapter_name},
-                    )
-
-                fallback_adapter_name = getattr(
-                    fallback_adapter, "adapter_name", fallback_adapter.__class__.__name__
-                )
-                try:
-                    fallback_result = fallback_adapter.dispatch(request, envelope)
-                    attempts.append(
-                        {
-                            "adapter_name": fallback_adapter_name,
-                            "status": "degraded",
-                            "reason": "fallback_success",
-                        }
-                    )
-                    fallback_result.status = DispatchStatus.DEGRADED
-                    fallback_result.degrade_reason = str(exc)
-                    fallback_result.fallback_adapter_name = fallback_adapter_name
-                    fallback_result.attempts = attempts
-                    fallback_result.trace = {
-                        **fallback_result.trace,
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_FAILED)
+                return DispatchResult(
+                    schema_version=SCHEMA_DISPATCH_RESULT,
+                    dispatch_id=request.dispatch_id,
+                    message_id=envelope.message_id,
+                    status=DispatchStatus.FAILED,
+                    recorded_at=request.requested_at,
+                    target=envelope.target,
+                    adapter_name=primary_adapter_name,
+                    failure_reason=f"primary={exc}; fallback={fallback_exc}",
+                    fallback_adapter_name=fallback_adapter_name,
+                    attempts=attempts,
+                    trace={
                         "failed_adapter": primary_adapter_name,
                         "fallback_adapter": fallback_adapter_name,
-                    }
-                    if self._metrics:
-                        self._metrics.inc(DISPATCH_PROTOCOL_VALIDATED)
-                    return fallback_result
-                except Exception as fallback_exc:  # BLE001:FOG
-                    with fail_open_guard("communication_dispatcher:dispatch"):
-                        attempts.append(
-                            {
-                                "adapter_name": fallback_adapter_name,
-                                "status": "failed",
-                                "reason": str(fallback_exc),
-                            }
-                        )
-                        if self._metrics:
-                            self._metrics.inc(DISPATCH_FAILED)
-                        return DispatchResult(
-                            schema_version=SCHEMA_DISPATCH_RESULT,
-                            dispatch_id=request.dispatch_id,
-                            message_id=envelope.message_id,
-                            status=DispatchStatus.FAILED,
-                            recorded_at=request.requested_at,
-                            target=envelope.target,
-                            adapter_name=primary_adapter_name,
-                            failure_reason=f"primary={exc}; fallback={fallback_exc}",
-                            fallback_adapter_name=fallback_adapter_name,
-                            attempts=attempts,
-                            trace={
-                                "failed_adapter": primary_adapter_name,
-                                "fallback_adapter": fallback_adapter_name,
-                            },
-                        )
+                    },
+                )
     def _resolve_adapter(self, envelope, *, route_policy, transport_hints, governance):
         if self._adapter is not None:
             return self._adapter

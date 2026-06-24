@@ -15,8 +15,6 @@ import math
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 if TYPE_CHECKING:
     from core.feedback.brain_performance_tracker import BrainPerformanceTracker
     from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
@@ -62,9 +60,8 @@ class DynamicBrainWeighter:
                 from core.feedback.brain_quality_engine import BrainQualityEngine
 
                 self._engine = BrainQualityEngine.instance()
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("dynamic_brain_weighter:__init__"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     # ── public API ──
 
     def get_weights(self) -> dict[str, float]:
@@ -114,9 +111,8 @@ class DynamicBrainWeighter:
             if brain_id in weights:
                 try:  # noqa: SIM105
                     p.dynamic_scale = weights[brain_id]
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("dynamic_brain_weighter:apply_weights"):
-                        pass  # frozen object
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass  # frozen object
         return proposals
 
     def get_summary(self, brain_id: str) -> dict:

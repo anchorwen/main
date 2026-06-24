@@ -2,8 +2,6 @@ import logging
 import threading
 from collections.abc import Callable
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 class EventBus:
     """In-process publish/subscribe event bus.
@@ -45,9 +43,8 @@ class EventBus:
             try:
                 handler(event_type, payload)
                 delivered += 1
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("event_bus:publish"):
-                    logging.exception("EventBus handler failed for event_type=%s", event_type)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                logging.exception("EventBus handler failed for event_type=%s", event_type)
         return delivered
 
     def get_event_log(self, limit: int = 50) -> list[dict]:

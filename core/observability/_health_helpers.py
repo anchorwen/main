@@ -10,8 +10,6 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def _utc_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -38,9 +36,8 @@ def _safe_json_load(path: str) -> dict[str, Any] | None:
             return None
         with open(path, encoding="utf-8") as f:
             return json.load(f)
-    except Exception:  # BLE001:FOG — Iron Law #1: never crash on bad data
-        with fail_open_guard("_health_helpers:_safe_json_load"):
-            return None
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG — Iron Law #1: never crash on bad data
+        return None
 def _safe_jsonl_count(path: str) -> int | None:
     """Count lines in a JSONL file; return None on failure."""
     try:
@@ -48,9 +45,8 @@ def _safe_jsonl_count(path: str) -> int | None:
             return None
         with open(path, encoding="utf-8") as f:
             return sum(1 for _ in f)
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("_health_helpers:_safe_jsonl_count"):
-            return None
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return None
 def _safe_jsonl_last(path: str, tail_bytes: int = 8192) -> dict[str, Any] | None:
     """Read the last line of a JSONL file using tail-read; return None on failure."""
     try:
@@ -90,9 +86,8 @@ def _safe_jsonl_last(path: str, tail_bytes: int = 8192) -> dict[str, Any] | None
                 except json.JSONDecodeError:
                     continue
             return None
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("_health_helpers:_safe_jsonl_last"):
-            return None
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return None
 def _safe_jsonl_tail_stats(path: str, max_scan: int = 500) -> dict[str, Any]:
     """Scan the last N lines of a JSONL for basic stats."""
     try:
@@ -140,6 +135,5 @@ def _safe_jsonl_tail_stats(path: str, max_scan: int = 500) -> dict[str, Any]:
             "retry_count": retry_count,
             "label_distribution": labels,
         }
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("_health_helpers:_safe_jsonl_tail_stats"):
-            return {}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return {}

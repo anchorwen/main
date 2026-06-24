@@ -9,7 +9,6 @@ from core.features.adapters.microstructure_feature_adapter import (
     MicrostructureFeatureAdapter,
 )
 from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
-from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -155,13 +154,12 @@ class BrainFactory:
                                 )
                 except BrainConfigError:
                     raise
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("brain_factory:build"):
-                        # .meta.json missing or unreadable — not fatal, but log
-                        logger.debug(
-                            "BrainFactory: could not verify feature order for %s (no .meta.json)",
-                            brain_id,
-                        )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    # .meta.json missing or unreadable — not fatal, but log
+                    logger.debug(
+                        "BrainFactory: could not verify feature order for %s (no .meta.json)",
+                        brain_id,
+                    )
         logger.info(
             "BrainFactory built and loaded adapter brain_id=%s type=%s backend=%s",
             brain_id,

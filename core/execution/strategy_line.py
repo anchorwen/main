@@ -13,6 +13,7 @@ other.  That responsibility belongs to the PortfolioRiskController.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ from core.execution.pwin_chain import resolve_p_win
 from core.execution.strategy_decision import StrategyDecision
 from core.execution.trend_isolation_gates import apply_trend_isolation_gates
 from core.execution.trend_volume_guard import check_minimum_rr, compute_counter_trend_volume_mult
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.shadow_recorder import record_brain_votes
 
 logger = logging.getLogger(__name__)
@@ -336,8 +337,7 @@ class StrategyLine:
             # DQAF-076/BLE001-P0: numpy operations (np.log, np.diff, etc.)
             # can raise ValueError on degenerate/invalid data or TypeError
             # on incompatible dtypes.  Return neutral theta=0.0.
-            with fail_open_guard("strategy_line:_compute_tf_ou_theta"):
-                return 0.0
+            return 0.0
 
     def _compute_tf_hurst(self, max_lag: int = 20) -> float:
         """Estimate Hurst exponent from recent close buffer (R/S method)."""
@@ -382,8 +382,7 @@ class StrategyLine:
             # DQAF-076/BLE001-P0: numpy polyfit/np.log can raise ValueError
             # on degenerate data; TypeError on incompatible dtypes.
             # Return neutral Hurst=0.5.
-            with fail_open_guard("strategy_line:_compute_tf_hurst"):
-                return 0.5
+            return 0.5
 
     # ── Subclass overrides ──────────────────────────────────────────────
 
@@ -658,19 +657,18 @@ class StrategyLine:
             # from malformed feature vectors.  All are non-recoverable in
             # this cycle — return fail-closed (should_trade=False).
             # Unknown exceptions (e.g. MemoryError) propagate to caller.
-            with fail_open_guard("strategy_line:evaluate"):
-                logger.exception("Brain inference failed for strategy=%s", name)
-                return self._make_decision(
-                    should_trade=False,
-                    direction="neutral",
-                    confidence=0.0,
-                    volume=0.0,
-                    sl=0.0,
-                    tp=0.0,
-                    hard_sl=0.0,
-                    regime_mode=regime_gate_mode,
-                    reason="inference_error",
-                )
+            logger.exception("Brain inference failed for strategy=%s", name)
+            return self._make_decision(
+                should_trade=False,
+                direction="neutral",
+                confidence=0.0,
+                volume=0.0,
+                sl=0.0,
+                tp=0.0,
+                hard_sl=0.0,
+                regime_mode=regime_gate_mode,
+                reason="inference_error",
+            )
         if not proposals:
             return self._make_decision(
                 should_trade=False,
@@ -690,7 +688,7 @@ class StrategyLine:
         # for shadow-mode barrier_12bar — without it, threshold calibration
         # (0.75) is flying blind.
         for p in proposals:
-            with fail_open_guard("StrategyLine:BrainIdResolve"):
+            try:
                 _brain_id = str(getattr(p, "brain_id", ""))
                 # Match regression brains by training_contract in brain config
                 _b_entry = next((b for b in self.brains if b.get("brain_id") == _brain_id), None)
@@ -717,6 +715,8 @@ class StrategyLine:
                         )
                 pass  # BLE001 — migrated from blind pass
 
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
         # ── 3a2. Record counterfactual signals (BEFORE approval gates) ──
         # Counterfactual P&L must be recorded every cycle for every brain,
         # independent of whether the trade is later approved.  Per-proposal
@@ -746,15 +746,14 @@ class StrategyLine:
                     # file I/O failure, or AttributeError on malformed
                     # proposal object.  Per-proposal catch prevents one
                     # misbehaving brain from silencing others.
-                    with fail_open_guard("strategy_line:evaluate"):
-                        import logging as _lg
+                    import logging as _lg
 
-                        _lg.getLogger(__name__).debug(
-                            "PnL record_signal failed for brain=%s: %s",
-                            getattr(p, "brain_id", "?"),
-                            _rec_exc,
-                            exc_info=True,
-                        )
+                    _lg.getLogger(__name__).debug(
+                        "PnL record_signal failed for brain=%s: %s",
+                        getattr(p, "brain_id", "?"),
+                        _rec_exc,
+                        exc_info=True,
+                    )
         # ── 3a3. Capture entry_z_score + entry_half_life from OU-style brains ──
         # Strangler Fig #17: uses extract_entry_z_score from brain_gates.py
         entry_z_score, entry_half_life = extract_entry_z_score(proposals)
@@ -823,12 +822,11 @@ class StrategyLine:
             # to file.  ValueError/TypeError from bad data, OSError from
             # file I/O, KeyError from malformed proposal dicts.
             # Non-blocking — audit trail loss doesn't stop trading.
-            with fail_open_guard("strategy_line:evaluate"):
-                logger.warning(
-                    "Brain vote recording failed strategy=%s — audit trail incomplete: %s",
-                    name,
-                    _bv_exc,
-                )
+            logger.warning(
+                "Brain vote recording failed strategy=%s — audit trail incomplete: %s",
+                name,
+                _bv_exc,
+            )
         parliament_passed = (
             direction != "neutral" and confidence >= self.config.confidence_threshold
         )
@@ -1734,7 +1732,7 @@ class StrategyLine:
         # ── Graduated streak reduction ──
         streak_mult = 1.0
         if self.budget is not None:
-            with fail_open_guard("StrategyLine:StreakMultiplier"):
+            with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 streak_mult = self.budget.get_streak_multiplier()
         size *= streak_mult
 

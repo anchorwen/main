@@ -19,7 +19,6 @@ from typing import Any
 
 # DQAF-20260622-059 / P2: sentinel magic guard
 from core.contracts.strategy_magic import UnattributedOrderRejected
-from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -211,18 +210,17 @@ class ExecutionQueue:
                 adapter_name=adapter_name,
             )
         except Exception as _fatal_exc:  # BLE001:FOG (logged, Phase 3b)
-            with fail_open_guard("execution_queue:flush"):
-                import logging as _fatal_log
+            import logging as _fatal_log
 
-                _fatal_log.getLogger(__name__).critical(
-                    "FATAL: ExecutionQueue flush() crashed — dispatch pipeline broken. "
-                    "Circuit breaker MUST be tripped by caller. Error: %s",
-                    _fatal_exc,
-                    exc_info=True,
-                )
-                raise ExecutionQueueFatalError(
-                    f"Dispatch pipeline fatal error: {_fatal_exc}"
-                ) from _fatal_exc
+            _fatal_log.getLogger(__name__).critical(
+                "FATAL: ExecutionQueue flush() crashed — dispatch pipeline broken. "
+                "Circuit breaker MUST be tripped by caller. Error: %s",
+                _fatal_exc,
+                exc_info=True,
+            )
+            raise ExecutionQueueFatalError(
+                f"Dispatch pipeline fatal error: {_fatal_exc}"
+            ) from _fatal_exc
 
     def _flush_unsafe(
         self,
@@ -246,9 +244,11 @@ class ExecutionQueue:
         # Pre-fetch current price for validation if broker is available
         _current_price: float | None = None
         if broker is not None:
-            with fail_open_guard("ExecutionQueue:PriceFetch"):
+            try:
                 _mid, _bid, _ask = broker.fetch_prices(symbol)
                 _current_price = _mid
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
         else:
             logger.warning(
                 "ExecutionQueue.flush: no broker provided — price guard validation skipped"
@@ -310,22 +310,21 @@ class ExecutionQueue:
                     # can only fail on TypeError (None/incompatible type) or
                     # AttributeError (missing .direction/.sl/.tp).  Both are
                     # data-integrity failures; skip this decision, don't crash.
-                    with fail_open_guard("execution_queue:_flush_unsafe"):
-                        logger.exception(
-                            "price_guard validation exception for strategy=%s",
-                            queued.strategy_name,
+                    logger.exception(
+                        "price_guard validation exception for strategy=%s",
+                        queued.strategy_name,
+                    )
+                    results.append(
+                        DispatchResult(
+                            strategy_name=queued.strategy_name,
+                            magic=decision.magic,
+                            dispatched=False,
+                            direction=decision.direction,
+                            reason=f"price_guard_exception:{type(_pg_exc).__name__}",
                         )
-                        results.append(
-                            DispatchResult(
-                                strategy_name=queued.strategy_name,
-                                magic=decision.magic,
-                                dispatched=False,
-                                direction=decision.direction,
-                                reason=f"price_guard_exception:{type(_pg_exc).__name__}",
-                            )
-                        )
-                        self._last_dispatch_time = _time.monotonic()
-                        continue
+                    )
+                    self._last_dispatch_time = _time.monotonic()
+                    continue
             # If NET_OUT or REDUCED, handle opposing position first
             _net_out_ticket_update: dict[str, Any] | None = None
             _close_result: dict[str, Any] | None = None  # FIX-138-Phase3: init before branch
@@ -403,12 +402,11 @@ class ExecutionQueue:
                                 # import (ImportError), malformed ack_detail dict
                                 # (KeyError on missing field, AttributeError on
                                 # non-dict .get()).
-                                with fail_open_guard("execution_queue:_flush_unsafe"):
-                                    logger.warning(
-                                        "ACK resolve error for intent_id=%s",
-                                        _intent_id,
-                                        exc_info=True,
-                                    )
+                                logger.warning(
+                                    "ACK resolve error for intent_id=%s",
+                                    _intent_id,
+                                    exc_info=True,
+                                )
                         else:
                             # When intent_id is empty, honour the dispatched flag from the
                             # close result.  Net-out closes routed through ExitWatchdog
@@ -424,12 +422,11 @@ class ExecutionQueue:
                     # Close actions skip the price guard path, so ValueError is
                     # a defensive catch.  Unknown exceptions propagate to the
                     # FATAL wrapper (Block 1) for circuit-breaking.
-                    with fail_open_guard("execution_queue:_flush_unsafe"):
-                        logger.exception(
-                            "net-out close dispatch failed for strategy=%s ticket=%s",
-                            queued.strategy_name,
-                            risk.net_out_ticket if hasattr(risk, "net_out_ticket") else "unknown",
-                        )
+                    logger.exception(
+                        "net-out close dispatch failed for strategy=%s ticket=%s",
+                        queued.strategy_name,
+                        risk.net_out_ticket if hasattr(risk, "net_out_ticket") else "unknown",
+                    )
                 if not _close_confirmed:
                     results.append(
                         DispatchResult(
@@ -500,29 +497,27 @@ class ExecutionQueue:
                     # DQAF-076/BLE001-P0: Structural dispatch failures —
                     # state-machine corruption, config error, or missing module.
                     # Retrying is futile; exit the retry loop immediately.
-                    with fail_open_guard("execution_queue:_flush_unsafe"):
-                        logger.exception(
-                            "Structural dispatch failed (NO RETRY) strategy=%s attempt=%d/%d",
-                            queued.strategy_name,
-                            _attempt + 1,
-                            _max_attempts,
-                        )
-                        _last_error = f"{type(exc).__name__}: {exc}"
+                    logger.exception(
+                        "Structural dispatch failed (NO RETRY) strategy=%s attempt=%d/%d",
+                        queued.strategy_name,
+                        _attempt + 1,
+                        _max_attempts,
+                    )
+                    _last_error = f"{type(exc).__name__}: {exc}"
                     break  # do NOT retry — structural errors don't heal
                 except (ConnectionError, TimeoutError, OSError) as exc:
                     # DQAF-076/BLE001-P0: Transient network/I/O failures —
                     # MT5/ZMQ flakiness or filesystem contention.  Retry with
                     # stagger delay; unknown exceptions propagate to FATAL wrapper.
-                    with fail_open_guard("execution_queue:_flush_unsafe"):
-                        logger.exception(
-                            "Transient dispatch failed (RETRYING) strategy=%s attempt=%d/%d",
-                            queued.strategy_name,
-                            _attempt + 1,
-                            _max_attempts,
-                        )
-                        _last_error = f"{type(exc).__name__}: {exc}"
-                        if _attempt < _max_attempts - 1:
-                            _time.sleep(1.5)
+                    logger.exception(
+                        "Transient dispatch failed (RETRYING) strategy=%s attempt=%d/%d",
+                        queued.strategy_name,
+                        _attempt + 1,
+                        _max_attempts,
+                    )
+                    _last_error = f"{type(exc).__name__}: {exc}"
+                    if _attempt < _max_attempts - 1:
+                        _time.sleep(1.5)
             if _dispatched:
                 _close_pnl: float | None = None
                 if _close_result is not None:

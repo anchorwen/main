@@ -13,10 +13,10 @@ weighted average.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard, log_and_continue
 from core.schemas.trading_contracts import ConsensusResult, DegradedResult, Direction
 
 # ── Contract group definitions ────────────────────────────────────────────
@@ -258,7 +258,7 @@ def get_group_for_proposal(proposal: Any) -> dict[str, Any] | None:
     # 2. brain_id → BrainRegistry → contract_group
     bid = getattr(proposal, "brain_id", None)
     if bid:
-        with log_and_continue(component="brain_group_resolution:registry_probe"):
+        try:
             from core.brains.brain_registry import BrainRegistry
 
             registry = BrainRegistry.instance()
@@ -266,19 +266,25 @@ def get_group_for_proposal(proposal: Any) -> dict[str, Any] | None:
             if entry and entry.contract_group in _GROUP_BY_NAME:
                 return _GROUP_BY_NAME[entry.contract_group]
 
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
     # 3. Legacy brain_type probe
     brain_type = ""
-    with log_and_continue(component="brain_group_resolution:brain_type_probe"):
+    with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
         brain_type = getattr(proposal, "brain_type", "")
     if not brain_type:
-        with log_and_continue(component="brain_group_resolution:source_type_probe"):
+        try:
             src = getattr(proposal, "source", None)
             if src is not None:
                 brain_type = getattr(src, "brain_type", "")
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
     if not brain_type:
-        with log_and_continue(component="brain_group_resolution:metadata_type_probe"):
+        try:
             meta = getattr(proposal, "metadata", None) or {}
             brain_type = meta.get("model_type", "")
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
     return _TYPE_TO_GROUP.get(brain_type) if brain_type else None
 
 
@@ -343,9 +349,8 @@ class ContractGroupConsensus:
             total += 1
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("contract_groups:_compute_weighted"):
-                    bid = "unknown"
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                bid = "unknown"
             brain_ids.append(bid)
 
             # Check for degraded signal
@@ -511,9 +516,8 @@ class ContractGroupConsensus:
         for p in proposals:
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("contract_groups:_compute_union"):
-                    bid = "unknown"
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                bid = "unknown"
             all_brain_ids.append(bid)
 
             # Check for degraded signal

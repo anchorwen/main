@@ -27,8 +27,6 @@ import statistics
 from dataclasses import dataclass
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 logger = logging.getLogger(__name__)
 
 # ── resolve_p_win_from_brains ──────────────────────────────────────────────
@@ -109,12 +107,11 @@ def resolve_p_win_from_brains(
             # invalid parameters.  Skip this brain; unknown exceptions
             # (e.g. AttributeError, TypeError — code bugs) propagate to
             # the caller for diagnosis.
-            with fail_open_guard("pwin_chain:resolve_p_win_from_brains"):
-                logger.debug(
-                    "PnL store get_metrics skipped brain=%s: %s",
-                    brain_id,
-                    _gm_exc,
-                )
+            logger.debug(
+                "PnL store get_metrics skipped brain=%s: %s",
+                brain_id,
+                _gm_exc,
+            )
             continue
         if m is None:
             continue

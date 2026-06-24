@@ -25,8 +25,6 @@ from typing import Any
 
 import numpy as np
 
-from core.runtime.fault_handler import fail_open_guard
-
 logger = logging.getLogger(__name__)
 
 
@@ -206,9 +204,8 @@ class PortfolioRiskController:
         try:
             corr = float(np.corrcoef(r1, r2)[0, 1])
             return corr if not np.isnan(corr) else 0.0
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PortfolioRisk:CorrelationCompute"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG_WRAPPED
+            raise
             logger.warning(
                 "Correlation computation failed for %s vs %s — assuming fully correlated",
                 s1,
@@ -421,9 +418,8 @@ class PortfolioRiskController:
                 )
                 if cvar_value > self.var_max_pct * _equity:
                     var_warning = True
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PortfolioRisk:VaRCvarCompute"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG_WRAPPED
+            raise
             logger.warning(
                 "VaR/CVaR computation failed for strategy=%s — risk check skipped",
                 strategy,

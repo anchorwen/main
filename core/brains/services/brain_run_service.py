@@ -4,7 +4,6 @@ from typing import Any
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
 from core.deployment.brain_config_validator import BrainConfigError
-from core.runtime.fault_handler import fail_open_guard
 
 # Schema aliases: all keys resolve to the same canonical feature dict
 _SCHEMA_ALIASES: dict[str, str] = {
@@ -70,12 +69,11 @@ class BrainRunService:
                     "BrainRunService config validation failed for brain_id=%s — brain excluded",
                     brain_id,
                 )
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("brain_run_service:ensure_loaded"):
-                    logging.exception(
-                        "BrainRunService failed to build adapter for brain_id=%s",
-                        brain_id,
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                logging.exception(
+                    "BrainRunService failed to build adapter for brain_id=%s",
+                    brain_id,
+                )
         return loaded
 
     def reload_adapters(self) -> list[str]:
@@ -161,21 +159,19 @@ class BrainRunService:
             except BrainConfigError:
                 self._failed_brain_ids.add(brain_id)
                 return None
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("brain_run_service:run_single_brain"):
-                    logging.exception(
-                        "BrainRunService failed to build adapter for brain_id=%s", brain_id
-                    )
-                    return None
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                logging.exception(
+                    "BrainRunService failed to build adapter for brain_id=%s", brain_id
+                )
+                return None
         if adapter is None:
             return None
 
         try:
             return adapter.run(feature_snapshot, feature_source or {})
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("brain_run_service:run_single_brain"):
-                logging.exception("BrainRunService inference failed for brain_id=%s", brain_id)
-                return None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logging.exception("BrainRunService inference failed for brain_id=%s", brain_id)
+            return None
     def run_brain_type(
         self,
         brain_type: str,
@@ -235,13 +231,12 @@ class BrainRunService:
                 {"message": "Brain excluded from inference due to config validation failure"},
             )
             return None
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("brain_run_service:_ensure_adapter"):
-                logging.exception(
-                    "BrainRunService failed to build adapter for brain_id=%s",
-                    brain_id,
-                )
-                return None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logging.exception(
+                "BrainRunService failed to build adapter for brain_id=%s",
+                brain_id,
+            )
+            return None
     def _run_one_entry(
         self,
         entry: dict,
@@ -261,10 +256,9 @@ class BrainRunService:
 
         try:
             return adapter.run(feature_snapshot, brain_feature_source)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("brain_run_service:_run_one_entry"):
-                logging.exception(
-                    "BrainRunService inference failed for brain_id=%s",
-                    brain_id,
-                )
-                return None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logging.exception(
+                "BrainRunService inference failed for brain_id=%s",
+                brain_id,
+            )
+            return None

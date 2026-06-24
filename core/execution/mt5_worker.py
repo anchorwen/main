@@ -22,7 +22,6 @@ from concurrent.futures import Future
 from typing import Any
 
 from core.protocol.services.resilience import CircuitBreaker
-from core.runtime.fault_handler import fail_open_guard
 
 # ── Module-level singleton ──────────────────────────────────────────
 
@@ -346,35 +345,36 @@ class MT5Worker:
                 if command not in ("_reconnect",):
                     self.circuit_breaker.record_success()
             except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("mt5_worker:_run"):
-                    future.set_exception(exc)
-                    if command not in ("_reconnect",):
-                        was_open = (
-                            self.circuit_breaker.state.value == "open"
-                            if hasattr(self.circuit_breaker, "state")
-                            else False
-                        )
-                        self.circuit_breaker.record_failure()
-                        # Detect CB transition to OPEN → alert hub
-                        if not was_open and self._alert_hub is not None:
-                            with fail_open_guard("MT5Worker:CircuitBreakerAlert"):
-                                is_open = (
-                                    self.circuit_breaker.state.value == "open"
-                                    if hasattr(self.circuit_breaker, "state")
-                                    else False
+                future.set_exception(exc)
+                if command not in ("_reconnect",):
+                    was_open = (
+                        self.circuit_breaker.state.value == "open"
+                        if hasattr(self.circuit_breaker, "state")
+                        else False
+                    )
+                    self.circuit_breaker.record_failure()
+                    # Detect CB transition to OPEN → alert hub
+                    if not was_open and self._alert_hub is not None:
+                        try:
+                            is_open = (
+                                self.circuit_breaker.state.value == "open"
+                                if hasattr(self.circuit_breaker, "state")
+                                else False
+                            )
+                            if is_open:
+                                self._alert_hub.send_critical(
+                                    "mt5_circuit_open",
+                                    {
+                                        "command": command,
+                                        "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                                        "total_trips": self.circuit_breaker.get_status().get(
+                                            "total_trips", 0
+                                        ),
+                                    },
                                 )
-                                if is_open:
-                                    self._alert_hub.send_critical(
-                                        "mt5_circuit_open",
-                                        {
-                                            "command": command,
-                                            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
-                                            "total_trips": self.circuit_breaker.get_status().get(
-                                                "total_trips", 0
-                                            ),
-                                        },
-                                    )
-                                pass  # BLE001 — migrated from blind pass
+                            pass  # BLE001 — migrated from blind pass
+                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                            pass
             finally:
                 self._command_in_flight = None
                 self._stuck_since = None  # clear stuck marker on successful completion
@@ -399,9 +399,8 @@ class MT5Worker:
             self._mt5 = mt5
             try:  # noqa: SIM105
                 self._mt5.symbol_select(self._default_symbol, True)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("mt5_worker:_mt5_initialize"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         else:
             self._mt5 = None
         return ok

@@ -36,8 +36,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard, log_and_continue
-
 # -- Constants --
 
 MAX_RETRIES = 5  # total retry attempts before escalation
@@ -264,7 +262,7 @@ class ExitWatchdog:
         # in MT5 (MIA).  Otherwise the watchdog exhausts all retries against
         # a nonexistent position and fires a false CRITICAL alert.
         if get_position_open is not None:
-            with log_and_continue(component="ExitWatchdog:position_verification"):
+            try:
                 if not get_position_open(position_ticket):
                     return ExitWatchdogResult(
                         success=True,
@@ -276,6 +274,8 @@ class ExitWatchdog:
                         alerts=[],
                     )
 
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
         for attempt_n in range(1, self.max_retries + 1):
             elapsed = time.monotonic() - start
             if elapsed > self.max_total_duration:
@@ -297,20 +297,19 @@ class ExitWatchdog:
                                 alerts=alerts,
                             )
                     except Exception as _l2_exc:  # BLE001:FOG (logged, Phase 3b)
-                        with fail_open_guard("exit_watchdog:execute_exit"):
-                            import logging as _lg
+                        import logging as _lg
 
-                            _lg.getLogger(__name__).critical(
-                                "L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
-                                position_ticket,
-                                reason,
-                                _l2_exc,
-                                exc_info=True,
-                            )
-                            alerts.append(
-                                f"CRITICAL: l2_forced_close_failed ticket={position_ticket} "
-                                f"error={type(_l2_exc).__name__}"
-                            )
+                        _lg.getLogger(__name__).critical(
+                            "L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
+                            position_ticket,
+                            reason,
+                            _l2_exc,
+                            exc_info=True,
+                        )
+                        alerts.append(
+                            f"CRITICAL: l2_forced_close_failed ticket={position_ticket} "
+                            f"error={type(_l2_exc).__name__}"
+                        )
                 alert = (
                     f"CRITICAL: exit_watchdog_timeout ticket={position_ticket} "
                     f"reason={reason} elapsed={elapsed:.1f}s attempts={attempt_n - 1}"
@@ -354,10 +353,9 @@ class ExitWatchdog:
                 result = dispatch_fn(payload)
                 att.dispatch_success = bool(result.get("dispatched", False))
             except Exception as exc:  # BLE001:FOG (logged, Phase 3b)
-                with fail_open_guard("exit_watchdog:execute_exit"):
-                    att.error = f"dispatch_exception:{exc}"
-                    attempts.append(att)
-                    continue
+                att.error = f"dispatch_exception:{exc}"
+                attempts.append(att)
+                continue
             if not att.dispatch_success:
                 att.error = f"dispatch_rejected:{result.get('reason', 'unknown')}"
                 attempts.append(att)
@@ -432,20 +430,19 @@ class ExitWatchdog:
                         alerts=alerts,
                     )
             except Exception as _l2f_exc:  # BLE001:FOG (logged, Phase 3b)
-                with fail_open_guard("exit_watchdog:execute_exit"):
-                    import logging as _lg
+                import logging as _lg
 
-                    _lg.getLogger(__name__).critical(
-                        "ESCALATED L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
-                        position_ticket,
-                        reason,
-                        _l2f_exc,
-                        exc_info=True,
-                    )
-                    alerts.append(
-                        f"EMERGENCY: l2_exhausted_close_failed ticket={position_ticket} "
-                        f"error={type(_l2f_exc).__name__}"
-                    )
+                _lg.getLogger(__name__).critical(
+                    "ESCALATED L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
+                    position_ticket,
+                    reason,
+                    _l2f_exc,
+                    exc_info=True,
+                )
+                alerts.append(
+                    f"EMERGENCY: l2_exhausted_close_failed ticket={position_ticket} "
+                    f"error={type(_l2f_exc).__name__}"
+                )
         alert = (
             f"ESCALATED: exit_watchdog_exhausted ticket={position_ticket} "
             f"reason={reason} attempts={self.max_retries} elapsed={elapsed:.1f}s"
@@ -551,7 +548,7 @@ class ExitWatchdog:
         if not intent_id:
             return None
 
-        with fail_open_guard("ExitWatchdog:ZMQResolveAck"):
+        try:
             from core.protocol.services.zmq_receipt_listener import resolve_ack
 
             return resolve_ack(
@@ -561,6 +558,8 @@ class ExitWatchdog:
                 poll_interval=self.ack_poll_interval,
             )
 
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
         # Pure file fallback if ZMQ not available
         deadline = time.monotonic() + timeout
         today = datetime.now(UTC).strftime("%Y-%m-%d")

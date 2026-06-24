@@ -28,8 +28,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from core.runtime.fault_handler import fail_open_guard
-
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
 
@@ -259,16 +257,15 @@ class BTCFeatureAugmenter:
             return ret if math.isfinite(ret) else 0.0
 
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("btc_feature_augmenter:_compute_xauusdc_return"):
-                self._xau_fail_count += 1
-                if self._xau_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
-                    _log.error(
-                        "BTCFeatureAugmenter: failed to compute XAUUSDc_return: %s. "
-                        "Zero-filling. (failed %d times)",
-                        exc,
-                        self._xau_fail_count,
-                    )
-                return 0.0
+            self._xau_fail_count += 1
+            if self._xau_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
+                _log.error(
+                    "BTCFeatureAugmenter: failed to compute XAUUSDc_return: %s. "
+                    "Zero-filling. (failed %d times)",
+                    exc,
+                    self._xau_fail_count,
+                )
+            return 0.0
     def _compute_audjpyc_return(self) -> float:
         """Compute AUDJPYc return from MT5 tick data.
 
@@ -306,16 +303,15 @@ class BTCFeatureAugmenter:
             return ret if math.isfinite(ret) else 0.0
 
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("btc_feature_augmenter:_compute_audjpyc_return"):
-                self._audjpy_fail_count += 1
-                if self._audjpy_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
-                    _log.error(
-                        "BTCFeatureAugmenter: failed to fetch AUDJPYc: %s. "
-                        "Zero-filling. (failed %d times)",
-                        exc,
-                        self._audjpy_fail_count,
-                    )
-                return 0.0
+            self._audjpy_fail_count += 1
+            if self._audjpy_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
+                _log.error(
+                    "BTCFeatureAugmenter: failed to fetch AUDJPYc: %s. "
+                    "Zero-filling. (failed %d times)",
+                    exc,
+                    self._audjpy_fail_count,
+                )
+            return 0.0
     def _compute_btc_xau_ratio(self, btc_price: float) -> tuple[float, float]:
         """Compute Cross_BTC_Gold_Ratio and its 1-bar ROC from MT5 XAU price.
 
@@ -371,14 +367,13 @@ class BTCFeatureAugmenter:
             return (ratio_out, roc_out)
 
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("btc_feature_augmenter:_compute_btc_xau_ratio"):
-                self._xau_price_fail_count += 1
-                if self._xau_price_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
-                    _log.error(
-                        "BTCFeatureAugmenter: failed to fetch XAUUSDc for "
-                        "BTC/XAU ratio: %s. Zero-filling slots [35-36]. "
-                        "(failed %d times)",
-                        exc,
-                        self._xau_price_fail_count,
-                    )
-                return (0.0, 0.0)
+            self._xau_price_fail_count += 1
+            if self._xau_price_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
+                _log.error(
+                    "BTCFeatureAugmenter: failed to fetch XAUUSDc for "
+                    "BTC/XAU ratio: %s. Zero-filling slots [35-36]. "
+                    "(failed %d times)",
+                    exc,
+                    self._xau_price_fail_count,
+                )
+            return (0.0, 0.0)

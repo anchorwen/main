@@ -15,7 +15,6 @@ import numpy as np
 
 from core.brains.adapters.params_brain_adapter import ParamsBrainAdapter
 from core.features.schemas.registry import get_schema_dimension
-from core.runtime.fault_handler import fail_open_guard, log_and_continue
 
 
 def build_meta_feature_vector(
@@ -42,7 +41,7 @@ def build_meta_feature_vector(
     for b_info in brains:
         adapter = b_info.get("adapter")
         if isinstance(adapter, ParamsBrainAdapter):
-            with log_and_continue(component="BrainInference:OU_params"):
+            try:
                 raw = adapter.infer(np.array([_price], dtype=np.float32))
                 ou_params = {
                     "z_score": float(raw.get("z_score", 0.0)),
@@ -51,6 +50,8 @@ def build_meta_feature_vector(
                 }
                 break
 
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
     # ═══════════════════════════════════════════════════════════════
     # Step 2: Read raw V9 features from feature store (40-dim)
     # ═══════════════════════════════════════════════════════════════
@@ -59,9 +60,8 @@ def build_meta_feature_vector(
         record = feature_store.latest(symbol, "M5", schema_name="v9_institutional_40")
         if record is not None:
             raw_features = dict(record.values) if record.values else {}
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("meta_feature_builder:build_meta_feature_vector"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
     # ── Step 3: Build 40-dim raw vector in TRAINING feature order ──
     # FIX-20260525-026: The V9_INSTITUTIONAL_40_FEATURES schema order
     # (M5→H1, OU_Theta/Hurst blocked at end) does NOT match the training
@@ -108,9 +108,8 @@ def build_meta_feature_vector(
                     _expected_dim = get_schema_dimension(_meta_schema_id)
                     if len(_names) == _expected_dim:
                         _feature_names = [str(f) for f in _names]
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("meta_feature_builder:build_meta_feature_vector"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     if raw_features is None:
         return None, None
 

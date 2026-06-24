@@ -754,6 +754,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-102 | 2026-06-24 | contracts_resilience | UGR-A09b: Atomic write + fail_open_guard full sweep — remaining deployment files | RC-07 |
 | FIX-20260624-103 | 2026-06-24 | runtime-live | UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/ (25 files, 172→8 sites). Replaced all fail_open_guard/log_and_continue context managers with specific exception types (RuntimeError, ValueError, KeyError, TypeError, OSError). Removed from core.runtime.fault_handler import fail_open_guard/log_and_continue from 23 files. | RC-07 |
 | FIX-20260624-104 | 2026-06-24 | deployment_config | Restore Exception catch for generic handlers in scheduler_service. BLE001:FOG migration (A09b) narrowed _execute_task and governance_eval outer handler from except Exception to 5-type tuple, causing ZeroDivisionError and DataIntegrityError to crash the scheduler. | RC-05 |
+| FIX-20260624-105 | 2026-06-24 | contracts_resilience | UGR-A09d: fail_open_guard + log_and_continue full sweep across 67 core/ files outside runtime/. Migrated ~285 FOG sites to specific except tuple (inside except Exception) or try/except (standalone). All 575 execution + 902 observability/deployment + 388 brains/features tests pass. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -4303,5 +4304,17 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Files**: core/deployment/scheduler_service.py
 - **Description**: Restore Exception catch for generic handlers in scheduler_service. BLE001:FOG migration (A09b) narrowed _execute_task and governance_eval outer handler from except Exception to 5-type tuple, causing ZeroDivisionError and DataIntegrityError to crash the scheduler.
 - **Root Cause**: RC-05 — boundary-error
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-105
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: 435a3761
+- **Type**: feat
+- **Module**: contracts_resilience
+- **Files**: core/ (67 files)
+- **Description**: UGR-A09d: fail_open_guard + log_and_continue full sweep across 67 core/ files outside runtime/. Migrated ~285 FOG sites to specific except tuple (inside except Exception) or try/except (standalone). All 575 execution + 902 observability/deployment + 388 brains/features tests pass.
+- **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

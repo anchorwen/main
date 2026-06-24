@@ -14,8 +14,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from core.runtime.fault_handler import fail_open_guard
-
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
 
@@ -275,15 +273,14 @@ class V9LiveFeatureComputer:
                 }
                 for r in rates
             ]
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("v9_live_computer:_fetch_rates"):
-                logging.exception(
-                    "V9LiveComputer failed fetching rates for symbol=%s timeframe=%s count=%s",
-                    self._symbol,
-                    mt5_tf,
-                    count,
-                )
-                return None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logging.exception(
+                "V9LiveComputer failed fetching rates for symbol=%s timeframe=%s count=%s",
+                self._symbol,
+                mt5_tf,
+                count,
+            )
+            return None
     def _fill_zeros(self, result: dict[str, float], label: str) -> None:
         """Fill 10 features for a timeframe with zeros."""
         for feat in [

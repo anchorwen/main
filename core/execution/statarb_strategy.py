@@ -24,7 +24,6 @@ from typing import Any
 import numpy as np
 
 from core.execution.strategy_line import StrategyLine
-from core.runtime.fault_handler import fail_open_guard
 
 
 class StatArbStrategy(StrategyLine):
@@ -54,23 +53,24 @@ class StatArbStrategy(StrategyLine):
                 price = float(mid_price) if mid_price else 0.0
                 prop = b_info["adapter"].inference(np.array([price], dtype=np.float32))
                 bid = b_info.get("brain_id", "unknown")
-                with fail_open_guard(f"StatArb:ProposalBuild:{bid}"):
+                try:
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
                 proposals.append(prop)
             except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
-                with fail_open_guard("statarb_strategy:_run_inference"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "brain_inference_error",
-                                "brain_id": b_info.get("brain_id", "unknown"),
-                                "brain_type": b_info.get("brain_type", "unknown"),
-                                "strategy": "statarb_dynamic",
-                                "error": str(_exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                print(
+                    json.dumps(
+                        {
+                            "event": "brain_inference_error",
+                            "brain_id": b_info.get("brain_id", "unknown"),
+                            "brain_type": b_info.get("brain_type", "unknown"),
+                            "strategy": "statarb_dynamic",
+                            "error": str(_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         return proposals

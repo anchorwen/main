@@ -164,9 +164,8 @@ def bridge_degrade(
 
         try:
             value = fn()
-        except Exception:
-            with fail_open_guard("ctx"):
-                value = None
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            value = None
 
     Returns (value, None) on success, (fallback, error_str) on caught error.
     """

@@ -25,8 +25,6 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 @dataclass
 class BrainRanking:
@@ -101,9 +99,8 @@ class BrainLeaderboard:
                 from core.feedback.brain_quality_engine import BrainQualityEngine
 
                 self._engine = BrainQualityEngine.instance()
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("brain_leaderboard:__init__"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     # ── DQAF-20260621-042: Required fields for schema validation ──
     _REQUIRED_METRIC_FIELDS: tuple[str, ...] = (
         "sharpe_ratio", "win_rate", "profit_factor",

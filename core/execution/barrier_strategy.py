@@ -20,7 +20,6 @@ import numpy as np
 
 from core.execution.strategy_line import StrategyLine
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
-from core.runtime.fault_handler import fail_open_guard
 
 # V9 canonical order → name index (built once at import)
 _V9_NAME_TO_IDX: dict[str, int] = {name: i for i, name in enumerate(V9_INSTITUTIONAL_40_FEATURES)}
@@ -110,23 +109,24 @@ class BarrierStrategy(StrategyLine):
                 prop = adapter.inference(final_fv)
 
                 bid = b_info.get("brain_id", "unknown")
-                with fail_open_guard("BarrierStrategy:BrainProposal"):
+                try:
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
                 proposals.append(prop)
             except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
-                with fail_open_guard("barrier_strategy:_run_inference"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "brain_inference_error",
-                                "brain_id": b_info.get("brain_id", "unknown"),
-                                "brain_type": b_info.get("brain_type", "unknown"),
-                                "strategy": "barrier_12bar",
-                                "error": str(_exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                print(
+                    json.dumps(
+                        {
+                            "event": "brain_inference_error",
+                            "brain_id": b_info.get("brain_id", "unknown"),
+                            "brain_type": b_info.get("brain_type", "unknown"),
+                            "strategy": "barrier_12bar",
+                            "error": str(_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         return proposals

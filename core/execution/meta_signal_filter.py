@@ -24,6 +24,7 @@ v4.0 (2026-05-16): Runtime meta-feature computation from V9 institutional featur
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -36,7 +37,6 @@ from typing import Any
 import numpy as np
 
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
-from core.runtime.fault_handler import fail_open_guard, log_and_continue
 
 
 @dataclass
@@ -132,7 +132,7 @@ class MetaSignalFilter:
         self._micro_scaler: Any = None
         self._micro_scaler_path = micro_scaler_path
         if micro_scaler_path and os.path.exists(micro_scaler_path):
-            with log_and_continue(component="MetaFilter:load_scaler"):
+            try:
                 from pathlib import Path
 
                 from core.features.adapters.microstructure_feature_adapter import (
@@ -143,6 +143,8 @@ class MetaSignalFilter:
                     Path(micro_scaler_path)
                 )
 
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
         # Protocol 2: Platt Scaling calibrator (smooth sigmoid, no step collapse)
         self._calibrator: Any = None
         self._calibrator_path = calibrator_path
@@ -192,7 +194,7 @@ class MetaSignalFilter:
         is_mlp_primary = self.model_path.endswith(".json")
 
         _loaded = False
-        with log_and_continue(component="MetaFilter:load_model"):
+        try:
             meta_path = self.model_path.rsplit(".", 1)[0] + ".meta.json"
             if os.path.exists(meta_path):
                 with open(meta_path) as f:
@@ -217,11 +219,13 @@ class MetaSignalFilter:
 
                 self._model = lgb.Booster(model_file=self.model_path)
                 if not self._feature_names:
-                    with log_and_continue(component="MetaFilter:feature_names_fallback"):
+                    with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                         self._feature_names = self._model.feature_name()
                 self._load_mlp_model()
                 self._load_calibrator()
                 _loaded = True
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
         if not _loaded:
             return False
         return True
@@ -249,25 +253,24 @@ class MetaSignalFilter:
 
             self._calibrator = joblib.load(self._calibrator_path)
         except Exception as e:  # BLE001:FOG
-            with fail_open_guard("meta_signal_filter:_load_calibrator"):
-                sys.stderr.write(
-                    json.dumps(
-                        {
-                            "event": "calibrator_load_error",
-                            "path": self._calibrator_path,
-                            "error": str(e),
-                        }
-                    )
-                    + "\n"
+            sys.stderr.write(
+                json.dumps(
+                    {
+                        "event": "calibrator_load_error",
+                        "path": self._calibrator_path,
+                        "error": str(e),
+                    }
                 )
-                self._calibrator = None
+                + "\n"
+            )
+            self._calibrator = None
     def _load_mlp_model(self) -> None:
         """Load the optional MLP ensemble model for probability averaging."""
         if not self.mlp_model_path or not os.path.exists(self.mlp_model_path):
             return
         from core.brains.online_mlp_model import OnlineMLP
 
-        with log_and_continue(component="MetaFilter:load_mlp"):
+        with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
             self._mlp_model = OnlineMLP.load(self.mlp_model_path)
 
     def filter(
@@ -452,8 +455,7 @@ class MetaSignalFilter:
                 reason=reason,
             )
         except Exception as _exc:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("MetaSignalFilter:Compute"):
-                raise
+            raise
             import logging
 
             _logger = logging.getLogger(__name__)
@@ -587,13 +589,15 @@ class MetaSignalFilter:
         import json as _json
 
         _state = None
-        with log_and_continue(component="MetaFilter:load_state"):
+        try:
             with open(path, encoding="utf-8") as fh:
                 _state = _json.load(fh)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
         if _state is None:
             return
 
-        with log_and_continue(component="MetaFilter:restore_pred_history"):
+        try:
             if "pred_history" in _state:
                 items = _state["pred_history"]
                 if items and isinstance(items[0], list):
@@ -601,23 +605,33 @@ class MetaSignalFilter:
                 for item in items[-self._conformal_window :]:
                     self._pred_history.append((float(item[0]), float(item[1])))
 
-        with log_and_continue(component="MetaFilter:restore_pred_buffer"):
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
+        try:
             for item in _state.get("pred_buffer", [])[-20:]:
                 self._pred_buffer.append(float(item))
 
-        with log_and_continue(component="MetaFilter:restore_atr_buffer"):
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
+        try:
             for item in _state.get("atr_buffer", [])[-100:]:
                 self._atr_buffer.append(float(item))
 
-        with log_and_continue(component="MetaFilter:restore_spread_buffer"):
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
+        try:
             for item in _state.get("micro_spread_buffer", [])[-100:]:
                 self._micro_spread_buffer.append(float(item))
 
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
         # FIX-20260610-006: restore ATR freeze status
-        with log_and_continue(component="MetaFilter:restore_atr_frozen"):
+        try:
             self._atr_frozen = bool(_state.get("atr_frozen", False))
             self._atr_frozen_detected_at = str(_state.get("atr_frozen_detected_at", ""))
 
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
     def _predict_proba(self, feat_vec: list[float]) -> float:
         """Compute ensemble P(TP|signal) = w_lgb * prob_lgb + w_mlp * prob_mlp.
 
@@ -634,7 +648,7 @@ class MetaSignalFilter:
         # Get MLP probability (if available)
         mlp_prob: float | None = None
         if self._mlp_model is not None:
-            with log_and_continue(component="MetaFilter:mlp_predict"):
+            try:
                 raw = self._mlp_model.forward_numpy(np.array(feat_vec, dtype=np.float32))
                 if raw.ndim == 2 and raw.shape[1] == 2:
                     mlp_prob = float(raw[0, 1])
@@ -645,6 +659,8 @@ class MetaSignalFilter:
                 else:
                     mlp_prob = float(raw.ravel()[0])
 
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
         # Ensemble or single-model fallback
         if lgb_prob is not None and mlp_prob is not None:
             w_lgb, w_mlp = self._ensemble_weights

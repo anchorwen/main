@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from core.deployment.brain_alert import emit_brain_alert
-from core.runtime.fault_handler import fail_open_guard
 
 from .base_adapter import BaseBrainAdapter
 
@@ -55,14 +54,13 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 self._backend = "onnxruntime:isolated"
                 return
             except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("v9_onnx_brain_adapter:load"):
-                    self._guard = None
-                    print(
-                        f"[v9_onnx_adapter] inference_isolation failed for "
-                        f"brain_id={self._brain_entry.get('brain_id', 'unknown')}: {exc}",
-                        flush=True,
-                    )
-                    # Fall through to in-process loading
+                self._guard = None
+                print(
+                    f"[v9_onnx_adapter] inference_isolation failed for "
+                    f"brain_id={self._brain_entry.get('brain_id', 'unknown')}: {exc}",
+                    flush=True,
+                )
+                # Fall through to in-process loading
         try:
             import onnxruntime as ort
 
@@ -78,19 +76,18 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 self._num_features = input_shape[1]
             self._backend = "onnxruntime"
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("v9_onnx_brain_adapter:load"):
-                self._backend = f"stub:{type(exc).__name__}"
-                bid = self._brain_entry.get("brain_id", "unknown")
-                print(
-                    f"[v9_onnx_adapter] load_failed brain_id={bid} artifact={artifact} "
-                    f"error={type(exc).__name__}: {exc}",
-                    flush=True,
-                )
-                emit_brain_alert(
-                    bid,
-                    "model_load_failed",
-                    {"artifact": artifact, "error": f"{type(exc).__name__}: {exc}"},
-                )
+            self._backend = f"stub:{type(exc).__name__}"
+            bid = self._brain_entry.get("brain_id", "unknown")
+            print(
+                f"[v9_onnx_adapter] load_failed brain_id={bid} artifact={artifact} "
+                f"error={type(exc).__name__}: {exc}",
+                flush=True,
+            )
+            emit_brain_alert(
+                bid,
+                "model_load_failed",
+                {"artifact": artifact, "error": f"{type(exc).__name__}: {exc}"},
+            )
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run ONNX inference on a 1-D feature vector.
 

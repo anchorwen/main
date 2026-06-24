@@ -12,8 +12,6 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def _utc_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -49,8 +47,7 @@ def dispatch_managed_close(
     """
     from core.execution.live_order_sender import dispatch_live_order
     from core.execution.reentry_guard import ExitRecord, ensure_reentry_state
-    from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
-
+    from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
     # ── DQAF-033 P0: reason enforcement ──
     # Empty reason = blind spot in journal detail.reason.  Default to a
     # diagnostic label so every close is attributable.
@@ -145,36 +142,34 @@ def dispatch_managed_close(
                         flush=True,
                     )
                 except Exception as _cd_exc:  # BLE001:FOG (logged, Phase 3b)
-                    with fail_open_guard("managed_close:dispatch_managed_close"):
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "cooldown_record_failed",
-                                    "time": _utc_iso(),
-                                    "strategy": strategy_name,
-                                    "error": f"{type(_cd_exc).__name__}: {str(_cd_exc)[:200]}",
-                                    "level": "LOG",
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+                    print(
+                        json.dumps(
+                            {
+                                "event": "cooldown_record_failed",
+                                "time": _utc_iso(),
+                                "strategy": strategy_name,
+                                "error": f"{type(_cd_exc).__name__}: {str(_cd_exc)[:200]}",
+                                "level": "LOG",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
         except Exception as _ew_exc:  # BLE001:FOG (logged, Phase 3b)
-            with fail_open_guard("managed_close:dispatch_managed_close"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "exit_recording_failed",
-                            "time": _utc_iso(),
-                            "strategy": strategy_name,
-                            "reason": reason[:80],
-                            "error": f"{type(_ew_exc).__name__}: {str(_ew_exc)[:200]}",
-                            "level": "LOG",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            print(
+                json.dumps(
+                    {
+                        "event": "exit_recording_failed",
+                        "time": _utc_iso(),
+                        "strategy": strategy_name,
+                        "reason": reason[:80],
+                        "error": f"{type(_ew_exc).__name__}: {str(_ew_exc)[:200]}",
+                        "level": "LOG",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── Pillar 4: Ghost-volume audit ──
     _close_volume = pos.volume
     _expected = getattr(pos, "expected_remaining_volume", pos.volume)
@@ -226,12 +221,14 @@ def dispatch_managed_close(
     if _close_brain_ids:
         payload["brain_ids"] = _close_brain_ids
     if strategy_name:
-        with log_and_continue(component="MagicAttribution:close"):
+        try:
             from core.contracts.strategy_magic import STRATEGY_TO_MAGIC
 
             _strat_magic = STRATEGY_TO_MAGIC.get(strategy_name, 0)
             if _strat_magic:
                 payload["magic"] = _strat_magic
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
     if state is not None:
         _open_entry = state.known_open_tickets.get(pos.ticket, {})
         _open_msg_id = _open_entry.get("message_id", "")
@@ -290,25 +287,26 @@ def dispatch_managed_close(
                 )
             elif state is not None and pnl is not None:
                 _close_dispatched = True
-                with log_and_continue(component="ExitWatchdog:PnL_store"):
+                try:
                     _oe = state.known_open_tickets.get(pos.ticket, {})
                     if _oe:
                         _oe["_engine_close_pnl"] = pnl
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
         except Exception as _wd_exc:  # BLE001:FOG (logged, Phase 3b)
-            with fail_open_guard("managed_close:dispatch_managed_close"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "exit_watchdog_exception",
-                            "time": _utc_iso(),
-                            "error": f"{type(_wd_exc).__name__}: {str(_wd_exc)[:200]}",
-                            "reason": reason,
-                            "level": "CRASH",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            print(
+                json.dumps(
+                    {
+                        "event": "exit_watchdog_exception",
+                        "time": _utc_iso(),
+                        "error": f"{type(_wd_exc).__name__}: {str(_wd_exc)[:200]}",
+                        "reason": reason,
+                        "level": "CRASH",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     else:
         try:
             dispatch_live_order(
@@ -324,20 +322,19 @@ def dispatch_managed_close(
             )
             _close_dispatched = True
         except Exception as exc:  # BLE001:FOG (logged, Phase 3b)
-            with fail_open_guard("managed_close:dispatch_managed_close"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "close_dispatch_error",
-                            "time": _utc_iso(),
-                            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
-                            "level": "CRASH",
-                            "reason": reason,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            print(
+                json.dumps(
+                    {
+                        "event": "close_dispatch_error",
+                        "time": _utc_iso(),
+                        "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                        "level": "CRASH",
+                        "reason": reason,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     # ── After successful close: remove tracking + record PnL ──
     if _close_dispatched and state is not None and pos.ticket:
         state.known_open_tickets.pop(pos.ticket, None)
@@ -351,9 +348,8 @@ def dispatch_managed_close(
                 if mt5_worker is not None:
                     _acc = mt5_worker.account_info()
                     _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
-            except Exception:  # BLE001:FOG (Sev 4, Phase 3b — MT5 account_info fallback)
-                with fail_open_guard("managed_close:dispatch_managed_close"):
-                    pass  # graceful fallback — keep _eq at 1000.0
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG (Sev 4, Phase 3b — MT5 account_info fallback)
+                pass  # graceful fallback — keep _eq at 1000.0
             _pnl_pct = float(pnl) / _eq if _eq > 0 else 0.0
             state._pending_budget_records.append(
                 {

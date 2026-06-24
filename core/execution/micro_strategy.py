@@ -15,7 +15,6 @@ from typing import Any
 import numpy as np
 
 from core.execution.strategy_line import StrategyLine
-from core.runtime.fault_handler import fail_open_guard
 
 
 class MicroStrategy(StrategyLine):
@@ -46,43 +45,42 @@ class MicroStrategy(StrategyLine):
                         try:
                             prop = b_info["adapter"].run(None, seq)
                         except Exception as _hmre_exc:  # BLE001:FOG (logged, Phase 3b)
-                            with fail_open_guard("micro_strategy:_run_inference"):
-                                # Fallback: reshape and use infer_sequence() directly,
-                                # bypassing the rolling buffer (infer() expects 9-dim
-                                # vectors; passing a flat ravel would corrupt the buffer).
-                                try:
-                                    seq_batch = seq.astype(np.float32).reshape(1, seq.shape[0], 9)
-                                    raw = b_info["adapter"].infer_sequence(seq_batch)
-                                    prop = b_info["adapter"].get_signal(raw)
-                                except Exception:  # BLE001:FOG
-                                    with fail_open_guard("micro_strategy:_run_inference"):
-                                        raise _hmre_exc from None
+                            # Fallback: reshape and use infer_sequence() directly,
+                            # bypassing the rolling buffer (infer() expects 9-dim
+                            # vectors; passing a flat ravel would corrupt the buffer).
+                            try:
+                                seq_batch = seq.astype(np.float32).reshape(1, seq.shape[0], 9)
+                                raw = b_info["adapter"].infer_sequence(seq_batch)
+                                prop = b_info["adapter"].get_signal(raw)
+                            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                                raise _hmre_exc from None
                     else:
                         continue  # sequence not available for this TF
                 else:
                     # Legacy M5 brain: use 9-dim feature vector → adapter.inference()
                     prop = b_info["adapter"].inference(micro_feature_vector)
                 bid = b_info.get("brain_id", "unknown")
-                with fail_open_guard(f"Micro:ProposalBuild:{bid}"):
+                try:
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
                 proposals.append(prop)
             except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
-                with fail_open_guard("micro_strategy:_run_inference"):
-                    print(
-                        json.dumps(
-                            {
-                                "event": "brain_inference_error",
-                                "brain_id": b_info.get("brain_id", "unknown"),
-                                "brain_type": b_info.get("brain_type", "unknown"),
-                                "strategy": self.config.name,
-                                "error": str(_exc),
-                                "feature_shape": str(micro_feature_vector.shape)
-                                if hasattr(micro_feature_vector, "shape")
-                                else "unknown",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                print(
+                    json.dumps(
+                        {
+                            "event": "brain_inference_error",
+                            "brain_id": b_info.get("brain_id", "unknown"),
+                            "brain_type": b_info.get("brain_type", "unknown"),
+                            "strategy": self.config.name,
+                            "error": str(_exc),
+                            "feature_shape": str(micro_feature_vector.shape)
+                            if hasattr(micro_feature_vector, "shape")
+                            else "unknown",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         return proposals

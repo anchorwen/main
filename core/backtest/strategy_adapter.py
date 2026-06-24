@@ -20,7 +20,6 @@ import numpy as np
 
 from core.backtest.data_feed import Bar
 from core.backtest.portfolio import VirtualPortfolio
-from core.runtime.fault_handler import fail_open_guard
 
 # ── Rule-based strategy generators ──────────────────────────────────────────
 
@@ -249,9 +248,8 @@ class StrategyLineAdapter:
                         mid_price=bar.close,
                         current_atr=atr,
                     )
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("strategy_adapter:_fn"):
-                        continue
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    continue
                 if not decision.should_trade:
                     continue
                 return {

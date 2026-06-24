@@ -14,7 +14,6 @@ from core.execution.fix_contracts import FixSessionConfig
 from core.execution.fix_gateway_adapter import FixGatewayAdapter
 from core.execution.gateway_contracts import OrderRequest
 from core.protocol.schema_versions import SCHEMA_DISPATCH_RESULT
-from core.runtime.fault_handler import fail_open_guard
 
 
 class FixCommunicationAdapter:
@@ -102,17 +101,16 @@ class FixCommunicationAdapter:
                 },
             )
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("fix_communication_adapter:dispatch"):
-                return DispatchResult(
-                    schema_version=SCHEMA_DISPATCH_RESULT,
-                    dispatch_id=request.dispatch_id,
-                    message_id=envelope.message_id,
-                    status=DispatchStatus.FAILED,
-                    recorded_at=request.requested_at,
-                    target=envelope.target,
-                    adapter_name=self.adapter_name,
-                    failure_reason=str(exc),
-                    trace={"adapter": self.adapter_name},
-                )
+            return DispatchResult(
+                schema_version=SCHEMA_DISPATCH_RESULT,
+                dispatch_id=request.dispatch_id,
+                message_id=envelope.message_id,
+                status=DispatchStatus.FAILED,
+                recorded_at=request.requested_at,
+                target=envelope.target,
+                adapter_name=self.adapter_name,
+                failure_reason=str(exc),
+                trace={"adapter": self.adapter_name},
+            )
     def is_connected(self) -> bool:
         return self._connected

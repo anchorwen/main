@@ -36,8 +36,6 @@ from typing import Any
 
 import numpy as np
 
-from core.runtime.fault_handler import fail_open_guard
-
 # ── Optional import ──
 
 
@@ -264,11 +262,10 @@ def run_shap_analysis(
         )
 
     except Exception as e:  # BLE001:FOG
-        with fail_open_guard("evaluation_report:run_shap_analysis"):
-            import sys
+        import sys
 
-            print(f"[evaluation_report] SHAP analysis failed: {e}", file=sys.stderr)
-            return None
+        print(f"[evaluation_report] SHAP analysis failed: {e}", file=sys.stderr)
+        return None
 def check_shap_stability(shap_reports: list[SHAPReport], threshold: float = 0.5) -> bool:
     """Check cross-fold SHAP stability.
 

@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 # Re-import for guard use
 from core.observability.data_loss import append_loss_record
-from core.runtime.fault_handler import fail_open_guard
 
 _HEARTBEAT_INTERVAL = 300   # 5 minutes
 _FULL_SCAN_INTERVAL = 3600  # 1 hour
@@ -110,16 +109,15 @@ class EntryContextGuard:
                     self._run_full_scan()
                     last_scan = now
 
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("entry_context_guard:_run_loop"):
-                    # M1: never let the guard die silently
-                    logger.critical(
-                        "EntryContextGuard: unhandled exception in main loop:\n%s",
-                        traceback.format_exc(),
-                    )
-                    # Brief sleep before retry to avoid spin on persistent errors
-                    time.sleep(10.0)
-                    continue
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                # M1: never let the guard die silently
+                logger.critical(
+                    "EntryContextGuard: unhandled exception in main loop:\n%s",
+                    traceback.format_exc(),
+                )
+                # Brief sleep before retry to avoid spin on persistent errors
+                time.sleep(10.0)
+                continue
             # Sleep in small increments so we respond to stop() promptly
             for _ in range(int(self._heartbeat_interval / 5)):
                 if self._stop_event.is_set():
@@ -156,13 +154,12 @@ class EntryContextGuard:
 
             service = DataHealthService(base_dir=str(self._base_dir), symbol=self._symbol)
             result = service.check_entry_context_completeness()
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("entry_context_guard:_run_full_scan"):
-                logger.error(
-                    "EntryContextGuard: DataHealthService scan failed:\n%s",
-                    traceback.format_exc(),
-                )
-                return
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logger.error(
+                "EntryContextGuard: DataHealthService scan failed:\n%s",
+                traceback.format_exc(),
+            )
+            return
         metrics = result.metrics
         if not metrics:
             return

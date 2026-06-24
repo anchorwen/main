@@ -25,8 +25,6 @@ from typing import Any
 
 import zmq
 
-from core.runtime.fault_handler import fail_open_guard
-
 logger = logging.getLogger(__name__)
 
 
@@ -109,9 +107,8 @@ class ZMQReceiptListener:
                     logger.debug("ZMQ error in recv loop", exc_info=True)
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON ACK received")
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("zmq_receipt_listener:_recv_loop"):
-                    logger.error("Unexpected error in ACK recv loop", exc_info=True)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                logger.error("Unexpected error in ACK recv loop", exc_info=True)
     def get_receipt(self, message_id: str, timeout: float = 5.0) -> dict[str, Any] | None:
         """Wait for a receipt matching *message_id*.
 
@@ -209,17 +206,18 @@ def resolve_ack(
     # ZMQ receipt errors are non-fatal — the file fallback below will
     # catch any missed ACKs.  fail_open_guard ensures the error is logged
     # AND the loop continues rather than silently swallowing the exception.
-    from core.runtime.fault_handler import fail_open_guard
 
-    with fail_open_guard("ZMQ:ResolveAck"):
+    try:
         listener = get_zmq_listener(auto_start=True)
         if listener is not None:
             ack = listener.get_receipt(message_id, timeout=timeout)
             if ack is not None:
                 return ack
 
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
     # ── File polling fallback ──
-    with fail_open_guard("ZMQ:FileAckFallback"):
+    try:
         today = _datetime.now(UTC).strftime("%Y-%m-%d")
         ack_path = _Path(base_dir) / "receipts" / today / "exec_bridge" / f"{message_id}.ack.json"
         deadline = _time.monotonic() + timeout
@@ -229,4 +227,6 @@ def resolve_ack(
                 return ack if isinstance(ack, dict) else None
             _time.sleep(poll_interval)
 
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
     return None

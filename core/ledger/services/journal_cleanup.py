@@ -21,8 +21,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def _utc_now_iso() -> str:
     return (
@@ -60,9 +58,8 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                         ),
                         flush=True,
                     )
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("journal_cleanup:_load_journal"):
-                        pass
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
     if parse_errors:
         try:  # noqa: SIM105
             print(
@@ -77,9 +74,8 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                 ),
                 flush=True,
             )
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("journal_cleanup:_load_journal"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     return entries
 
 
@@ -114,9 +110,8 @@ def _read_tail_lines(path: Path, n: int = 1000) -> list[str]:
                 for _l in _raw_lines[-n - 1 :]
                 if _l
             ]
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("journal_cleanup:_read_tail_lines"):
-            pass
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass
         return []  # Best-effort — if read fails, write anyway
 
 
@@ -249,9 +244,8 @@ def _resolve_strategy(entry: dict[str, Any]) -> str:
             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
             return MAGIC_TO_STRATEGY.get(magic, "")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("journal_cleanup:_resolve_strategy"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
     return ""
 
 
@@ -776,14 +770,13 @@ def compact_journal(
             _log.debug("Journal compaction: nothing to remove")
 
     except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("journal_cleanup:compact_journal"):
-            _log.error("Journal compaction failed: %s", exc, exc_info=True)
-            # Clean up temp file on failure
-            import contextlib
-            with contextlib.suppress(OSError):
-                if temp_path.exists():
-                    temp_path.unlink()
-            return {"status": "error", "error": str(exc)[:200]}
+        _log.error("Journal compaction failed: %s", exc, exc_info=True)
+        # Clean up temp file on failure
+        import contextlib
+        with contextlib.suppress(OSError):
+            if temp_path.exists():
+                temp_path.unlink()
+        return {"status": "error", "error": str(exc)[:200]}
     finally:
         if _lock_acquired and _lock is not None:
             _lock.release()

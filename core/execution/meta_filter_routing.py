@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 
 from core.execution.strategy_decision import StrategyDecision
-from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -150,9 +149,8 @@ def apply_meta_filter_gate(
                 flush=True,
             )
             return _meta_p_win, None
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("MetaFilterRouting:Apply"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG_WRAPPED
+            raise
             logger.warning(
                 "MetaFilter statarb routing failed for %s: fallthrough to p_win resolution",
                 name,

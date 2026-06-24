@@ -44,8 +44,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
 
@@ -160,9 +158,8 @@ class BarSyncPoller:
                 )
                 time.sleep(self.fallback_interval)
                 return None
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                pass  # Session detection is advisory -- never block the main loop
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass  # Session detection is advisory -- never block the main loop
         timeout = timeout_seconds if timeout_seconds is not None else self.timeout_seconds
         _start = time.monotonic()
         deadline = _start + timeout
@@ -233,28 +230,25 @@ class BarSyncPoller:
                                 self._mt5_worker.reconnect()
                                 self._mt5_available = True
                             except Exception as _exc:  # BLE001:FOG
-                                with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                                    self._log_event(
-                                        "BAR_RECONNECT_FAILED",
-                                        {"error": str(_exc)[:200], "path": "worker"},
-                                    )
+                                self._log_event(
+                                    "BAR_RECONNECT_FAILED",
+                                    {"error": str(_exc)[:200], "path": "worker"},
+                                )
                         else:
                             try:
                                 mt5.shutdown()
                             except Exception as _exc:  # BLE001:FOG
-                                with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                                    self._log_event(
-                                        "BAR_RECONNECT_FAILED",
-                                        {"error": str(_exc)[:200], "path": "shutdown"},
-                                    )
+                                self._log_event(
+                                    "BAR_RECONNECT_FAILED",
+                                    {"error": str(_exc)[:200], "path": "shutdown"},
+                                )
                             try:
                                 self._init_mt5()
                             except Exception as _exc:  # BLE001:FOG
-                                with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                                    self._log_event(
-                                        "BAR_RECONNECT_FAILED",
-                                        {"error": str(_exc)[:200], "path": "init_mt5"},
-                                    )
+                                self._log_event(
+                                    "BAR_RECONNECT_FAILED",
+                                    {"error": str(_exc)[:200], "path": "init_mt5"},
+                                )
                         _consecutive_empty = 0
                         time.sleep(self.poll_interval * 2)
                         continue
@@ -370,58 +364,54 @@ class BarSyncPoller:
                     }
 
             except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                    _error_count += 1
-                    self._log_event(
-                        "MT5_ERROR",
-                        {
-                            "action": "retry"
-                            if _error_count <= MAX_MT5_ERROR_RETRIES
-                            else "fallback_to_poll",
-                            "error_count": _error_count,
-                            "max_retries": MAX_MT5_ERROR_RETRIES,
-                            "exception": str(exc),
-                            "exception_type": type(exc).__name__,
-                        },
-                    )
-                    if _error_count <= MAX_MT5_ERROR_RETRIES:
-                        # Transient error -- clean up stale connection and re-init
-                        self._mt5_available = False
-                        if self._mt5_worker is not None:
-                            try:
-                                self._mt5_worker.reconnect()
-                                self._mt5_available = True
-                            except Exception as _exc:  # BLE001:FOG
-                                with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                                    self._log_event(
-                                        "BAR_MT5_ERROR_RECONNECT_FAILED",
-                                        {"error": str(_exc)[:200], "path": "worker"},
-                                    )
-                        else:
-                            try:
-                                import MetaTrader5 as _mt5_mod
-
-                                _mt5_mod.shutdown()
-                            except Exception as _exc:  # BLE001:FOG
-                                with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                                    self._log_event(
-                                        "BAR_MT5_ERROR_RECONNECT_FAILED",
-                                        {"error": str(_exc)[:200], "path": "shutdown"},
-                                    )
-                            try:
-                                self._init_mt5()
-                            except Exception as _exc:  # BLE001:FOG
-                                with fail_open_guard("event_bar_sync:wait_for_new_bar"):
-                                    self._log_event(
-                                        "BAR_MT5_ERROR_RECONNECT_FAILED",
-                                        {"error": str(_exc)[:200], "path": "init_mt5"},
-                                    )
-                        time.sleep(self.poll_interval * 2)
-                        continue
-                    # Persistent error -- give up for this cycle
+                _error_count += 1
+                self._log_event(
+                    "MT5_ERROR",
+                    {
+                        "action": "retry"
+                        if _error_count <= MAX_MT5_ERROR_RETRIES
+                        else "fallback_to_poll",
+                        "error_count": _error_count,
+                        "max_retries": MAX_MT5_ERROR_RETRIES,
+                        "exception": str(exc),
+                        "exception_type": type(exc).__name__,
+                    },
+                )
+                if _error_count <= MAX_MT5_ERROR_RETRIES:
+                    # Transient error -- clean up stale connection and re-init
                     self._mt5_available = False
-                    time.sleep(self.fallback_interval)
-                    return None
+                    if self._mt5_worker is not None:
+                        try:
+                            self._mt5_worker.reconnect()
+                            self._mt5_available = True
+                        except Exception as _exc:  # BLE001:FOG
+                            self._log_event(
+                                "BAR_MT5_ERROR_RECONNECT_FAILED",
+                                {"error": str(_exc)[:200], "path": "worker"},
+                            )
+                    else:
+                        try:
+                            import MetaTrader5 as _mt5_mod
+
+                            _mt5_mod.shutdown()
+                        except Exception as _exc:  # BLE001:FOG
+                            self._log_event(
+                                "BAR_MT5_ERROR_RECONNECT_FAILED",
+                                {"error": str(_exc)[:200], "path": "shutdown"},
+                            )
+                        try:
+                            self._init_mt5()
+                        except Exception as _exc:  # BLE001:FOG
+                            self._log_event(
+                                "BAR_MT5_ERROR_RECONNECT_FAILED",
+                                {"error": str(_exc)[:200], "path": "init_mt5"},
+                            )
+                    time.sleep(self.poll_interval * 2)
+                    continue
+                # Persistent error -- give up for this cycle
+                self._mt5_available = False
+                time.sleep(self.fallback_interval)
+                return None
         # Timeout -- no new bar within the window
         self._log_event(
             "BAR_TIMEOUT",
@@ -444,11 +434,10 @@ class BarSyncPoller:
         if self._mt5_worker is not None:
             try:
                 m1_rates = self._mt5_worker.copy_rates_from_pos(self.symbol, MT5_TIMEFRAME_M1, 0, 6)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("event_bar_sync:fetch_synthetic_bar"):
-                    self._mt5_available = False
-                    self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
-                    return None
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                self._mt5_available = False
+                self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
+                return None
         else:
             _mt5: Any = mt5
             if _mt5 is None:
@@ -456,10 +445,9 @@ class BarSyncPoller:
                     import MetaTrader5 as _mt5_mod
 
                     _mt5 = _mt5_mod
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("event_bar_sync:fetch_synthetic_bar"):
-                        self._log_event("BAR_SYNTHETIC_FAILED", {"error": "import_error"})
-                        return None
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    self._log_event("BAR_SYNTHETIC_FAILED", {"error": "import_error"})
+                    return None
             try:
                 m1_rates = _mt5.copy_rates_from_pos(
                     self.symbol,
@@ -467,11 +455,10 @@ class BarSyncPoller:
                     0,
                     6,  # last 6 × M1 bars cover a full M5 window
                 )
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("event_bar_sync:fetch_synthetic_bar"):
-                    self._mt5_available = False
-                    self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
-                    return None
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                self._mt5_available = False
+                self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
+                return None
         if m1_rates is None or len(m1_rates) < 2:
             return None
 
@@ -601,9 +588,8 @@ class BarSyncPoller:
             self._log_event("MT5_INIT_OK", {"symbol": self.symbol})
 
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("event_bar_sync:_init_mt5"):
-                self._log_event("MT5_INIT_EXCEPTION", {"error": str(exc)})
-                self._mt5_available = False
+            self._log_event("MT5_INIT_EXCEPTION", {"error": str(exc)})
+            self._mt5_available = False
     @staticmethod
     def _timeframe_map(tf: str) -> int:
         """Map string timeframe to MT5 constant (hardcoded -- no import needed)."""
@@ -662,9 +648,8 @@ class BarSyncPoller:
                     ),
                     flush=True,
                 )
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("event_bar_sync:_load_state"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
     def _save_state(self) -> None:
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)

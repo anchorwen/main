@@ -15,8 +15,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 @dataclass
 class BrainEntry:
@@ -67,9 +65,8 @@ class BrainRegistry:
                 continue
             try:
                 raw = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("brain_registry:_load_all"):
-                    continue
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                continue
             if raw.get("schema_version") != "brain_registry_entry.v1":
                 continue
 

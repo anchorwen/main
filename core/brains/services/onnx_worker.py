@@ -15,8 +15,6 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def run_worker(conn, model_path: str) -> None:
     """Load ONNX model and serve inference requests until sentinel received.
@@ -39,10 +37,9 @@ def run_worker(conn, model_path: str) -> None:
         input_name = session.get_inputs()[0].name
         output_names = [o.name for o in session.get_outputs()]
     except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("onnx_worker:run_worker"):
-            conn.send({"error": f"load_failed: {exc}"})
-            conn.close()
-            return
+        conn.send({"error": f"load_failed: {exc}"})
+        conn.close()
+        return
     # Main loop — block on recv, run inference, send result
     while True:
         try:
@@ -69,8 +66,7 @@ def run_worker(conn, model_path: str) -> None:
             outputs: list[Any] = session.run(feed_output_names, {feed_input_name: model_input})
             conn.send(outputs)
         except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("onnx_worker:run_worker"):
-                conn.send({"error": f"inference_failed: {exc}"})
+            conn.send({"error": f"inference_failed: {exc}"})
 # ── Entry point for subprocess ──
 if __name__ == "__main__":
     if len(sys.argv) < 2:

@@ -51,7 +51,6 @@ from core.observability.alert_service import (
     build_rules_from_config,
 )
 from core.protocol.services.resilience import CircuitBreaker
-from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]  # d:\future\
@@ -274,12 +273,11 @@ class BackgroundDeliveryWorker(threading.Thread):
             try:
                 self._channel.send(enriched)
                 self._delivered += 1
-            except Exception:  # noqa: BLE001  # BLE001:FOG
-                with fail_open_guard("live_alert_hub:run"):
-                    logger.exception(
-                        "BackgroundDeliveryWorker: channel.send failed for rule=%s",
-                        enriched.get("rule_name", "?"),
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # noqa: BLE001  # BLE001:FOG
+                logger.exception(
+                    "BackgroundDeliveryWorker: channel.send failed for rule=%s",
+                    enriched.get("rule_name", "?"),
+                )
             self._queue.task_done()
 
     def _dedup_or_pass(self, alert: dict[str, Any]) -> dict[str, Any] | None:
@@ -665,9 +663,8 @@ class LiveAlertHub:
                 stderr=subprocess.DEVNULL,
                 cwd=str(ROOT),
             ).communicate(input=payload.encode("utf-8"), timeout=0.5)
-        except Exception:  # noqa: BLE001  # BLE001:FOG
-            with fail_open_guard("live_alert_hub:_trigger_shadow_rca"):
-                pass  # Shadow RCA is best-effort — never block trading
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # noqa: BLE001  # BLE001:FOG
+            pass  # Shadow RCA is best-effort — never block trading
 
     def _write_fallback_alert(self, alert: dict[str, Any]) -> None:
         """Emergency fallback: write dropped alert directly to audit log.
@@ -732,9 +729,8 @@ class LiveAlertHub:
                 with contextlib.suppress(OSError):
                     os.unlink(tmp_path)
                 raise
-        except Exception:  # noqa: BLE001  # BLE001:FOG
-            with fail_open_guard("live_alert_hub:_save_cooling_state"):
-                pass
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # noqa: BLE001  # BLE001:FOG
+            pass
 
     def _load_cooling_state(self) -> None:
         """Restore rule cooling timestamps from disk after process restart.

@@ -28,7 +28,6 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
-from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -112,16 +111,15 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
 
         try:
             data = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("online_learner_adapter:load"):
-                self._backend = "online_sgd:zeros"
-                self._init_zeros()
-                emit_brain_alert(
-                    brain_id,
-                    "model_load_failed",
-                    {"reason": "json parse failed", "artifact": artifact_path},
-                )
-                return
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            self._backend = "online_sgd:zeros"
+            self._init_zeros()
+            emit_brain_alert(
+                brain_id,
+                "model_load_failed",
+                {"reason": "json parse failed", "artifact": artifact_path},
+            )
+            return
         # Detect MLP format
         if data.get("model_type") == "online_mlp_v1":
             self._use_mlp = True
@@ -138,13 +136,12 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
                     self._n_features,
                     self._total_updates,
                 )
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("online_learner_adapter:load"):
-                    self._backend = "online_mlp:zeros"
-                    self._init_mlp_zeros()
-                    emit_brain_alert(
-                        brain_id, "model_load_failed", {"reason": "MLP state dict load failed"}
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                self._backend = "online_mlp:zeros"
+                self._init_mlp_zeros()
+                emit_brain_alert(
+                    brain_id, "model_load_failed", {"reason": "MLP state dict load failed"}
+                )
         else:
             self._use_mlp = False
             try:
@@ -160,13 +157,12 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
                     self._classes.tolist(),
                     self._total_updates,
                 )
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("online_learner_adapter:load"):
-                    self._backend = "online_sgd:zeros"
-                    self._init_zeros()
-                    emit_brain_alert(
-                        brain_id, "model_load_failed", {"reason": "SGD weights load failed"}
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                self._backend = "online_sgd:zeros"
+                self._init_zeros()
+                emit_brain_alert(
+                    brain_id, "model_load_failed", {"reason": "SGD weights load failed"}
+                )
     def _init_zeros(self) -> None:
         n_classes = len(LABEL_CLASSES)
         self._coef = np.zeros((n_classes, self._n_features), dtype=np.float64)
@@ -422,9 +418,8 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
         try:
             clf.partial_fit(x, y, classes=self._classes)
         except Exception as e:  # BLE001:FOG
-            with fail_open_guard("online_learner_adapter:_sgd_step"):
-                logger.error("OnlineLearnerAdapter: SGD step failed: %s", e)
-                return False
+            logger.error("OnlineLearnerAdapter: SGD step failed: %s", e)
+            return False
         self._coef = clf.coef_.copy()
         self._intercept = clf.intercept_.copy()
         return True

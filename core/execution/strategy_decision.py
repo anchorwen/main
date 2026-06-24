@@ -17,8 +17,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 # ── Cached git commit hash (lazy, once per process lifetime) ──────────────
 
 _GIT_HASH_CACHE: str | None = None
@@ -42,9 +40,8 @@ def _get_cached_git_hash() -> str:
             _GIT_HASH_CACHE = result.stdout.strip()
         else:
             _GIT_HASH_CACHE = "unknown"
-    except Exception:  # BLE001:FOG — subprocess best-effort metadata
-        with fail_open_guard("strategy_decision:_get_cached_git_hash"):
-            _GIT_HASH_CACHE = "unknown"
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG — subprocess best-effort metadata
+        _GIT_HASH_CACHE = "unknown"
     return _GIT_HASH_CACHE
 
 

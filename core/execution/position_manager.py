@@ -30,7 +30,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from core.execution.trail_stop_engine import TrailPolicy, TrailStopEngine
-from core.runtime.fault_handler import fail_open_guard
 
 if TYPE_CHECKING:
     from core.execution.meta_exit_engine import ExitEvaluation
@@ -1540,9 +1539,8 @@ class ActivePositionManager:
             }
             with open(_path, "a", encoding="utf-8") as _f:
                 _f.write(_json.dumps(_record, ensure_ascii=False, default=str) + "\n")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("position_manager:_write_meta_exit_telemetry"):
-                pass  # telemetry failure must never block trading
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass  # telemetry failure must never block trading
     @staticmethod
     def _is_trend_aligned(regime_info: dict[str, Any], *, position_side: str = "") -> bool:
         """Check if the current regime's trend direction matches position side."""

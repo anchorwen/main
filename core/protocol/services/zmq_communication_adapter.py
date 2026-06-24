@@ -10,7 +10,6 @@ from core.contracts.enums import DispatchStatus
 from core.contracts.serialization.json_codec import to_dict
 from core.protocol.schema_versions import SCHEMA_DISPATCH_RESULT
 from core.protocol.services.resilience import CircuitBreaker  # Phase 2: ZMQ → File auto-failover
-from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +197,8 @@ class ZMQCommunicationAdapter:
                         "zmq_failures": self._circuit_breaker._failure_count,
                     }
                     return result
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("zmq_communication_adapter:dispatch"):
-                        logger.error("Fallback adapter also failed", exc_info=True)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    logger.error("Fallback adapter also failed", exc_info=True)
             raise
 
         # Success — reset breaker

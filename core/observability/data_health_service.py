@@ -42,7 +42,6 @@ from core.observability.data_health_schema import (
     build_alert_context as _build_alert_context,
 )
 from core.observability.health_checks import HealthCheckMethods
-from core.runtime.fault_handler import fail_open_guard
 
 # ── DataHealthService ──────────────────────────────────────────────────────
 
@@ -110,15 +109,14 @@ class DataHealthService(HealthCheckMethods):
             try:
                 result = meta.func(self)
             except Exception as exc:  # BLE001:FOG — Iron Law #1
-                with fail_open_guard("data_health_service:_run"):
-                    result = SourceCheckResult(
-                        source=meta.source,
-                        tier=meta.tier,
-                        status=SourceStatus.FAIL,
-                        primary_code=f"{meta.source.upper()}_CHECK_CRASHED",
-                        message=f"Check raised {type(exc).__name__}: {exc}",
-                        checked_at=_utc_iso(),
-                    )
+                result = SourceCheckResult(
+                    source=meta.source,
+                    tier=meta.tier,
+                    status=SourceStatus.FAIL,
+                    primary_code=f"{meta.source.upper()}_CHECK_CRASHED",
+                    message=f"Check raised {type(exc).__name__}: {exc}",
+                    checked_at=_utc_iso(),
+                )
             if result.metrics:
                 pass  # already set
             sources.append(result)
