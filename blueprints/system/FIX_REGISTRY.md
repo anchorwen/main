@@ -4479,7 +4479,7 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 ### FIX-20260624-120
 - **Date**: 2026-06-24
 - **Author**: cursor-agent
-- **Commit**: (pending)
+- **Commit**: dd3224fd
 - **Type**: fix
 - **Module**: execution_orders
 - **Files**: core/execution/strategy_line.py, blueprints/modules/execution_orders.md
