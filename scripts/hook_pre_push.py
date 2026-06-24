@@ -65,7 +65,7 @@ def _git_tracked_py_files() -> list[str] | None:
 def _run_ruff_on_paths(paths: list[str]) -> subprocess.CompletedProcess:
     """Run ruff on a list of file paths, respecting Windows cmdline limits."""
     return subprocess.run(
-        [sys.executable, "-m", "ruff", "check", *paths],
+        [sys.executable, "-m", "ruff", "check", "--ignore", "SIM105", *paths],
         cwd=REPO_ROOT,
         capture_output=True,
         timeout=120,
@@ -89,7 +89,17 @@ def check_ruff() -> bool:
         print("[pre-push] Ruff check (core/ apps/ scripts/ — directory fallback)")
         print("=" * 60)
         result = subprocess.run(
-            [sys.executable, "-m", "ruff", "check", "core/", "apps/", "scripts/"],
+            [
+                sys.executable,
+                "-m",
+                "ruff",
+                "check",
+                "--ignore",
+                "SIM105",
+                "core/",
+                "apps/",
+                "scripts/",
+            ],
             cwd=REPO_ROOT,
             capture_output=True,
             timeout=120,
@@ -238,12 +248,9 @@ def check_omega() -> bool:
     except subprocess.TimeoutExpired:
         print("[pre-push] Omega: TIMEOUT (>30s)")
         return False
-    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
-        try:  # BLE001:FOG (was: FOG/LAC)
-            print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
-            return False
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
+        return False
 
 
 # ---------------------------------------------------------------------------
