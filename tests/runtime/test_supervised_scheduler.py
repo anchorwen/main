@@ -87,7 +87,7 @@ class TestThreadTask:
 
         scheduler.start()
         assert started.wait(timeout=2.0)
-        assert task.status == TaskStatus.RUNNING  # type: ignore[comparison-overlap]
+        assert task.status == TaskStatus.RUNNING
 
         done.set()
         _time.sleep(0.1)
@@ -155,8 +155,11 @@ class TestThreadTask:
 
         # White-box: force last_heartbeat to appear ancient.
         # Use lock to prevent race with heartbeat thread.
+        # Guard against fresh machines where monotonic() < 999:
+        # the supervisor checks `last_heartbeat > 0` at line 368,
+        # so negative values would skip the stall check entirely.
         with scheduler._lock:
-            task.last_heartbeat = _time.monotonic() - 999.0
+            task.last_heartbeat = max(_time.monotonic() - 999.0, 0.001)
 
         # Wait for supervisor to detect the stall
         _time.sleep(0.5)

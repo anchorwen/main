@@ -4241,3 +4241,14 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Prevention**: _verify_thread() called at all 3 proof-consumption entry points; debug-mode enforcement (zero production overhead); AST scanner ProofLeakDetector covers static analysis path
 - **Dependents Checked**: All 38 cap_result tests pass; ruff clean; mypy baseline unchanged
 - **Dependents Checked**: All 66 phantom_contract tests pass; ruff clean; mypy baseline unchanged
+### FIX-20260624-100
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: tests/runtime/test_supervised_scheduler.py
+- **Description**: test_stuck_detection CI flake fix. monotonic()-999.0 yields negative on fresh VMs (uptime < 999s), skipped by supervisor > 0 guard. Fix: max(monotonic()-999.0, 0.001). Also removed 1 unused type:ignore comment.
+- **Root Cause**: L1 — test assumed monotonic() >= 999 at all times; fresh CI VMs can have lower uptime
+- **Prevention**: max() guard ensures positive heartbeat value regardless of machine uptime
+- **Dependents Checked**: All 14 test_supervised_scheduler tests pass; ruff clean; mypy clean
