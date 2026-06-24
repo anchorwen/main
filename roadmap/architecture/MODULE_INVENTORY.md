@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T12:44:37Z
-> **扫描模块数**: 666
+> **自动生成**: 2026-06-24T14:47:54Z
+> **扫描模块数**: 669
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -669,7 +669,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 667 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 668 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -740,22 +740,25 @@
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 185 | — | |
 | `omega_constants.py` | 📄 config | — | 0 | 70 | — | |
 | `omega_crash_snapshot.py` | ✅ active | — | 4 | 158 | — | |
-| `omega_gate.py` | ✅ active | — | 4 | 542 | — | |
+| `omega_gate.py` | ✅ active | — | 4 | 545 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
+| `phase4_final_audit.py` | ✅ active | — | 7 | 571 | — | |
+| `phase4_shadow_review.py` | ✅ active | — | 11 | 405 | — | |
 | `position_query.py` | ✅ active | — | 6 | 193 | — | |
 | `position_snapshot.py` | ✅ active | — | 3 | 176 | — | |
 | `pre_commit_blueprint.py` | ✅ active | — | 5 | 204 | — | |
 | `pre_commit_mypy.py` | ✅ active | — | 5 | 162 | — | |
 | `probe_xau_signal_generation.py` | ✅ active | — | 7 | 362 | — | |
 | `purge_backtest_from_governance.py` | ✅ active | — | 5 | 249 | — | |
-| `reconcile_fix_registry.py` | ✅ active | — | 6 | 361 | — | |
+| `reconcile_fix_registry.py` | ✅ active | — | 6 | 381 | — | |
 | `register_fix.py` | ✅ active | — | 8 | 329 | — | |
 | `repair_brain_configs.py` | ✅ active | — | 4 | 141 | — | |
 | `restore_btc_schema_41.py` | ✅ active | — | 4 | 177 | — | |
 | `run_data_health.py` | ✅ active | — | 3 | 172 | — | |
 | `runtime_protection_guard.py` | ✅ active | — | 1 | 22 | — | |
+| `scan_barrier_params.py` | ✅ active | — | 5 | 236 | — | |
 | `send_data_health_alert.py` | ✅ active | — | 6 | 231 | — | |
 | `send_live_order.py` | ✅ active | — | 4 | 148 | — | |
 | `shadow_decision_recorder.py` | ✅ active | — | 7 | 199 | — | |
@@ -774,7 +777,7 @@
 | `train_regime_aware_btc.py` | ✅ active | — | 3 | 256 | — | |
 | `training_strategy_report.py` | ⬜ empty | — | 0 | 172 | — | |
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
-| `validate_blueprints.py` | ✅ active | — | 7 | 297 | — | |
+| `validate_blueprints.py` | ✅ active | — | 7 | 303 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 406 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |

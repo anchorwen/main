@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T12:44:37Z
+> **自动生成**: 2026-06-24T14:47:54Z
 
 ## Package-Level Dependencies
 
@@ -660,6 +660,8 @@
 - `online_feedback_hook.py` → `core.brains.adapters.online_learner_adapter`, `core.feedback.online_feedback_hook`
 - `optimize_sl_tp.py` → `scripts.paper_trade_simulator`
 - `paper_trade_simulator.py` → `core.simulation.spread_model`
+- `phase4_final_audit.py` → (无内部依赖)
+- `phase4_shadow_review.py` → (无内部依赖)
 - `position_query.py` → (无内部依赖)
 - `position_snapshot.py` → (无内部依赖)
 - `pre_commit_blueprint.py` → (无内部依赖)
@@ -672,6 +674,7 @@
 - `restore_btc_schema_41.py` → `core.features.schemas.registry`
 - `run_data_health.py` → `core.observability.data_health_service`
 - `runtime_protection_guard.py` → `scripts.guards.journal_quality`
+- `scan_barrier_params.py` → (无内部依赖)
 - `send_data_health_alert.py` → `core.observability.data_health_service`
 - `send_live_order.py` → `core.contracts.domain.dispatch_context`, `core.execution.live_order_sender`, `core.execution.mt5_broker_adapter`
 - `shadow_decision_recorder.py` → `core.contracts.domain.decision_record`, `core.contracts.ids`, `core.ledger.storage.jsonl_ledger_store`, `core.runtime.shadow_recorder`, `core.schemas.trading_contracts`

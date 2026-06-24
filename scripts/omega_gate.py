@@ -118,6 +118,9 @@ def _staged_diff_stats() -> dict[str, int]:
 
 
 def main() -> int:
+    # Fix Windows GBK encoding for emoji characters in hook output
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     commit_msg = get_commit_msg()
     staged = get_staged_files()
 

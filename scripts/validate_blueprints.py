@@ -59,11 +59,14 @@ EXPECTED_MODULES = [
     "feedback_online",
     "protocol_governance",
     "protocol_parliament",
+    "parliament_consensus",
     "protocol_services",
     "contracts_domain",
     "contracts_ids",
     "contracts_training",
+    "contracts_resilience",
     "data_infrastructure",
+    "governance_rules",
     "deployment_config",
     "deployment_lifecycle",
     "features_rolling",
@@ -71,8 +74,11 @@ EXPECTED_MODULES = [
     "runtime_live",
     "runtime_state",
     "training",
+    "training_pipeline",
     "market_mtf",
+    "monitoring",
     "monitor_dashboard",
+    "mt5_bridge_worker",
 ]
 
 FIX_ID_RE = re.compile(r"FIX-\d{8}-\d{3}")

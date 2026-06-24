@@ -67,3 +67,22 @@ Phase 7:  StrategyDecision assembly
 
 ## Fix History
 See [execution_orders.md](execution_orders.md) for consolidated Fix History.
+
+| FIX-20260622-064d | 2026-06-23 | cursor-agent | — | **DQAF-064d: XAU 3-Brain LIVE Promotion (IC_MANDATE)**. Swing_V10_H1_Directional (30 trades +107.33R PF=81.10 Sharpe=2.66), Swing_V9_M30_V2 (42 trades +62.53R PF=6.48 Sharpe=1.69), Swing_V9_H4_V2 (11 trades +15.87R PF=18.06 Sharpe=1.56) promoted candidate/probation → live. Brain config JSONs + governance_state updated with IC_MANDATE authority. | L2 — governance scheduler failed to promote brains with strong PnL metrics |
+## Data Flow
+See [StrategyLine.evaluate() — 8-Phase Pipeline](#strategylineevaluate--8-phase-pipeline) above — the 8-phase pipeline from Regime gate to StrategyDecision assembly serves as this module's Data Flow documentation.
+
+## Known Issues
+No known issues.
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `StrategyLine.evaluate(market_state, brain_proposals)` → `StrategyDecision` | strategy_evaluator, live_cycle | Stable |
+| `StrategyDecision` dataclass (23 fields, immutable) | All strategy subclasses, live_cycle | Stable |
+| `StrategyLineConfig` immutable configuration | strategy_builder | Stable |
+
+## Verification
+```bash
+python -m pytest tests/ -k "strategy_line or strategy_decision" -q
+```

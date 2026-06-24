@@ -89,3 +89,11 @@ Promotion pipeline (shadow → live)
 | `BrainConfigBuilder.build(recipe)` → dict | train.py, deployment | Stable |
 | `TrainingRegistry.register(model_path, card, hash)` | train.py, promotion | Stable |
 | `Dataset.load(path, split)` → (X_train, y_train, X_test, y_test) | All training scripts | Stable |
+
+## Data Flow
+See [Training Flow](#training-flow) above — the architecture diagram and 8-stage pipeline description serve as this module's Data Flow documentation.
+
+## Verification
+```bash
+python -m pytest tests/ -k "training" -q
+```

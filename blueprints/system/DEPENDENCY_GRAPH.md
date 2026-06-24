@@ -55,10 +55,15 @@
 | **feedback/online** | features, brains |
 | **features/service** | contracts |
 | **features/rolling** | — |
+| **governance/rules** | contracts, infrastructure |
+| **monitoring** | data, features, deployment |
+| **parliament/consensus** | brains, contracts, execution |
+| **contracts/resilience** | contracts, data, observability, runtime |
 | **contracts/domain** | ledger (replay_execution_record only) |
 | **contracts/ids** | — |
 | **contracts/training** | — (stdlib dataclasses + yaml only) |
 | **training** | contracts/training, numpy |
+| **training/pipeline** | brains, contracts, features, metrics, training |
 | **state** | contracts |
 | **runtime/state** | contracts |
 | **monitor/dashboard** | feedback, governance, observability |
@@ -74,6 +79,7 @@
 | apps/monitor/ | feedback, governance, observability |
 | scripts/training/train.py | contracts/training, training (full) |
 | scripts/training/trainers/* | contracts/training, training |
+| scripts/mt5_bridge_worker.py | execution, infrastructure, data |
 
 | execution/exit_watchdog | execution, runtime |
 | execution/managed_close | execution, runtime |

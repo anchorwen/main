@@ -77,3 +77,8 @@ BrainDecisionProposal[] → DynamicBrainWeighter.apply_weights()
 | `compute_contract_group_consensus()` signature | live_cycle | Stable — params only added, never removed |
 | `ConsensusResult` dataclass | strategy_line, capital_allocator | Stable — frozen dataclass |
 | `ContractGroupConsensus.compute()` | contract_groups | Stable |
+
+## Verification
+```bash
+python -m pytest tests/ -k "parliament or consensus" -q
+```

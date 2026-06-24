@@ -9,6 +9,9 @@ Automated silent monitoring for data integrity and feature distribution drift.
 Replaces ad-hoc manual checks with scheduled hourly audit + PSI-based early
 warning for model decay.
 
+## Key Files
+See [Sub-Components](#sub-components) below for the full list of monitoring scripts and their functions.
+
 ## Sub-Components
 
 | Component | File | Function |
@@ -45,6 +48,9 @@ warning for model decay.
                     └──────────────────────┘
 ```
 
+## Data Flow
+See [Architecture](#architecture) above — the scheduler-driven pipeline (Task Scheduler → audit/PSI/normalize → DingTalk alert dispatch) serves as this module's Data Flow documentation.
+
 ## Data Dependencies
 
 - `data/live_trade_journal.jsonl` — XAU trade journal
@@ -67,3 +73,28 @@ warning for model decay.
 - Feature store lacks atomic write protection — monitor uses JSONL line-level validation as defense
 - BTC snapshots have 30% historical gap (pre-2026-05-31 era)
 - Multi-terminal architecture requires per-data-dir MT5 configuration
+
+## Inbound Dependencies
+| Module | What is imported | Why |
+|--------|-----------------|-----|
+| data_infrastructure | EventWriter, ticket_resolver | Journal/ledger access for audit |
+| features_service | Feature store records | PSI baseline comparison |
+| deployment_config | MT5 terminal paths | Multi-terminal audit routing |
+
+## Outbound Dependents
+| Module | What it imports | Why |
+|--------|-----------------|-----|
+| N/A (scripts layer) | — | Monitoring scripts are leaf nodes — no core modules depend on them |
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `audit_data_integrity.py --data-dir <path> --quiet --alert` | Windows Task Scheduler | Stable |
+| `monitor_feature_drift.py --baseline <path> --live <path> --alert` | Windows Task Scheduler | Stable |
+| `alert_dispatcher.py` — unified DingTalk push with cooling/aggregation | All monitoring scripts | Stable |
+
+## Verification
+```bash
+python scripts/audit_data_integrity.py --data-dir data_btc --quiet
+python -m pytest tests/ -k "audit or monitor or alert" -q
+```

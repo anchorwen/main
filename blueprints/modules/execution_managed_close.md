@@ -40,3 +40,21 @@ Compares `pos.volume` (system belief) vs `expected_remaining_volume` (after part
 
 ## Fix History
 See [execution_orders.md](execution_orders.md) for consolidated Fix History.
+
+## Data Flow
+See [Close Flow](#close-flow) above — the 7-step pipeline (PnL estimation → ExitRecord → CooldownRegistry → Ghost-volume audit → Trail metadata → Watchdog dispatch → Post-close cleanup) serves as this module's Data Flow documentation.
+
+## Known Issues
+No known issues.
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `dispatch_managed_close(pos, reason, trail_meta)` → `FinalStatus` | live_cycle | Stable |
+| `ExitRecord(ticket, close_price, pnl, reason)` → `ReentryState` | reentry_guard | Stable |
+| Ghost-volume audit: `pos.volume` vs `expected_remaining_volume` vs MT5 ground truth | managed_close (internal) | Stable |
+
+## Verification
+```bash
+python -m pytest tests/ -k "managed_close or managed" -q
+```

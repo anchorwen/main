@@ -87,3 +87,8 @@ Valid transitions:
 | `GovernanceService.transition(brain_id, new_status, reason)` | rule_engine, daily_ops | Stable |
 | `GovernanceRuleEngine.evaluate(brain_summaries, system_context)` | live_cycle, daily_ops | Stable |
 | `GovernanceRuleEngine.execute_transitions(report, dry_run)` | deployment | Stable |
+
+## Verification
+```bash
+python -m pytest tests/ -k "governance" -q
+```

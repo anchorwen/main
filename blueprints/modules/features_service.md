@@ -92,6 +92,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 | FIX-20260606-134 | 2026-06-06 | cursor-agent | — | **BTCFeatureAugmenter — Phase 5b Step B.2**: New `btc_feature_augmenter.py` with 3 production safeguards. Fixes [12] XAUUSDc_return, [30] AUDJPYc_return. XAU pipeline frozen. | RC-06 |
 | FIX-20260614-015 | 2026-06-14 | cursor-agent | — | **NaN Implicit Truthiness Trap**: Python if value else default catches 0.0 but NOT NaN. 9 division guard sites in microstructure_computer.py allowed NaN through to brain inference. Fix: _safe_div() using math.isfinite() on BOTH numerator AND denominator. 16 stress tests assert zero NaN propagation. ReB: NAN_IMPLICIT_TRUTHINESS_TRAP. | RC-06 |
 | FIX-20260614-B3-LIVE | 2026-06-15 | cursor-agent | — | P0: Live 37->41 feature parity — ONNX shape mismatch prevention. BTCFeatureAugmenter now statefully tracks prev_ou/prev_hurst, computes 4 regime derivatives, outputs 41-dim. Schema extended 37->41. feature_assembler updated. Brain config -> 41 features. | RC-06 |
+| FIX-20260619-050 | 2026-06-19 | cursor-agent | — | **Tier 2 零覆盖破冰 5/14 + SF #24**: data_augmentation(13), v9_micro_computer(5), onnx_worker(4), ofi_collector(5), feature_router(2) → 29 tests. SF #24: cooldown_blocks_fire → cooldown.py. 纯函数模块 12→13. | RC-08 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

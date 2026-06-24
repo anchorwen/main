@@ -768,7 +768,76 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-118 | 2026-06-24 | infrastructure | P1-3 + docs: auto-fix script + CONTRIBUTING.md bootstrap workflow + CLAUDE.md Scene F routing | RC-09 |
 | FIX-20260624-119 | 2026-06-24 | monitor_dashboard | **BLE001:FOG over-narrowing in EventBus.publish()** — restore except Exception for pub/sub fire-and-forget handler dispatch. 5-type tuple excluded ZeroDivisionError, crashing publisher when handler raises unlisted exception. Same class as FIX-20260624-104 (scheduler_service). | RC-05 |
 | FIX-20260624-120 | 2026-06-24 | execution_orders | **Ω-M1: Consensus Contamination Root Cause — brain_ids→supporting_brains (4 sites).** `_compute_consensus()` L1569 returned `signal.brain_ids` (ALL brains) instead of `signal.supporting_brains` (only winning-direction brains). `_compute_weighted_fallback()` L1628+L1637 neutral paths returned all `brain_ids`→`[]`; L1648 directional path `brain_ids`→`supporting`. True root cause of FIX-20260527-002 (6 patches in feedback_loop/reconciliation/journal never touched this field-selection error). ReB: `CONSENSUS_CONTAMINATION_BRAIN_IDS`. L3 deferred: rename fields to `all_participating_brains`/`winning_brains`. | RC-06 |
+| FIX-20260624-121 | 2026-06-24 | deployment_lifecycle | **Blueprint consistency 117→0 — full audit clearance.** Phase 1: Added 6 modules to EXPECTED_MODULES. Phase 2: Filled 45 missing sections across 12 blueprints. Phase 3: Fixed reconcile_fix_registry.py regex parsing bug + idempotent guard; backfilled 84 ORPHAN/MISSING FIX cross-references. Added DEPENDENCY_GRAPH entries + MODULE_SOURCE_MAP. Fixed omega_gate.py Windows GBK Unicode crash. Baseline zeroed. | RC-09 |
 | FIX-20260624-061 | 2026-06-24 | training | **DQAF-061: analyze_live_journal.py multi-source brain data priority fallback.** `entry_context.brain_predictions` deprecated ~2026-06-20. Audit script read from single stale source → all recent entries showed `n_brains=0`. Fix: 3-tier source — `brain_votes` > `entry_context.brain_predictions` > `brain_ids`. Bare-ID entries show `dirs=['?']` / `up_probs=None` (honest unknown). | RC-09 |
+| FIX-20260602-078 | 2026-06-02 | training-pipeline | V9 institutional schema 41-dim training | RC-06 |
+| FIX-20260607-011 | 2026-06-07 | parliament-consensus | Vote weight decoupling: base_weight × dynamic_scale with fail-fast gate | RC-06 |
+| FIX-20260617-001a | 2026-06-17 | governance-rules | add save() + auto-register to governance pipeline | RC-06 |
+| FIX-20260619-005 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-006 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-007 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-008 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-009 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-010 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-011 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-012 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-013 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-014 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-015 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-016 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-017 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-018 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-019 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-020 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-021 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260619-022 | 2026-06-19 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260620-064 | 2026-06-20 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260620-065 | 2026-06-20 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260620-067 | 2026-06-20 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260620-068 | 2026-06-20 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260620-069 | 2026-06-20 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260620-072 | 2026-06-20 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260621-027 | 2026-06-21 | training | cursor-agent | RC-06 |
+| FIX-20260622-052x | 2026-06-22 | deployment-lifecycle | cursor-agent | RC-06 |
+| FIX-20260622-052x | 2026-06-22 | monitor-dashboard | cursor-agent | RC-06 |
+| FIX-20260622-057-P3a | 2026-06-22 | training | cursor-agent | RC-06 |
+| FIX-20260622-057-P3c | 2026-06-22 | training | cursor-agent | RC-06 |
+| FIX-20260622-057a | 2026-06-22 | runtime-state | cursor-agent | RC-06 |
+| FIX-20260622-057b | 2026-06-22 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260622-059b | 2026-06-22 | contracts-ids | cursor-agent | RC-06 |
+| FIX-20260622-059b | 2026-06-22 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260622-059b | 2026-06-22 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260622-061 | 2026-06-22 | monitor-dashboard | cursor-agent | RC-06 |
+| FIX-20260622-064 | 2026-06-22 | execution-guards | IC_MANDATE | RC-06 |
+| FIX-20260622-064 | 2026-06-22 | execution-orders | IC_MANDATE | RC-06 |
+| FIX-20260622-064 | 2026-06-22 | runtime-live | IC_MANDATE | RC-06 |
+| FIX-20260622-064b | 2026-06-22 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260622-064c | 2026-06-22 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260623-067 | 2026-06-23 | deployment-lifecycle | cursor-agent | RC-06 |
+| FIX-20260623-067 | 2026-06-23 | features-service | cursor-agent | RC-06 |
+| FIX-20260623-067 | 2026-06-23 | monitor-dashboard | cursor-agent | RC-06 |
+| FIX-20260623-067 | 2026-06-23 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260623-067 | 2026-06-23 | training | cursor-agent | RC-06 |
+| FIX-20260623-068 | 2026-06-23 | feedback-pnl | cursor-agent | RC-06 |
+| FIX-20260623-068 | 2026-06-23 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260623-073 | 2026-06-23 | data-infrastructure | cursor-agent | RC-06 |
+| FIX-20260623-073 | 2026-06-23 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260623-073 | 2026-06-23 | training | cursor-agent | RC-06 |
+| FIX-20260623-075 | 2026-06-23 | deployment-lifecycle | cursor-agent | RC-06 |
+| FIX-20260624-090 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-091 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-091 | 2026-06-24 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260624-092 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-092 | 2026-06-24 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260624-093 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-094 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-095 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-095 | 2026-06-24 | execution-guards | cursor-agent | RC-06 |
+| FIX-20260624-095 | 2026-06-24 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260624-096 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-097 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-098 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
+| FIX-20260624-099 | 2026-06-24 | contracts-resilience | cursor-agent | RC-06 |
 
 
 ---

@@ -63,6 +63,9 @@ so downstream modules can decide whether to degrade, skip, or circuit-break.
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues across all changed modules | type-confusion |
 | FIX-20260522-022 | 2026-05-22 | cursor-agent | 24ff517 | Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility | contract-violation |
 | FIX-20260522-017 | 2026-05-22 | cursor-agent | — | Layer 1 immutable contracts: Created `core/schemas/trading_contracts.py` — single source of truth for inter-module data contracts. Four frozen dataclasses (`BrainSignal`, `ConsensusResult`, `StrategyDecision`, `DegradedResult`) replace untyped dicts at all 4 module boundaries. `DegradedResult` replaces every `except:pass` with explicit degradation signal enabling circuit breaker. All fields use `frozen=True, slots=True` for immutability. | RC-06 |
+| FIX-20260621-036 | 2026-06-21 | cursor-agent | — | **DQAF-033 P1: position_identifier 注入两路径对账主键。** PositionClosed 新增 position_identifier 字段，PCA 从 MT5 deal.position_id 捕获，bridge worker detail + journal record 同步注入。0 行路由/资金逻辑变更。 | RC-08 |
+| FIX-20260624-106 | 2026-06-24 | cursor-agent | — | test_stub_sequence_gap_detectable: fix field tracking — test used record.seq (WAL sequential numbering) instead of record.payload.recorded_at_wal_seq (where the intentional gap at seq 4 lives in the stub payload). | RC-06 |
+| FIX-20260531-005 | 2026-05-31 | cursor-agent | — | **Architectural Defense 1**: Global Asset Registry `core/config/asset_registry.py` — SSOT for symbol physical properties. XAUUSDc + BTCUSDc registered. Adding new asset = 1 line. | RC-09 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

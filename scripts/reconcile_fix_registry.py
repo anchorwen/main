@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -36,14 +37,16 @@ def _parse_registry_fix_index(content: str) -> list[dict]:
         if in_table:
             if line.startswith("|---"):
                 continue
-            if not line.startswith("| FIX-"):
+            if not re.match(r"^\|\s*\**FIX-", line):
                 break
             # | FIX-YYYYMMDD-NNN | date | module | summary | root_cause |
             cells = [c.strip() for c in line.split("|")[1:-1]]
             if len(cells) >= 5:
+                # Strip markdown bold/italic formatting from fix_id
+                fix_id = cells[0].strip("*")
                 rows.append(
                     {
-                        "fix_id": cells[0],
+                        "fix_id": fix_id,
                         "date": cells[1],
                         "module": cells[2],
                         "summary": cells[3],
@@ -166,6 +169,16 @@ def _resolve_module_name(registry_module_field: str) -> str | None:
         "system-health": "monitor_dashboard",
         "data-health": "monitor_dashboard",
         "journal-cleanup": "data_infrastructure",
+        # Additional backlog entries from 2026-06-24 audit
+        "tests": "deployment_lifecycle",
+        "execution": "execution_orders",
+        "infrastructure": "deployment_lifecycle",
+        "omega-protocol": "deployment_lifecycle",
+        "data-btc": "data_infrastructure",
+        "data-integrity": "data_infrastructure",
+        "ci": "deployment_lifecycle",
+        "contracts": "contracts_domain",
+        "---": "contracts_domain",  # placeholder module → contracts_domain
     }
     mapped = aliases.get(registry_module_field)
     if mapped and (MODULES_DIR / f"{mapped}.md").exists():
@@ -229,27 +242,34 @@ def reconcile(dry_run: bool = True) -> dict:
                 print(f"  SKIP {bp_name}: blueprint not found", file=sys.stderr)
                 continue
             bp_path = module_paths[bp_name]
-            lines = bp_path.read_text(encoding="utf-8").split("\n")
+
+            new_module_rows: list[str] = []
+            existing_text = bp_path.read_text(encoding="utf-8")
+            for fix in sorted(fixes, key=lambda r: r["fix_id"]):
+                # Skip if already present (idempotent re-run guard)
+                if fix["fix_id"] in existing_text:
+                    continue
+                # Format: | FIX-ID | date | summary | root_cause |
+                new_row = (
+                    f"| {fix['fix_id']} | {fix['date']} | cursor-agent | — | "
+                    f"{fix['summary']} | {fix['root_cause']} |"
+                )
+                new_module_rows.append(new_row)
+                orphan_added += 1
+
+            if not new_module_rows:
+                continue
+            lines = existing_text.split("\n")
             insert_at = _find_fix_history_insertion_point(lines)
             if insert_at is None:
                 print(f"  SKIP {bp_name}: cannot find Fix History table", file=sys.stderr)
                 continue
 
-            new_rows = []
-            for fix in sorted(fixes, key=lambda r: r["fix_id"]):
-                # Format: | FIX-ID | date | summary | root_cause |
-                row = (
-                    f"| {fix['fix_id']} | {fix['date']} | cursor-agent | — | "
-                    f"{fix['summary']} | {fix['root_cause']} |"
-                )
-                new_rows.append(row)
-                orphan_added += 1
-
             # Insert new rows before the insertion point (reverse chronological)
-            for row in reversed(new_rows):
-                lines.insert(insert_at, row)
+            for new_row in reversed(new_module_rows):
+                lines.insert(insert_at, new_row)
             bp_path.write_text("\n".join(lines), encoding="utf-8")
-            print(f"  +{len(new_rows)} rows → {bp_name}.md")
+            print(f"  +{len(new_module_rows)} rows → {bp_name}.md")
 
         # --- Backfill MISSING entries into FIX_REGISTRY.md ---
         # Find missing entries from module blueprints
@@ -280,18 +300,18 @@ def reconcile(dry_run: bool = True) -> dict:
                     insert_at = i + 1  # after this row
             if insert_at:
                 # Sort by FIX ID for consistent ordering
-                new_rows = []
+                new_reg_rows: list[str] = []
                 for fix in sorted(missing_details, key=lambda r: r["fix_id"]):
-                    row = (
+                    new_row = (
                         f"| {fix['fix_id']} | {fix['date']} | {fix['module']} | "
                         f"{fix['summary']} | {fix['root_cause']} |"
                     )
-                    new_rows.append(row)
+                    new_reg_rows.append(new_row)
 
-                for row in reversed(new_rows):
-                    reg_lines.insert(insert_at, row)
+                for new_row in reversed(new_reg_rows):
+                    reg_lines.insert(insert_at, new_row)
                 REGISTRY_PATH.write_text("\n".join(reg_lines), encoding="utf-8")
-                print(f"  +{len(new_rows)} rows → FIX_REGISTRY.md")
+                print(f"  +{len(new_reg_rows)} rows → FIX_REGISTRY.md")
 
     return {
         "orphan_total": len(orphan_ids),

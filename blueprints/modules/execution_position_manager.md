@@ -47,3 +47,19 @@ Prevents cross-cycle retry avalanche: `_pending_close` dict (ticket→dispatch_c
 
 ## Fix History
 See [execution_orders.md](execution_orders.md) for the consolidated Fix History covering all execution/ modules.
+
+## Data Flow
+See [Exit Evaluation Order](#exit-evaluation-order) above — the 7-layer priority system and Pending Close Lock mechanism serve as this module's Data Flow documentation.
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `ActivePositionManager.register_position(*, trail_atr_mult, trail_atr_mult_low, trail_atr_mult_high, breakeven_threshold_atr)` → `ActivePosition` | live_cycle, strategy_line | Stable |
+| `ActivePositionManager.evaluate_exits(positions, market_state)` → `list[ExitDecision]` | live_cycle | Stable |
+| `TrailStopEngine.compute_trail_stop(pos, market)` → `TrailResult` | position_manager | Stable |
+| `ActivePosition` dataclass (40+ fields, 4 intent-state fields persisted to SSOT) | All execution modules | Stable |
+
+## Verification
+```bash
+python -m pytest tests/ -k "position_manager or active_position" -q
+```

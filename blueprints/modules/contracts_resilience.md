@@ -75,3 +75,20 @@ verify_phantom_contracts.py (offline replay against WAL state)
 | FIX-20260624-101 | 2026-06-24 | cursor-agent | — | **UGR-A09a: Atomic write migration — deployment state files**. Added `atomic_write_text`/`atomic_write_json` convenience functions to `AtomicFileWriter`. Migrated 12 `write_text` calls → `atomic_write_json`/`atomic_write_text` in 7 deployment state files (state_persistence, blue_green, brain_lifecycle_manager, release_registry, release_gate, release_pipeline, release_certification). Replaced 12 `fail_open_guard`/`log_and_continue` with specific exception types in 5 deployment files. All 144 related tests pass. Remaining files deferred to UGR-A09b. | RC-12 — write_text vulnerable to partial-write corruption; fail_open_guard DEPRECATED but not yet migrated |
 | FIX-20260624-102 | 2026-06-24 | cursor-agent | — | **UGR-A09b: Atomic write + fail_open_guard full sweep — remaining deployment files**. Migrated remaining 17 `write_text` → `atomic_write_json` in 13 deployment files (deployment_plan, final_audit, deployment_executor, evidence_bundle, compliance_control_matrix, release_readiness, permission_audit, compliance_audit, runbook_engine, rollback_drill, operations_timeline, ops_maturity, postmortem_report, scheduler_service). Replaced 18 `fail_open_guard` with specific exception types `(RuntimeError, ValueError, KeyError, TypeError, OSError)` in 10 deployment files (rollback_drill, startup_validator, permission_audit, service_container, config_hot_reload, operational_support, scheduler_service, lifecycle_manager, brain_registration_gate, runbook_engine). Removed `from core.runtime.fault_handler import fail_open_guard` from all 10 files. All 187 deployment tests pass. | RC-12 — write_text vulnerable to partial-write corruption; fail_open_guard DEPRECATED but not yet migrated |
 | FIX-20260624-103 | 2026-06-24 | cursor-agent | — | **UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/**. Replaced 164 `fail_open_guard`/`log_and_continue` with specific exception types `(RuntimeError, ValueError, KeyError, TypeError, OSError)` across 25 files: data_health_monitor, feature_freshness, gate_audit_recorder, mia_close, micro_persist, signal_settlement, pnl_recording, live_bootstrap, modify_trail_dispatch, trail_dispatch, reentry_recording, dispatch_post, execution_state, daily_ops_scheduler, live_startup, signal_health, order_dispatch, reconciliation, session_guards, restart_state, strategy_evaluator, position_registration, position_close_adapter, management_phase, live_cycle. Removed `from core.runtime.fault_handler import fail_open_guard`/`log_and_continue` from 23 files. 8 remaining references are comments only. Ruff 0 errors, mypy clean. | RC-12 — fail_open_guard DEPRECATED but not yet migrated |
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `CapResult[T].ok(value, proof)` — requires valid `_SuccessProof` from `Kernel.success_scope()` | runtime_live, execution_guards, execution_orders, deployment_lifecycle | Stable |
+| `Kernel.success_scope()` → `_SuccessProof` context manager | CapResult consumers | Stable |
+| `TypedClock.now()` → `MonotonicInstant` | runtime_live, execution_orders | Stable |
+| `WriteAheadLog.append(entry)` — hash-chained, fsync'd | data_infrastructure, verify_phantom_contracts | Stable |
+| `AlertBus.emit(alert)` — storm-protected alert dispatch | monitor_dashboard, invariant_engine | Stable |
+| `InvariantEngine.check_all_and_alert()` → 15 predicate violations | runtime_live (shadow-only currently) | Experimental |
+
+## Verification
+```bash
+python -m pytest tests/ -k "capresult or typed_clock or phantom or wal or invariant or alert" -q
+python scripts/verify_capresult_ast.py --enforce
+python scripts/verify_phantom_contracts.py
+```

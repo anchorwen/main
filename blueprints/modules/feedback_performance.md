@@ -50,6 +50,7 @@ Execution events → OutcomeCollector → DecisionScorer → BrainPerformanceTra
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 | FIX-20260514-004 | 2026-05-14 | cursor-agent | — | Add marginal tier (score 10-20), fix WR cliff with smooth ramp, fix DD component when PnL<=0, add marginal to all tier mappings. | RC-05 |
 | FIX-20260527-002 | 2026-05-27 | cursor-agent | — | Brain performance data contamination fix: `ingest_journal_to_tracker()` replaced `_find_brains_by_time()` (which grouped ALL consensus brains → identical records for 5 brains) with per-strategy `brain_ids` from open journal entries. Governance path upgraded to PnL-first via BrainPnLStore. Contaminated tracker records for 5 brains cleaned. | RC-11 |
+| FIX-20260617-002 | 2026-06-17 | cursor-agent | — | **P0: brain_performance dimensions enrichment — per-brain scoring**: `_record_brain_outcomes()` now records per-brain dimensions (brain_confidence, brain_direction, consensus_direction, vote_matched, symbol) instead of empty dict. Previously all consensus brains in a parliament received identical records — impossible to distinguish voting strength. Now composite_score already per-brain (based on individual confidence), and dimensions provide full audit trail. Also enriched single-brain consensus_skip path. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

@@ -2,8 +2,14 @@
 
 > Auto-generated per Iron Law #6 (Pre-Fix Protocol).
 > Module: `scripts/mt5_bridge_worker.py`
-> Purpose: MT5 order execution bridge — consumes handoff files from outbox / ZMQ,
->          executes orders via MT5 API, writes journal entries and ACK receipts.
+
+## Purpose
+MT5 order execution bridge — consumes handoff files from outbox/ZMQ, executes orders via MT5 API, writes journal entries and ACK receipts. Two operational modes: file-based (`run_worker`) and ZMQ-based (`run_zmq_bridge`) with 5s file-outbox fallback.
+
+## Key Files
+| File | Role |
+|------|------|
+| `scripts/mt5_bridge_worker.py` | Main bridge worker — ZMQ + file-based order execution, journal writing, ACK dispatch |
 
 ## Architecture
 
@@ -53,3 +59,38 @@ Three-phase fix for the MIA (Missing In Action) root cause — crash window betw
   ACK receipts (`data/mt5_outbox_processed/.../*.ack.json`)
 - **Dependents**: `live_order_sender.py` → `CommunicationDispatcher` → ZMQ/File adapter → Bridge
 - **Depends on**: MT5 terminal (via `MetaTrader5` Python package), `FileLock` from `core.infrastructure.distributed_lock`
+
+## Data Flow
+```
+Order dispatch (live_order_sender.py)
+    ↓
+CommunicationDispatcher → ZMQ PUSH or file outbox (*.mt5.json)
+    ↓
+mt5_bridge_worker.py:
+  → _send_to_mt5(payload)
+    → route to _mt5_market_open() / _mt5_close_position() / _mt5_modify_sltp()
+    → MT5 API call (via MetaTrader5 package)
+  → _write_zmq_journal_entry() or _append_journal()
+    → live_trade_journal.jsonl (append-only)
+  → ACK dispatch (ZMQ PUB or *.ack.json)
+    → live_order_sender.py receives ACK
+```
+
+## Inbound Dependencies
+| Module | What is imported | Why |
+|--------|-----------------|-----|
+| execution/live_order_sender | CommunicationDispatcher | Order dispatch → ZMQ/file handoff |
+| core/infrastructure/distributed_lock | FileLock | Cross-process journal write safety |
+
+## Outbound Dependents
+| Module | What it imports | Why |
+|--------|-----------------|-----|
+| execution/live_order_sender | (ZMQ ACK / file ACK receipt) | Order confirmation |
+| data_infrastructure | (journal entries) | Trade/close event recording |
+
+## Verification
+```bash
+# Manual verification (requires MT5 terminal running)
+python scripts/mt5_bridge_worker.py --help
+python -m pytest tests/ -k "mt5 or bridge" -q
+```

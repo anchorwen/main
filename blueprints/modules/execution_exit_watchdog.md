@@ -46,3 +46,21 @@ After 30s:   L2 forced liquidation via broker.close_position()
 See [execution_orders.md](execution_orders.md) for consolidated Fix History.
 
 | FIX-20260613-086 | 2026-06-13 | cursor-agent | ad6795e | Watchdog Encapsulation: multi-dimensional evaluator with time_decay + price_decay triggers. Model-independent structural exits. | missing-validation |
+
+## Data Flow
+See [Multi-stage Confirmation](#multi-stage-confirmation) above — the 4-stage pipeline (Dispatch → ACK Poll → Position Verification → L2 Fallback) with retry strategy serves as this module's Data Flow documentation.
+
+## Known Issues
+No known issues.
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `ExitWatchdog.dispatch_with_watchdog(payload, dispatch_fn, l2_broker)` → `FinalStatus` | managed_close, live_cycle | Stable |
+| `ExitWatchdog.is_healthy()` → `bool` | live_cycle, monitor_dashboard | Stable |
+| `resolve_ack(ticket)` → `AckResult` | exit_watchdog | Stable |
+
+## Verification
+```bash
+python -m pytest tests/ -k "watchdog or exit_watchdog" -q
+```

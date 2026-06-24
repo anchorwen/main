@@ -45,3 +45,21 @@ None — pure calculation engine with zero imports beyond numpy.
 
 ## Fix History
 See [execution_orders.md](execution_orders.md) for consolidated Fix History.
+
+## Data Flow
+See [Chandelier Formula](#chandelier-formula) and [Regime Adaptation](#regime-adaptation) above — the trail computation pipeline (Market State → Regime Multiplier → Chandelier Formula → Activation Watermark → Nonlinear Decay → TrailResult) serves as this module's Data Flow documentation.
+
+## Known Issues
+No known issues.
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `TrailStopEngine.compute_trail_stop(pos, market_state)` → `TrailResult` | position_manager, trail_dispatch | Stable |
+| `TrailStopEngine.should_breakeven(pos, market_state)` → `bool` | position_manager | Stable |
+| `TrailPolicy` dataclass (immutable per-strategy config) | live_cycle, trail_dispatch | Stable |
+
+## Verification
+```bash
+python -m pytest tests/ -k "trail_stop or trail" -q
+```
