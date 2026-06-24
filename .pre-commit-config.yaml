@@ -53,8 +53,8 @@ repos:
   - repo: local
     hooks:
       - id: blueprint-consistency
-        name: "[门禁] 蓝图一致性验证"
-        entry: python scripts/validate_blueprints.py
+        name: "[门禁] 蓝图一致性验证 (baseline-gated)"
+        entry: python scripts/pre_commit_blueprint.py
         language: system
         files: ^(blueprints/|core/|apps/|scripts/)
         stages: [pre-commit]

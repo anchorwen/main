@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T09:46:21Z
+> **自动生成**: 2026-06-24T09:51:22Z
 
 ## Package-Level Dependencies
 
@@ -660,6 +660,7 @@
 - `paper_trade_simulator.py` → `core.simulation.spread_model`
 - `position_query.py` → (无内部依赖)
 - `position_snapshot.py` → (无内部依赖)
+- `pre_commit_blueprint.py` → (无内部依赖)
 - `pre_commit_mypy.py` → (无内部依赖)
 - `probe_xau_signal_generation.py` → `core.brains.services.brain_factory`, `core.features.local_feature_store`, `core.features.schemas.v9_institutional_schema`
 - `purge_backtest_from_governance.py` → `core.feedback.live_journal_metrics`

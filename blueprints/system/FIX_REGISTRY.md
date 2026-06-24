@@ -759,6 +759,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-107 | 2026-06-24 | execution | meta_signal_filter.load(): ImportError not caught — lightgbm import raises ModuleNotFoundError in CI (no lightgbm installed), but except tuple only caught RuntimeError/ValueError/KeyError/TypeError/OSError. Added ImportError to except tuple. | RC-06 |
 | FIX-20260624-108 | 2026-06-24 | tests | test_poll_ack_zmq_failure_graceful: @patch(fail_open_guard) — fail_open_guard was removed from exit_watchdog.py during A09e FOG migration. Removed stale @patch decorator (method now handles ZMQ failures internally). | RC-06 |
 | FIX-20260624-111 | 2026-06-24 | infrastructure | P0-1: ruff config single-source-of-truth — move SIM105 to global ignore in pyproject.toml, remove --ignore SIM105 from all 4 gate layers | RC-09 |
+| FIX-20260624-112 | 2026-06-24 | runtime_state | P0-2: blueprint baseline mechanism — pre_commit_blueprint.py with baseline-gated validation, mirrors mypy_baseline.json pattern | RC-09 |
+| FIX-20260624-113 | 2026-06-24 | deployment_lifecycle | P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state | RC-09 |
 
 ---
 ## Fix Details by Year
@@ -4367,6 +4369,30 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Module**: infrastructure
 - **Files**: pyproject.toml,.pre-commit-config.yaml,scripts/hook_pre_push.py,.github/workflows/ci-windows.yml,scripts/verify_ruff_config.sh
 - **Description**: P0-1: ruff config single-source-of-truth — move SIM105 to global ignore in pyproject.toml, remove --ignore SIM105 from all 4 gate layers
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-112
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: a2c77b03
+- **Type**: feat
+- **Module**: runtime_state
+- **Files**: scripts/pre_commit_blueprint.py,blueprint_baseline.json,.pre-commit-config.yaml,scripts/check_blueprint_compliance.py
+- **Description**: P0-2: blueprint baseline mechanism — pre_commit_blueprint.py with baseline-gated validation, mirrors mypy_baseline.json pattern
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-113
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: a2c77b03
+- **Type**: refactor
+- **Module**: deployment_lifecycle
+- **Files**: scripts/check_blueprint_compliance.py
+- **Description**: P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state
 - **Root Cause**: RC-09 — config-drift
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

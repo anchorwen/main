@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T09:46:21Z
-> **扫描模块数**: 663
+> **自动生成**: 2026-06-24T09:51:22Z
+> **扫描模块数**: 664
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -744,6 +744,7 @@
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
 | `position_query.py` | ✅ active | — | 6 | 193 | — | |
 | `position_snapshot.py` | ✅ active | — | 3 | 176 | — | |
+| `pre_commit_blueprint.py` | ✅ active | — | 5 | 204 | — | |
 | `pre_commit_mypy.py` | ✅ active | — | 5 | 162 | — | |
 | `probe_xau_signal_generation.py` | ✅ active | — | 7 | 362 | — | |
 | `purge_backtest_from_governance.py` | ✅ active | — | 5 | 249 | — | |

@@ -329,7 +329,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/ble001_phase3c_fog_wrap.py",
         "scripts/ble001_phase3b_migrate_hotpath.py",
     ],
-    "runtime_state": ["core/state/", "scripts/hook_pre_push.py"],
+    "runtime_state": ["core/state/", "scripts/hook_pre_push.py", "scripts/pre_commit_blueprint.py"],
     "training": [
         "core/training/",
         "core/backtest/strategy_adapter.py",
