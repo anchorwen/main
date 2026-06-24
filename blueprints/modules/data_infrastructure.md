@@ -12,6 +12,7 @@ Immutable event stream infrastructure (FIX-20260611-021). Replaces mutable JSON 
 
 ## Fix History
 
+| FIX-20260624-089 | 2026-06-24 | cursor-agent | — | **UGR-B02: WAL rotation + atomic checkpoint + HMAC signature**. rotate() + verify_integrity_from_checkpoint() + load_checkpoint(). | RC-12 |
 | FIX-20260623-073 | 2026-06-23 | cursor-agent | — | **DQAF-073: Unified Ticket Resolution**. Created `core/data/ticket_resolver.py` — single canonical path for position ticket extraction. Migrated label_builder, daily_ops, and audit_data_exhaustive to use `resolve_ticket()`. Resolves schema drift: 83 files previously used 4+ different extraction patterns for the same business concept. P0: 3 key consumers migrated. P1: touch-migration. P2: full sweep. | L3 — schema drift (4 extraction patterns for same concept) |
 | FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 交叉感染: get_event_writer(base_dir) 移除默认值** — 现在调用方必须显式提供 base_dir。 | L3 — base_dir="data" 默认值 |
 | FIX-20260613-067 | 2026-06-13 | cursor-agent | c992678 | FileLock Atomic Exclusive Create: replaced os.replace() (always overwrites) with os.O_CREAT|O_EXCL for true cross-process mutual exclusion. Added same-instance re-acquire guard. 23/23 tests pass. | contract-violation |

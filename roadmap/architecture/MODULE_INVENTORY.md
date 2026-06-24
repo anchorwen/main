@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T00:59:43Z
+> **自动生成**: 2026-06-24T01:05:36Z
 > **扫描模块数**: 662
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -163,7 +163,7 @@
 | `projections.py` | ✅ active | — | 7 | 271 | — | |
 | `ticket_resolver.py` | ✅ active | TicketResolutionError | 3 | 101 | — | |
 | `wap.py` | ✅ active | WAPStore | 11 | 219 | — | |
-| `write_ahead_log.py` | ✅ active | WALConfig, WALRecord, WriteAheadLog | 12 | 300 | — | |
+| `write_ahead_log.py` | ✅ active | WALConfig, WALRecord, WriteAheadLog | 19 | 498 | — | |
 
 ## core/deployment
 
