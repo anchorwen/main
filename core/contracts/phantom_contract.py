@@ -51,7 +51,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.data.write_ahead_log import WriteAheadLog
+from core.data.write_ahead_log import WALConfig, WriteAheadLog
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PhantomStub — the audit record written to WAL
@@ -791,6 +791,9 @@ def phantom(
 # Not a hard import to avoid circular dependency on WAL config.
 _wal: WriteAheadLog | None = None
 
+# UGR-A10: whether the phantom WAL was created by this module (owned)
+_phantom_wal_owned: bool = False
+
 # Test-only flag: force production behavior (stub recording) even when
 # __debug__ is True.  Set by test fixtures; never used in production.
 _FORCE_PRODUCTION_MODE: bool = False
@@ -802,8 +805,29 @@ def set_phantom_wal(wal: WriteAheadLog) -> None:
     Called once at application startup.  Phantom stubs are silently
     dropped if no WAL is configured.
     """
-    global _wal
+    global _wal, _phantom_wal_owned
     _wal = wal
+    _phantom_wal_owned = False
+
+
+def init_phantom_wal(config: WALConfig) -> WriteAheadLog:
+    """Create an independent WAL instance for phantom stub recording (UGR-A10).
+
+    Unlike set_phantom_wal() which reuses an externally-provided WAL,
+    this creates a dedicated WAL with its own fsync policy and disk quota.
+    The independent WAL isolates audit traffic from the main application WAL.
+
+    Returns the created WriteAheadLog instance.
+    """
+    global _wal, _phantom_wal_owned
+    _wal = WriteAheadLog(config)
+    _phantom_wal_owned = True
+    return _wal
+
+
+def get_phantom_wal() -> WriteAheadLog | None:
+    """Return the current phantom WAL instance, if any."""
+    return _wal
 
 
 def _write_phantom_stub(
@@ -843,6 +867,14 @@ def _write_phantom_stub(
         timestamp_wall=_dt.datetime.now(_dt.UTC).isoformat(),
         caller_module=caller_module,
     )
+
+    # UGR-A10: disk quota guard — reject append if phantom WAL exceeds quota
+    within_quota, quota_reason = _wal.check_quota()
+    if not within_quota:
+        import sys as _sys
+        print(f"[phantom] WAL quota exceeded, dropping stub: {quota_reason}",
+              file=_sys.stderr)
+        return
 
     with contextlib.suppress(Exception):
         _wal.append(stub.to_payload(), record_type="phantom_stub")
