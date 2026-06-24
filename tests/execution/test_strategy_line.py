@@ -475,7 +475,9 @@ class TestConsensus:
         assert confidence > 0.40
         assert support == 2
         assert total == 3
-        assert len(ids) == 3
+        # FIX-20260624-120: Only supporting (winning-direction) brains returned,
+        # not all participating brains. 2 of 3 voted LONG → ids has 2 entries.
+        assert len(ids) == 2
 
     def test_simple_majority_short(self):
         line = _make_strategy()
