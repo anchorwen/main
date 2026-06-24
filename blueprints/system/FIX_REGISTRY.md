@@ -767,6 +767,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-117 | 2026-06-24 | deployment_lifecycle | P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption) | RC-09 |
 | FIX-20260624-118 | 2026-06-24 | infrastructure | P1-3 + docs: auto-fix script + CONTRIBUTING.md bootstrap workflow + CLAUDE.md Scene F routing | RC-09 |
 | FIX-20260624-119 | 2026-06-24 | monitor_dashboard | **BLE001:FOG over-narrowing in EventBus.publish()** — restore except Exception for pub/sub fire-and-forget handler dispatch. 5-type tuple excluded ZeroDivisionError, crashing publisher when handler raises unlisted exception. Same class as FIX-20260624-104 (scheduler_service). | RC-05 |
+| FIX-20260624-120 | 2026-06-24 | execution_orders | **Ω-M1: Consensus Contamination Root Cause — brain_ids→supporting_brains (4 sites).** `_compute_consensus()` L1569 returned `signal.brain_ids` (ALL brains) instead of `signal.supporting_brains` (only winning-direction brains). `_compute_weighted_fallback()` L1628+L1637 neutral paths returned all `brain_ids`→`[]`; L1648 directional path `brain_ids`→`supporting`. True root cause of FIX-20260527-002 (6 patches in feedback_loop/reconciliation/journal never touched this field-selection error). ReB: `CONSENSUS_CONTAMINATION_BRAIN_IDS`. L3 deferred: rename fields to `all_participating_brains`/`winning_brains`. | RC-06 |
 
 
 ---
@@ -4474,4 +4475,16 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: RC-05 — one-size-fits-all FOG narrow tuple applied to generic callable dispatch; pub/sub buses MUST catch all handler errors
 - **Prevention**: Code review checklist for FOG migration: "does this site dispatch user-provided callables? → except Exception"
 - **Dependents Checked**: (none)
+
+### FIX-20260624-120
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: execution_orders
+- **Files**: core/execution/strategy_line.py, blueprints/modules/execution_orders.md
+- **Description**: Ω-M1: Consensus Contamination Root Cause — brain_ids→supporting_brains (4 sites). (1) `_compute_consensus()` L1569: `signal.brain_ids` (all participating brains) → `signal.supporting_brains` (only brains voting FOR winning direction). This was the true root cause of FIX-20260527-002 — 6 downstream patches over 4 weeks (feedback_loop ingest_journal_to_tracker, reconciliation SignalSettled iteration, journal brain_ids field) only mitigated the blast radius but never fixed the source. (2) `_compute_weighted_fallback()` L1628+L1637: neutral fallbacks returned all `brain_ids` → `[]` (no brains supported a neutral decision). (3) L1648: directional fallback returned `brain_ids` → `supporting` (only winning-direction brains). ReB: `CONSENSUS_CONTAMINATION_BRAIN_IDS`. L3 deferred: rename fields to `all_participating_brains`/`winning_brains` to eliminate API ambiguity at the type-system level.
+- **Root Cause**: RC-06 (contract-violation) — API contract between `ContractGroupConsensus.compute()` and `_compute_consensus()` violated: `brain_ids` field used where `supporting_brains` was required. L1 fix applied; L3 rename deferred.
+- **Prevention**: L3 architecture fix: rename `brain_ids`→`all_participating_brains` and `supporting_brains`→`winning_brains` in ContractGroupConsensus to make the semantic distinction self-documenting at the type level.
+- **Dependents Checked**: `feedback_loop.py:ingest_journal_to_tracker`, `reconciliation.py:SignalSettled`, `strategy_line.py:_compute_consensus` (all 6 FIX-20260527-002 mitigation sites) — confirmed the new correct field propagates correctly through all downstream consumers.
 - **Dependents Checked**: (none)

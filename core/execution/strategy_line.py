@@ -1566,7 +1566,7 @@ class StrategyLine:
                 return (
                     direction,
                     confidence,
-                    signal.brain_ids,
+                    signal.supporting_brains,
                     signal.supporting_count,
                     signal.total_count,
                 )
@@ -1625,7 +1625,7 @@ class StrategyLine:
         short_count = len(short_brains)
         total_weights = long_weight + short_weight
         if total_weights < 1e-9:
-            return "neutral", 0.0, brain_ids, 0, len(proposals)
+            return "neutral", 0.0, [], 0, len(proposals)
 
         if long_weight > short_weight:
             direction = "long"
@@ -1634,7 +1634,7 @@ class StrategyLine:
             direction = "short"
             supporting = short_brains
         else:
-            return "neutral", 0.0, brain_ids, 0, len(proposals)
+            return "neutral", 0.0, [], 0, len(proposals)
 
         majority_ratio = max(long_weight, short_weight) / total_weights
         confidence = round(
@@ -1645,7 +1645,7 @@ class StrategyLine:
             confidence *= 1.0 - self.config.long_bias_discount
 
         support_count = max(long_count, short_count) if direction != "neutral" else 0
-        return direction, round(float(confidence), 4), brain_ids, support_count, total
+        return direction, round(float(confidence), 4), supporting, support_count, total
 
     # ── Volume computation ──────────────────────────────────────────────
 
