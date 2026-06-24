@@ -18,12 +18,26 @@ python -m pytest -m staged_regression # communication + V9 shadow regression
 
 ## Pre-commit Hooks
 
+After cloning the repository, run the bootstrap script:
 ```bash
-pip install pre-commit
-pre-commit install
+bash scripts/bootstrap-dev-env.sh
+```
+This installs pre-commit, pre-push, and commit-msg hooks, and initializes the blueprint baseline.
+
+## Pre-commit Workflow
+
+Before committing, run auto-fixes to prevent stash conflicts:
+```bash
+bash scripts/pre_commit_auto_fix.sh   # ruff check --fix + ruff format
+git add -u
+git commit
 ```
 
-Hooks: ruff (lint), ruff-format (formatter), architecture-gate (roadmap auto-refresh).
+## Push Gate
+
+Pre-push runs the same checks as CI: ruff (full codebase), mypy (baseline), omega scan.
+Checks are defined in `.pre-commit-config.yaml` (stages: [pre-push]).
+Emergency override: `git push --no-verify` (requires reason per Iron Law #0-bis).
 
 ## Commit Conventions
 

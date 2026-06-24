@@ -765,6 +765,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-115 | 2026-06-24 | deployment_lifecycle | P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state | RC-09 |
 | FIX-20260624-116 | 2026-06-24 | runtime_state | P1-1+P1-2: Scene F full exemption in omega gate + shared omega_constants.py + pre-flight validator hook | RC-09 |
 | FIX-20260624-117 | 2026-06-24 | deployment_lifecycle | P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption) | RC-09 |
+| FIX-20260624-118 | 2026-06-24 | infrastructure | P1-3 + docs: auto-fix script + CONTRIBUTING.md bootstrap workflow + CLAUDE.md Scene F routing | RC-09 |
 
 ---
 ## Fix Details by Year
@@ -4445,6 +4446,18 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Module**: deployment_lifecycle
 - **Files**: scripts/omega_gate.py,scripts/validate_commit_msg.py,scripts/check_blueprint_compliance.py
 - **Description**: P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption)
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-118
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: c2e00692
+- **Type**: refactor
+- **Module**: infrastructure
+- **Files**: scripts/pre_commit_auto_fix.sh,CONTRIBUTING.md,CLAUDE.md
+- **Description**: P1-3 + docs: auto-fix script + CONTRIBUTING.md bootstrap workflow + CLAUDE.md Scene F routing
 - **Root Cause**: RC-09 — config-drift
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
