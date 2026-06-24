@@ -19,7 +19,6 @@ from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController, RiskVerdict
 from core.execution.pre_trade_guards import check_feature_vector, repair_feature_vector
 from core.execution.regime_gate import RegimeGate
-from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 # ── R1 Gate silence protection state (FIX-20260613-083) ──
@@ -641,7 +640,7 @@ def evaluate_strategy_lines(
         # FIX-20260611-022: Computed upstream from DataHealthService output.
         # NORMAL(100%) → YELLOW(40%) → ORANGE(15%,no new) → RED(0%,close-only).
         if decision.should_trade and gate_mode != "shadow" and degradation_constraints is not None:
-            with fail_open_guard("StrategyEvaluator:DegradationApply"):
+            try:
                 from core.observability.degradation import apply_degradation_to_decision
 
                 _dv, _dt, _dr = apply_degradation_to_decision(
@@ -652,22 +651,23 @@ def evaluate_strategy_lines(
                 if _dr:
                     decision.volume = _dv
                     decision.should_trade = _dt
-                    decision.reason = (decision.reason or "") + _dr
-                    if not _dt:
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "degradation_blocked",
-                                    "time": _utc_iso(),
-                                    "strategy": sname,
-                                    "direction": decision.direction,
-                                    "reason": decision.reason,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                pass  # BLE001 — migrated from blind pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
+            decision.reason = (decision.reason or "") + _dr
+            if not _dt:
+                print(
+                    json.dumps(
+                        {
+                            "event": "degradation_blocked",
+                            "time": _utc_iso(),
+                            "strategy": sname,
+                            "direction": decision.direction,
+                            "reason": decision.reason,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
 
         # Apply session + health volume multipliers
         if decision.should_trade:
@@ -693,7 +693,7 @@ def evaluate_strategy_lines(
         )
 
         if not decision.should_trade:
-            with fail_open_guard("StrategyEvaluator:GateAuditRecord"):
+            try:
                 from core.runtime.gate_audit_recorder import record_gate_block
 
                 record_gate_block(
@@ -703,7 +703,8 @@ def evaluate_strategy_lines(
                     gate_diag=getattr(decision, "gate_diag", None) or None,
                     base_dir=base_dir,
                 )
-                pass  # BLE001 — migrated from blind pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
             continue
 
         # Portfolio risk check

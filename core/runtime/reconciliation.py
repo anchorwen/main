@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 
@@ -57,8 +57,8 @@ def _load_settled_keys(ledger_path: str) -> set[tuple[int, str]]:
                 continue
     except OSError:
         logging.getLogger(__name__).warning(
-                "Failed to read ledger for idempotency check: %s", _path
-            )
+            "Failed to read ledger for idempotency check: %s", _path
+        )
     return _keys
 
 
@@ -223,9 +223,12 @@ def reconcile_closed_positions(
         if _resolved_magic is None:
             _resolved_magic = open_entry.get("detail", {}).get("request", {}).get("magic", 0)
         if not _resolved_strategy and _resolved_magic:
-            with fail_open_guard("Reconciliation:MagicResolve"):
+            try:
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
+
                 _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         if close_price is None:
             print(
@@ -298,9 +301,8 @@ def reconcile_closed_positions(
             }
             with open(_labels_path, "a", encoding="utf-8") as _lf:
                 _lf.write(json.dumps(_label_entry, ensure_ascii=False) + "\n")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("reconciliation:reconcile_closed_positions"):
-                pass  # best-effort — label write must not block reconciliation
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass  # best-effort — label write must not block reconciliation
         # ── DQAF-20260614-005c: SignalSettled from startup reconciliation ──
         # This path handles ALL real closes (the reconcile_mt5_close_events
         # path in live_cycle.py uses PositionCloseAdapter and rarely fires).
@@ -316,13 +318,11 @@ def reconcile_closed_positions(
         # only be settled once against a given position.
         _brain_ids = open_entry.get("brain_ids")
         if _brain_ids and pnl != 0:
-            with fail_open_guard("Reconciliation:PnLEventWrite"):
+            try:
                 from core.contracts.events import PnLEvent
                 from core.data.event_writer import EventWriter
 
-                _ledger_path = str(
-                    Path(journal_path).parent / "ledger_events.jsonl"
-                )
+                _ledger_path = str(Path(journal_path).parent / "ledger_events.jsonl")
                 # ── DQAF-20260621-030: Load already-settled keys ──
                 _already_settled = _load_settled_keys(_ledger_path)
                 _writer = EventWriter(_ledger_path)
@@ -333,7 +333,9 @@ def reconcile_closed_positions(
                 if _entry_price <= 0:
                     _detail = open_entry.get("detail", {})
                     if isinstance(_detail, dict):
-                        _ep = _detail.get("entry_price", 0) or _detail.get("request", {}).get("price", 0)
+                        _ep = _detail.get("entry_price", 0) or _detail.get("request", {}).get(
+                            "price", 0
+                        )
                         if _ep:
                             _entry_price = float(_ep)
                 _close_price_f = float(close_price) if close_price else 0.0
@@ -370,8 +372,12 @@ def reconcile_closed_positions(
                     logging.getLogger(__name__).debug(
                         "[IDEMPOTENCY] reconciliation: skipped %d/%d already-settled "
                         "signals for ticket=%s",
-                        _skipped, len(_brain_ids), ticket,
+                        _skipped,
+                        len(_brain_ids),
+                        ticket,
                     )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         # ── Record exit for re-entry guard (native MT5 SL/TP) ──
         if state is not None:
@@ -395,9 +401,7 @@ def reconcile_closed_positions(
                     )
                     _rs = ensure_reentry_state(state._reentry_states, _exit_strategy)
                     _rs.record_exit(_rec)
-                except Exception:  # BLE001:FOG_WRAPPED
-                    with fail_open_guard("Reconciliation:ReentryGuardRecord"):
-                        raise
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                     logging.getLogger(__name__).warning(
                         "Reentry guard state recording failed ticket=%s strategy=%s — "
                         "reentry protection is volatile until next persist",

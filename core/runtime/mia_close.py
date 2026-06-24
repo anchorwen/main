@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso
 
 
@@ -53,10 +52,12 @@ def build_mia_close_entry(
         "request", {}
     ).get("magic", 0)
     if not _resolved_strategy and _resolved_magic:
-        with fail_open_guard("MIA_MagicResolution"):
+        try:
             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
             _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     return {
         "schema_version": "live_trade_journal.v2",

@@ -27,8 +27,6 @@ from datetime import UTC, datetime
 from pathlib import Path as _Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 _logger = _logging.getLogger(__name__)
 
 
@@ -79,9 +77,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
 
     try:
         _content = _jp.read_text(encoding="utf-8")
-    except Exception:  # BLE001:FOG_WRAPPED
-        with fail_open_guard("RestartState:JournalRead"):
-            raise
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
         _logger.error(
             "Bootstrap: failed to read journal at %s.\n%s",
             journal_path,
@@ -120,9 +116,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
             else:
                 continue
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("RestartState:TimestampParse"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             _logger.debug(
                 "Bootstrap: unparseable timestamp in journal entry: %.120s",
                 _ts_str,
@@ -135,6 +129,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
             _magic = _entry.get("magic", 0)
             if _magic:
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2
+
                 _strategy = _M2.get(_magic, "")
 
         # Collect: always for unseen strategies (most recent close),
@@ -150,6 +145,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
 
     # ── FIX-20260603-068: full-chain debug — one restart to find root cause ──
     import json as _json
+
     _debug = {
         "event": "bootstrap_debug",
         "step": "scan_complete",
@@ -158,12 +154,14 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
     }
     _debug_entries = []
     for _ce in _close_entries:
-        _debug_entries.append({
-            "time": _ce.get("recorded_at", "?"),
-            "strategy": _ce.get("strategy", "?"),
-            "label": _ce.get("label", "?"),
-            "ticket": _ce.get("position_ticket", "?"),
-        })
+        _debug_entries.append(
+            {
+                "time": _ce.get("recorded_at", "?"),
+                "strategy": _ce.get("strategy", "?"),
+                "label": _ce.get("label", "?"),
+                "ticket": _ce.get("position_ticket", "?"),
+            }
+        )
     _debug["entries"] = _debug_entries
     print(_json.dumps(_debug, ensure_ascii=False, default=str), flush=True)
 
@@ -286,9 +284,8 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
             else:
                 continue
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("restart_state:bootstrap_restart_state"):
-                continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            continue
         # ── Resolve entry_confidence from matching open ──
         _entry_confidence = 0.5
         _open_match = _open_index.get(int(_ticket)) if _ticket else None
@@ -310,21 +307,30 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _rs = ensure_reentry_state(state._reentry_states, _strategy)
                 _rs.record_exit(_rec)
                 # Debug: show what was actually recorded
-                print(_json.dumps({
-                    "event": "bootstrap_debug",
-                    "step": "recorded_exit",
-                    "strategy": _strategy,
-                    "exit_time": _ts,
-                    "exit_confidence": _entry_confidence,
-                    "exit_reason": _reason,
-                    "exit_label": _label,
-                    "last_exit_timestamp": _rs.last_exit.timestamp if _rs.last_exit else None,
-                    "last_exit_confidence": _rs.last_exit.confidence if _rs.last_exit else None,
-                    "last_exit_reason": _rs.last_exit.reason if _rs.last_exit else None,
-                }, ensure_ascii=False, default=str), flush=True)
-            except Exception:  # BLE001:FOG_WRAPPED
-                with fail_open_guard("RestartState:RecordExit"):
-                    raise
+                print(
+                    _json.dumps(
+                        {
+                            "event": "bootstrap_debug",
+                            "step": "recorded_exit",
+                            "strategy": _strategy,
+                            "exit_time": _ts,
+                            "exit_confidence": _entry_confidence,
+                            "exit_reason": _reason,
+                            "exit_label": _label,
+                            "last_exit_timestamp": _rs.last_exit.timestamp
+                            if _rs.last_exit
+                            else None,
+                            "last_exit_confidence": _rs.last_exit.confidence
+                            if _rs.last_exit
+                            else None,
+                            "last_exit_reason": _rs.last_exit.reason if _rs.last_exit else None,
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                    flush=True,
+                )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                 _logger.warning(
                     "Bootstrap: failed to record exit for strategy=%s ticket=%s.\n%s",
                     _strategy,

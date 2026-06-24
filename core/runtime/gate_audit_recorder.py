@@ -24,8 +24,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def record_gate_block(
     *,
@@ -59,6 +57,5 @@ def record_gate_block(
         audit_path = audit_dir / f"{date_str}.jsonl"
         with open(audit_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("gate_audit_recorder:record_gate_block"):
-            pass  # audit recording is best-effort, not critical path
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass  # audit recording is best-effort, not critical path

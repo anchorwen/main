@@ -11,8 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def compute_sl_tp_for_side(
     side: str,
@@ -70,9 +68,8 @@ def _check_recent_sl_streak(
         if not p.exists():
             return False, 0
         lines = p.read_text(encoding="utf-8").splitlines()
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("order_dispatch:_check_recent_sl_streak"):
-            return False, 0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        return False, 0
     now = _time.time()
     sl_streak = 0
     for line in reversed(lines):
@@ -81,9 +78,8 @@ def _check_recent_sl_streak(
             continue
         try:
             rec = json.loads(line)
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("order_dispatch:_check_recent_sl_streak"):
-                continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            continue
         if rec.get("action") != "close":
             continue
         # Filter by strategy if requested
@@ -99,9 +95,8 @@ def _check_recent_sl_streak(
                 dt = datetime.fromisoformat(recorded)
             if now - dt.timestamp() > lookback_seconds:
                 break
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("order_dispatch:_check_recent_sl_streak"):
-                continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            continue
         label = rec.get("label", "")
         if label in ("sl_hit_first", "loss"):
             sl_streak += 1
@@ -225,10 +220,9 @@ def _build_risk_context(mt5_worker: Any, symbol: str) -> dict[str, Any]:
             if balance > 0:
                 ctx["current_drawdown_pct"] = round(max(0.0, (balance - equity) / balance) * 100, 2)
         ctx["_source"] = "mt5_live"
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("order_dispatch:_build_risk_context"):
-            ctx["_source"] = "mt5_error"
-            ctx["_error"] = str(exc)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+        ctx["_source"] = "mt5_error"
+        ctx["_error"] = str(exc)
     return ctx
 
 
@@ -254,10 +248,9 @@ def _build_risk_context_from_broker(broker: Any, symbol: str) -> dict[str, Any]:
         ctx["positions_per_symbol"] = per_sym
         ctx["current_drawdown_pct"] = broker.get_account_drawdown_pct()
         ctx["_source"] = f"{getattr(broker, 'broker_name', 'unknown')}_live"
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("order_dispatch:_build_risk_context_from_broker"):
-            ctx["_source"] = "broker_error"
-            ctx["_error"] = str(exc)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+        ctx["_source"] = "broker_error"
+        ctx["_error"] = str(exc)
     return ctx
 
 
@@ -304,13 +297,12 @@ def _evaluate_risk(
             if hasattr(control_snapshot.mode_state.current_mode, "value")
             else str(control_snapshot.mode_state.current_mode),
         }
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("order_dispatch:_evaluate_risk"):
-            return {
-                "status": "error",
-                "risk_tier": "unknown",
-                "blocking_reasons": [],
-                "warning_reasons": [f"risk_eval_error: {exc}"],
-                "blocked": False,
-                "mode": "unknown",
-            }
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+        return {
+            "status": "error",
+            "risk_tier": "unknown",
+            "blocking_reasons": [],
+            "warning_reasons": [f"risk_eval_error: {exc}"],
+            "blocked": False,
+            "mode": "unknown",
+        }

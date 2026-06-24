@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from core.execution.trail_stop_engine import TrailPolicy
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 
 
 def register_dispatched_positions(
@@ -88,7 +88,7 @@ def register_dispatched_positions(
                         line = line.strip()
                         if not line or intent_id not in line:
                             continue
-                        with fail_open_guard("PositionRegistration:JournalParse"):
+                        try:
                             rec = json.loads(line)
                             # Match either message_id (original) or open_message_id (bridge follow-up)
                             _mid = rec.get("message_id", "")
@@ -105,6 +105,8 @@ def register_dispatched_positions(
                                     brain_votes_from_journal = bv
                                 if ticket is not None:
                                     break
+                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                            continue
                     if ticket is not None:
                         break
                 _time_module.sleep(0.5)
@@ -121,7 +123,7 @@ def register_dispatched_positions(
                         line = line.strip()
                         if not line or intent_id not in line:
                             continue
-                        with fail_open_guard("PositionRegistration:JournalParse"):
+                        try:
                             rec = json.loads(line)
                             _mid = rec.get("message_id", "")
                             _omid = rec.get("open_message_id", "")
@@ -131,6 +133,8 @@ def register_dispatched_positions(
                                     ticket = t
                                 if ticket is not None:
                                     break
+                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                            continue
                     if ticket is not None:
                         break
                 _time_module.sleep(0.5)
@@ -269,7 +273,7 @@ def register_dispatched_positions(
             )
             # ── Shadow record for limit-order execution quality ──
             if limit_monitor is not None:
-                with fail_open_guard("PositionRegistration:LimitMonitor"):
+                try:
                     _lom_spread_pts = 0.0
                     _lom_b = bid if bid is not None else 0.0
                     _lom_a = ask if ask is not None else 0.0
@@ -285,24 +289,25 @@ def register_dispatched_positions(
                         spread_points=_lom_spread_pts,
                         atr=current_atr,
                     )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
 
             registered_count += 1
-        except Exception as _reg_exc:  # noqa: BLE001 — BLE001:FOG pattern with fail_open_guard
-            with fail_open_guard("position_registration:register_dispatched_positions"):
-                print(
-                    json.dumps(
-                        {
-                            "event": "position_register_failed",
-                            "time": _utc_iso(),
-                            "strategy": dr.strategy_name,
-                            "ticket": ticket,
-                            "error": str(_reg_exc)[:200],
-                            "level": "DEGRADE",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _reg_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "position_register_failed",
+                        "time": _utc_iso(),
+                        "strategy": dr.strategy_name,
+                        "ticket": ticket,
+                        "error": str(_reg_exc)[:200],
+                        "level": "DEGRADE",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     return {
         "registered_count": registered_count,
         "position_state_path": getattr(config, "position_state_path", None),

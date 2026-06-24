@@ -19,7 +19,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 
@@ -205,20 +204,26 @@ def restore_execution_state(
                 continue
             budget = getattr(strategy, "budget", None)
             if budget is not None and hasattr(budget, "load_state"):
-                with fail_open_guard("ExecutionState:BudgetLoad"):
+                try:
                     budget.load_state(budget_snapshot)
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
 
     # ── Restore cooldown registry ──
     cd_data = data.get("cooldown_registry", {})
     if cd_data and state._cooldown_registry is not None:
-        with fail_open_guard("ExecutionState:CooldownLoad"):
+        try:
             state._cooldown_registry.load_state(cd_data)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── Restore family entry tracker ──
     fe_data = data.get("family_entry_tracker", {})
     if fe_data and state._family_entry_tracker is not None:
-        with fail_open_guard("ExecutionState:FamilyEntryLoad"):
+        try:
             state._family_entry_tracker.load_state(fe_data)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── FIX-20260605-120: restore additional guard state ──
     # SL streak cooldown timers — prevents restart from clearing SL blocks

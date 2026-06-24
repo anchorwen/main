@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from core.runtime.live_cycle import LiveCycleConfig, LiveCycleState
 
 
-from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 
@@ -33,12 +32,8 @@ def _save_daily_ops_state(base_dir: str, ts: float) -> None:
 
         symbol = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
         writer = StateWriter(base_dir, symbol=symbol)
-        writer.write_artifact(
-            lookup("DAILY_OPS_STATE"), symbol, {"last_daily_ops_utc": ts}
-        )
-    except Exception as _exc:  # BLE001:FOG_WRAPPED
-        with fail_open_guard("DailyOps:SaveState"):
-            raise
+        writer.write_artifact(lookup("DAILY_OPS_STATE"), symbol, {"last_daily_ops_utc": ts})
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _exc:
         import logging as _logging
 
         _logging.getLogger(__name__).warning(
@@ -107,12 +102,15 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
         try:
             gc.collect()
             # Compact local feature store to prevent unbounded JSONL growth
-            with fail_open_guard("DailyOps:FeatureStoreCompact"):
+            try:
                 from core.features.local_feature_store import LocalFeatureStore
+
                 _store = LocalFeatureStore(base_dir=config.base_dir)
                 _store.compact(retention_days=7)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
             # FIX-20260601-047: prune label files older than 30 days
-            with fail_open_guard("DailyOps:LabelPrune"):
+            try:
                 _labels_dir = Path(config.base_dir) / "labels"
                 if _labels_dir.exists():
                     _cutoff = time.time() - (30 * 86400)
@@ -132,6 +130,8 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                             ),
                             flush=True,
                         )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
             _cleanup_ms = (time.perf_counter() - _cleanup_started) * 1000.0
             print(
                 json.dumps(
@@ -140,15 +140,14 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                 ),
                 flush=True,
             )
-        except Exception as _cleanup_exc:  # BLE001:FOG
-            with fail_open_guard("daily_ops_scheduler:run_scheduled_daily_ops"):
-                print(
-                    json.dumps(
-                        {"event": "resource_cleanup_failed", "error": str(_cleanup_exc)},
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _cleanup_exc:
+            print(
+                json.dumps(
+                    {"event": "resource_cleanup_failed", "error": str(_cleanup_exc)},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         # ── P12: Session-aware governance gate ──
         # Suppress governance transitions during market-closed periods
         # (weekend for forex_24_5) to prevent stale-metric false positives
@@ -176,9 +175,8 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                         ),
                         flush=True,
                     )
-            except Exception:  # BLE001:FOG (fail-open — session check failure should not block daily_ops)
-                with fail_open_guard("daily_ops_scheduler:run_scheduled_daily_ops"):
-                    pass  # graceful fallback — run governance anyway
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass  # graceful fallback — run governance anyway
         if not _skip_governance:
             # Re-run governance after daily_ops refreshes PnL data
             try:
@@ -231,21 +229,23 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                         ),
                         flush=True,
                     )
-            except Exception as _gov_exc:  # BLE001:FOG
-                with fail_open_guard("daily_ops_scheduler:run_scheduled_daily_ops"):
-                    print(
-                        json.dumps(
-                            {"event": "daily_governance_error", "time": _utc_iso(), "error": str(_gov_exc)},
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("daily_ops_scheduler:run_scheduled_daily_ops"):
-            print(
-                json.dumps(
-                    {"event": "daily_ops_error", "time": _utc_iso(), "error": str(exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _gov_exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "daily_governance_error",
+                            "time": _utc_iso(),
+                            "error": str(_gov_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+        print(
+            json.dumps(
+                {"event": "daily_ops_error", "time": _utc_iso(), "error": str(exc)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )

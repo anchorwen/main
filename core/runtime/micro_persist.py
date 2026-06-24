@@ -10,8 +10,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def persist_micro_features(
     config: Any,
@@ -34,8 +32,7 @@ def persist_micro_features(
     from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
 
     _all_zero = all(
-        abs(float(micro_features.get(fn, 0.0))) < 1e-15
-        for fn in MICROSTRUCTURE_9_FEATURES
+        abs(float(micro_features.get(fn, 0.0))) < 1e-15 for fn in MICROSTRUCTURE_9_FEATURES
     )
     if _all_zero:
         return
@@ -52,14 +49,11 @@ def persist_micro_features(
         )
         if _micro_version is not None:
             _now = datetime.now(UTC).replace(tzinfo=None)
-            _latest_v9 = _micro_store.latest(
-                config.symbol, "M5", schema_name="v9_institutional_40"
-            )
+            _latest_v9 = _micro_store.latest(config.symbol, "M5", schema_name="v9_institutional_40")
             if _latest_v9 is not None and _latest_v9.event_time is not None:
                 _now = _latest_v9.event_time
             _micro_values = {
-                fn: float(micro_features.get(fn, 0.0))
-                for fn in MICROSTRUCTURE_9_FEATURES
+                fn: float(micro_features.get(fn, 0.0)) for fn in MICROSTRUCTURE_9_FEATURES
             }
             _micro_store.write_records(
                 [
@@ -75,6 +69,5 @@ def persist_micro_features(
                     )
                 ]
             )
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("micro_persist:persist_micro_features"):
-            pass  # best-effort — micro store write must not block cycle
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass  # best-effort — micro store write must not block cycle

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T05:38:34Z
-> **扫描模块数**: 662
+> **自动生成**: 2026-06-24T06:17:02Z
+> **扫描模块数**: 663
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -498,49 +498,49 @@
 | `cycle_replay.py` | ✅ active | RuntimeReplayReport, RuntimeCycleReplay | 4 | 124 | — | |
 | `daily_ops_scheduler.py` | ✅ active | — | 2 | 251 | — | |
 | `data_health_monitor.py` | ✅ active | — | 1 | 68 | — | |
-| `dispatch_post.py` | ✅ active | — | 2 | 91 | — | |
+| `dispatch_post.py` | ✅ active | — | 2 | 92 | — | |
 | `evidence_contracts.py` | ✅ active | RuntimeEvidenceRecord | 2 | 61 | — | |
 | `evidence_reader.py` | ✅ active | RuntimeEvidenceReader | 5 | 42 | — | |
 | `evidence_writer.py` | ✅ active | RuntimeEvidenceWriter | 2 | 30 | — | |
 | `execution_gates.py` | ✅ active | RuntimeRiskGate, RuntimeGovernanceGate, RuntimeExecutionApprovalChain | 6 | 107 | — | |
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
-| `execution_state.py` | ✅ active | — | 3 | 263 | — | |
+| `execution_state.py` | ✅ active | — | 3 | 268 | — | |
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 466 | — | |
-| `feature_freshness.py` | ✅ active | — | 2 | 80 | — | |
-| `gate_audit_recorder.py` | ✅ active | — | 1 | 64 | — | |
+| `feature_freshness.py` | ✅ active | — | 2 | 81 | — | |
+| `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 249 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
-| `live_bootstrap.py` | ✅ active | — | 1 | 162 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4203 | — | |
-| `live_startup.py` | ✅ active | — | 10 | 376 | — | |
-| `management_phase.py` | ✅ active | — | 8 | 1630 | — | |
+| `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4255 | — | |
+| `live_startup.py` | ✅ active | — | 10 | 369 | — | |
+| `management_phase.py` | ✅ active | — | 8 | 1625 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
-| `mia_close.py` | ✅ active | — | 2 | 178 | — | |
-| `micro_persist.py` | ✅ active | — | 1 | 80 | — | |
-| `modify_trail_dispatch.py` | ✅ active | — | 1 | 84 | — | |
-| `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 316 | — | |
+| `mia_close.py` | ✅ active | — | 2 | 179 | — | |
+| `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
+| `modify_trail_dispatch.py` | ✅ active | — | 1 | 85 | — | |
+| `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
-| `pnl_recording.py` | ✅ active | — | 1 | 91 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 573 | — | |
+| `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 565 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
-| `position_registration.py` | ✅ active | — | 1 | 309 | — | |
+| `position_registration.py` | ✅ active | — | 1 | 314 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
-| `reconciliation.py` | ✅ active | — | 2 | 410 | — | |
+| `reconciliation.py` | ✅ active | — | 2 | 414 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
-| `reentry_recording.py` | ✅ active | — | 2 | 82 | — | |
-| `restart_state.py` | ✅ active | — | 1 | 364 | — | |
+| `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
+| `restart_state.py` | ✅ active | — | 1 | 370 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
-| `session_guards.py` | ✅ active | — | 3 | 181 | — | |
+| `session_guards.py` | ✅ active | — | 3 | 182 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
-| `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 511 | — | |
+| `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 505 | — | |
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
-| `signal_settlement.py` | ✅ active | — | 1 | 94 | — | |
+| `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 923 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 871 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 872 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 15 | 411 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -729,6 +729,7 @@
 | `live_shadow_intent_producer.py` | ✅ active | — | 7 | 264 | — | |
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
+| `migrate_fog_live_cycle.py` | ✅ active | — | 3 | 112 | — | |
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 712 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |

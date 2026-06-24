@@ -12,7 +12,6 @@ import time as _time
 from datetime import UTC
 from typing import Any
 
-from core.runtime.fault_handler import log_and_continue
 from core.runtime.time_utils import _utc_iso
 
 
@@ -44,7 +43,7 @@ def check_feature_freshness(
     if config.no_mt5 or feature_store is None:
         return
 
-    with log_and_continue(component="FeatureCheck:freshness"):
+    try:
         from core.execution.pre_trade_guards import check_feature_freshness as _cff
 
         latest_record = feature_store.latest(config.symbol, "M5")
@@ -78,3 +77,5 @@ def check_feature_freshness(
                         )
                 else:
                     state._consecutive_stale_features = 0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass

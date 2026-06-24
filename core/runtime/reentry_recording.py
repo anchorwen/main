@@ -11,7 +11,6 @@ import time as _time
 from datetime import datetime
 from typing import Any
 
-from core.runtime.fault_handler import log_and_continue
 from core.runtime.time_utils import _utc_iso
 
 
@@ -44,9 +43,11 @@ def record_mia_exits_for_reentry(
         _exit_ts_str = _entry.get("recorded_at", "")
         _exit_ts = _time.time()
         if _exit_ts_str:
-            with log_and_continue(component="MIA_Close:parse_timestamp"):
+            try:
                 _parsed = datetime.fromisoformat(_exit_ts_str.replace("Z", "+00:00"))
                 _exit_ts = _parsed.timestamp()
+            except (ValueError, OSError):
+                pass
         _exit_confidence = (
             _entry.get("entry_consensus", {}).get("consensus_score", 0.5)
             if isinstance(_entry.get("entry_consensus"), dict)
@@ -54,7 +55,7 @@ def record_mia_exits_for_reentry(
         )
         _exit_reason = _entry.get("detail", {}).get("reason", "mia_close")
         if _exit_strategy and _exit_side in ("long", "short"):
-            with log_and_continue(component="MIA_Close:reentry_guard"):
+            try:
                 from core.execution.reentry_guard import (
                     ExitRecord,
                     ensure_reentry_state,
@@ -80,3 +81,5 @@ def record_mia_exits_for_reentry(
                     close_price=_exit_price,
                     pnl=_entry.get("pnl"),
                 )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass

@@ -9,6 +9,7 @@ FIX-20260620-065: Strangler Fig #26 — extracted to core.runtime.management_pha
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
@@ -20,8 +21,6 @@ import numpy as np
 from core.runtime.fault_handler import (
     FaultLevel,
     FaultTolerantContext,
-    fail_open_guard,
-    log_and_continue,
 )
 from core.runtime.market_ingress import _get_current_atr, _mid_and_prices
 from core.runtime.mia_close import build_mia_close_entry as _build_mia_close_entry
@@ -154,7 +153,7 @@ def _build_and_dispatch_alert_context(
     if _ah is None:
         return
 
-    with log_and_continue(component="AlertHub:dispatch"):
+    try:
         # Build context from in-memory state only (Guardrail 3)
         # FIX-20260616-001: error_rate was hardcoded to 0.0 — RULE-001 was
         # permanently silent.  Derive a composite health score from the
@@ -182,8 +181,7 @@ def _build_and_dispatch_alert_context(
             # DQAF-076/BLE001-P0: governance_state.json read can fail on
             # JSONDecodeError (corruption) or OSError (filesystem).
             # Non-critical: frozen count degrades to 0.
-            with fail_open_guard("management_phase:_build_and_dispatch_alert_context"):
-                pass  # Non-critical: frozen check degrades gracefully
+            pass
         _ctx_pos_util = 0.0
         _ctx_bridge_last_ack = time.time() - getattr(state, "_last_bridge_ack_time", time.time())
 
@@ -292,10 +290,9 @@ def _build_and_dispatch_alert_context(
             # JSONDecodeError (corruption), OSError (filesystem), or
             # ValueError/TypeError on malformed PnL/ticket data.
             # Non-blocking: alert context degrades without journal enrichment.
-            with fail_open_guard("management_phase:_build_and_dispatch_alert_context"):
-                pass  # journal enrichment failed — alert context will lack daily PnL
+            pass
         if pnl_ledger is not None:
-            with log_and_continue(component="AlertHub:PnL_context"):
+            try:
                 # FIX-20260613-052: resolved placeholder: "Frankenstein" logic fix.
                 # Previously _worst_pnl and _worst_wr were independently
                 # min()'d across all brains — they could come from two
@@ -339,13 +336,12 @@ def _build_and_dispatch_alert_context(
                     # JSONDecodeError = corruption, OSError = filesystem.
                     # Fail-Close: empty active_brain_ids → worst-brain
                     # computation skipped (Missing > Corrupted).
-                    with fail_open_guard("management_phase:_is_operational"):
-                        # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
-                        # If governance is unreadable, we MUST NOT fall back to unfiltered
-                        # data (which includes archived/retired ghost brains from FIX-011).
-                        # Keep _active_brain_ids as empty set → worst-brain computation
-                        # will be skipped (Missing > Corrupted principle).
-                        _active_brain_ids = set()
+                    # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
+                    # If governance is unreadable, we MUST NOT fall back to unfiltered
+                    # data (which includes archived/retired ghost brains from FIX-011).
+                    # Keep _active_brain_ids as empty set → worst-brain computation
+                    # will be skipped (Missing > Corrupted principle).
+                    _active_brain_ids = set()
                 _all_m = pnl_ledger.get_all_metrics()
                 # Filter to active brains only when governance provides them.
                 # If _active_brain_ids is empty (governance unreadable), skip
@@ -378,8 +374,12 @@ def _build_and_dispatch_alert_context(
                     _ctx["strategy_pnl"] = 0.0
                     _ctx["strategy_win_rate"] = 1.0
                     _ctx["worst_brain_id"] = ""
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         _ah.evaluate_and_dispatch(_ctx)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
 
 
 def _evaluate_brain_ensemble(
@@ -422,8 +422,7 @@ def _evaluate_brain_ensemble(
                 # DQAF-076/BLE001-P0: compute_all_sequences() uses numpy
                 # ops. ValueError on shape mismatch, TypeError on dtype,
                 # KeyError on missing feature, RuntimeError on compute fail.
-                with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
-                    _emit("sequence_compute_error", error=str(_seq_exc))
+                _emit("sequence_compute_error", error=str(_seq_exc))
         raw_proposals: list[Any] = []
         for b_info in brains:
             schema_id = b_info.get("feature_schema_id", "")
@@ -487,10 +486,7 @@ def _evaluate_brain_ensemble(
                                         # (bad input), TypeError (dtype),
                                         # RuntimeError (model), or
                                         # AttributeError (augmenter not init).
-                                        with fail_open_guard(
-                                            "management_phase:_evaluate_brain_ensemble"
-                                        ):
-                                            _mgmt_btc_aug = None  # degrade: fall through to None
+                                        _mgmt_btc_aug = None  # degrade: fall through to None
                             fv = assemble_swing_features(
                                 schema_id,
                                 daily_features=fv_24,
@@ -631,9 +627,11 @@ def _evaluate_brain_ensemble(
                 _h4_dir = "neutral"
                 _h1_dir = "neutral"
                 if hasattr(state, "regime_gate") and state.regime_gate is not None:
-                    with fail_open_guard("LiveCycle:TrendDirectionLookup"):
+                    try:
                         _h4_dir = state.regime_gate.h4_trend_direction
                         _h1_dir = state.regime_gate.h1_trend_direction
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                        pass
                         if _h4_dir != "neutral" and _h4_dir == pos.side:
                             _trend_protected = True  # H4 supports position
                         elif _h4_dir == "neutral" and _h1_dir == pos.side:
@@ -744,7 +742,7 @@ def _evaluate_brain_ensemble(
                     for b_info in brains:
                         if b_info.get("brain_type") == "ou_params_v6":
                             # ── DQAF-20260616-101/P1.3: BLE001 → log_and_continue ──
-                            with log_and_continue("OUBrainExit"):
+                            try:
                                 raw_ou = b_info["adapter"].infer(np.array([mid], dtype=np.float32))
                                 ou_z = float(raw_ou.get("z_score", 0.0))
                                 should_ou_exit, ou_reason = pm.should_exit_ou_based(
@@ -775,7 +773,8 @@ def _evaluate_brain_ensemble(
                                     if _dispatched:
                                         pm.clear_position(ticket=pos.ticket)
                                     return True
-                            # (BLE001 replaced with log_and_continue("OUBrainExit") — DQAF-20260616-101/P1.3)
+                            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                                pass
                             break  # only one OU brain
 
                 should_exit = False
@@ -865,8 +864,7 @@ def _evaluate_brain_ensemble(
                 # (TypeError/KeyError/AttributeError), and dispatch
                 # I/O (ConnectionError/TimeoutError/OSError).
                 # Fail-closed: emit error, return consensus with closed=False.
-                with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
-                    _emit("brain_reeval_error", error=str(exc))
+                _emit("brain_reeval_error", error=str(exc))
     # Not closed — return consensus for downstream layers
     return {
         "closed": False,
@@ -1115,7 +1113,7 @@ def execute_management_phase(
     # ── 2. Update regime detector ──
     regime_info: dict[str, Any] = {}
     if regime_detector is not None:
-        with log_and_continue(component="RegimeDetector:update"):
+        with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
             regime_info = regime_detector.update(current_atr)
 
     # ── 3. Update position tracking ──
@@ -1245,8 +1243,7 @@ def execute_management_phase(
                     # DQAF-076/BLE001-P0: STRATEGY_TO_MAGIC import
                     # (ImportError) or dict key TypeError on malformed
                     # strategy name.  Non-blocking: close uses default magic.
-                    with fail_open_guard("management_phase:execute_management_phase"):
-                        logger.warning("Magic resolution failed for partial close — using default")
+                    logger.warning("Magic resolution failed for partial close — using default")
             _open_entry = state.known_open_tickets.get(pos.ticket, {})
             _open_msg_id = _open_entry.get("message_id", "")
             if _open_msg_id:
@@ -1323,8 +1320,7 @@ def execute_management_phase(
                 # and exit_watchdog.execute_exit().  ImportError from
                 # dynamic import, RuntimeError/ValueError from dispatch
                 # guards, ConnectionError/TimeoutError/OSError from I/O.
-                with fail_open_guard("management_phase:_ptp_dispatch_fn"):
-                    _emit("partial_tp_dispatch_error", ticket=pos.ticket, error=str(_ptp_exc))
+                _emit("partial_tp_dispatch_error", ticket=pos.ticket, error=str(_ptp_exc))
             if not _ptp_dispatched:
                 # Leave position manager state unchanged — retry next cycle
                 pass
@@ -1553,8 +1549,7 @@ def execute_management_phase(
             # pm.evaluate_meta_exit().  ValueError on bad inputs,
             # TypeError/AttributeError on malformed evaluation object.
             # Non-blocking: MetaExit is shadow-mode (telemetry only).
-            with fail_open_guard("management_phase:_ptp_dispatch_fn"):
-                _emit("meta_exit_error", error=str(exc))
+            _emit("meta_exit_error", error=str(exc))
     # ── 7.8 Layer 2.8: Hesitation exit (no breakeven within N cycles) ──
     _skip_hesitation = pm._is_protected_period(ticket=pos.ticket) and not pm._toxicity_veto(
         mid if mid is not None else 0.0, ticket=pos.ticket

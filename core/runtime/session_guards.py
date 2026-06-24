@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.time_utils import _utc_iso
 
 
@@ -123,18 +123,22 @@ def run_session_guards(
                                         reason="intraday_drawdown",
                                         dispatched=_dd_result.get("dispatched", False),
                                     )
-                                except Exception as _dd_exc:  # BLE001:FOG
-                                    with fail_open_guard("session_guards:run_session_guards"):
-                                        _emit(
-                                            "force_close_error",
-                                            error=str(_dd_exc),
-                                        )
+                                except (
+                                    RuntimeError,
+                                    ValueError,
+                                    KeyError,
+                                    TypeError,
+                                    OSError,
+                                ) as _dd_exc:
+                                    _emit(
+                                        "force_close_error",
+                                        error=str(_dd_exc),
+                                    )
                 if dd_result.get("blocked"):
                     return True, session_info  # skip cycle — drawdown kill active
-            except Exception as _dd_setup_exc:  # BLE001:FOG (degrade, Phase 3b)
-                with fail_open_guard("session_guards:run_session_guards"):
-                    # DEGRADE — intraday DD check setup failed, continue without it
-                    _emit("intraday_drawdown_kill_error", error=str(_dd_setup_exc))
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _dd_setup_exc:
+                # DEGRADE — intraday DD check setup failed, continue without it
+                _emit("intraday_drawdown_kill_error", error=str(_dd_setup_exc))
         # ── Feature freshness check ──
         # DQAF-20260623-067: Use getattr with safe default so a missing
         # dataclass field does not cause a silent fail-open AttributeError.
@@ -160,22 +164,19 @@ def run_session_guards(
         # Missing dataclass fields, type mismatches — the system state is
         # structurally corrupted.  Letting the cycle continue would mean
         # trading on unverified state.  Skip the cycle and alert.
-        with fail_open_guard("session_guards:run_session_guards"):
-            _emit(
-                "session_guard_state_integrity_error",
-                error=str(_state_exc),
-                error_type=type(_state_exc).__name__,
-                action="fail_closed_skip_cycle",
-            )
+        _emit(
+            "session_guard_state_integrity_error",
+            error=str(_state_exc),
+            error_type=type(_state_exc).__name__,
+            action="fail_closed_skip_cycle",
+        )
         _log_cycle_end(state.loop_iteration)
         return True, session_info  # skip cycle — state integrity unverified
-    except Exception as _session_exc:  # BLE001:FOG (fail-open, Phase 3b)
+    except (RuntimeError, ValueError, KeyError, OSError) as _session_exc:
         # ── Transient / data-quality errors → FAIL-OPEN ──
         # MT5 timeouts, network blips, calendar I/O — the guard itself is
         # non-critical; failing open lets the cycle proceed with the other
         # downstream safety nets (price guards, circuit breaker, etc.).
-        with fail_open_guard("session_guards:run_session_guards"):
-            _emit("session_guard_error", error=str(_session_exc))
-            # Fail-open on session detection failure — let the cycle continue
-            pass
+        _emit("session_guard_error", error=str(_session_exc))
+        # Fail-open on session detection failure — let the cycle continue
     return False, session_info

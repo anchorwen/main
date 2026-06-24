@@ -77,6 +77,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260624-103 | 2026-06-24 | cursor-agent | 8b4b786e | UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/ (25 files, 172→8 sites). Replaced all fail_open_guard/log_and_continue context managers with specific exception types (RuntimeError, ValueError, KeyError, TypeError, OSError). Removed from core.runtime.fault_handler import fail_open_guard/log_and_continue from 23 files. | missing-validation |
 | FIX-20260624-091 | 2026-06-24 | cursor-agent | — | **UGR-A02: TypedClock — three incompatible time types**. Created core/runtime/typed_clock.py: MonotonicInstant, WallInstant (NO arithmetic), Duration. Type-level enforcement prevents mixing monotonic/wall times. | RC-12 — missing-feature |
 | FIX-20260624-092 | 2026-06-24 | cursor-agent | — | **UGR-A04: SupervisedScheduler — THREAD+PROCESS dual isolation**. Created core/runtime/supervised_scheduler.py: THREAD tasks (cancellation+heartbeat), PROCESS tasks (SIGTERM→SIGKILL escalation). | RC-12 — missing-feature |
 | FIX-20260624-087 | 2026-06-24 | cursor-agent | — | **UGR-A07: SystemError guard + fail_open_guard DEPRECATED in FaultTolerantContext**. SystemError added to never-swallow list. fail_open_guard emits DeprecationWarning with 3-tier migration path. | RC-12 |

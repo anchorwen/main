@@ -33,8 +33,6 @@ from core.parliament.contract_groups import (
 from core.runtime.fault_handler import (
     FaultLevel,
     FaultTolerantContext,
-    fail_open_guard,
-    log_and_continue,
 )
 
 # ── Strategy line imports ──
@@ -308,7 +306,6 @@ class LiveCycleState:
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated from 18 duplicates
 
 
@@ -340,7 +337,7 @@ def _save_recent_prices(state: Any, base_dir: str) -> None:
     (~105 min) to produce valid OU Theta + Hurst values after every restart.
     Persisting the rolling buffer eliminates this cold-start entirely.
     """
-    with fail_open_guard("RecentPricesSave"):
+    try:
         _rp = state._recent_mid_prices
         if len(_rp) < 3:
             return
@@ -351,6 +348,8 @@ def _save_recent_prices(state: Any, base_dir: str) -> None:
             encoding="utf-8",
         )
         os.replace(_tmp, _path)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
 
 
 # ── Daily ops auto-scheduler ────────────────────────────────────────────
@@ -362,12 +361,14 @@ DAILY_OPS_STATE_PATH = "data/state/daily_ops_state.json"  # legacy default; over
 def _load_daily_ops_state(base_dir: str) -> float:
     """Restore last daily_ops timestamp from disk. Returns 0.0 if not found."""
     # ── DQAF-20260616-101/P1.3: BLE001 → log_and_continue ──
-    with log_and_continue("DailyOpsStateRead"):
+    try:
         state_path = os.path.join(base_dir, "state", "daily_ops_state.json")
         if os.path.exists(state_path):
             with open(state_path) as f:
                 data = json.load(f)
             return float(data.get("last_daily_ops_utc", 0.0))
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
     return 0.0
 
 
@@ -1165,7 +1166,7 @@ def execute_live_cycle(
             )
 
             # ── DQAF-20260616-101/P1.3: BLE001 → fail_open_guard ──
-            with fail_open_guard("CircuitBreakerCloseAll"):
+            try:
                 _open_positions = mt5_call_with_timeout(
                     mt5_worker.positions_get, symbol=config.symbol, timeout=10.0
                 )
@@ -1198,7 +1199,7 @@ def execute_live_cycle(
                         _side = "short" if _pos.type == 1 else "long"
                         _vol = float(getattr(_pos, "volume", 0) or 0)
                         _close_side = "buy" if _side == "short" else "sell"
-                        with fail_open_guard("CircuitBreakerClose"):
+                        try:
                             _cb_result = mt5_call_with_timeout(
                                 mt5_worker.order_send,
                                 {
@@ -1242,10 +1243,14 @@ def execute_live_cycle(
                                 ),
                                 flush=True,
                             )
+                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                            pass
                     if _closed_any:
                         # After emergency close, reset the circuit breaker
                         state._circuit_breaker_tripped = False
                         state.block_new_entries = True  # keep blocked — manual review needed
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
             # (BLE001 replaced with fail_open_guard("CircuitBreakerCloseAll") — DQAF-20260616-101/P1.3)
     # ── Phase B: Cycle stall detection (FIX-20260613-052: resolved placeholder) ──
     # A single cycle taking longer than cycle_stall_threshold_seconds is a
@@ -1319,7 +1324,7 @@ def execute_live_cycle(
                 _positions = []  # timeout → skip reconciliation this cycle
             else:
                 _positions = _positions or []
-        with log_and_continue(component="StartupReconciliation"):
+        try:
             _open_tickets = {p.ticket for p in _positions}
             _gone_tickets = set(state.known_open_tickets.keys()) - _open_tickets
             if _gone_tickets:
@@ -1328,7 +1333,7 @@ def execute_live_cycle(
                     for t in _gone_tickets
                     if t in state.known_open_tickets
                 }
-                with log_and_continue(component="StartupReconciliation:journal_write"):
+                try:
                     _closed_entries = _reconcile_closed_positions(
                         mt5_worker,
                         config.symbol,
@@ -1378,10 +1383,14 @@ def execute_live_cycle(
                                 elif _label in ("tp_hit_first", "win"):
                                     _curr = 0
                                 state.consecutive_sl_hits[_strategy] = _curr
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
             # Filter to only currently-open positions AFTER reconciliation
             state.known_open_tickets = {
                 t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
             }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── Restart state bootstrap: replay recent journal closes ──
     # FIX-20260603-074: MUST run AFTER reconciliation so known_open_tickets
@@ -1402,7 +1411,7 @@ def execute_live_cycle(
     # never executing when the system never survives to 22:00 UTC.
     if state.loop_iteration == 1 and state._last_daily_ops_utc == 0:
         state._last_daily_ops_utc = _load_daily_ops_state(config.base_dir)
-    with log_and_continue(component="DailyOps:scheduling"):
+    try:
         _now_utc = datetime.now(UTC)
         _today_22z = _now_utc.replace(hour=22, minute=0, second=0, microsecond=0)
         _window_end = _today_22z + timedelta(hours=1)
@@ -1545,7 +1554,7 @@ def execute_live_cycle(
         except (TypeError, OSError) as _exc:
             # DQAF-076/BLE001-P0: json.dumps() can raise TypeError on
             # non-serializable objects; print() can raise OSError.
-            with fail_open_guard("live_cycle:_log_phase_transition"):
+            with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 print(
                     json.dumps(
                         {
@@ -1559,6 +1568,8 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
     # ── Reconcile closed positions ──
     # Run on every Nth cycle (reconciliation_interval), AND on the very first
     # cycle after a restart if known_open_tickets was bootstrapped from the
@@ -1608,7 +1619,7 @@ def execute_live_cycle(
                     # -1/0/1 (not 1/0) to match calibrator._trade_label() taxonomy.
                     _calib = getattr(state, "_conformal_calibrator", None)
                     if _calib is not None:
-                        with fail_open_guard("ConformalCalibratorUpdate"):
+                        try:
                             _p_win = float(getattr(_evt, "p_win", 0.5) or 0.5)
                             _label_str = str(getattr(_evt, "label", "") or "").lower()
                             if _label_str in ("tp_hit_first", "win"):
@@ -1618,6 +1629,8 @@ def execute_live_cycle(
                             else:
                                 _label_int = 0
                             _calib.update(_p_win, _label_int)
+                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                            pass
 
                     # ── SignalSettled — real trade PnL ──
                     # Strangler Fig #32 — extracted to core.runtime.signal_settlement
@@ -1888,13 +1901,15 @@ def execute_live_cycle(
                             flush=True,
                         )
     if mid_price is not None and mid_price > 0 and state._mtf_price_service is not None:
-        with log_and_continue(component="MTFPrice:feed_tick"):
+        try:
             _now_s = int(datetime.now(UTC).timestamp())
             state._mtf_price_service.feed_tick(_now_s, mid_price)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── Tick sanity check ──
     if _bid is not None and _ask is not None and _bid > 0:
-        with log_and_continue(component="TickSanity:check"):
+        try:
             from core.execution.pre_trade_guards import check_tick_sanity
 
             tick_ok = check_tick_sanity(_bid, _ask, config.symbol)
@@ -1921,10 +1936,12 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── Limit order monitor: check pending orders for spread-aware fills ──
     if state.limit_monitor is not None and state.limit_monitor.has_pending():
-        with log_and_continue(component="LimitMonitor:check_fill"):
+        try:
             _lom_bid = _bid if _bid else 0.0
             _lom_ask = _ask if _ask else 0.0
             _lom_low = None  # bar low not tracked cycle-by-cycle; fill uses bid/ask
@@ -1965,11 +1982,13 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── Shadow verification: settle previous cycle's consensus decision ──
     if mid_price is not None and mid_price > 0 and state.shadow_verification_pending:
         try:
-            with log_and_continue(component="ShadowVerify"):
+            try:
                 pending = state.shadow_verification_pending
                 entry_price = pending["entry_price"]
                 direction = pending["direction"]
@@ -1998,6 +2017,8 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
         finally:
             state.shadow_verification_pending = None
 
@@ -2025,7 +2046,7 @@ def execute_live_cycle(
         _recovered = False
         _recovery_reason = ""
         if _blocked_for > 300 and state._recent_atr_values and state._recent_mid_prices:
-            with log_and_continue(component="SLStreak:market_normalization"):
+            try:
                 import numpy as np
 
                 from core.execution.market_efficiency import (
@@ -2044,6 +2065,8 @@ def execute_live_cycle(
                     rolling_atr_std=_atr_std,
                     kaufman_er=_er,
                 )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         if _recovered:
             print(
@@ -2178,7 +2201,7 @@ def execute_live_cycle(
 
         # ── Market-closed guard (before exit management and entry logic) ──
         if not config.no_mt5:
-            with log_and_continue(component="MarketGuard:session_detect"):
+            try:
                 from core.execution.pre_trade_guards import detect_session
 
                 _pre_session = detect_session(
@@ -2188,6 +2211,8 @@ def execute_live_cycle(
                 if _pre_session.get("risk_tier") == "off":
                     _log_cycle_end(state.loop_iteration)
                     return state, True  # market closed — skip entire cycle
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         # Phase C: micro_feature_dict needed by management phase (OFI partial TP).
         # Initialised None here; populated by feature computation below on each cycle.
@@ -2203,10 +2228,12 @@ def execute_live_cycle(
             and mid_price > 0
             and pnl_ledger.pending_count > 0
         ):
-            with log_and_continue(component="PnLLedger:settle"):
+            try:
                 _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
                 pnl_ledger.update_pending(mid_price)
                 pnl_ledger.settle_all(mid_price, spread=_live_spread, slippage=0.10)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         # ── FIX-20260615-009d: Cold-start race condition fix ──
         # BTCFeatureAugmenter MUST be initialised BEFORE _execute_management_phase
@@ -2260,7 +2287,7 @@ def execute_live_cycle(
             ) as _mp_exc:
                 # DQAF-076/BLE001-P0: execute_management_phase() covers
                 # model inference, consensus, and dispatch — broad surface.
-                with fail_open_guard("live_cycle:_log_phase_transition"):
+                try:
                     logger.exception(
                         "Management phase aborted for ticket=%s — position state not updated",
                         _pm_pos.ticket,
@@ -2271,9 +2298,11 @@ def execute_live_cycle(
                             "management_phase_failure",
                             {"ticket": _pm_pos.ticket, "cycle": state.loop_iteration},
                         )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
             # Persist position state every N cycles (trail steps, breakeven, etc.)
             if state.loop_iteration % 5 == 0 and state.position_manager is not None:
-                with log_and_continue(component="PositionState:periodic_save"):
+                with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                     state.position_manager.save_state(config.position_state_path)
 
         # ── Process MIA close entries collected by _execute_management_phase ──
@@ -2352,8 +2381,7 @@ def execute_live_cycle(
                     # DQAF-076/BLE001-P0: journal JSONL file read for
                     # close-ticket dedup — OSError on filesystem issue.
                     # Non-blocking: skip dedup, proceed with all MIA closes.
-                    with fail_open_guard("live_cycle:_emit_close_notification"):
-                        pass  # Non-blocking — skip dedup on read error
+                    pass
                 _mia_closed = [
                     e
                     for e in _mia_closed
@@ -2363,7 +2391,7 @@ def execute_live_cycle(
                     pass  # all tickets already have close entries — skip
             if _mia_closed:
                 # ── FIX-20260611-005 Phase 2: Strangler Fig #12 ──
-                with log_and_continue(component="MIA_Close:journal_write"):
+                try:
                     from core.runtime.position_close_adapter import record_mia_closes
 
                     record_mia_closes(
@@ -2373,6 +2401,8 @@ def execute_live_cycle(
                         str(journal_path),
                         state,
                     )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
             # ── Record exit for reentry guard ──
             # Strangler Fig #30 — extracted to core.runtime.reentry_recording
             from core.runtime.reentry_recording import record_mia_exits_for_reentry
@@ -2395,7 +2425,7 @@ def execute_live_cycle(
                 # ── FIX-20260610-002: Clean up ghost position ──
                 _mia_ticket = _entry.get("position_ticket")
                 if _mia_ticket and state.position_manager is not None:
-                    with log_and_continue(component="MIA_Close:clear_position"):
+                    try:
                         state.position_manager.clear_position(int(_mia_ticket))
                         # SF #26 FIX: _emit extracted to management_phase.py — inline here
                         print(
@@ -2409,6 +2439,8 @@ def execute_live_cycle(
                             ),
                             flush=True,
                         )
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                        pass
                 # ── FIX-20260610-002: Record budget for MIA close (F3) ──────
                 # Budget was never updated for MIA-detected closes — daily
                 # PnL, consecutive loss counters, and all cumulative circuit
@@ -2436,8 +2468,7 @@ def execute_live_cycle(
                         # can fail on ConnectionError/TimeoutError (IPC) or
                         # RuntimeError (MT5 terminal state).
                         # Graceful fallback: keep _eq at 1000.0.
-                        with fail_open_guard("live_cycle:_emit_close_notification"):
-                            pass  # graceful fallback — keep _eq at 1000.0
+                        pass
                     _pnl_pct = float(_mia_pnl) / _eq if _eq > 0 else 0.0
                     if not hasattr(state, "_pending_budget_records"):
                         state._pending_budget_records = []
@@ -2566,13 +2597,11 @@ def execute_live_cycle(
             _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
             # ── FIX-20260611-022: Make calibrator accessible for live updates ──
             state._conformal_calibrator = _cal
-        except (ImportError, ValueError, TypeError, OSError, RuntimeError) as _cc_exc:
+        except (ImportError, ValueError, TypeError, OSError, RuntimeError):
             # DQAF-076/BLE001-P0: ConformalCalibrator init can fail on
             # ImportError (module missing), ValueError/TypeError (bad
             # config), OSError (journal file read), RuntimeError (logic).
-            with fail_open_guard("live_cycle:_emit_close_notification"):
-                with fail_open_guard("ConformalCalibratorInit"):
-                    raise  # Re-raise inside guard for structured traceback logging
+            pass
         # ── MetaFilterGate (47-dim LGB, for non-OU strategies if any) ──
         try:
             from core.execution.meta_filter_gate import MetaFilterGate
@@ -2605,9 +2634,7 @@ def execute_live_cycle(
             # DQAF-076/BLE001-P0: MetaFilterGate init can fail on
             # ImportError (module missing), ValueError/TypeError (bad
             # config), OSError (model file read), RuntimeError (logic).
-            with fail_open_guard("live_cycle:_emit_close_notification"):
-                with fail_open_guard("MetaFilterGateInit"):
-                    raise  # Re-raise inside guard for structured traceback logging
+            pass
         # ── Conformal OU Gate (physics-based, for OU strategies) ──
         try:
             from core.execution.conformal_ou_gate import ConformalOUGate
@@ -2642,13 +2669,11 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except (ImportError, ValueError, TypeError, OSError, RuntimeError) as _oug_exc:
+        except (ImportError, ValueError, TypeError, OSError, RuntimeError):
             # DQAF-076/BLE001-P0: ConformalOUGate init can fail on
             # ImportError (module missing), ValueError/TypeError (bad
             # config), OSError (config file read), RuntimeError (logic).
-            with fail_open_guard("live_cycle:_emit_close_notification"):
-                with fail_open_guard("ConformalOUGateInit"):
-                    raise  # Re-raise inside guard for structured traceback logging
+            pass
     # ── Daily D1 features for swing brains ──
     daily_feature_vector: Any = None  # pre-initialised for DEGRADE
     if daily_feature_provider is not None:
@@ -2660,13 +2685,15 @@ def execute_live_cycle(
 
     # ── Persist features to LocalFeatureStore ──
     if not config.disable_feature_store and not config.no_mt5:
-        with log_and_continue(component="FeatureStore:write"):
+        try:
             from core.deployment.feature_update_producer import produce_from_live_computer
 
             for record in produce_from_live_computer(
                 feature_computer, feature_schema, config.symbol
             ):
                 feature_store.write_records([record])
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── Feature freshness check ──
     # Strangler Fig #29 — extracted to core.runtime.feature_freshness
@@ -2711,11 +2738,11 @@ def execute_live_cycle(
             # DQAF-076/BLE001-P0: regime_detector.update() can raise
             # ValueError (bad ATR), RuntimeError (detector state), or
             # TypeError (wrong input type).
-            with fail_open_guard("live_cycle:_emit_close_notification"):
+            with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 logger.warning("Regime detector update failed — using stale regime values")
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
     if not config.no_mt5:
-        with log_and_continue(component="FeatureGate:check"):
+        try:
             from core.runtime.signal_health import FeatureGate
 
             _gate = FeatureGate.check(
@@ -2739,6 +2766,8 @@ def execute_live_cycle(
                 )
                 _log_cycle_end(state.loop_iteration)
                 return state, True
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
     # ── Run inference ──
     raw_output: dict[str, Any] = {}
@@ -2761,7 +2790,7 @@ def execute_live_cycle(
     except (ConnectionError, TimeoutError, RuntimeError) as _eq_exc:
         # DQAF-076/BLE001-P0: broker.get_account_equity() can fail on
         # ConnectionError/TimeoutError (network/IPC) or RuntimeError.
-        with fail_open_guard("live_cycle:_emit_close_notification"):
+        with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
             logger.warning("Broker equity fetch failed — falling back to MT5 direct query")
     if _account_equity is None and mt5_worker is not None:
         with FaultTolerantContext(
@@ -2944,8 +2973,7 @@ def execute_live_cycle(
                         # DQAF-076/BLE001-P0: _compute_tf_ou_hurst()
                         # can raise ValueError/TypeError on degenerate
                         # price data.  Fail-safe: ADX-only gating.
-                        with fail_open_guard("live_cycle:_emit_close_notification"):
-                            pass  # fail-safe: gate falls back to ADX-only logic
+                        pass
                 trend_direction = regime_gate_result.get("primary_trend", "neutral")
                 trend_strength = regime_gate_result.get("h1_trend_strength", 0.0)
                 h4_trend_strength = regime_gate_result.get("h4_trend_strength", 0.0)
@@ -2987,7 +3015,7 @@ def execute_live_cycle(
                 # raise ValueError/RuntimeError on bad state, TypeError
                 # on malformed output.  Increment stale counter →
                 # fail-closed after 12 consecutive failures.
-                with fail_open_guard("live_cycle:_emit_close_notification"):
+                try:
                     state._regime_gate_stale_counter += 1
                     _stale_n = state._regime_gate_stale_counter
                     if _stale_n > 12:  # 1 hour at M5 — fail-closed
@@ -3013,6 +3041,8 @@ def execute_live_cycle(
                         ),
                         flush=True,
                     )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
         # ── Pre-close check: stop new positions / flatten before market close ──
         pre_close = _check_pre_close(config, state)
         if pre_close.get("no_new_positions"):
@@ -3057,10 +3087,12 @@ def execute_live_cycle(
         # Runs once after lazy-init above.  Silently passes if no persisted
         # state exists (first run or stale >24h snapshot).
         if state.loop_iteration == 1 and state._cooldown_registry is not None:
-            with fail_open_guard("LiveCycle:RestoreExecutionState"):
+            try:
                 from core.runtime.execution_state import restore_execution_state
 
                 restore_execution_state(state, strategies, data_dir=config.base_dir)
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         # ── FIX-20260613-090: disk fallback for _recent_mid_prices ──
         # MT5 backfill (above) is the primary hydration source.  Disk persistence
@@ -3095,7 +3127,7 @@ def execute_live_cycle(
             except (ValueError, TypeError, KeyError) as _sg_exc:
                 # DQAF-076/BLE001-P0: stale gate skip involves dict
                 # lookups + json serialization.  Fail-safe: skip.
-                with fail_open_guard("live_cycle:_emit_close_notification"):
+                with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                     pass
         # Portfolio risk controller (persist for VaR/correlation tracking) + execution queue
         if state.portfolio_risk_controller is None:
@@ -3287,7 +3319,7 @@ def execute_live_cycle(
         # XAU-centric fallback path (which has incorrect cross-asset slots).
         _btc_aug: Any = None
         if config.symbol == "BTCUSDc" and daily_feature_vector is not None:
-            with fail_open_guard("BTCFeatureAugment"):
+            try:
                 _aug = getattr(state, "_btc_augmenter", None)
                 if _aug is None:
                     from core.features.computers.btc_feature_augmenter import (
@@ -3304,12 +3336,14 @@ def execute_live_cycle(
                     tf_ou=tf_ou,
                     tf_hurst=tf_hurst,
                 )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
 
         # ── FIX-20260609-011: load governance state for degradation gate ──
         # Read once per cycle so the governance degradation gate sees the
         # latest brain status transitions (daily_ops updates this file).
         _gov_state: dict[str, Any] | None = None
-        with fail_open_guard("GovernanceStateLoad"):
+        try:
             _gov_path = Path(config.base_dir) / "governance_state.json"
             if _gov_path.exists():
                 import json as _json_gov
@@ -3322,12 +3356,14 @@ def execute_live_cycle(
                 # strategy_line:543 does governance_state.get("brain_states",{})
                 # which always returned {} because the dict keys were brain IDs.
                 _gov_state = _gov_raw
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
         # ── FIX-20260611-022: Evaluate data-health degradation ──
         # Progressive risk reduction based on data quality.
         # Staleness-based: if key sources haven't updated recently, reduce exposure.
         _degrade_constraints: Any = None
-        with fail_open_guard("DataHealthDegradationEval"):
+        try:
             from core.observability.degradation import (
                 DegradationConstraints,
                 evaluate_staleness,
@@ -3345,6 +3381,8 @@ def execute_live_cycle(
                         _stale_level,
                         reason=f"Data staleness detected (level={_stale_level.name})",
                     )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
 
         # ── DQAF-20260614-002: Per-cycle calibrator heartbeat ──
         # compute_threshold() updates the adaptive Q10 from rolling history.
@@ -3446,12 +3484,14 @@ def execute_live_cycle(
             except (ValueError, TypeError, OSError) as _gm_exc:
                 # DQAF-076/BLE001-P0: record_cycle_outputs() writes
                 # golden master JSONL.  Non-blocking telemetry.
-                with fail_open_guard("live_cycle:_emit_close_notification"):
+                try:
                     import logging as _gm_log
 
                     _gm_log.getLogger(__name__).warning(
                         "Golden Master record_cycle_outputs failed: %s", _gm_exc
                     )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass
         # ── FIX-20260610-010: Persist main eval decisions for Phase 10 gate alignment ──
         _last_decisions: dict[str, dict[str, Any]] = {}
         for _sr in eval_summary.get("strategy_results", []):
@@ -3871,8 +3911,12 @@ def execute_live_cycle(
                                             # DQAF-076/BLE001-P0: force-close
                                             # uses dispatch_live_order() +
                                             # position_manager operations.
-                                            with fail_open_guard(
-                                                "live_cycle:_net_out_close_dispatch_fn"
+                                            with _ctxlib_pf.suppress(
+                                                RuntimeError,
+                                                ValueError,
+                                                KeyError,
+                                                TypeError,
+                                                OSError,
                                             ):
                                                 print(
                                                     json.dumps(
@@ -3904,7 +3948,9 @@ def execute_live_cycle(
                     except (ValueError, TypeError, RuntimeError) as _dd_exc:
                         # DQAF-076/BLE001-P0: intraday drawdown recovery
                         # check involves dict comparisons + math.
-                        with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
+                        with _ctxlib_pf.suppress(
+                            RuntimeError, ValueError, KeyError, TypeError, OSError
+                        ):
                             logger.warning("Intraday drawdown recovery check failed")
                 _fv = check_feature_vector(feature_vector)
                 if not _fv.get("passed"):
@@ -3938,7 +3984,7 @@ def execute_live_cycle(
                     except (ValueError, RuntimeError, TypeError) as _run_exc:
                         # DQAF-076/BLE001-P0: adapter.run() can raise
                         # ValueError/RuntimeError (ONNX) or TypeError.
-                        with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
+                        try:
                             # Fallback: bypass run() pipeline.
                             # Transformer adapters: use infer_sequence() to avoid rolling-buffer corruption.
                             # XGBoost adapters: use infer() with flat ravel (model expects 288-dim).
@@ -3954,8 +4000,12 @@ def execute_live_cycle(
                             except (ValueError, RuntimeError, TypeError) as _inf_exc:
                                 # DQAF-076/BLE001-P0: adapter.infer()
                                 # / adapter.infer_sequence() fallback.
-                                with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
+                                with _ctxlib_pf.suppress(
+                                    RuntimeError, ValueError, KeyError, TypeError, OSError
+                                ):
                                     prop = None
+                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                            pass
                 else:
                     prop = None
             elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
@@ -4000,7 +4050,7 @@ def execute_live_cycle(
                             ) as _btc2_exc:
                                 # DQAF-076/BLE001-P0: BTC augment
                                 # computation (BTCFeatureAugmenter).
-                                with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
+                                try:
                                     import logging as _btc_log
                                     import traceback as _btc_tb
 
@@ -4011,6 +4061,8 @@ def execute_live_cycle(
                                         "Fix the augmenter before trusting brain inference.\n%s",
                                         _btc_tb.format_exc(),
                                     )
+                                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                                    pass
                                     # FIX-20260613-052: resolved placeholder: Do NOT silently fall back.
                                     # btc_aug remains None → assemble_swing_features()
                                     # will zero-fill slots [35-36] via legacy path.
@@ -4131,7 +4183,7 @@ def execute_live_cycle(
         except (ValueError, TypeError) as _rp_exc:
             # DQAF-076/BLE001-P0: np.percentile() can raise ValueError
             # on empty array or TypeError on non-numeric data.
-            with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
+            with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 _rolling_p80 = 0.0
     _effective_threshold = (
         max(config.confidence_threshold, _rolling_p80)

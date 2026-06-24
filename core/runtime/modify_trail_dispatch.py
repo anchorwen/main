@@ -7,9 +7,8 @@ through the live_order_sender outbox pipeline.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
-
-from core.runtime.fault_handler import fail_open_guard, log_and_continue
 
 
 def dispatch_modify_trail(
@@ -61,16 +60,18 @@ def dispatch_modify_trail(
         payload["brain_ids"] = brain_ids
     # Resolve magic from strategy name for correct journal attribution
     if strategy_name:
-        with log_and_continue(component="MagicAttribution:trail"):
+        try:
             from core.contracts.strategy_magic import STRATEGY_TO_MAGIC
 
             _strat_magic = STRATEGY_TO_MAGIC.get(strategy_name, 0)
             if _strat_magic:
                 payload["magic"] = _strat_magic
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
     if open_message_id:
         payload["open_message_id"] = open_message_id
 
-    with fail_open_guard("TrailSLDispatch"):
+    with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
         dispatch_live_order(
             base_dir=base_dir,
             broker=None,

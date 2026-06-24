@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def check_data_health(
     base_dir: str,
@@ -31,7 +29,9 @@ def check_data_health(
         from core.observability.data_health_service import DataHealthService
 
         svc = DataHealthService(
-            base_dir=base_dir, symbol=symbol, mode="light",
+            base_dir=base_dir,
+            symbol=symbol,
+            mode="light",
             position_manager=position_manager,
         )
         report = svc.run_lightweight()
@@ -39,7 +39,7 @@ def check_data_health(
 
         # Feed context through alert system instead of bypassing it
         if alert_hub is not None:
-            with fail_open_guard("DataHealthMonitor:AlertDispatch"):
+            try:
                 ctx = svc.build_alert_context(report)
                 if hasattr(alert_hub, "evaluate_and_dispatch"):
                     alert_hub.evaluate_and_dispatch(ctx)
@@ -47,22 +47,22 @@ def check_data_health(
                     if report.alert_level in ("WARNING", "CRITICAL"):
                         alert_hub.send_warning(
                             "data_health_degraded",
-                            {"alert_level": report.alert_level,
-                             "primary_codes": report.primary_codes},
+                            {
+                                "alert_level": report.alert_level,
+                                "primary_codes": report.primary_codes,
+                            },
                         )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
         return {
             "time": report.generated_at,
             "symbol": symbol,
-            "checks": {
-                s.source: {"status": s.status.value, **s.metrics}
-                for s in report.sources
-            },
+            "checks": {s.source: {"status": s.status.value, **s.metrics} for s in report.sources},
             "alerts": [
                 s.primary_code
                 for s in report.sources
                 if s.status.value in ("warn", "fail", "missing")
             ],
         }
-    except Exception:  # BLE001:FOG — Iron Law #1: never crash the main loop
-        with fail_open_guard("data_health_monitor:check_data_health"):
-            return {"time": "", "symbol": symbol, "checks": {}, "alerts": ["data_health_service_error"]}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        return {"time": "", "symbol": symbol, "checks": {}, "alerts": ["data_health_service_error"]}

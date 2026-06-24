@@ -12,6 +12,7 @@ Key design decisions:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time as _time_module
 from datetime import UTC, datetime
@@ -19,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 from core.contracts.position_events import PositionClosed, PositionOpened
-from core.runtime.fault_handler import fail_open_guard
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Strangler Fig: delegation wrappers for live_cycle.py
@@ -101,7 +101,7 @@ def record_position_opened(
 
     Called from live_cycle.py at position_registered_for_mgmt point.
     """
-    with fail_open_guard("PositionCloseAdapter:RecordOpen"):
+    try:
         adapter = PositionCloseAdapter(
             tick_size=0.01 if "XAU" in symbol else 1.0,
         )
@@ -119,6 +119,8 @@ def record_position_opened(
             confidence=confidence,
         )
         return adapter.record_open(evt, journal_path, state=state)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
     return False  # best-effort — never block position registration
 
 
@@ -192,7 +194,7 @@ class PositionCloseAdapter:
         events: list[PositionClosed] = []
 
         current_positions = []
-        with fail_open_guard("PositionCloseAdapter:PositionsGet"):
+        with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
             current_positions = mt5_worker.positions_get(symbol=symbol)
 
         current_volumes: dict[int, float] = {}
@@ -275,11 +277,13 @@ class PositionCloseAdapter:
         # catches an exception, _journal_ok stays False and we return False
         # (retry next cycle).  On success we proceed to notify downstream.
         _journal_ok = False
-        with fail_open_guard("PositionCloseAdapter:JournalWrite"):
+        try:
             from core.ledger.services.journal_cleanup import _append_journal
 
             _append_journal(_path, _entry, lock_dir=_lock_dir)
             _journal_ok = True
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass  # _journal_ok stays False
 
         if not _journal_ok:
             return False  # Journal write failed — do not notify downstream
@@ -318,9 +322,7 @@ class PositionCloseAdapter:
         for _attempt in range(3):
             try:
                 deals = mt5_worker.history_deals_get(position=ticket)
-            except Exception:  # BLE001:FOG_WRAPPED
-                with fail_open_guard("PositionCloseAdapter:DealHistoryGet"):
-                    raise
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                 _time_module.sleep(1.0)
                 continue
 
@@ -440,9 +442,7 @@ class PositionCloseAdapter:
             if pm is not None and hasattr(pm, "clear_position"):
                 if event.remaining_volume <= 0:
                     pm.clear_position(event.position_ticket)
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PositionCloseAdapter:PositionManagerNotify"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             _log.warning("PositionCloseAdapter: position_manager notify failed")
 
     @staticmethod
@@ -465,9 +465,7 @@ class PositionCloseAdapter:
                     event.strategy,
                 )
                 _rs.record_exit(_rec)
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PositionCloseAdapter:ReentryGuardNotify"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             _log.warning("PositionCloseAdapter: reentry_guard notify failed")
 
     @staticmethod
@@ -499,9 +497,7 @@ class PositionCloseAdapter:
                     _settled,
                     event.position_ticket,
                 )
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PositionCloseAdapter:PnLLedgerNotify"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             _log.warning("PositionCloseAdapter: pnl_ledger notify failed")
 
     @staticmethod
@@ -516,9 +512,7 @@ class PositionCloseAdapter:
                         "ticket": event.position_ticket,
                     }
                 )
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PositionCloseAdapter:BudgetNotify"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             _log.warning("PositionCloseAdapter: budget notify failed")
 
     # ── Open event recording ────────────────────────────────────────────
@@ -545,9 +539,7 @@ class PositionCloseAdapter:
             from core.ledger.services.journal_cleanup import _append_journal
 
             _append_journal(_path, _entry, lock_dir=_lock_dir)
-        except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PositionCloseAdapter:OpenJournalWrite"):
-                raise
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             _log.exception(
                 "PositionCloseAdapter: open journal write failed for ticket=%s",
                 event.position_ticket,

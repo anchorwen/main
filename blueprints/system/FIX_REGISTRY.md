@@ -752,6 +752,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260623-087 | 2026-06-23 | deployment-lifecycle | Commit Message Pre-Flight Validator: single-pass omega-routing validation script. Runs all 14 checks at once, reports all failures with fix hints. Eliminates whack-a-mole push pattern. | RC-09 |
 | FIX-20260624-101 | 2026-06-24 | contracts-resilience | UGR-A09a: Atomic write migration — deployment state files. Added atomic_write_text/atomic_write_json to AtomicFileWriter. Migrated 12 write_text→atomic_write_json in 7 deployment state files. Replaced 12 fail_open_guard→specific exception types in 5 files. 144 tests pass. | RC-07 |
 | FIX-20260624-102 | 2026-06-24 | contracts_resilience | UGR-A09b: Atomic write + fail_open_guard full sweep — remaining deployment files | RC-07 |
+| FIX-20260624-103 | 2026-06-24 | runtime-live | UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/ (25 files, 172→8 sites). Replaced all fail_open_guard/log_and_continue context managers with specific exception types (RuntimeError, ValueError, KeyError, TypeError, OSError). Removed from core.runtime.fault_handler import fail_open_guard/log_and_continue from 23 files. | RC-07 |
 
 ---
 ## Fix Details by Year
@@ -4276,6 +4277,18 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Module**: contracts_resilience
 - **Files**: core/deployment/deployment_plan.py core/deployment/final_audit.py core/deployment/deployment_executor.py core/deployment/evidence_bundle.py core/deployment/compliance_control_matrix.py core/deployment/release_readiness.py core/deployment/permission_audit.py core/deployment/compliance_audit.py core/deployment/runbook_engine.py core/deployment/rollback_drill.py core/deployment/operations_timeline.py core/deployment/ops_maturity.py core/deployment/postmortem_report.py core/deployment/scheduler_service.py core/deployment/startup_validator.py core/deployment/service_container.py core/deployment/config_hot_reload.py core/deployment/operational_support.py core/deployment/lifecycle_manager.py core/deployment/brain_registration_gate.py
 - **Description**: UGR-A09b: Atomic write + fail_open_guard full sweep — remaining deployment files
+- **Root Cause**: RC-07 — missing-validation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-103
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: 8b4b786e
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/
+- **Description**: UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/ (25 files, 172→8 sites). Replaced all fail_open_guard/log_and_continue context managers with specific exception types (RuntimeError, ValueError, KeyError, TypeError, OSError). Removed from core.runtime.fault_handler import fail_open_guard/log_and_continue from 23 files.
 - **Root Cause**: RC-07 — missing-validation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

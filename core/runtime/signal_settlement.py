@@ -12,8 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def settle_closed_trade_signals(
     evt: Any,
@@ -38,7 +36,7 @@ def settle_closed_trade_signals(
     if not getattr(evt, "brain_ids", None):
         return
 
-    with fail_open_guard("SignalSettledWrite"):
+    try:
         from core.contracts.events import PnLEvent
         from core.data.event_writer import EventWriter
 
@@ -86,9 +84,14 @@ def settle_closed_trade_signals(
             _already_settled.add(_dedup_key)
         if _skipped > 0:
             import logging
+
             _log = logging.getLogger(__name__)
             _log.debug(
                 "[IDEMPOTENCY] signal_settlement: skipped %d/%d already-settled "
                 "signals for ticket=%s",
-                _skipped, len(evt.brain_ids), _ticket,
+                _skipped,
+                len(evt.brain_ids),
+                _ticket,
             )
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass

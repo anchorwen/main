@@ -16,8 +16,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import log_and_continue
-
 
 def compute_and_dispatch_trail(
     *,
@@ -134,7 +132,7 @@ def compute_and_dispatch_trail(
         )
     _vol_change = round(current_atr / pos.entry_atr, 4) if pos.entry_atr > 0 else 1.0
     _trail_dist = round(abs(pos.current_sl - pos.entry_price), 3) if pos.current_sl > 0 else 0.0
-    with log_and_continue(component="PositionSnapshot:record"):
+    try:
         _snap_path = Path(config.base_dir) / "position_snapshots.jsonl"
 
         # ── FIX-20260611-003: Data flywheel — enriched snapshot fields ──
@@ -182,6 +180,8 @@ def compute_and_dispatch_trail(
             _snap_path.parent.mkdir(parents=True, exist_ok=True)
             with open(_snap_path, "a", encoding="utf-8") as _sf:
                 _sf.write(_snap + "\n")
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
 
     # ── Single dispatch ──
     _sl_changed = abs(_final_sl - pos.current_sl) >= config.exit_min_step

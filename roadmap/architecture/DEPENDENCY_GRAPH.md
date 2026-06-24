@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T05:38:34Z
+> **自动生成**: 2026-06-24T06:17:02Z
 
 ## Package-Level Dependencies
 
@@ -428,57 +428,57 @@
 - `circuit_breaker_reset.py` → `core.runtime.time_utils`
 - `cooldown.py` → (无内部依赖)
 - `cycle_replay.py` → `core.runtime.evidence_reader`, `core.runtime.schema_versions`
-- `daily_ops_scheduler.py` → `core.execution.pre_trade_guards`, `core.features.local_feature_store`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.runtime.fault_handler`, `core.runtime.live_cycle`, `core.runtime.time_utils`, `core.state.catalog`, `core.state.writer`, `scripts.daily_ops`, `scripts.training.governance_scheduler`
-- `data_health_monitor.py` → `core.observability.data_health_service`, `core.runtime.fault_handler`
-- `dispatch_post.py` → `core.execution.pre_trade_guards`, `core.runtime.fault_handler`, `core.runtime.order_dispatch`, `core.runtime.time_utils`
+- `daily_ops_scheduler.py` → `core.execution.pre_trade_guards`, `core.features.local_feature_store`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.runtime.live_cycle`, `core.runtime.time_utils`, `core.state.catalog`, `core.state.writer`, `scripts.daily_ops`, `scripts.training.governance_scheduler`
+- `data_health_monitor.py` → `core.observability.data_health_service`
+- `dispatch_post.py` → `core.execution.pre_trade_guards`, `core.runtime.order_dispatch`, `core.runtime.time_utils`
 - `evidence_contracts.py` → `core.runtime.integration_contracts`, `core.runtime.schema_versions`
 - `evidence_reader.py` → `core.ledger.stream_names`
 - `evidence_writer.py` → `core.contracts.ids`, `core.ledger.stream_names`, `core.runtime.evidence_contracts`, `core.runtime.integration_contracts`
 - `execution_gates.py` → `core.contracts.ids`, `core.execution.gateway_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
 - `execution_gateway_router.py` → `core.execution.gateway_contracts`
 - `execution_pipeline.py` → `core.contracts.ids`, `core.execution.quality_analyzer`, `core.execution.quality_contracts`, `core.runtime.execution_gateway_router`, `core.runtime.integration_contracts`, `core.runtime.schema_versions`, `core.runtime.signal_order_builder`, `core.strategies.registry`
-- `execution_state.py` → `core.runtime.fault_handler`, `core.runtime.time_utils`, `core.state.catalog`, `core.state.writer`
+- `execution_state.py` → `core.runtime.time_utils`, `core.state.catalog`, `core.state.writer`
 - `fault_handler.py` → `core.runtime.fault_handler`
-- `feature_freshness.py` → `core.execution.pre_trade_guards`, `core.runtime.fault_handler`, `core.runtime.time_utils`
-- `gate_audit_recorder.py` → `core.runtime.fault_handler`
+- `feature_freshness.py` → `core.execution.pre_trade_guards`, `core.runtime.time_utils`
+- `gate_audit_recorder.py` → (无内部依赖)
 - `golden_master.py` → (无内部依赖)
 - `integration_contracts.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
 - `legacy_dispatch_reference.py` → (无内部依赖)
-- `live_bootstrap.py` → `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.live_daily_provider`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.runtime.fault_handler`, `core.runtime.time_utils`
+- `live_bootstrap.py` → `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.live_daily_provider`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.runtime.time_utils`
 - `live_cycle.py` → `core.config.asset_registry`, `core.contracts.domain.dispatch_context`, `core.contracts.strategy_magic`, `core.deployment.feature_update_producer`, `core.execution.conformal_calibrator`, `core.execution.conformal_ou_gate`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.managed_close`, `core.execution.market_efficiency`, `core.execution.meta_filter_gate`, `core.execution.mt5_worker`, `core.execution.net_out_close_handler`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.features.computers.btc_feature_augmenter`, `core.features.meta_feature_builder`, `core.features.schemas.registry`, `core.infrastructure.distributed_lock`, `core.market.mtf_price_service`, `core.observability.degradation`, `core.parliament.contract_groups`, `core.parliament.group_consensus`, `core.runtime.circuit_breaker_reset`, `core.runtime.cooldown`, `core.runtime.daily_ops_scheduler`, `core.runtime.dispatch_post`, `core.runtime.execution_state`, `core.runtime.fault_handler`, `core.runtime.feature_freshness`, `core.runtime.golden_master`, `core.runtime.management_phase`, `core.runtime.market_ingress`, `core.runtime.mia_close`, `core.runtime.micro_persist`, `core.runtime.modify_trail_dispatch`, `core.runtime.order_dispatch`, `core.runtime.ou_hurst`, `core.runtime.pnl_recording`, `core.runtime.position_close_adapter`, `core.runtime.position_ownership`, `core.runtime.position_registration`, `core.runtime.pre_close_check`, `core.runtime.reconciliation`, `core.runtime.reentry_alert`, `core.runtime.reentry_recording`, `core.runtime.restart_state`, `core.runtime.session_guards`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`, `core.runtime.signal_settlement`, `core.runtime.strategy_builder`, `core.runtime.strategy_evaluator`, `core.runtime.time_utils`, `core.runtime.trade_notify`
 - `live_startup.py` → `core.governance.governance_service`, `core.risk.risk_evaluation_service`, `core.risk.risk_policies`, `core.runtime.fault_handler`
 - `management_phase.py` → `core.contracts.domain.dispatch_context`, `core.contracts.strategy_magic`, `core.execution.capital_allocator`, `core.execution.live_order_sender`, `core.execution.managed_close`, `core.features.schemas.registry`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.live_cycle`, `core.runtime.market_ingress`, `core.runtime.mia_close`, `core.runtime.modify_trail_dispatch`, `core.runtime.ou_hurst`, `core.runtime.signal_health`, `core.runtime.time_utils`, `core.runtime.trail_dispatch`
 - `market_ingress.py` → `core.config.asset_registry`, `core.execution.mt5_worker`, `core.runtime.fault_handler`
-- `mia_close.py` → `core.contracts.strategy_magic`, `core.runtime.fault_handler`, `core.runtime.time_utils`
-- `micro_persist.py` → `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.features.store_contracts`, `core.runtime.fault_handler`
-- `modify_trail_dispatch.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`, `core.runtime.fault_handler`
-- `order_dispatch.py` → `apps.engine.runtime_loop`, `core.brains.brain_registry`, `core.contracts.domain.decision_intent`, `core.contracts.domain.system_mode_state`, `core.contracts.enums`, `core.contracts.ids`, `core.runtime.fault_handler`, `core.state.schema_versions`
+- `mia_close.py` → `core.contracts.strategy_magic`, `core.runtime.time_utils`
+- `micro_persist.py` → `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.features.store_contracts`
+- `modify_trail_dispatch.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`
+- `order_dispatch.py` → `apps.engine.runtime_loop`, `core.brains.brain_registry`, `core.contracts.domain.decision_intent`, `core.contracts.domain.system_mode_state`, `core.contracts.enums`, `core.contracts.ids`, `core.state.schema_versions`
 - `ou_hurst.py` → (无内部依赖)
-- `pnl_recording.py` → `core.brains.brain_registry`, `core.runtime.fault_handler`
-- `position_close_adapter.py` → `core.contracts.position_events`, `core.execution.reentry_guard`, `core.ledger.services.journal_cleanup`, `core.runtime.fault_handler`
+- `pnl_recording.py` → `core.brains.brain_registry`
+- `position_close_adapter.py` → `core.contracts.position_events`, `core.execution.reentry_guard`, `core.ledger.services.journal_cleanup`
 - `position_ownership.py` → (无内部依赖)
 - `position_registration.py` → `core.execution.trail_stop_engine`, `core.runtime.fault_handler`
 - `pre_close_check.py` → `core.market.calendar`
 - `reconciliation.py` → `core.contracts.events`, `core.contracts.strategy_magic`, `core.data.event_writer`, `core.execution.reentry_guard`, `core.runtime.fault_handler`, `core.runtime.time_utils`
 - `reentry_alert.py` → `core.runtime.time_utils`
-- `reentry_recording.py` → `core.execution.reentry_guard`, `core.runtime.fault_handler`, `core.runtime.time_utils`
-- `restart_state.py` → `core.contracts.strategy_magic`, `core.execution.reentry_guard`, `core.runtime.fault_handler`
+- `reentry_recording.py` → `core.execution.reentry_guard`, `core.runtime.time_utils`
+- `restart_state.py` → `core.contracts.strategy_magic`, `core.execution.reentry_guard`
 - `schema_versions.py` → (无内部依赖)
 - `session_guards.py` → `core.execution.live_order_sender`, `core.execution.pre_trade_guards`, `core.runtime.fault_handler`, `core.runtime.time_utils`
 - `shadow_recorder.py` → `core.contracts.domain.decision_record`, `core.contracts.ids`, `core.ledger.schema_versions`, `core.ledger.storage.jsonl_ledger_store`
-- `signal_health.py` → `core.runtime.fault_handler`
+- `signal_health.py` → (无内部依赖)
 - `signal_order_builder.py` → `core.contracts.ids`, `core.execution.gateway_contracts`, `core.runtime.integration_contracts`, `core.strategies.contracts`
 - `signal_pipeline.py` → `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`
-- `signal_settlement.py` → `core.contracts.events`, `core.data.event_writer`, `core.runtime.fault_handler`, `core.runtime.reconciliation`
+- `signal_settlement.py` → `core.contracts.events`, `core.data.event_writer`, `core.runtime.reconciliation`
 - `strategy_builder.py` → `core.config.asset_registry`, `core.execution.barrier_strategy`, `core.execution.meta_pipeline`, `core.execution.micro_strategy`, `core.execution.rule_engine_strategy`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.parliament.contract_groups`, `core.runtime.time_utils`, `core.strategies.structural_swing_v1`
 - `strategy_config_validator.py` → (无内部依赖)
-- `strategy_evaluator.py` → `core.execution.correlation_sizer`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_direction_gate`, `core.execution.regime_gate`, `core.observability.degradation`, `core.runtime.fault_handler`, `core.runtime.gate_audit_recorder`, `core.runtime.time_utils`
+- `strategy_evaluator.py` → `core.execution.correlation_sizer`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_direction_gate`, `core.execution.regime_gate`, `core.observability.degradation`, `core.runtime.gate_audit_recorder`, `core.runtime.time_utils`
 - `summary_service.py` → `core.runtime.evidence_reader`, `core.runtime.schema_versions`
 - `supervised_scheduler.py` → (无内部依赖)
 - `time_utils.py` → (无内部依赖)
 - `timeframe_scaling.py` → (无内部依赖)
 - `trade_notify.py` → `core.runtime.time_utils`
-- `trail_dispatch.py` → `core.runtime.fault_handler`
+- `trail_dispatch.py` → (无内部依赖)
 - `typed_clock.py` → (无内部依赖)
 
 ### `core/schemas/`
@@ -645,6 +645,7 @@
 - `live_shadow_intent_producer.py` → `core.features.live_feature_source`, `core.runtime.fault_handler`
 - `live_stack_diagnostic.py` → `scripts.live_dispatch_policy`, `scripts.send_live_order`
 - `market_calendar.py` → `core.market.calendar`
+- `migrate_fog_live_cycle.py` → (无内部依赖)
 - `monitor_feature_drift.py` → `core.runtime.fault_handler`, `scripts.alert_dispatcher`
 - `monitor_pwin_fix.py` → (无内部依赖)
 - `mt5_bridge_healthcheck.py` → (无内部依赖)

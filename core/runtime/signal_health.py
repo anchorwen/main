@@ -19,8 +19,6 @@ from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 # ── Feature gate ────────────────────────────────────────────────────────
 
 
@@ -98,9 +96,8 @@ class FeatureGate:
                         "FEATURE_ZERO_VECTOR",
                         f"{zero_count}/{total} zero features (≥30 non-zero required)",
                     )
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("signal_health:check"):
-                    return GateResult(False, "FEATURE_ZERO_VECTOR", "feature vector validation failed")
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                return GateResult(False, "FEATURE_ZERO_VECTOR", "feature vector validation failed")
         # ── Market data sanity ──
         if atr <= 0:
             return GateResult(False, "FEATURE_STALE", "ATR <= 0")
@@ -116,9 +113,7 @@ class FeatureGate:
                     return GateResult(
                         False, "FEATURE_COLD_START", "micro vector is all zeros (fallback)"
                     )
-            except Exception:  # BLE001:FOG_WRAPPED
-                with fail_open_guard("SignalHealth:ColdStartCheck"):
-                    raise
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                 logging.getLogger(__name__).warning("Feature vector cold-start check failed")
 
         return GateResult(True, "", "ok")
@@ -250,11 +245,10 @@ class SignalHealthMonitor:
                 if r.get("warning", False):
                     results["warnings"] += 1
                     results["healthy"] = False
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("signal_health:check_all"):
-                    results["checks"][name] = {"warning": True, "reason": f"check_error: {exc}"}
-                    results["warnings"] += 1
-                    results["healthy"] = False
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+                results["checks"][name] = {"warning": True, "reason": f"check_error: {exc}"}
+                results["warnings"] += 1
+                results["healthy"] = False
         # Derive actions from warnings
         results["actions"] = self._derive_actions(results["checks"])
         return results

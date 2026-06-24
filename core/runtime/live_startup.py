@@ -10,8 +10,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 
 def decide_side_from_anchor(price: float, anchor: float, threshold: float) -> str | None:
     """Determine trade direction from price vs anchor +- threshold."""
@@ -82,9 +80,10 @@ def bootstrap_regime_detector(
                 detector._var = sample_var - detector._eps
 
         return detector.is_warmed_up
-    except Exception:  # BLE001:FOG
-        with fail_open_guard("live_startup:bootstrap_regime_detector"):
-            return False
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        return False
+
+
 def load_normalization_config(path: str, *, project_root: Path | None = None) -> dict[str, Any]:
     """Load normalization config from JSON, resolving relative paths."""
     p = Path(path)
@@ -162,10 +161,9 @@ def apply_governance_filter(
 
         gov = GovernanceService.load(gov_path)
         report["governance_loaded"] = True
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_startup:apply_governance_filter"):
-            report["reason"] = f"governance_load_failed: {exc}"
-            return entries, report
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+        report["reason"] = f"governance_load_failed: {exc}"
+        return entries, report
     filtered: list[dict[str, Any]] = []
     for entry in entries:
         brain_id = entry.get("brain_id", "unknown")
@@ -266,9 +264,8 @@ def check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService.load(gov_path)
-    except Exception as exc:  # BLE001:FOG
-        with fail_open_guard("live_startup:check_single_brain_governance"):
-            return {"blocked": False, "warning": False, "reason": f"governance_load_failed: {exc}"}
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+        return {"blocked": False, "warning": False, "reason": f"governance_load_failed: {exc}"}
     state = gov.get_brain_state(brain_id)
     if state is None:
         return {"blocked": False, "warning": False, "reason": "not_registered"}
@@ -324,12 +321,10 @@ def inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
             if not isinstance(_records, list):
                 continue
             _wins = sum(
-                1 for r in _records
-                if isinstance(r, dict) and r.get("execution_outcome") == "win"
+                1 for r in _records if isinstance(r, dict) and r.get("execution_outcome") == "win"
             )
             _losses = sum(
-                1 for r in _records
-                if isinstance(r, dict) and r.get("execution_outcome") == "loss"
+                1 for r in _records if isinstance(r, dict) and r.get("execution_outcome") == "loss"
             )
             _total = _wins + _losses
             if _total == 0:
@@ -346,9 +341,7 @@ def inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
                 },
             )
         gov.save(str(_gov_path), lock_timeout=1.0)
-    except Exception:  # BLE001:FOG_WRAPPED
-        with fail_open_guard("LiveStartup:MetricsInject"):
-            raise
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
         import logging as _inj_log
 
         _inj_log.getLogger(__name__).warning(
