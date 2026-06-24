@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T05:17:55Z
+> **自动生成**: 2026-06-24T05:38:34Z
 > **扫描模块数**: 662
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -174,27 +174,27 @@
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 13 | 226 | — | |
 | `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1288 | — | |
-| `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 22 | 502 | — | |
+| `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 22 | 500 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
 | `compliance_control_matrix.py` | ✅ active | ComplianceControlMatrixService | 11 | 424 | — | |
 | `compliance_export.py` | ✅ active | TradeRecord, ComplianceReport | 9 | 368 | — | |
-| `config_hot_reload.py` | ✅ active | ConfigHotReload | 7 | 130 | — | |
-| `deployment_executor.py` | ✅ active | DeploymentExecutor | 8 | 329 | — | |
+| `config_hot_reload.py` | ✅ active | ConfigHotReload | 7 | 128 | — | |
+| `deployment_executor.py` | ✅ active | DeploymentExecutor | 8 | 330 | — | |
 | `deployment_plan.py` | ✅ active | DeploymentPlanService | 7 | 300 | — | |
 | `domain_keys.py` | ⬜ empty | — | 0 | 7 | — | |
 | `environment_config.py` | ✅ active | Environment, EnvironmentConfig | 7 | 126 | — | |
-| `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 287 | — | |
+| `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 288 | — | |
 | `feature_update_producer.py` | ✅ active | — | 2 | 57 | — | |
 | `final_audit.py` | ✅ active | FinalAuditService | 5 | 211 | — | |
 | `governance_summary.py` | ✅ active | — | 4 | 56 | — | |
 | `health_check.py` | ✅ active | HealthCheckService | 9 | 117 | — | |
-| `lifecycle_manager.py` | ✅ active | LifecycleManager | 7 | 168 | — | |
-| `operational_support.py` | ✅ active | RetryPolicy, ConfigValidator | 7 | 131 | — | |
-| `operations_timeline.py` | ✅ active | OperationsTimelineService | 16 | 262 | — | |
+| `lifecycle_manager.py` | ✅ active | LifecycleManager | 7 | 166 | — | |
+| `operational_support.py` | ✅ active | RetryPolicy, ConfigValidator | 7 | 129 | — | |
+| `operations_timeline.py` | ✅ active | OperationsTimelineService | 16 | 263 | — | |
 | `ops_maturity.py` | ✅ active | OpsMaturityService | 4 | 164 | — | |
 | `path_defaults.py` | ✅ active | — | 2 | 85 | — | |
-| `permission_audit.py` | ✅ active | AuditEntry, PermissionMatrix, AuditTrail | 20 | 336 | — | |
+| `permission_audit.py` | ✅ active | AuditEntry, PermissionMatrix, AuditTrail | 20 | 335 | — | |
 | `postmortem_report.py` | ✅ active | PostmortemReportService | 11 | 468 | — | |
 | `release_certification.py` | ✅ active | ReleaseCertificationService | 12 | 294 | — | |
 | `release_gate.py` | ✅ active | ReleaseGateService | 16 | 320 | — | |
@@ -202,13 +202,13 @@
 | `release_readiness.py` | ✅ active | ReleaseReadinessService | 13 | 437 | — | |
 | `release_registry.py` | ✅ active | ReleaseRegistryService | 17 | 352 | — | |
 | `replay_isolation.py` | ✅ active | ReplayDispatchAdapter, NullDispatchAdapter, ReplayEnvironment | 11 | 138 | — | |
-| `rollback_drill.py` | ✅ active | RollbackDrillService | 8 | 305 | — | |
-| `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 665 | — | |
+| `rollback_drill.py` | ✅ active | RollbackDrillService | 8 | 304 | — | |
+| `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 664 | — | |
 | `scheduled_task_registry.py` | ✅ active | — | 4 | 36 | — | |
-| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 558 | — | |
+| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 567 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
-| `service_container.py` | ✅ active | ServiceContainer | 41 | 640 | — | |
-| `startup_validator.py` | ✅ active | — | 1 | 115 | — | |
+| `service_container.py` | ✅ active | ServiceContainer | 41 | 638 | — | |
+| `startup_validator.py` | ✅ active | — | 1 | 113 | — | |
 | `state_persistence.py` | ✅ active | StatePersistence | 6 | 101 | — | |
 | `validation_mode.py` | ✅ active | — | 1 | 10 | — | |
 

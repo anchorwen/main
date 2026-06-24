@@ -70,6 +70,7 @@ from core.contracts.domain_keys import (
     SLO_STATUS_BREACHING,
     SLO_STATUS_HEALTHY,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.schema_versions import SCHEMA_DEPLOYMENT_EXECUTION
 from core.deployment.validation_mode import resolve_validation_mode
 from core.observability.metric_names import CYCLES_CIRCUIT_OPEN
@@ -161,7 +162,7 @@ class DeploymentExecutor:
     def save_result(self, result: dict, path: str) -> str:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, result)
         return str(target)
 
     def _execute_phase(

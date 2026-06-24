@@ -50,7 +50,6 @@ from core.deployment.brain_config_validator import (
     SCHEMA_DIMENSIONS,
     _get_schema_feature_names,
 )
-from core.runtime.fault_handler import fail_open_guard
 
 
 @dataclass
@@ -117,9 +116,8 @@ class BrainRegistrationGate:
                 ok = check_fn(entry, result)
                 if ok:
                     result.checks_passed += 1
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("brain_registration_gate:validate"):
-                    result.failures.append((check_name, f"unexpected error: {exc}"))
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                result.failures.append((check_name, f"unexpected error: {exc}"))
         # Non-blocking warnings
         self._check_vote_weight(entry, result)
         self._check_contract_group(entry, result)
@@ -389,7 +387,7 @@ class BrainRegistrationGate:
             from core.brains.services.brain_factory import BrainFactory
 
             return BrainFactory().build(entry)
-        except Exception:
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             return None
 
     @staticmethod
@@ -409,7 +407,7 @@ class BrainRegistrationGate:
                 vec[i] = float(vec_dict.get(name, 0.0))
             try:
                 raw = adapter.infer(vec)
-            except Exception:
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                 continue
             if isinstance(raw, dict):
                 score = raw.get("raw_score")
@@ -455,9 +453,9 @@ class BrainRegistrationGate:
 
             live = yaml.safe_load(self._live_yaml_path.read_text(encoding="utf-8")) or {}
             return set(live.get("strategy_lines", {}).keys())
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("brain_registration_gate:_known_contract_groups"):
-                return set()
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            return set()
+
     # ── CLI entry point ──
 
     @classmethod

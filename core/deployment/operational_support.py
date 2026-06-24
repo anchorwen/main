@@ -16,7 +16,6 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_VALID,
     PAYLOAD_KEY_WARNINGS,
 )
-from core.runtime.fault_handler import fail_open_guard
 
 
 class RetryPolicy:
@@ -107,15 +106,14 @@ class ConfigValidator:
                     errors.append(
                         {PAYLOAD_KEY_RULE: name, PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_FAILED}
                     )
-            except Exception as exc:  # BLE001:FOG
-                with fail_open_guard("operational_support:validate"):
-                    errors.append(
-                        {
-                            PAYLOAD_KEY_RULE: name,
-                            PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
-                            PAYLOAD_KEY_DETAIL: str(exc),
-                        }
-                    )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                errors.append(
+                    {
+                        PAYLOAD_KEY_RULE: name,
+                        PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
+                        PAYLOAD_KEY_DETAIL: str(exc),
+                    }
+                )
         if config.environment == "production" and not config.enable_audit_log:
             warnings.append("audit_log disabled in production")
         if config.environment == "production" and not config.enable_metrics:

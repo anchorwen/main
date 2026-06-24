@@ -4,7 +4,6 @@ Aggregates release readiness, compliance audit, control matrix, and
 Alpha budget governance signals into a single gate-style report.
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -46,6 +45,7 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_WARNING_TOTAL,
     VALIDATION_MODE_DEEP,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.governance_summary import build_governance_summary
 from core.deployment.schema_versions import SCHEMA_FINAL_AUDIT
 from core.deployment.validation_mode import resolve_validation_mode
@@ -207,5 +207,5 @@ class FinalAuditService:
         )
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, payload)
         return str(target)

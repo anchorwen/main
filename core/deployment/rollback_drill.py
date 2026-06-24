@@ -5,7 +5,6 @@ It does not mutate infrastructure; it validates rollback prerequisites,
 constructs steps, evaluates checkpoints, and records risks.
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -77,9 +76,9 @@ from core.contracts.domain_keys import (
     ROLLBACK_STEP_VERIFY_HEALTH,
     SLO_STATUS_HEALTHY,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.schema_versions import SCHEMA_RELEASE_READINESS, SCHEMA_ROLLBACK_DRILL
 from core.deployment.validation_mode import resolve_validation_mode
-from core.runtime.fault_handler import fail_open_guard
 
 
 class RollbackDrillService:
@@ -147,7 +146,7 @@ class RollbackDrillService:
     def save_result(self, result: dict, path: str) -> str:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, result)
         return str(target)
 
     def _build_prerequisites(
@@ -196,13 +195,13 @@ class RollbackDrillService:
                     PAYLOAD_KEY_FAILED_COUNT: verification.get(PAYLOAD_KEY_FAILED_COUNT, 0)
                 },
             }
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("rollback_drill:_verify_evidence"):
-                return {
-                    PAYLOAD_KEY_NAME: ROLLBACK_PREREQUISITE_EVIDENCE_MANIFEST_VERIFIED,
-                    PAYLOAD_KEY_PASSED: False,
-                    PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_ERROR: str(exc)},
-                }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            return {
+                PAYLOAD_KEY_NAME: ROLLBACK_PREREQUISITE_EVIDENCE_MANIFEST_VERIFIED,
+                PAYLOAD_KEY_PASSED: False,
+                PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_ERROR: str(exc)},
+            }
+
     def _build_steps(self, version: str, reason: str) -> list[dict]:
         return [
             {

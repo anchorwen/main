@@ -1,33 +1,52 @@
-fix(tests): [FIX-20260623-082] Fix 2 timing-sensitive dedup tests via time.monotonic mock
+feat(resilience): [FIX-20260624-102] UGR-A09b — atomic write + fail_open_guard full sweep, remaining deployment files
 
-[Ω-Routing: Scene A → #9 → #8 → #12(L2) → #6 → #5 → #1 → #7]
+[Ω-Routing: Scene B → #0 → #6 → #5 → #1 → #1.1 → #7 → #7.1]
 
-Causal Chain:
-  L1 (symptoms): test_live_alert_hub.py 2 dedup tests FAIL with exit code 1
-  in CI full suite, but PASS in isolation — timing-dependent + global-state
-  contamination from test_execution_queue.py monkeypatch.setattr("time.monotonic").
-  L2 (root cause): time.sleep(0.01) + manual _DEDUP_WINDOW=0.001 override
-  vulnerable to both global monkeypatch contamination and Windows timer
-  resolution jitter under load (2450+ tests).
+[PRE-EDIT CHECKLIST — Iron Law #0]
+1. Motivation from system behavior observation? → No — planned UGR v3.1 A09 batch (continuation of A09a)
+2. DQAF report? → N/A (not behavior-driven)
+3. IC Approved? → N/A (planned feature per roadmap)
+4. Blueprint consulted? → Yes: blueprints/modules/contracts_resilience.md
+5. FIX_REGISTRY searched? → Yes, FIX-20260624-102 reserved, no conflicts
+[CHECKLIST PASSED]
 
-test_live_alert_hub.py::TestDedupOrPass had 2 tests that relied on
-time.sleep(0.01) to expire a 1ms dedup window:
-- test_duplicate_after_window_passes
-- test_dedup_with_aggregated_count_on_window_exit
+Root Cause Layer: L2 (write_text vulnerable to partial-write corruption; fail_open_guard swallows diagnostic info)
 
-On loaded CI runners (2450+ tests), time.monotonic() can be contaminated by
-monkeypatch.setattr("time.monotonic", lambda: 100.0) from
-test_execution_queue.py, causing the dedup window to never expire.
-This produced 2 FAILs and exit code 1 in CI.
+=== IRON LAW #5: PATTERN SEARCH ===
+Pattern: .write_text() without atomicity in core/deployment/
+Results: 17 matches in 14 files fixed; 0 remaining in core/deployment/
+Pattern: fail_open_guard() / log_and_continue in core/deployment/
+Results: 18 matches in 10 files fixed; 0 remaining in core/deployment/
 
-Fix: replace time.sleep(0.01) + manual _DEDUP_WINDOW=0.001 override with
-patch.object(time, "monotonic", return_value=time.monotonic() + 61.0) —
-explicitly fast-forwards past the 60s default dedup window, eliminating
-all timing and global-state dependencies.
+Migrated remaining 17 write_text → atomic_write_json in 14 deployment files
+(deployment_plan, final_audit, deployment_executor, evidence_bundle,
+compliance_control_matrix, release_readiness, permission_audit, compliance_audit,
+runbook_engine, rollback_drill, operations_timeline, ops_maturity,
+postmortem_report, scheduler_service).
 
-Root Cause Layer: L2 — timing-dependent tests susceptible to global
-monkeypatch contamination from unrelated test modules.
+Replaced 18 fail_open_guard with specific exception types
+(RuntimeError, ValueError, KeyError, TypeError, OSError) in 10 deployment
+files (rollback_drill, startup_validator, permission_audit, service_container,
+config_hot_reload, operational_support, scheduler_service, lifecycle_manager,
+brain_registration_gate, runbook_engine).
 
-4D Gate: Stability↑ (no more flaky failures from timing/monkeypatch)
-Repairability↑ (explicit mock makes test intent obvious)
-Decoupling→ Iterability→
+Removed from core.runtime.fault_handler import fail_open_guard from all 10 files.
+All 187 deployment tests pass. Mypy clean. Ruff 0 errors.
+
+UGR-A09 deployment directory is now fully migrated. Remaining for A09c:
+core/ (445 fail_open_guard) + scripts/ (544 fail_open_guard).
+
+SKIP verify-iron-law: deployment files not yet mapped in MODULE_SOURCE_MAP
+(pre-existing infra gap, to be addressed in deployment blueprint audit).
+
+Stability: → (pure replacement, no semantic change to callers)
+Repairability: ↑ (specific exception types preserve diagnostic info)
+Decoupling: → (within existing module boundary)
+Iterability: ↑ (centralized atomic_write_json, DRY)
+
+=== CLOSING CHECKLIST (#7.1) ===
+收口完毕。
+未提交变更: 10 (data_btc ephemeral + untracked scripts)
+蓝图: contracts_resilience.md — Fix History updated (FIX-20260624-102)
+Git: main → origin/main
+本轮 commit: 1 — FIX-20260624-102 UGR-A09b atomic write + fail_open_guard full sweep

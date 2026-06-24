@@ -5,7 +5,6 @@ a machine-readable rollout plan with phases, checkpoints, and rollback
 triggers.
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -47,6 +46,7 @@ from core.contracts.domain_keys import (
     RELEASE_PIPELINE_GATE_DECISION_WARN,
     RELEASE_PIPELINE_STATUS_BLOCKED,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.schema_versions import SCHEMA_DEPLOYMENT_PLAN
 from core.deployment.validation_mode import resolve_validation_mode
 from core.observability.metric_names import CYCLES_CIRCUIT_OPEN
@@ -135,7 +135,7 @@ class DeploymentPlanService:
         plan = self.build_plan(**kwargs)
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, plan)
         return str(target)
 
     def _build_phases(self, strategy: str) -> list[dict]:

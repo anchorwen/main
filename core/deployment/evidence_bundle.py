@@ -59,6 +59,7 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_VALIDATION_MODE,
     PAYLOAD_KEY_VERIFIED,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.governance_summary import build_governance_summary, extract_governance_summary
 from core.deployment.schema_versions import (
     SCHEMA_ENGINE_CONFIG_EVIDENCE,
@@ -269,7 +270,7 @@ class EvidenceBundleService:
         }
 
     def _write_json(self, path: Path, payload: dict) -> None:
-        path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(path, payload)
 
     def _file_manifest(self, path: Path, *, section: str) -> dict:
         return {

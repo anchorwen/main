@@ -22,13 +22,13 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_TASKS,
     PAYLOAD_KEY_THROTTLE_RATE,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.scheduled_task_registry import get_task
 from core.observability.metric_names import (
     CYCLES_ERRORS,
     CYCLES_THROTTLED,
     CYCLES_TOTAL,
 )
-from core.runtime.fault_handler import fail_open_guard
 
 
 class ScheduledTask:
@@ -128,16 +128,16 @@ class SchedulerService:
             task.last_run = datetime.now(UTC).replace(tzinfo=None)
             task.last_error = None
             return {PAYLOAD_KEY_TASK: task.name, PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_OK}
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("scheduler_service:_execute_task"):
-                task.error_count += 1
-                task.last_run = datetime.now(UTC).replace(tzinfo=None)
-                task.last_error = str(exc)
-                return {
-                    PAYLOAD_KEY_TASK: task.name,
-                    PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
-                    PAYLOAD_KEY_ERROR: str(exc),
-                }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            task.error_count += 1
+            task.last_run = datetime.now(UTC).replace(tzinfo=None)
+            task.last_error = str(exc)
+            return {
+                PAYLOAD_KEY_TASK: task.name,
+                PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
+                PAYLOAD_KEY_ERROR: str(exc),
+            }
+
     @classmethod
     def for_container(cls, container, persistence=None, alert_service=None):
         """Build a scheduler with standard periodic tasks for a ServiceContainer."""
@@ -152,18 +152,25 @@ class SchedulerService:
                 if _market_type != "crypto_24_7":
                     try:
                         from core.execution.pre_trade_guards import detect_session
+
                         _gov_session = detect_session(market_type=_market_type)
                         if _gov_session.get("risk_tier") == "off":
                             import logging
+
                             _logger = logging.getLogger(__name__)
                             _logger.info(
                                 "Governance eval skipped: market closed (market_type=%s, risk_tier=off)",
                                 _market_type,
                             )
                             return
-                    except Exception:  # BLE001:FOG (fail-open)
-                        with fail_open_guard("scheduler_service:governance_eval"):
-                            pass  # graceful fallback — run governance anyway
+                    except (
+                        RuntimeError,
+                        ValueError,
+                        KeyError,
+                        TypeError,
+                        OSError,
+                    ):  # BLE001:FOG (fail-open)
+                        pass  # graceful fallback — run governance anyway
                 summaries = container.brain_tracker.get_all_summaries()
                 summary_map = {s[PAYLOAD_KEY_BRAIN_ID]: s for s in summaries}
 
@@ -184,9 +191,8 @@ class SchedulerService:
                             tracker = ShadowTracker(base_dir=str(container.config.base_dir))
                             shadow_map = build_shadow_summary(tracker, candidate_ids)
                             summary_map.update(shadow_map)
-                    except Exception:  # BLE001:FOG
-                        with fail_open_guard("scheduler_service:governance_eval"):
-                            pass  # Shadow tracking is non-critical
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass  # Shadow tracking is non-critical
                 if summary_map:
                     container.governance_rule_engine.evaluate(summary_map)
 
@@ -233,11 +239,13 @@ class SchedulerService:
                                 if not isinstance(_records, list):
                                     continue
                                 _wins = sum(
-                                    1 for r in _records
+                                    1
+                                    for r in _records
                                     if isinstance(r, dict) and r.get("execution_outcome") == "win"
                                 )
                                 _losses = sum(
-                                    1 for r in _records
+                                    1
+                                    for r in _records
                                     if isinstance(r, dict) and r.get("execution_outcome") == "loss"
                                 )
                                 _total = _wins + _losses
@@ -248,7 +256,10 @@ class SchedulerService:
                                     "win_rate": round(_wr, 4),
                                     "profit_factor": (
                                         round(_wins / max(_losses, 1), 2)
-                                        if _losses > 0 else round(_wins, 2) if _wins > 0 else 0.0
+                                        if _losses > 0
+                                        else round(_wins, 2)
+                                        if _wins > 0
+                                        else 0.0
                                     ),
                                     "signal_count": _total,
                                     "consecutive_losses": 0,  # not in brain_performance
@@ -303,7 +314,9 @@ class SchedulerService:
                             )
 
                             # ── Persist governance state to disk ──
-                            _gov_save_path = _Path(str(container.config.base_dir)) / "governance_state.json"
+                            _gov_save_path = (
+                                _Path(str(container.config.base_dir)) / "governance_state.json"
+                            )
                             container.governance_service.save(str(_gov_save_path), lock_timeout=1.0)
                             _logger.info(
                                 "[GOV_LIVE] Governance state saved to %s",
@@ -344,12 +357,17 @@ class SchedulerService:
                                             _sm["win_rate"],
                                             _sm["pnl_r"],
                                         )
-                        except Exception:  # BLE001:FOG
-                            with fail_open_guard("scheduler_service:governance_eval"):
-                                _logger.debug(
-                                    "[GOV_MANUAL] Event stream projection skipped "
-                                    "(stream not available)"
-                                )
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ):  # BLE001:FOG
+                            _logger.debug(
+                                "[GOV_MANUAL] Event stream projection skipped "
+                                "(stream not available)"
+                            )
                         brain_states = container.governance_service.get_all_states()
                         evaluator = BrainPromotionEvaluator()
                         decisions = evaluator.evaluate_all(brain_states, perf)
@@ -385,17 +403,17 @@ class SchedulerService:
                                     )
                         else:
                             container.governance_rule_engine.execute_transitions(decisions)
-                    except Exception:  # BLE001:FOG
-                        with fail_open_guard("scheduler_service:governance_eval"):
-                            _logger.exception(
-                                "CRITICAL: PnL-based governance evaluation failed — "
-                                "brain promotion decisions will be skipped this cycle"
-                            )
-                            emit_brain_alert(
-                                "__system__",
-                                "pnl_pipeline_failure",
-                                {"error": "PnL governance evaluation raised exception"},
-                            )
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        _logger.exception(
+                            "CRITICAL: PnL-based governance evaluation failed — "
+                            "brain promotion decisions will be skipped this cycle"
+                        )
+                        emit_brain_alert(
+                            "__system__",
+                            "pnl_pipeline_failure",
+                            {"error": "PnL governance evaluation raised exception"},
+                        )
+
             svc.add_task("governance_evaluation", governance_eval, interval_seconds=60)
 
         if persistence:
@@ -455,9 +473,9 @@ class SchedulerService:
                         if tracker_path.exists():
                             fresh = type(container.brain_tracker).load(tracker_path)
                             container.brain_tracker._records = fresh._records
-                    except Exception:  # BLE001:FOG
-                        with fail_open_guard("scheduler_service:daily_ops"):
-                            pass
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass
+
             svc.add_task("daily_ops", daily_ops, interval_seconds=86400)
 
         # ── Feature store periodic update ──
@@ -504,7 +522,6 @@ class SchedulerService:
                 if build_snapshot is None:
                     return
 
-                import json
                 from pathlib import Path
 
                 snap = build_snapshot(
@@ -515,9 +532,7 @@ class SchedulerService:
                 # Write snapshot to file for dashboard consumption
                 out_path = Path(base_dir) / "reports" / "monitor_snapshot_latest.json"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(
-                    json.dumps(snap, ensure_ascii=False, default=str), encoding="utf-8"
-                )
+                atomic_write_json(out_path, snap, ensure_ascii=False)
 
             svc.add_task("live_monitor_snapshot", live_monitor_snapshot, interval_seconds=30)
 
@@ -526,15 +541,12 @@ class SchedulerService:
                 if build_report is None:
                     return
 
-                import json
                 from pathlib import Path
 
                 report = build_report(base_dir=Path(base_dir), symbol=symbol)
                 out_path = Path(base_dir) / "reports" / "healthcheck_latest.json"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(
-                    json.dumps(report, ensure_ascii=False, default=str), encoding="utf-8"
-                )
+                atomic_write_json(out_path, report, ensure_ascii=False)
 
             svc.add_task("auto_healthcheck", auto_healthcheck, interval_seconds=60)
 
@@ -543,15 +555,12 @@ class SchedulerService:
                 if build_report is None:
                     return
 
-                import json
                 from pathlib import Path
 
                 report = build_report(base_dir=Path(base_dir))
                 out_path = Path(base_dir) / "reports" / "data_quality_latest.json"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(
-                    json.dumps(report, ensure_ascii=False, default=str), encoding="utf-8"
-                )
+                atomic_write_json(out_path, report, ensure_ascii=False)
 
             svc.add_task("data_quality_report", data_quality_report, interval_seconds=900)
 

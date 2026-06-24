@@ -5,7 +5,6 @@ container: environment config, health, services, diagnostics, and
 operational capabilities.
 """
 
-import json
 import platform
 import sys
 from datetime import UTC, datetime
@@ -129,6 +128,7 @@ from core.contracts.domain_keys import (
     VALIDATION_MODE_DEEP,
     VALIDATION_MODE_FAST,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.capability_registry import (
     CapabilityRegistry,
     build_default_release_capability_registry,
@@ -225,7 +225,7 @@ class ReleaseReadinessService:
         report = self.build_report(validation_mode=validation_mode)
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, report)
         return str(target)
 
     def _ensure_runtime_loop(self) -> None:

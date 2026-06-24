@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
+from core.deployment.atomic_file_writer import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -285,9 +285,8 @@ class AuditTrail:
                     results.append(entry)
                     if len(results) >= limit:
                         break
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("permission_audit:query"):
-                    pass
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
         return results
 
     def denied_operations(self, since: str = "", limit: int = 50) -> list[dict[str, Any]]:
@@ -317,7 +316,7 @@ class AuditTrail:
         entries = self.query(start=start, end=end, limit=10_000)
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(entries, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(path, entries)
         return str(path)
 
     @property

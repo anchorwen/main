@@ -751,6 +751,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260623-086 | 2026-06-23 | deployment-lifecycle | CI Red-X: PowerShell to bash shell migration for fast track step. pwsh $LASTEXITCODE + 2>&1 does not preserve Python exit codes reliably. | RC-09 |
 | FIX-20260623-087 | 2026-06-23 | deployment-lifecycle | Commit Message Pre-Flight Validator: single-pass omega-routing validation script. Runs all 14 checks at once, reports all failures with fix hints. Eliminates whack-a-mole push pattern. | RC-09 |
 | FIX-20260624-101 | 2026-06-24 | contracts-resilience | UGR-A09a: Atomic write migration — deployment state files. Added atomic_write_text/atomic_write_json to AtomicFileWriter. Migrated 12 write_text→atomic_write_json in 7 deployment state files. Replaced 12 fail_open_guard→specific exception types in 5 files. 144 tests pass. | RC-07 |
+| FIX-20260624-102 | 2026-06-24 | contracts_resilience | UGR-A09b: Atomic write + fail_open_guard full sweep — remaining deployment files | RC-07 |
 
 ---
 ## Fix Details by Year
@@ -4263,6 +4264,18 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Module**: contracts-resilience
 - **Files**: core/deployment/atomic_file_writer.py,core/deployment/state_persistence.py,core/deployment/blue_green.py,core/deployment/brain_lifecycle_manager.py,core/deployment/release_registry.py,core/deployment/release_gate.py,core/deployment/release_pipeline.py,core/deployment/release_certification.py,blueprints/modules/contracts_resilience.md
 - **Description**: UGR-A09a: Atomic write migration — deployment state files. Added atomic_write_text/atomic_write_json to AtomicFileWriter. Migrated 12 write_text→atomic_write_json in 7 deployment state files. Replaced 12 fail_open_guard→specific exception types in 5 files. 144 tests pass.
+- **Root Cause**: RC-07 — missing-validation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-102
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: c9cb948a
+- **Type**: fix
+- **Module**: contracts_resilience
+- **Files**: core/deployment/deployment_plan.py core/deployment/final_audit.py core/deployment/deployment_executor.py core/deployment/evidence_bundle.py core/deployment/compliance_control_matrix.py core/deployment/release_readiness.py core/deployment/permission_audit.py core/deployment/compliance_audit.py core/deployment/runbook_engine.py core/deployment/rollback_drill.py core/deployment/operations_timeline.py core/deployment/ops_maturity.py core/deployment/postmortem_report.py core/deployment/scheduler_service.py core/deployment/startup_validator.py core/deployment/service_container.py core/deployment/config_hot_reload.py core/deployment/operational_support.py core/deployment/lifecycle_manager.py core/deployment/brain_registration_gate.py
+- **Description**: UGR-A09b: Atomic write + fail_open_guard full sweep — remaining deployment files
 - **Root Cause**: RC-07 — missing-validation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

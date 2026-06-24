@@ -19,7 +19,6 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_RELOAD_COUNT,
     PAYLOAD_KEY_SYSTEM_MODE,
 )
-from core.runtime.fault_handler import fail_open_guard
 
 
 class ConfigHotReload:
@@ -77,12 +76,11 @@ class ConfigHotReload:
             for fn in self._listeners:
                 try:
                     fn(changes, new)
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("config_hot_reload:check_and_reload"):
-                        logging.exception(
-                            "ConfigHotReload listener failed for config_path=%s",
-                            self._path,
-                        )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    logging.exception(
+                        "ConfigHotReload listener failed for config_path=%s",
+                        self._path,
+                    )
         return changes
 
     def apply_overrides(self, container, overrides: dict) -> list[str]:

@@ -4,7 +4,6 @@ Maps operational/release governance controls to concrete evidence,
 status, gaps, and remediation actions.
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -60,6 +59,7 @@ from core.contracts.domain_keys import (
     TIMELINE_STATUS_FAILED,
     VALIDATION_MODE_DEEP,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.governance_summary import build_governance_summary
 from core.deployment.schema_versions import SCHEMA_COMPLIANCE_CONTROL_MATRIX
 from core.deployment.validation_mode import resolve_validation_mode
@@ -110,7 +110,7 @@ class ComplianceControlMatrixService:
     def save_report(self, report: dict, path: str) -> str:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, report)
         return str(target)
 
     def _build_controls(

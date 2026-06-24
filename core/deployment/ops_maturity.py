@@ -4,7 +4,6 @@ Computes a 0–100 score with per-pillar breakdown, including Alpha budget
 governance coverage from registry and readiness checks.
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -41,6 +40,7 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_WEIGHT,
     SLO_STATUS_HEALTHY,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.schema_versions import SCHEMA_OPS_MATURITY
 from core.deployment.validation_mode import resolve_validation_mode
@@ -160,5 +160,5 @@ class OpsMaturityService:
         report = self.evaluate(validation_mode=validation_mode)
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, report)
         return str(target)

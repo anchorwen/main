@@ -10,7 +10,6 @@ from typing import Any
 
 from core.features.feature_service import FeatureService
 from core.features.local_feature_store import LocalFeatureStore
-from core.runtime.fault_handler import fail_open_guard
 
 
 def validate_per_brain_schema(
@@ -36,9 +35,8 @@ def validate_per_brain_schema(
     if feature_store is not None:
         try:
             registered_schemas = feature_store._load_schemas()
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("startup_validator:validate_per_brain_schema"):
-                logging.warning("startup_validator: failed to load schemas from feature store")
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            logging.warning("startup_validator: failed to load schemas from feature store")
     implemented_schemas = FeatureService.available_schemas()
 
     results: dict[str, Any] = {"ok": [], "dropped": [], "errors": []}

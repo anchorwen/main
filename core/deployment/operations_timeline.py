@@ -63,6 +63,7 @@ from core.contracts.domain_keys import (
     TIMELINE_STATUS_PASSED,
     TIMELINE_STATUS_UNKNOWN,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.schema_versions import (
     SCHEMA_ALPHA_BUDGET_GOVERNANCE_EVENT,
     SCHEMA_ENGINE_CONFIG_RELOAD_EVENT,
@@ -162,7 +163,7 @@ class OperationsTimelineService:
             PAYLOAD_KEY_SUMMARY: self.summarize(),
             PAYLOAD_KEY_EVENTS: self._load_events(),
         }
-        target.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, payload)
         return str(target)
 
     def clear(self) -> dict:
@@ -177,7 +178,7 @@ class OperationsTimelineService:
 
     def _write_events(self, events: list[dict]) -> None:
         self._base_dir.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(events, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(self._path, events)
 
     def _infer_status(self, payload: dict) -> str:
         if PAYLOAD_KEY_DECISION in payload:
