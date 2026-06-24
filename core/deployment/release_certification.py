@@ -73,12 +73,12 @@ from core.contracts.domain_keys import (
     RELEASE_PIPELINE_KEY_SUMMARY,
     RELEASE_PIPELINE_KEY_VERSION,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.schema_versions import (
     SCHEMA_RELEASE_CERTIFICATE,
     SCHEMA_RELEASE_CERTIFICATE_VERIFICATION,
 )
-from core.runtime.fault_handler import fail_open_guard
 
 
 class ReleaseCertificationService:
@@ -152,7 +152,7 @@ class ReleaseCertificationService:
     def save_certificate(self, certificate: dict, path: str) -> str:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(certificate, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, certificate)
         return str(target)
 
     def verify_certificate(self, certificate_path: str) -> dict:
@@ -211,9 +211,9 @@ class ReleaseCertificationService:
             }
         try:
             return self._container.evidence_bundle.verify_bundle(manifest)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("release_certification:_verify_evidence_manifest"):
-                return {PAYLOAD_KEY_VERIFIED: False, PAYLOAD_KEY_ERROR: str(exc)}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+            return {PAYLOAD_KEY_VERIFIED: False, PAYLOAD_KEY_ERROR: str(exc)}
+
     def _alpha_budget_evidence(self, pipeline: dict, evidence_verification: dict) -> dict:
         manifest_path = pipeline.get(RELEASE_PIPELINE_KEY_ARTIFACTS, {}).get(
             ARTIFACT_EVIDENCE_MANIFEST

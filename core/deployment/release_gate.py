@@ -4,7 +4,6 @@ ReleaseGateService combines readiness, runbook preflight, SLO status,
 and configuration validation into a deployment gate decision.
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -54,9 +53,9 @@ from core.contracts.domain_keys import (
     SLO_STATUS_BREACHING,
     SLO_STATUS_HEALTHY,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.schema_versions import SCHEMA_RELEASE_GATE
 from core.deployment.validation_mode import resolve_validation_mode
-from core.runtime.fault_handler import fail_open_guard
 
 
 class ReleaseGateService:
@@ -120,57 +119,57 @@ class ReleaseGateService:
         )
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, report)
         return str(target)
 
     def _safe_readiness(self, *, validation_mode: str | None = None) -> dict:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
         try:
             return self._container.release_readiness.build_report(validation_mode=validation_mode)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("release_gate:_safe_readiness"):
-                return {
-                    PAYLOAD_KEY_READY: False,
-                    PAYLOAD_KEY_ERROR: str(exc),
-                    PAYLOAD_KEY_SUMMARY: {
-                        PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_READINESS_EXCEPTION]
-                    },
-                }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+            return {
+                PAYLOAD_KEY_READY: False,
+                PAYLOAD_KEY_ERROR: str(exc),
+                PAYLOAD_KEY_SUMMARY: {
+                    PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_READINESS_EXCEPTION]
+                },
+            }
+
     def _safe_preflight(self, *, validation_mode: str | None = None) -> dict:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
         try:
             return self._container.runbook_engine.preflight(validation_mode=validation_mode)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("release_gate:_safe_preflight"):
-                return {
-                    PAYLOAD_KEY_PASSED: False,
-                    PAYLOAD_KEY_ERROR: str(exc),
-                    PAYLOAD_KEY_SUMMARY: {
-                        PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_PREFLIGHT_EXCEPTION]
-                    },
-                }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+            return {
+                PAYLOAD_KEY_PASSED: False,
+                PAYLOAD_KEY_ERROR: str(exc),
+                PAYLOAD_KEY_SUMMARY: {
+                    PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_PREFLIGHT_EXCEPTION]
+                },
+            }
+
     def _safe_slo(self) -> dict:
         try:
             return self._container.slo_service.evaluate()
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("release_gate:_safe_slo"):
-                return {
-                    PAYLOAD_KEY_STATUS: SLO_STATUS_BREACHING,
-                    PAYLOAD_KEY_ERROR: str(exc),
-                    PAYLOAD_KEY_FAILED_OBJECTIVES: [RELEASE_GATE_FAILED_OBJECTIVE_SLO_EXCEPTION],
-                }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+            return {
+                PAYLOAD_KEY_STATUS: SLO_STATUS_BREACHING,
+                PAYLOAD_KEY_ERROR: str(exc),
+                PAYLOAD_KEY_FAILED_OBJECTIVES: [RELEASE_GATE_FAILED_OBJECTIVE_SLO_EXCEPTION],
+            }
+
     def _safe_config(self) -> dict:
         try:
             from core.deployment.operational_support import ConfigValidator
 
             return ConfigValidator().validate(self._container.config)
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("release_gate:_safe_config"):
-                return {
-                    PAYLOAD_KEY_VALID: False,
-                    PAYLOAD_KEY_ERRORS: [str(exc)],
-                    PAYLOAD_KEY_WARNINGS: [],
-                }
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+            return {
+                PAYLOAD_KEY_VALID: False,
+                PAYLOAD_KEY_ERRORS: [str(exc)],
+                PAYLOAD_KEY_WARNINGS: [],
+            }
+
     def _build_signals(
         self,
         readiness: dict,

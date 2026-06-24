@@ -20,8 +20,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.deployment.atomic_file_writer import atomic_write_json, atomic_write_text
 from core.deployment.path_defaults import BRAINS_DIR, LIVE_YAML_PATH, RETIRED_BRAINS_DIR
-from core.runtime.fault_handler import fail_open_guard
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
@@ -203,9 +205,9 @@ class BrainLifecycleManager:
     def _save_live_yaml(self, config: dict[str, Any]) -> None:
         import yaml
 
-        self._live_yaml_path.write_text(
+        atomic_write_text(
+            self._live_yaml_path,
             yaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
         )
 
     def _validate_brain_symbol_consistency(self, declared_symbol: str) -> None:
@@ -220,6 +222,7 @@ class BrainLifecycleManager:
         configs/brains/ (XAU brains → BTC live trading).
         """
         import logging
+
         _log = logging.getLogger(__name__)
 
         bd_lower = str(self._brains_dir).lower()
@@ -229,6 +232,7 @@ class BrainLifecycleManager:
         # Derive expected keyword from the symbol: "BTCUSDc" → "btc", "XAUUSDc" → "xau"
         # For any symbol NOT in ASSET_REGISTRY, skip validation (backward compat).
         from core.config.asset_registry import ASSET_REGISTRY
+
         _asset = ASSET_REGISTRY.get(declared_symbol)
         if _asset is not None:
             # FIX-20260602-051: XAU's default brains_dir is configs/brains/ —
@@ -444,15 +448,15 @@ class BrainLifecycleManager:
             writer.commit()
             report.atomic_success = True
 
-        except Exception as exc:  # BLE001:FOG
-            with fail_open_guard("brain_lifecycle_manager:retire_brain"):
-                report.errors.append(f"retirement_transaction_failed: {exc}")
-                try:
-                    writer.rollback()
-                    report.rollback_triggered = True
-                except Exception as rb_exc:  # BLE001:FOG
-                    with fail_open_guard("brain_lifecycle_manager:retire_brain"):
-                        report.errors.append(f"rollback_failed: {rb_exc}")
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            logger.exception("Retirement transaction failed: %s", exc)
+            report.errors.append(f"retirement_transaction_failed: {exc}")
+            try:
+                writer.rollback()
+                report.rollback_triggered = True
+            except OSError as rb_exc:
+                logger.exception("Rollback failed: %s", rb_exc)
+                report.errors.append(f"rollback_failed: {rb_exc}")
         return report
 
     # ── PnL cold storage ────────────────────────────────────────────────
@@ -488,19 +492,13 @@ class BrainLifecycleManager:
             "records": records,
         }
         cold_path = cold_dir / f"{brain_id}.json"
-        cold_path.write_text(
-            json.dumps(cold_entry, indent=2, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
+        atomic_write_json(cold_path, cold_entry, ensure_ascii=False)
 
         # Update hot ledger
         ledger["settled"] = settled
         backup_path = ledger_path.with_suffix(".json.bak")
         ledger_path.rename(backup_path)
-        ledger_path.write_text(
-            json.dumps(ledger, indent=2, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
+        atomic_write_json(ledger_path, ledger, ensure_ascii=False)
 
         return True
 
@@ -580,8 +578,10 @@ class BrainLifecycleManager:
         # profitable (PF>1.0). At RR<1.0, breakeven WR > 50% but the brain
         # can still be profitable through selective trade filtering.
         _wr_override = (
-            train_profit_factor is not None and train_profit_factor > 1.0
-            and train_sharpe is not None and train_sharpe > 0
+            train_profit_factor is not None
+            and train_profit_factor > 1.0
+            and train_sharpe is not None
+            and train_sharpe > 0
         )
         if train_winrate is not None and train_winrate <= 0.50 and not _wr_override:
             report.errors.append(
@@ -870,9 +870,8 @@ class BrainLifecycleManager:
                     if bid in gov._brain_states:
                         gov._brain_states[bid]["last_transition_at"] = ts
                         gov._brain_states[bid]["transition_count"] = 1
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("brain_lifecycle_manager:verify_startup_integrity"):
-                        pass
+                except (KeyError, ValueError, TypeError):
+                    pass
                 report.auto_registered.append(f"{bid}:{initial}")
                 logging.warning(
                     "BrainLifecycleManager: auto-registered '%s' in governance as '%s'",
@@ -1045,9 +1044,8 @@ class BrainLifecycleManager:
             ensemble_errors = validate_ensemble_references(bs)
             for err in ensemble_errors:
                 report.hardcoded_path_mismatches.append(f"ensemble: {err}")
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("brain_lifecycle_manager:verify_startup_integrity"):
-                pass
+        except (ImportError, KeyError, ValueError, TypeError):
+            pass
         # ── contract_group validity ──
         known_cgs: set[str] = set()
         if self._live_yaml_path.exists():
@@ -1074,9 +1072,8 @@ class BrainLifecycleManager:
                         f"{bid}: schema '{schema_id}' NOT supported by FeatureService. "
                         f"Available: {sorted(available)}"
                     )
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("brain_lifecycle_manager:verify_startup_integrity"):
-                pass
+        except (ImportError, KeyError, ValueError, TypeError):
+            pass
         # ── artifact_hash integrity ──
         import hashlib
 
@@ -1286,6 +1283,6 @@ class BrainLifecycleManager:
             # Create backup before overwriting
             backup = ledger_path.with_suffix(".json.bak")
             ledger_path.rename(backup)
-            ledger_path.write_text(json.dumps(ledger, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(ledger_path, ledger, ensure_ascii=False)
 
         return removed

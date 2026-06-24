@@ -18,6 +18,7 @@ from core.contracts.domain_keys import (
     STATE_PERSISTENCE_KEY_POSITIONS,
     STATE_PERSISTENCE_KEY_TRACKER,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 
 
 class StatePersistence:
@@ -41,7 +42,7 @@ class StatePersistence:
         }
         path = self._base_dir / STATE_PERSISTENCE_KEY_GOVERNANCE / f"{label}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(path, payload)
         return path
 
     def restore_governance_state(self, governance_service, label: str = "latest") -> dict | None:
@@ -66,7 +67,7 @@ class StatePersistence:
         }
         path = self._base_dir / STATE_PERSISTENCE_KEY_TRACKER / f"{label}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(path, payload)
         return path
 
     def save_positions(self, position_tracker, label: str = "latest") -> Path:
@@ -79,7 +80,7 @@ class StatePersistence:
         }
         path = self._base_dir / STATE_PERSISTENCE_KEY_POSITIONS / f"{label}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(path, payload)
         return path
 
     def save_all(self, container, label: str | None = None) -> dict:

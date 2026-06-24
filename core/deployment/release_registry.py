@@ -78,6 +78,7 @@ from core.contracts.domain_keys import (
     RELEASE_REGISTRY_FILE,
     RELEASE_REGISTRY_ID_PREFIX,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.schema_versions import (
     SCHEMA_RELEASE_REGISTRY_EXPORT,
@@ -239,7 +240,7 @@ class ReleaseRegistryService:
             PAYLOAD_KEY_SUMMARY: self.summarize(),
             PAYLOAD_KEY_RECORDS: self._load_records(),
         }
-        target.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(target, payload)
         return str(target)
 
     def clear(self) -> dict:
@@ -259,7 +260,7 @@ class ReleaseRegistryService:
 
     def _write_records(self, records: list[dict]) -> None:
         self._base_dir.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(records, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(self._path, records)
 
     def _alpha_budget_warning_count(self, cert: dict) -> int:
         artifact = cert.get(PAYLOAD_KEY_ALPHA_BUDGET_EVIDENCE, {}).get(PAYLOAD_KEY_ARTIFACT) or {}

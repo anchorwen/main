@@ -5,6 +5,7 @@ Temp files are written alongside targets (target_path.with_suffix('.tmp.staging'
 to guarantee same-device atomicity — avoids OSError 18 (cross-device link).
 
 Usage:
+    # Batch transactional writes:
     writer = AtomicFileWriter([path1, path2])
     writer.backup()          # take snapshot of current state
     # ... mutate files ...
@@ -12,12 +13,18 @@ Usage:
     writer.commit()          # os.replace each staged file, clean up
     # if exception:
     writer.rollback()        # restore from .bak files, clean staging
+
+    # Single-file atomic write (convenience):
+    atomic_write_text(path, content)       # atomic str → file
+    atomic_write_json(path, payload)       # atomic dict → JSON → file
 """
 
 from __future__ import annotations
 
+import json as _json
 import shutil
 from pathlib import Path
+from typing import Any
 
 
 class AtomicFileError(RuntimeError):
@@ -128,3 +135,35 @@ class AtomicFileWriter:
             path.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Convenience functions — single-file atomic writes
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+    """Atomically write a string to a file (temp + os.replace).
+
+    Writes to a .tmp sibling then atomically replaces the target.
+    On any error the original file is untouched.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding=encoding)
+    try:
+        tmp.replace(path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def atomic_write_json(
+    path: Path, payload: Any, *, indent: int = 2, encoding: str = "utf-8", **kwargs: Any
+) -> None:
+    """Atomically serialize a dict/list to JSON and write to a file.
+
+    Convenience wrapper: json.dumps() → atomic_write_text().
+    All extra kwargs (default, ensure_ascii, etc.) forwarded to json.dumps().
+    """
+    content = _json.dumps(payload, indent=indent, default=str, **kwargs)
+    atomic_write_text(path, content, encoding=encoding)

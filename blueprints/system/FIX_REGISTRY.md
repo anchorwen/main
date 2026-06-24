@@ -750,6 +750,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260621-041 | 2026-06-21 | execution-orders | **DQAF-034 MIA Root Cause Fix — Bridge Idempotent WAL Gateway (3-Phase).** P1: 持久化 Processed IDs (bridge_processed_wal.jsonl)。P2: _mt5_close_position 状态验证网关。P3: _append_journal 退避重试 + 60s overflow 自愈合并。消除 47 笔 MIA 根因。 | RC-04 (race-condition) |
 | FIX-20260623-086 | 2026-06-23 | deployment-lifecycle | CI Red-X: PowerShell to bash shell migration for fast track step. pwsh $LASTEXITCODE + 2>&1 does not preserve Python exit codes reliably. | RC-09 |
 | FIX-20260623-087 | 2026-06-23 | deployment-lifecycle | Commit Message Pre-Flight Validator: single-pass omega-routing validation script. Runs all 14 checks at once, reports all failures with fix hints. Eliminates whack-a-mole push pattern. | RC-09 |
+| FIX-20260624-101 | 2026-06-24 | contracts-resilience | UGR-A09a: Atomic write migration — deployment state files. Added atomic_write_text/atomic_write_json to AtomicFileWriter. Migrated 12 write_text→atomic_write_json in 7 deployment state files. Replaced 12 fail_open_guard→specific exception types in 5 files. 144 tests pass. | RC-07 |
 
 ---
 ## Fix Details by Year
@@ -4252,3 +4253,16 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: L1 — test assumed monotonic() >= 999 at all times; fresh CI VMs can have lower uptime
 - **Prevention**: max() guard ensures positive heartbeat value regardless of machine uptime
 - **Dependents Checked**: All 14 test_supervised_scheduler tests pass; ruff clean; mypy clean
+
+
+### FIX-20260624-101
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: 6e4286ba
+- **Type**: feat
+- **Module**: contracts-resilience
+- **Files**: core/deployment/atomic_file_writer.py,core/deployment/state_persistence.py,core/deployment/blue_green.py,core/deployment/brain_lifecycle_manager.py,core/deployment/release_registry.py,core/deployment/release_gate.py,core/deployment/release_pipeline.py,core/deployment/release_certification.py,blueprints/modules/contracts_resilience.md
+- **Description**: UGR-A09a: Atomic write migration — deployment state files. Added atomic_write_text/atomic_write_json to AtomicFileWriter. Migrated 12 write_text→atomic_write_json in 7 deployment state files. Replaced 12 fail_open_guard→specific exception types in 5 files. 144 tests pass.
+- **Root Cause**: RC-07 — missing-validation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)

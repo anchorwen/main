@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T04:23:37Z
+> **自动生成**: 2026-06-24T05:17:55Z
 
 ## Package-Level Dependencies
 
@@ -140,10 +140,10 @@
 ### `core/deployment/`
 
 - `atomic_file_writer.py` → (无内部依赖)
-- `blue_green.py` → `core.runtime.fault_handler`
+- `blue_green.py` → `core.deployment.atomic_file_writer`
 - `brain_alert.py` → (无内部依赖)
 - `brain_config_validator.py` → `core.brains.adapters`, `core.features.schemas.registry`
-- `brain_lifecycle_manager.py` → `core.config.asset_registry`, `core.deployment.atomic_file_writer`, `core.deployment.path_defaults`, `core.features.feature_service`, `core.governance.governance_service`, `core.runtime.fault_handler`, `core.runtime.signal_pipeline`
+- `brain_lifecycle_manager.py` → `core.config.asset_registry`, `core.deployment.atomic_file_writer`, `core.deployment.path_defaults`, `core.features.feature_service`, `core.governance.governance_service`, `core.runtime.signal_pipeline`
 - `brain_registration_gate.py` → `core.brains.adapters`, `core.brains.services.brain_factory`, `core.deployment.brain_config_validator`, `core.runtime.fault_handler`
 - `capability_registry.py` → `core.contracts.domain_keys`
 - `compliance_audit.py` → `core.contracts.domain_keys`, `core.deployment.governance_summary`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
@@ -166,11 +166,11 @@
 - `path_defaults.py` → (无内部依赖)
 - `permission_audit.py` → `core.runtime.fault_handler`
 - `postmortem_report.py` → `core.contracts.domain_keys`, `core.deployment.governance_summary`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
-- `release_certification.py` → `core.contracts.domain_keys`, `core.deployment.governance_summary`, `core.deployment.schema_versions`, `core.runtime.fault_handler`
-- `release_gate.py` → `core.contracts.domain_keys`, `core.deployment.operational_support`, `core.deployment.schema_versions`, `core.deployment.validation_mode`, `core.runtime.fault_handler`
-- `release_pipeline.py` → `core.contracts.domain_keys`, `core.deployment.governance_summary`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
+- `release_certification.py` → `core.contracts.domain_keys`, `core.deployment.atomic_file_writer`, `core.deployment.governance_summary`, `core.deployment.schema_versions`
+- `release_gate.py` → `core.contracts.domain_keys`, `core.deployment.atomic_file_writer`, `core.deployment.operational_support`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
+- `release_pipeline.py` → `core.contracts.domain_keys`, `core.deployment.atomic_file_writer`, `core.deployment.governance_summary`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
 - `release_readiness.py` → `core.contracts.domain_keys`, `core.deployment.capability_registry`, `core.deployment.governance_summary`, `core.deployment.health_check`, `core.deployment.schema_versions`, `core.deployment.validation_mode`
-- `release_registry.py` → `core.contracts.domain_keys`, `core.deployment.governance_summary`, `core.deployment.schema_versions`
+- `release_registry.py` → `core.contracts.domain_keys`, `core.deployment.atomic_file_writer`, `core.deployment.governance_summary`, `core.deployment.schema_versions`
 - `replay_isolation.py` → `core.contracts.domain.dispatch_result`, `core.contracts.domain_keys`, `core.contracts.enums`, `core.protocol.schema_versions`, `core.protocol.services.communication_dispatcher`
 - `rollback_drill.py` → `core.contracts.domain_keys`, `core.deployment.schema_versions`, `core.deployment.validation_mode`, `core.runtime.fault_handler`
 - `runbook_engine.py` → `core.contracts.domain_keys`, `core.deployment.health_check`, `core.deployment.operational_support`, `core.deployment.schema_versions`, `core.deployment.validation_mode`, `core.observability.diagnostics_dashboard`, `core.observability.metric_names`, `core.runtime.fault_handler`
@@ -179,7 +179,7 @@
 - `schema_versions.py` → (无内部依赖)
 - `service_container.py` → `apps.engine.orchestrator`, `apps.engine.runtime_loop`, `core.brains.services.brain_factory`, `core.brains.services.brain_run_service`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.domain.system_mode_state`, `core.contracts.domain_keys`, `core.contracts.enums`, `core.deployment.compliance_audit`, `core.deployment.compliance_control_matrix`, `core.deployment.config_hot_reload`, `core.deployment.deployment_executor`, `core.deployment.deployment_plan`, `core.deployment.environment_config`, `core.deployment.evidence_bundle`, `core.deployment.final_audit`, `core.deployment.health_check`, `core.deployment.operations_timeline`, `core.deployment.ops_maturity`, `core.deployment.postmortem_report`, `core.deployment.release_certification`, `core.deployment.release_gate`, `core.deployment.release_pipeline`, `core.deployment.release_readiness`, `core.deployment.release_registry`, `core.deployment.rollback_drill`, `core.deployment.runbook_engine`, `core.deployment.schema_versions`, `core.execution.execution_manager`, `core.execution.fix_contracts`, `core.features.feature_service`, `core.feedback.brain_performance_tracker`, `core.feedback.decision_scorer`, `core.feedback.feedback_loop`, `core.feedback.outcome_collector`, `core.governance.governance_rule_engine`, `core.governance.governance_service`, `core.ledger.services.communication_inspection_service`, `core.ledger.services.communication_operations_service`, `core.ledger.services.communication_record_reader`, `core.ledger.services.communication_record_writer`, `core.ledger.services.communication_replay_gate`, `core.ledger.services.communication_replay_service`, `core.ledger.services.decision_record_writer`, `core.ledger.services.execution_event_reader`, `core.ledger.services.execution_event_writer`, `core.ledger.services.execution_reconciliation_service`, `core.ledger.storage.jsonl_ledger_store`, `core.market.position_tracker`, `core.observability.alert_channels`, `core.observability.alert_service`, `core.observability.audit_log`, `core.observability.diagnostics_dashboard`, `core.observability.metric_names`, `core.observability.metrics_collector`, `core.observability.slo_service`, `core.parliament.parliament_service`, `core.protocol.services.communication_dispatcher`, `core.protocol.services.decision_compiler`, `core.protocol.services.file_queue_communication_adapter`, `core.protocol.services.file_queue_receipt_reader`, `core.protocol.services.fix_communication_adapter`, `core.protocol.services.idempotency`, `core.protocol.services.intent_message_builder`, `core.protocol.services.mt5_communication_adapter`, `core.protocol.services.override_resolver`, `core.protocol.services.stub_communication_adapter`, `core.protocol.services.venue_router`, `core.protocol.services.zmq_communication_adapter`, `core.risk.risk_evaluation_service`, `core.risk.risk_policies`, `core.runtime.fault_handler`, `core.state.schema_versions`, `core.state.services.control_snapshot_service`, `core.state.stores.override_store`, `core.state.stores.system_mode_store`
 - `startup_validator.py` → `core.features.feature_service`, `core.features.local_feature_store`, `core.runtime.fault_handler`
-- `state_persistence.py` → `core.contracts.domain_keys`
+- `state_persistence.py` → `core.contracts.domain_keys`, `core.deployment.atomic_file_writer`
 - `validation_mode.py` → `core.contracts.domain_keys`
 
 ### `core/execution/`

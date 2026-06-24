@@ -25,7 +25,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
+from core.deployment.atomic_file_writer import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -333,9 +333,8 @@ class BlueGreenManager:
         for hook in self._pre_cutover_hooks:
             try:
                 hook(self._topology)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("blue_green:promote"):
-                    logger.exception("Pre-cutover hook failed")
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ConnectionError):
+                logger.exception("Pre-cutover hook failed")
         time.sleep(min(drain_timeout_seconds, 5.0))
 
         # Step 3: Switch
@@ -375,9 +374,8 @@ class BlueGreenManager:
         for hook in self._post_cutover_hooks:
             try:
                 hook(self._topology)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("blue_green:promote"):
-                    logger.exception("Post-cutover hook failed")
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ConnectionError):
+                logger.exception("Post-cutover hook failed")
         # Archive the cutover record
         self._archive_cutover(previous_color, standby.color, success=True)
 
@@ -471,21 +469,15 @@ class BlueGreenManager:
 
     def _save(self) -> None:
         """Persist topology to disk atomically."""
-        tmp = self._state_file.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps(self._topology.to_dict(), indent=2, default=str),
-            encoding="utf-8",
-        )
-        tmp.replace(self._state_file)
+        atomic_write_json(self._state_file, self._topology.to_dict())
 
     def _load_or_init(self) -> DeploymentTopology:
         if self._state_file.exists():
             try:
                 data = json.loads(self._state_file.read_text(encoding="utf-8"))
                 return DeploymentTopology.from_dict(data)
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("blue_green:_load_or_init"):
-                    logger.exception("Failed to load topology, reinitializing")
+            except (json.JSONDecodeError, KeyError, TypeError, OSError):
+                logger.exception("Failed to load topology, reinitializing")
         return self._init_topology()
 
     def _init_topology(self) -> DeploymentTopology:
@@ -515,7 +507,7 @@ class BlueGreenManager:
             "deployed_by": self._topology.deployed_by,
         }
         fname = f"cutover_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
-        (self._history_dir / fname).write_text(json.dumps(record, indent=2), encoding="utf-8")
+        atomic_write_json(self._history_dir / fname, record, indent=2)
 
     def cutover_history(self, limit: int = 20) -> list[dict[str, Any]]:
         """Return recent cutover records."""
@@ -524,7 +516,6 @@ class BlueGreenManager:
         for f in files[:limit]:
             try:  # noqa: SIM105
                 records.append(json.loads(f.read_text(encoding="utf-8")))
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("blue_green:cutover_history"):
-                    pass
+            except (json.JSONDecodeError, OSError):
+                logger.warning("Failed to read cutover history entry: %s", f)
         return records

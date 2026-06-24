@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T04:23:37Z
+> **自动生成**: 2026-06-24T05:17:55Z
 > **扫描模块数**: 662
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -169,11 +169,11 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `atomic_file_writer.py` | ✅ active | AtomicFileError, AtomicFileWriter | 12 | 130 | — | |
-| `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 530 | — | |
+| `atomic_file_writer.py` | ✅ active | AtomicFileError, AtomicFileWriter | 14 | 169 | — | |
+| `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 521 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 13 | 226 | — | |
-| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1291 | — | |
+| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1288 | — | |
 | `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 22 | 502 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
@@ -197,10 +197,10 @@
 | `permission_audit.py` | ✅ active | AuditEntry, PermissionMatrix, AuditTrail | 20 | 336 | — | |
 | `postmortem_report.py` | ✅ active | PostmortemReportService | 11 | 468 | — | |
 | `release_certification.py` | ✅ active | ReleaseCertificationService | 12 | 294 | — | |
-| `release_gate.py` | ✅ active | ReleaseGateService | 16 | 321 | — | |
+| `release_gate.py` | ✅ active | ReleaseGateService | 16 | 320 | — | |
 | `release_pipeline.py` | ✅ active | ReleasePipelineService | 7 | 378 | — | |
 | `release_readiness.py` | ✅ active | ReleaseReadinessService | 13 | 437 | — | |
-| `release_registry.py` | ✅ active | ReleaseRegistryService | 17 | 351 | — | |
+| `release_registry.py` | ✅ active | ReleaseRegistryService | 17 | 352 | — | |
 | `replay_isolation.py` | ✅ active | ReplayDispatchAdapter, NullDispatchAdapter, ReplayEnvironment | 11 | 138 | — | |
 | `rollback_drill.py` | ✅ active | RollbackDrillService | 8 | 305 | — | |
 | `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 665 | — | |
@@ -209,7 +209,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
 | `service_container.py` | ✅ active | ServiceContainer | 41 | 640 | — | |
 | `startup_validator.py` | ✅ active | — | 1 | 115 | — | |
-| `state_persistence.py` | ✅ active | StatePersistence | 6 | 100 | — | |
+| `state_persistence.py` | ✅ active | StatePersistence | 6 | 101 | — | |
 | `validation_mode.py` | ✅ active | — | 1 | 10 | — | |
 
 ## core/execution

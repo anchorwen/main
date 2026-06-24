@@ -5,7 +5,6 @@ release gate, evidence bundle, deployment plan, deployment execution,
 rollback drill, operations timeline recording, and postmortem summary.
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -102,6 +101,7 @@ from core.contracts.domain_keys import (
     RELEASE_PIPELINE_SUMMARY_ROLLBACK_STATUS,
     RELEASE_PIPELINE_SUMMARY_TIMELINE_EVENT_COUNT,
 )
+from core.deployment.atomic_file_writer import atomic_write_json
 from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.schema_versions import (
     SCHEMA_ALPHA_BUDGET_GOVERNANCE_EVENT,
@@ -374,5 +374,5 @@ class ReleasePipelineService:
 
     def _write_json(self, path: Path, payload: dict) -> str:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        atomic_write_json(path, payload)
         return str(path)
