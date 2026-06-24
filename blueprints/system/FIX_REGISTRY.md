@@ -4120,3 +4120,63 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: RC-09 — config-drift
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
+
+### FIX-20260624-090
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: contracts-resilience
+- **Files**: core/contracts/cap_result.py
+- **Description**: UGR-A01: CapResult[T] + _SuccessProof scope-gated proof token. ok() requires valid proof from success_scope; proof invalidated on exit.
+- **Root Cause**: RC-12 — missing-feature
+- **Prevention**: (to be filled)
+- **Dependents Checked**: adapters.py, phantom_contract.py
+
+### FIX-20260624-091
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: contracts-resilience / runtime-live
+- **Files**: core/runtime/typed_clock.py
+- **Description**: UGR-A02: TypedClock — MonotonicInstant/WallInstant/Duration, three incompatible time types. Mypy-enforced separation.
+- **Root Cause**: RC-12 — missing-feature
+- **Prevention**: (to be filled)
+- **Dependents Checked**: adapters.py
+
+### FIX-20260624-092
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: contracts-resilience / runtime-live
+- **Files**: core/runtime/supervised_scheduler.py
+- **Description**: UGR-A04: SupervisedScheduler — THREAD (cancellation+heartbeat) + PROCESS (SIGTERM→SIGKILL) dual isolation.
+- **Root Cause**: RC-12 — missing-feature
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-093
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: contracts-resilience
+- **Files**: scripts/verify_capresult_ast.py, docs/specs/*
+- **Description**: UGR-P02/P03/P04: AST scanner baseline + spec docs (phantom_state_replay, wal_checkpoint_design).
+- **Root Cause**: RC-12 — missing-feature
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260624-094
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: deployment-lifecycle
+- **Files**: core/contracts/cap_result.py, core/runtime/typed_clock.py, core/runtime/supervised_scheduler.py
+- **Description**: CI Red-X repair — commit missing Phase 0-1 UGR v3.1 dependency files. adapters.py imports cap_result+typed_clock → ImportError on clean checkout.
+- **Root Cause**: L1 — git add omitted
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
