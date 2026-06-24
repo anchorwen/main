@@ -4216,3 +4216,15 @@ Tier 3: 将 `p_win_source` 和 `p_win_degraded` 提升为 journal 顶级字段,
 - **Root Cause**: RC-12 — missing-feature: only 1 prototype predicate (risk_budget_non_negative, input-only), no StateProjector for state reconstruction, no state-aware verification
 - **Prevention**: StateProjector.snapshot_for() validates per-contract required_state_keys before predicate evaluation; timeout/overflow protection prevents CI blockage; key conflict detection prevents handler ordering bugs
 - **Dependents Checked**: PredicateRegistry.list_contracts() returns 9 contracts; verify_phantom_contracts.py --state-aware mode successfully replays state-dependent predicates; StateProjector 13 unit tests including idempotency, completeness assertion, error propagation, timeout/overflow
+
+### FIX-20260624-098
+- **Date**: 2026-06-24
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: contracts-resilience
+- **Files**: core/contracts/phantom_contract.py
+- **Description**: Phantom _alert_violation LiveAlertHub.instance() AttributeError. LiveAlertHub is a regular class (LiveAlertHub(base_dir="data")), not a singleton — calling .instance() raises AttributeError which bypasses the except ImportError handler. Widen to except (ImportError, AttributeError) so both "module not available" and "API mismatch" fall back to stderr. 4 failing tests fixed (TestPhantomDebug: test_raises_contract_violation_when_predicate_fails, test_function_body_not_executed_on_violation; TestAlertRouting: test_stderr_fallback, test_violation_counter_increments). 1 line changed.
+- **Root Cause**: L1 — incorrect API assumption: _alert_violation assumed LiveAlertHub follows singleton pattern (.instance()), but it uses constructor-based init
+- **Prevention**: N/A (L1 typo-class error, no architectural change needed)
+- **Dependents Checked**: All 66 phantom_contract tests pass; ruff clean; mypy baseline unchanged

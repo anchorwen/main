@@ -893,7 +893,7 @@ def _alert_violation(contract_id: str, message: str, severity: str) -> None:
                 metadata={"contract_id": contract_id, "severity": severity},
             )
             return
-    except ImportError:
+    except (ImportError, AttributeError):
         pass  # Alert hub unavailable — fall back to stderr
 
     print(
