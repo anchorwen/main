@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-24T00:43:54Z
+> **自动生成**: 2026-06-24T00:53:04Z
 
 ## Package-Level Dependencies
 
@@ -87,6 +87,7 @@
 
 ### `core/contracts/`
 
+- `adapters.py` → `core.contracts.cap_result`, `core.runtime.typed_clock`
 - `calibrator_contract.py` → (无内部依赖)
 - `cap_result.py` → (无内部依赖)
 - `domain_keys.py` → (无内部依赖)

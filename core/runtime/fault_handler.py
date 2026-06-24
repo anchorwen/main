@@ -196,9 +196,12 @@ class FaultTolerantContext:
             return False  # no exception → normal exit
 
         # Absolute guard: never swallow system exit signals.
-        # KeyboardInterrupt (SIGINT) and SystemExit (sys.exit) must always
-        # propagate so SIGTERM graceful shutdown and crash-loop exit(42) work.
-        if isinstance(exc_val, KeyboardInterrupt | SystemExit):
+        # KeyboardInterrupt (SIGINT), SystemExit (sys.exit), and SystemError
+        # (interpreter internal error) must always propagate so SIGTERM graceful
+        # shutdown, crash-loop exit(42), and interpreter-level faults work.
+        # UGR v3.1 §A07: SystemError added — CPython raises this for
+        # unrecoverable internal errors (bytecode corruption, memory exhaustion).
+        if isinstance(exc_val, KeyboardInterrupt | SystemExit | SystemError):
             return False
 
         if self.level == FaultLevel.IGNORE:
@@ -320,7 +323,49 @@ def log_and_continue(component: str) -> FaultTolerantContext:
 
 
 def fail_open_guard(component: str) -> FaultTolerantContext:
-    """Drop-in replacement for bare ``except Exception: pass`` on the hot path.
+    """.. deprecated:: UGR v3.1 §A07
+
+    **DEPRECATED** — prefer granular exception handling with specific types.
+
+    Migration path (in priority order):
+
+    1. **Hot path (live_cycle, execution)**: Replace with specific exception
+       types per FIX-20260623-076 (BLE001 P0 — 43 sites already migrated).
+       Pattern::
+
+           try:
+               do_something()
+           except (ValueError, KeyError, OSError) as e:
+               logger.exception("Component: do_something failed")
+               # Continue degraded
+
+    2. **Cold/warm path (management_phase, daily_ops)**: Use
+       ``FaultTolerantContext`` with explicit ``FaultLevel``::
+
+           with FaultTolerantContext(
+               level=FaultLevel.DEGRADE,
+               component="ComponentName",
+               alert_hub=hub,
+           ) as ctx:
+               do_something()
+           if ctx.exception:
+               ...  # Handle degradation
+
+    3. **Cleanup/teardown (__del__, atexit)**: Use
+       ``contextlib.suppress(Exception)`` with a justification comment::
+
+           with contextlib.suppress(Exception):  # Best-effort cleanup
+               resource.close()
+
+    ``fail_open_guard`` remains available for backward compatibility but
+    new code should use one of the patterns above.  Sites using this
+    function should be migrated during the next resilience audit cycle.
+
+    ---
+    Original docstring follows.
+    ---
+
+    Drop-in replacement for bare ``except Exception: pass`` on the hot path.
 
     FIX-20260607-146: BLE001 governance Phase 1 (preparation).
     Provides a DEGRADE-level context that logs the exception with full
@@ -340,6 +385,15 @@ def fail_open_guard(component: str) -> FaultTolerantContext:
         with fail_open_guard("ComponentName"):
             do_something()
     """
+    import warnings
+
+    warnings.warn(
+        "fail_open_guard is DEPRECATED (UGR v3.1 §A07). "
+        "Prefer specific exception types or FaultTolerantContext with explicit level. "
+        f"Caller: {component}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return FaultTolerantContext(
         level=FaultLevel.DEGRADE,
         component=component,
@@ -383,7 +437,7 @@ def mt5_call_with_timeout(
     def _target() -> None:
         try:
             result[0] = fn(*args, **kwargs)
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # noqa: BLE001  # BLE001:FOG
             with fail_open_guard("fault_handler:_target"):
                 error[0] = exc
         finally:
@@ -410,4 +464,3 @@ def mt5_call_with_timeout(
         raise error[0]  # Re-raise in calling thread
 
     return result[0]
-

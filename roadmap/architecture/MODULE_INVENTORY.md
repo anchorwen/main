@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T00:43:54Z
-> **扫描模块数**: 659
+> **自动生成**: 2026-06-24T00:53:04Z
+> **扫描模块数**: 660
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -107,6 +107,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
+| `adapters.py` | ✅ active | — | 11 | 209 | — | |
 | `calibrator_contract.py` | ✅ active | CalibratorHistoryEntry, CalibratorState | 3 | 116 | — | |
 | `cap_result.py` | ✅ active | CapProofExpired, CapProofReused, _SuccessProof, CapResult, Kernel | 18 | 275 | — | |
 | `domain_keys.py` | 📄 config | — | 0 | 979 | — | |
@@ -504,7 +505,7 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `execution_state.py` | ✅ active | — | 3 | 263 | — | |
-| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 413 | — | |
+| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 466 | — | |
 | `feature_freshness.py` | ✅ active | — | 2 | 80 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 64 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 249 | — | |
@@ -667,7 +668,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 203 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 652 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 654 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 557 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 224 | — | |

@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| UGR-A07 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/contracts/adapters.py` → contracts_resilience**. New adapter module registered. Also fixed pre-existing mypy return-statement error in _run_git(). | RC-09 |
 | UGR-A06 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `core/observability/invariant_engine.py` → monitor_dashboard**. New InvariantEngine file registered in source map. | RC-09 |
 | UGR-P01 | 2026-06-24 | cursor-agent | — | **MODULE_SOURCE_MAP: `contracts_resilience` module registered**. New module for UGR v3.1 zero-tolerance resilience architecture (CapResult, Phantom Contracts, TypedClock, WAL, SupervisedScheduler). Blueprint: `blueprints/modules/contracts_resilience.md`. | RC-09 — new module not yet registered |
 | FIX-20260623-087 | 2026-06-23 | cursor-agent | 3dbc07ec | Commit Message Pre-Flight Validator: single-pass omega-routing validation script. Runs all 14 checks at once, reports all failures with fix hints. Eliminates whack-a-mole push pattern. | config-drift |

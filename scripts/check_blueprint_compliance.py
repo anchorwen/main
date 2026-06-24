@@ -54,7 +54,8 @@ def _run_git(args: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess(args, -1, stdout="", stderr="timeout")
     except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("check_blueprint_compliance:_run_git"):
-            return subprocess.CompletedProcess(args, -1, stdout="", stderr="error")
+            pass
+    return subprocess.CompletedProcess(args, -1, stdout="", stderr="error")
 
 
 # ── Module → source directory/file mapping ──
@@ -178,6 +179,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "contracts_resilience": [
         # UGR v3.1 — Zero-tolerance resilience architecture
+        "core/contracts/adapters.py",
         "core/contracts/cap_result.py",
         "core/contracts/phantom_contract.py",
         "scripts/verify_capresult_ast.py",

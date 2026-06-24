@@ -15,6 +15,7 @@ v3.1 architectural transformation described in the master plan.
 | `core/data/write_ahead_log.py` | Hash-chained WAL with checkpoint + rotation support | PLANNED |
 | `core/data/lifecycle_manager.py` | In-memory eviction lifecycle | PLANNED |
 | `core/runtime/supervised_scheduler.py` | THREAD + PROCESS dual-isolation scheduler | PLANNED |
+| `core/contracts/adapters.py` | Adapter bridges — CapResult ↔ legacy, TypedClock ↔ float, fault tolerance helpers | ✅ UGR-A07 |
 | `core/observability/invariant_engine.py` | 15 binary predicate invariants + WAL integrity check | ✅ UGR-A06 |
 | `core/observability/live_alert_hub.py` | AlertBus — AlertStormDetector + get_health_status (storm protection + self-monitoring) | ✅ UGR-A05 |
 | `scripts/verify_capresult_ast.py` | AST scanner: CapResult placement + dynamic call detection | PLANNED |
