@@ -27,6 +27,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 | `core/runtime/execution_gateway_router.py` | `ExecutionGatewayRouter` |
 | `core/runtime/integration_contracts.py` | `RuntimePipelineResult`, `OrderSizingPolicy` |
 | `core/runtime/signal_order_builder.py` | `SignalOrderRequestBuilder` |
+| `core/runtime/gods_eye_bridge.py` | `feed_gods_eye()` — RegimeGate→GodsEye translation bridge (Strangler Fig) |
 | `scripts/daily_ops.py` | Daily ops pipeline — feedback, retraining, governance, alpha lifecycle orchestration |
 
 ## Data Flow
@@ -78,6 +79,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260624-103 | 2026-06-24 | cursor-agent | 8b4b786e | UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/ (25 files, 172→8 sites). Replaced all fail_open_guard/log_and_continue context managers with specific exception types (RuntimeError, ValueError, KeyError, TypeError, OSError). Removed from core.runtime.fault_handler import fail_open_guard/log_and_continue from 23 files. | missing-validation |
+| FIX-20260625-124 | 2026-06-25 | cursor-agent | — | **God's Eye Phase 2 — Live Pipeline Integration**. Created `core/runtime/gods_eye_bridge.py` (Strangler Fig extraction). Added God's Eye gate (Cut 7) in strategy_evaluator. live_cycle only +12 lines: state field + bridge import/call + param forwarding. Advisory-only, never fails cycle. | RC-12 |
 | FIX-20260624-100 | 2026-06-24 | cursor-agent | — | Sev 2 fix — runtime-live module. | RC-06 |
 | FIX-20260605-119 | 2026-06-05 | cursor-agent | — | **四维度交叉审计——合约/启动链/品种分叉/配置校验**: Cross-audit across runtime-live, deployment-config, and execution-guards modules. | RC-09 |
 | FIX-20260624-091 | 2026-06-24 | cursor-agent | — | **UGR-A02: TypedClock — three incompatible time types**. Created core/runtime/typed_clock.py: MonotonicInstant, WallInstant (NO arithmetic), Duration. Type-level enforcement prevents mixing monotonic/wall times. | RC-12 — missing-feature |

@@ -296,6 +296,8 @@ class LiveCycleState:
 
     # Regime gate fail-closed: stale counter for fail-open → fail-closed migration
     _regime_gate_stale_counter: int = 0
+    # ── God's Eye: cross-instrument multi-TF regime consensus engine ──
+    gods_eye: Any = None  # GodsEye (persisted across cycles for regime history)
     # ── DQAF-20260623-067: feature buffer warm-up gate ──
     # Set False at init; flipped to True after MT5 bootstrap hydrates
     # price history + MTF service (Phase 2a).  session_guards.py reads
@@ -836,6 +838,7 @@ def _evaluate_strategy_lines(
     # ── FIX-20260609-011: governance degradation gate ──
     governance_state: dict[str, Any] | None = None,
     degradation_constraints: Any | None = None,  # FIX-20260611-022
+    gods_eye_verdict: Any = None,  # FIX-20260625-090: God's Eye cross-instrument consensus
     base_dir: str = "",  # FIX-20260615-006/C8
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
@@ -889,6 +892,7 @@ def _evaluate_strategy_lines(
         btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
         governance_state=governance_state,
         degradation_constraints=degradation_constraints,
+        gods_eye_verdict=gods_eye_verdict,  # FIX-20260625-090
         base_dir=base_dir,
     )
 
@@ -2935,6 +2939,7 @@ def execute_live_cycle(
 
         regime_gate: RegimeGate | None = state.regime_gate
         regime_gate_result: dict[str, Any] = {}
+        gods_eye_verdict: Any = None  # GodsEyeVerdict — cross-instrument consensus
         regime_modulation: Any = None
         trend_direction: str = "neutral"
         trend_strength: float = 0.0
@@ -3010,6 +3015,12 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+                # ── God's Eye: cross-instrument multi-TF regime consensus ──
+                # FIX-20260625-090: Extracted to core.runtime.gods_eye_bridge
+                # (Strangler Fig).  Only the bridge call remains in live_cycle.
+                from core.runtime.gods_eye_bridge import feed_gods_eye  # noqa: I001
+
+                gods_eye_verdict = feed_gods_eye(state, regime_gate_result, config)
             except (ValueError, RuntimeError, TypeError) as _rg_exc:
                 # DQAF-076/BLE001-P0: regime_detector.get_result() can
                 # raise ValueError/RuntimeError on bad state, TypeError
@@ -3453,6 +3464,7 @@ def execute_live_cycle(
             btc_augment=_btc_aug,  # FIX-20260613-052: resolved placeholder
             governance_state=_gov_state,
             degradation_constraints=_degrade_constraints,
+            gods_eye_verdict=gods_eye_verdict,  # FIX-20260625-090: God's Eye consensus
             base_dir=config.base_dir,  # FIX-20260615-006/C8
         )
 

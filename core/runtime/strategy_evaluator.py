@@ -97,6 +97,8 @@ def evaluate_strategy_lines(
     degradation_constraints: Any | None = None,
     # ── P4-2: Cross-strategy coordinator (2026-06-13) ──
     cross_strategy_coordinator: CrossStrategyCoordinator | None = None,
+    # ── FIX-20260625-090: God's Eye cross-instrument regime consensus ──
+    gods_eye_verdict: Any = None,
     # ── FIX-20260615-006/C8: required — no default ──
     base_dir: str = "",
 ) -> dict[str, Any]:
@@ -668,6 +670,57 @@ def evaluate_strategy_lines(
                     ),
                     flush=True,
                 )
+
+        # ── Cut 7: God's Eye cross-instrument consensus gate ────────────
+        # FIX-20260625-090: Modulates confidence and volume based on
+        # multi-TF alignment, cross-instrument consistency, chop, and
+        # anomaly scores.  God's Eye NEVER blocks a trade outright
+        # (fail-open for entries) — it reduces confidence and volume.
+        # Only exception: "shadow" mode forces shadow (no real money).
+        if gods_eye_verdict is not None and decision.should_trade:
+            _gev = gods_eye_verdict
+            _ge_health = getattr(_gev, "health_score", 1.0)
+            _ge_conf_mod = getattr(_gev, "confidence_modifier", 1.0)
+            _ge_mode = getattr(_gev, "recommended_mode", "normal")
+            _ge_chop = getattr(_gev, "chop_detected", False)
+            _ge_anomaly = getattr(_gev, "anomaly_score", 0.0)
+            _ge_macro = getattr(_gev, "macro_bias", "neutral")
+
+            # ── Mode-based gating ──
+            if _ge_mode == "shadow":
+                # God's Eye in shadow: force shadow mode (no real money)
+                from core.execution.regime_gate import get_stricter_mode
+
+                gate_mode = get_stricter_mode(gate_mode, "shadow")
+                decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
+            elif _ge_mode == "defensive":
+                # Defensive: require higher confidence floor
+                if decision.confidence < 0.50:
+                    decision.should_trade = False
+                    decision.reason = (
+                        f"gods_eye:defensive_confidence_floor"
+                        f"(conf={decision.confidence:.3f}<0.50)"
+                    )
+                else:
+                    decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
+            elif _ge_mode == "cautious":
+                # Cautious: modest confidence reduction
+                decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
+            # "normal": no modification
+
+            # ── Health-based volume modulation ──
+            if decision.should_trade:
+                _health_vol = max(0.25, _ge_health)  # floor at 25%
+                decision.volume = max(0.01, round(decision.volume * _health_vol, 2))
+                # Append God's Eye diagnostic to reason
+                _ge_tag = f"+gods_eye:{_ge_mode}" f"_h={_ge_health:.2f}" f"_cm={_ge_conf_mod:.2f}"
+                if _ge_chop:
+                    _ge_tag += "_chop"
+                if _ge_anomaly > 0.3:
+                    _ge_tag += f"_anom={_ge_anomaly:.2f}"
+                if _ge_macro != "neutral":
+                    _ge_tag += f"_macro={_ge_macro}"
+                decision.reason = (decision.reason or "") + _ge_tag
 
         # Apply session + health volume multipliers
         if decision.should_trade:

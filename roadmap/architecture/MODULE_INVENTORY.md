@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-24T17:15:17Z
-> **扫描模块数**: 673
+> **自动生成**: 2026-06-25T00:20:48Z
+> **扫描模块数**: 675
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -510,11 +510,12 @@
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 466 | — | |
 | `feature_freshness.py` | ✅ active | — | 2 | 81 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
+| `gods_eye_bridge.py` | ✅ active | — | 2 | 148 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 249 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4255 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4267 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1625 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
@@ -541,7 +542,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 923 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 872 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 925 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -699,6 +700,7 @@
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |
+| `diagnose_process_health.py` | ✅ active | — | 10 | 457 | — | |
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 564 | — | |

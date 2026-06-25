@@ -10,6 +10,7 @@ Online volatility regime classification using ATR-based rolling percentile with 
 | `core/execution/regime_gate.py` | `compute_continuous_regime_modulation()` — 4D regime modulation |
 | `core/execution/trend_detector.py` | `KalmanTrendFilter`, `Hurst`, `TrendDetector` |
 | `core/execution/gods_eye.py` | `GodsEye` — cross-instrument, multi-TF regime consensus engine |
+| `core/runtime/gods_eye_bridge.py` | `feed_gods_eye()` — RegimeGate→GodsEye translation bridge (Strangler Fig) |
 | `core/constants.py` | `REGIME_LOOKBACK_BARS`, `REGIME_CONFIRM_BARS`, `REGIME_EXIT_BARS`, `REGIME_RATE_LIMIT_CYCLES` |
 
 ## Data Flow
@@ -18,7 +19,9 @@ Market bars → RegimeDetector.update(bar) → regime_label (low/normal/high vol
                  ↓
           RegimeGate.modulate() → continuous 4D modulation factors
                  ↓
-          GodsEye.verdict() → cross-instrument consensus + health score
+          gods_eye_bridge.feed_gods_eye() → GodsEye.verdict()
+                 ↓
+          strategy_evaluator (Cut 7) → confidence_modifier × volume × mode fusion
 ```
 
 ## Inbound Dependencies
@@ -52,6 +55,8 @@ Market bars → RegimeDetector.update(bar) → regime_label (low/normal/high vol
 | FIX-20260529-026 | 2026-05-29 | cursor-agent | — | FIFO buffer eviction bias: replaced `bisect.insort()` sorted list with `collections.deque(maxlen=window)` + `numpy` vectorized percentile scan. The old approach used `pop(0)` on a sorted buffer, which removes the smallest ATR value instead of the oldest — causing systematic upward drift in volatility percentile estimates and "low vol false-positive" regime gating. For a 500-element window, the C-level scan costs ≈3 µs (negligible at M5 cadence). | RC-06 |
 | FIX-20260530-080 | 2026-05-30 | cursor-agent | — | 5.2 风控物理闭环: drawdown kill → block_new_entries flag. Both main+legacy paths trip CB on DD threshold, auto-clear on recovery/midnight reset. Entry section checks flag before strategy eval. Last gap in institutional audit closed. | RC-07 |
 | FIX-20260602-053 | 2026-06-02 | cursor-agent | — | **BTC trend_conviction threshold 0.30→0.15**: old threshold unreachable for BTC (Hurst 0.50-0.53 → need trend_strength>1.22). System drifted into shadow 20min after restart, locked for 70min. Lower threshold allows reduced→full transition while keeping pure-noise regimes in reduced. | RC-05 |
+| FIX-20260625-090 | 2026-06-25 | cursor-agent | `1fa175a2` | **God's Eye — Cross-Instrument Regime Consensus Engine**. Created `core/execution/gods_eye.py` (300 lines, 23 tests). Multi-TF alignment, cross-instrument consistency, chop + anomaly detection. Sits ABOVE RegimeGate. | RC-12 |
+| FIX-20260625-124 | 2026-06-25 | cursor-agent | — | **God's Eye Phase 2 — Live Pipeline Integration**. Created `core/runtime/gods_eye_bridge.py` (Strangler Fig). God's Eye gate (Cut 7) in strategy_evaluator: confidence_modifier × volume × mode fusion. Advisory-only. live_cycle +12 lines. | RC-12 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
