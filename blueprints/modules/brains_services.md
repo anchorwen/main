@@ -68,6 +68,8 @@ Zero governance import below orchestrator layer — pure dict dependency injecti
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260625-136 | 2026-06-25 | cursor-agent | bc9094a8 | Augment BrainPromotionEvaluator with journal-based PnL. Tracker profit_factor was composite_score proxy; override with actual MT5 trade PnL from journal. Closes data-source gap that caused high-PF brains to be undervalued by promotion evaluator. (DQAF-20260625-060 Phase 2) | missing-feature |
+| FIX-20260625-135 | 2026-06-25 | cursor-agent | dcbe93b9 | Fix _compute_metrics_from_tracker() consecutive losses: lifetime max to tail (DQAF-20260625-060). 5 brains incorrectly flagged for freeze rescued. | contract-violation |
 | FIX-20260613-074 | 2026-06-13 | cursor-agent | 6856291 | Promotion-before-throttle: reversed check order so probation→live promotion runs BEFORE throttle check. Previously recent_wr<38% throttle intercepted probation brains before they could reach promotion evaluation. Swing_V9_M15_V2 (PF=3.51) was stuck in promote→throttle→promote loop. | contract-violation |
 | FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **Leaderboard equal-weight fallback**: rank() vote_weights空/全零→1/N兜底, 彻底消除全局权重0瘫痪. | RC-06 |
 | FIX-20260607-147 | 2026-06-07 | cursor-agent | — | **Vote weight decoupling**: `apply_weights()` stamps `p.dynamic_scale` instead of overwriting `p.vote_weight`. Config base_weight preserved as binary permission gate. Prevents shadow brains (config vote_weight=0.0) from accumulating collective dynamic weight to override voting brains. DQAF-011. | RC-09 |

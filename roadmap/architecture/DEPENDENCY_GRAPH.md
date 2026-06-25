@@ -1,7 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-25T06:25:59Z
-
+> **自动生成**: 2026-06-25T06:25:59Z> **自动生成**: 2026-06-25T07:05:30Z
 ## Package-Level Dependencies
 
 ### `apps/engine/`
@@ -562,6 +561,7 @@
 - `audit_data_module.py` → (无内部依赖)
 - `audit_deferred_tasks.py` → (无内部依赖)
 - `audit_entry_spread.py` → (无内部依赖)
+- `audit_entry_spread_coverage.py` → (无内部依赖)
 - `audit_full_pipeline.py` → (无内部依赖)
 - `audit_institutional_performance.py` → (无内部依赖)
 - `audit_live_brains.py` → (无内部依赖)
@@ -751,7 +751,7 @@
 
 - `batch_train_skeleton.py` → `scripts.training.crt_manifest`
 - `brain_leaderboard.py` → (无内部依赖)
-- `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.governance.governance_service`
+- `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`
 - `build_calibrated_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_live_labeled_dataset.py` → (无内部依赖)
 - `build_meta_features.py` → `core.contracts.training.training_contract`

@@ -313,6 +313,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/commander_guardrails_arch.py",
         "scripts/monitor_pwin_fix.py",
         "scripts/verify_dqaf044_fix_effect.py",
+        "scripts/audit_entry_spread_coverage.py",
     ],
     "runtime_live": [
         "main.py",

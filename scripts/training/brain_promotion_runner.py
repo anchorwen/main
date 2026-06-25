@@ -78,14 +78,21 @@ def _compute_metrics_from_tracker(records: list[dict[str, Any]]) -> dict[str, An
     recent_closed = sum(1 for o in recent if o not in ("pending", "skipped", ""))
     recent_wr = recent_wins / recent_closed if recent_closed > 0 else win_rate
 
-    cons_losses = 0
-    max_cons = 0
-    for o in outcomes:
+    # FIX-20260625-135: Tail consecutive losses (reversed scan).
+    # Old code used forward scan tracking lifetime maximum — a single bad
+    # streak from months ago would permanently freeze the brain even if it
+    # had recovered and was winning recently.  The correct signal for
+    # "is this brain in a losing streak right now?" is the tail: scan
+    # backwards from the most recent outcome and stop at the first win.
+    # This matches the canonical implementation in
+    #   run_promotion.py:compute_performance_from_ledger() (lines 78-84)
+    #   brain_pnl_ledger.py:get_metrics_calibrated() (lines 742-747)
+    consecutive_losses = 0
+    for o in reversed(outcomes):
         if "loss" in o.lower() or "sl" in o.lower():
-            cons_losses += 1
-            max_cons = max(max_cons, cons_losses)
+            consecutive_losses += 1
         elif "win" in o.lower() or "tp" in o.lower():
-            cons_losses = 0
+            break
 
     scores = [r.get("composite_score", 0.5) for r in records]
     avg_score = sum(scores) / len(scores) if scores else 0.5
@@ -102,10 +109,48 @@ def _compute_metrics_from_tracker(records: list[dict[str, Any]]) -> dict[str, An
         "signal_count": dispatched,
         "win_rate": round(win_rate, 4),
         "profit_factor": round(profit_factor, 4),
-        "consecutive_losses": max_cons,
+        "consecutive_losses": consecutive_losses,
         "recent_win_rate": round(recent_wr, 4),
         "total_outcomes": len(outcomes),
     }
+
+
+def _augment_with_journal_pnl(
+    performance: dict[str, dict[str, Any]],
+    data_dir: str | Path = "data_btc",
+) -> dict[str, dict[str, Any]]:
+    """Augment tracker-based performance metrics with journal-based PnL.
+
+    FIX-20260625-136: The BrainPerformanceTracker records composite_score-based
+    profit_factor (a heuristic proxy), not actual trade PnL.  This function
+    loads journal-based PnL metrics and overrides the profit_factor field with
+    actual PnL values.  The tracker's signal_count and win_rate are preserved
+    (they reflect live dispatch activity; journal metrics reflect closed trades).
+    """
+    from core.feedback.live_journal_metrics import compute_journal_brain_metrics
+
+    journal_metrics = compute_journal_brain_metrics(Path(data_dir))
+    for brain_id, metrics in performance.items():
+        jm = journal_metrics.get(brain_id)
+        if jm is None:
+            continue
+        jm_sample_count = jm.get("sample_count", 0)
+        if jm_sample_count < 3:
+            continue  # Not enough closed trades for reliable PnL
+
+        # ── Override profit_factor with journal-based PnL ──
+        # The tracker-derived profit_factor is a heuristic from composite_score
+        # (see _compute_metrics_from_tracker L90-97).  Journal PF is based on
+        # actual MT5 pnl_r values — the ground truth for profitability.
+        metrics["profit_factor"] = round(jm.get("profit_factor", 0.0), 4)
+
+        # ── Supplement with journal-specific fields ──
+        metrics["journal_sample_count"] = jm_sample_count
+        metrics["journal_win_rate"] = round(jm.get("win_rate", 0.0), 4)
+        metrics["journal_sharpe"] = round(jm.get("sharpe", 0.0), 4)
+        metrics["journal_cumulative_pnl"] = round(jm.get("cumulative_pnl", 0.0), 4)
+
+    return performance
 
 
 def run_evaluation(
@@ -121,6 +166,16 @@ def run_evaluation(
     )
 
     performance = load_performance(performance_path)
+
+    # FIX-20260625-136: Augment tracker metrics with journal-based PnL.
+    # Tracker profit_factor is a composite_score proxy; journal PF is actual
+    # MT5 trade PnL.  This closes the data-source gap that caused high-PF
+    # brains to be blocked by low tracker sample counts.
+    try:
+        data_dir = performance_path.parent
+        performance = _augment_with_journal_pnl(performance, data_dir)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        pass  # Journal augmentation is best-effort; fall through on any error
     try:
         from core.governance.governance_service import GovernanceService
 
