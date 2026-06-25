@@ -17,21 +17,9 @@ repos:
         pass_filenames: true
 
   # ------------------------------------------------------------------
-  # mypy type-check — iron law gate
-  # Blocks commit if any staged .py file has MORE mypy errors than baseline.
-  # Update baseline: python scripts/pre_commit_mypy.py --update-baseline
-  # ------------------------------------------------------------------
-  - repo: local
-    hooks:
-      - id: mypy-iron-law
-        name: "[铁律] mypy type-check (no new errors)"
-        entry: python scripts/pre_commit_mypy.py
-        language: system
-        files: \.py$
-        stages: [pre-commit]
-        pass_filenames: false
-        require_serial: true
-
+  # Plan E (2026-06-25): Removed redundant mypy pre-commit hook.
+  # verify-iron-law (verify.py --quick) already runs mypy against the
+  # same baseline.  Pre-push ci-mirror-mypy remains as the final gate.
   # ------------------------------------------------------------------
   # 架构文档门禁 — 改动 core/ apps/ scripts/ configs/ main.py 时自动刷新
   # 模式: AUTO-UPDATE (扫描 → 生成 → 自动 git add)

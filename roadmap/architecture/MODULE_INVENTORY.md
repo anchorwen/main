@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T01:48:03Z
+> **自动生成**: 2026-06-25T03:59:00Z
 > **扫描模块数**: 676
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -743,9 +743,9 @@
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 185 | — | |
-| `omega_constants.py` | 📄 config | — | 0 | 70 | — | |
+| `omega_constants.py` | ✅ active | — | 1 | 112 | — | |
 | `omega_crash_snapshot.py` | ✅ active | — | 4 | 158 | — | |
-| `omega_gate.py` | ✅ active | — | 4 | 545 | — | |
+| `omega_gate.py` | ✅ active | — | 4 | 558 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
@@ -786,7 +786,7 @@
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
 | `validate_blueprints.py` | ✅ active | — | 8 | 358 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
-| `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 406 | — | |
+| `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 409 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
 | `verify.py` | ✅ active | — | 15 | 992 | — | |

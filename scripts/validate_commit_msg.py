@@ -29,6 +29,7 @@ from scripts.omega_constants import (
     HOT_PATH_IRON_LAW,
     SCENE_REQUIRES_IRON_LAW,
     SIGNATURE_RE,
+    is_test_only_commit,
 )
 
 
@@ -143,10 +144,12 @@ def validate(msg: str) -> ValidationReport:
     covered_staged = get_staged_covered()
     has_fix = bool(re.search(r"FIX-\d{8}-\d{3}", msg))
     has_dqaf = bool(re.search(r"DQAF-\d{8}-\d{3}", msg))
-    is_exempt = is_scene_f or bool(EXEMPTION_PATTERN.search(msg))
+    # Plan A: test-only commits auto-exempt from quality gates
+    is_test_only = is_test_only_commit(covered_staged)
+    is_exempt = is_scene_f or bool(EXEMPTION_PATTERN.search(msg)) or is_test_only
 
     # ── Check 2: Scene requires minimal iron law references ────────────────
-    if scene_match:
+    if scene_match and not is_test_only:
         required = SCENE_REQUIRES_IRON_LAW.get(scene, [])
         missing_laws = [law for law in required if law not in signature]
         if missing_laws:
@@ -165,7 +168,7 @@ def validate(msg: str) -> ValidationReport:
             )
 
     # ── Check 3: Root Cause Layer + Causal Chain for Scene A ──────────────
-    if scene == "A":
+    if scene == "A" and not is_test_only:
         has_rc_layer = bool(re.search(r"Root\s*Cause\s*Layer\s*:\s*(L[123])", msg, re.IGNORECASE))
         has_causal = bool(re.search(r"Causal\s*Chain.*:", msg, re.IGNORECASE))
         if not has_rc_layer:

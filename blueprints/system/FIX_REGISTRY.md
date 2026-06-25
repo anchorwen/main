@@ -855,6 +855,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260625-129 | 2026-06-25 | deployment-lifecycle | Phase 4 shadow verification scripts: phase4_shadow_review.py + phase4_final_audit.py, MODULE_SOURCE_MAP update for 7 new files | RC-12 |
 | FIX-20260625-130 | 2026-06-25 | runtime-live | Process health diagnostic script: diagnose_process_health.py, Iron Law #11 compliant | RC-12 |
 | FIX-20260625-131 | 2026-06-25 | monitor_dashboard | Flaky test: test_summary_emission — time.sleep(0.06) insufficient on Windows (~15.6ms timer quantum), raised to 0.15s to safely exceed 50ms storm_summary_interval | RC-01 |
+| FIX-20260625-132 | 2026-06-25 | deployment_lifecycle | Plan A+E: Test-only commit auto-exemption (Scene F) + redundant mypy hook removal. Added is_test_only_commit() to omega_constants.py with path normalization and root conftest.py whitelist. omega_gate.py and validate_commit_msg.py auto-detect test-only staged files and bypass quality gates (DQAF/FIX_REGISTRY/4D/closing). Removed redundant mypy pre-commit hook (verify.py --quick already covers it). Updated CLAUDE.md Scene F trigger definition. | RC-12 |
 
 
 

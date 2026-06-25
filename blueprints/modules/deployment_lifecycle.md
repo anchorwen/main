@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260625-132 | 2026-06-25 | cursor-agent | 1ee64d8f | Plan A+E: Test-only commit auto-exemption (Scene F) + redundant mypy hook removal. Added is_test_only_commit() to omega_constants.py with path normalization and root conftest.py whitelist. omega_gate.py and validate_commit_msg.py auto-detect test-only staged files and bypass quality gates (DQAF/FIX_REGISTRY/4D/closing). Removed redundant mypy pre-commit hook (verify.py --quick already covers it). Updated CLAUDE.md Scene F trigger definition. | missing-feature |
 | FIX-20260625-129 | 2026-06-25 | cursor-agent | c94a1d22 | Phase 4 shadow verification scripts: phase4_shadow_review.py + phase4_final_audit.py, MODULE_SOURCE_MAP update for 7 new files | missing-feature |
 | FIX-20260625-127 | 2026-06-25 | cursor-agent | 62aa0e2d | Memory audit script: detects stale/untracked/completed memory files. Classifies 39 memory files by staleness, completion, and tracking. --sweep archives completed to _archive/ and updates MEMORY.md. | missing-feature |
 | FIX-20260625-126 | 2026-06-25 | cursor-agent | 2924f66e | Quarterly split: FIX_REGISTRY.md detail entries extracted to fixes/FIX_2026_Q2.md. Main file 4603→879 lines (-81%). Index table retained as central SSOT. register_fix.py writes detail to quarter file + index to main file. validate_blueprints.py gains quarterly consistency + duplicate detection check. shadow_rca.py searches quarterly files for context. | dependency-order |

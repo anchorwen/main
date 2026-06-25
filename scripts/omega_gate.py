@@ -49,6 +49,7 @@ from scripts.omega_constants import (
     SCENE_F_EXEMPTION_SCOPE,
     SCENE_REQUIRES_IRON_LAW,
     SIGNATURE_RE,
+    is_test_only_commit,
 )
 
 
@@ -62,7 +63,7 @@ def get_commit_msg() -> str:
 
 
 def get_staged_files() -> set[str]:
-    """Get set of staged Python files."""
+    """Get set of all staged files (all types, not just .py)."""
     result = subprocess.run(
         ["git", "diff", "--name-only", "--cached"],
         capture_output=True,
@@ -72,9 +73,7 @@ def get_staged_files() -> set[str]:
     )
     if result.returncode != 0:
         return set()
-    return {
-        line.strip() for line in result.stdout.strip().split("\n") if line.strip().endswith(".py")
-    }
+    return {line.strip() for line in result.stdout.strip().split("\n") if line.strip()}
 
 
 def _staged_diff_stats() -> dict[str, int]:
@@ -143,10 +142,24 @@ def main() -> int:
     # IRON_LAW-13-S1: Enhanced with Root Cause Layer + Causal Chain depth (#8, #12).
     scene_match = re.search(r"Scene\s+([A-H])", signature)
     scene = scene_match.group(1).upper() if scene_match else ""
-    is_scene_f = scene == "F"  # P0-3: Scene F = pure mechanical, full exemption
-    if is_scene_f:
+
+    # ── Plan A: Auto-detect test-only commits → Scene F equivalent ──────
+    is_test_only = is_test_only_commit(staged)
+    is_scene_f = (
+        scene == "F" or is_test_only
+    )  # P0-3 + Plan A: Scene F = pure mechanical + test-only
+    if is_test_only:
+        test_py = [
+            f for f in staged if f.replace("\\", "/").startswith("tests/") and f.endswith(".py")
+        ]
+        print(
+            f"[Ω] Test-only commit detected ({len(test_py)} test file(s)) "
+            f"— quality gates bypassed (Scene F equivalent, Plan A)."
+        )
+    elif is_scene_f:
         print(f"[Ω] Scene F detected — quality gates bypassed. Scope: {SCENE_F_EXEMPTION_SCOPE}")
-    if scene_match:
+
+    if scene_match and not is_test_only:
         required = SCENE_REQUIRES_IRON_LAW.get(scene, [])
         missing = [law for law in required if law not in signature]
         if missing:
@@ -159,7 +172,7 @@ def main() -> int:
             return 1
 
         # ── #8 / #12 depth verification for Scene A ──
-        if scene == "A":
+        if scene == "A" and not is_test_only:
             has_root_cause_layer = bool(
                 re.search(r"Root\s*Cause\s*Layer\s*:\s*(L[123])", commit_msg, re.IGNORECASE)
             )

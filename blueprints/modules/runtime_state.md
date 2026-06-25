@@ -41,6 +41,7 @@ LiveCycle.run_cycle() reads snapshot once per cycle
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |------|------|--------|--------|---------|------------|
+| FIX-20260625-132 | 2026-06-25 | cursor-agent | — | **Plan A+E: test-only commit auto-exemption + redundant mypy hook removal**. Added `is_test_only_commit()` to `omega_constants.py` with path normalization (`\\`→`/`) and root `conftest.py` whitelist. Test-only staged files auto-detected as Scene F equivalent. | RC-12 (missing-feature — Scene routing lacked test-only exemption path) |
 | FIX-20260624-116 | 2026-06-24 | cursor-agent | 018e58e5 | P1-1+P1-2: Scene F full exemption in omega gate + shared omega_constants.py + pre-flight validator hook | config-drift |
 | FIX-20260624-114 | 2026-06-24 | cursor-agent | 14b4c6da | P0-3: unify pre-push with pre-commit framework — extract check_omega_pre_push.py, add ci-mirror-omega hook, create bootstrap-dev-env.sh | config-drift |
 | FIX-20260624-112 | 2026-06-24 | cursor-agent | a2c77b03 | P0-2: blueprint baseline mechanism — pre_commit_blueprint.py with baseline-gated validation, mirrors mypy_baseline.json pattern | config-drift |
