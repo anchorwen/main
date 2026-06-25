@@ -317,7 +317,8 @@ class TestAlertStormDetector:
         for _ in range(10):
             d.record("rule_a")
         # First emission: interval has elapsed since storm entered
-        time.sleep(0.06)
+        # Use >= 3× timer quantum (Windows ~15.6ms) to stay safely above 50ms interval
+        time.sleep(0.15)
         assert d.should_emit_summary()
         summary = d.consume_summary()
         assert "rule_a" in summary

@@ -854,6 +854,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260625-128 | 2026-06-25 | contracts-training | Barrier v1.2.1 contract: scan_barrier_params.py + backtest_rule_strategies.py + training config (SL=2.0, TP=1.25, H=12) + label contract | RC-12 |
 | FIX-20260625-129 | 2026-06-25 | deployment-lifecycle | Phase 4 shadow verification scripts: phase4_shadow_review.py + phase4_final_audit.py, MODULE_SOURCE_MAP update for 7 new files | RC-12 |
 | FIX-20260625-130 | 2026-06-25 | runtime-live | Process health diagnostic script: diagnose_process_health.py, Iron Law #11 compliant | RC-12 |
+| FIX-20260625-131 | 2026-06-25 | monitor_dashboard | Flaky test: test_summary_emission — time.sleep(0.06) insufficient on Windows (~15.6ms timer quantum), raised to 0.15s to safely exceed 50ms storm_summary_interval | RC-01 |
 
 
 
