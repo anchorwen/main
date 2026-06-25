@@ -783,3 +783,28 @@
 | DQAF-20260623-072 | 2026-06-23 | execution_strategy_line | Sev 1 |
 
 **Cross-References**: FIX-20260623-072, CCT-20260623-072
+
+---
+
+### ReB-20260625-125
+- **Pattern Signature**: `ORPHAN_WATCHDOG_MIGRATION_SWEEP_INCOMPLETE`
+- **Date Cataloged**: 2026-06-25
+- **Source Docket**: DQAF-20260625-125
+- **Related**: ReB-20260622-001 (`WILD_STATE_WRITE_POISONING`), ReB-20260622-047 (`ORPHAN_GENERATOR_NOT_WIRED_TO_PIPELINE`)
+
+**Definition**: 基础设施级迁移 (如 StateWriter gate rollout) 跨越多个模块时, 某个消费者/探测器脚本未被纳入迁移范围 → 该脚本继续使用旧路径/旧字段名/旧数据格式 → 静默失效。本例中 Plan B StateWriter 迁移 (FIX-20260622-001) 将 `daily_ops_scheduler.py` 的写入路径从 `daily_ops_state.json` 变更为 `state/daily_ops_state.json`, 但 `watchdog_daily_ops.py` (读取同一状态文件的消费者) 未被更新 → 三连盲 (路径/字段名/auto_run) → watchdog 完全失效。
+
+**Prevention Strategy**:
+1. 基础设施迁移必须包含 `grep` 完整消费者审计 — 搜索旧路径/字段名的所有引用, 在迁移 PR 中全部更新
+2. 迁移 checklist: 迁移后运行 `python scripts/commander_guardrails_arch.py` 检查 stale state files + orphan consumers
+3. Watchdog 自检: `watchdog_daily_ops.py` 增加启动时路径可达性检查 — 如果 state_path 不存在且 `--auto-run` 启用, 立即 CRITICAL 告警
+4. 消费者-生产者契约: 状态文件路径和字段名应定义在 `core/state/catalog.py` 中 (SSOT), 消费者使用 `catalog.lookup()` 而非硬编码
+
+**Detection Method**: `grep "daily_ops_state.json"` 全库搜索 → 验证所有引用点使用相同路径 + 字段名。`scripts/system_trust_report.py` staleness 检查可捕获 >24h 未生成 leaderboard 的情况。
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260625-125 | 2026-06-25 | runtime, scripts | Sev 2 |
+
+**Cross-References**: FIX-20260625-125, CCT-20260625-125

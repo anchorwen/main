@@ -903,3 +903,23 @@
 - **关联 ReB Pattern**: `WRONG_DICT_LEVEL_GOVERNANCE`
 - **关联 FIX**: FIX-20260623-072 (`governance_state.get("brain_states",{}).items()` 单行修复)
 - **状态**: **CLOSED** — DQAF-059 治理门过滤 + DQAF-066 治理冷启动回退 + DQAF-066 cold_explore 门禁全部自愈
+
+---
+
+### CCT-20260625-125
+- **Docket ID**: DQAF-20260625-125
+- **日期**: 2026-06-25
+- **置信度**: confirmed (code audit × production log evidence × file path verification)
+- **因果链**:
+  - [Layer 1 — 症状]: XAU `data/reports/leaderboard.json` generated_at=2026-06-22T05:44 (66h/3956min stale), BTC leaderboard 819min stale. `daily_ops_complete` 事件从未发出。
+  - [Layer 2 — 中间异常]: `live_launcher` log L13632: intent loop crashed with exit code 1 (restart #12) during daily_ops execution — pipeline interrupted after feedback step, before retraining_check. Watchdog 未能自动恢复。
+  - [Layer 3 — 根因]: FIX-20260622-001 (Plan B StateWriter 迁移) 遗漏 `watchdog_daily_ops.py`。三处 bug 叠加: (a) 路径 `base_dir/"daily_ops_state.json"` 与实际 `base_dir/"state"/"daily_ops_state.json"` 不匹配, (b) 字段名 `last_run_utc`/`updated_utc` 与实际 `last_daily_ops_utc` 不匹配, (c) `age_h is None` 分支未实现 auto_run。Watchdog 完全盲化 — 即使 `--auto-run` 也不执行。
+- **证据引用**:
+  - Source 1: `data/reports/leaderboard.json` — generated_at=2026-06-22T05:44:49 (文件 mtime 验证)
+  - Source 2: `data/logs/live_launcher_20260624T114818Z.log:13632` — `intent exited with code 1`
+  - Source 3: `scripts/watchdog_daily_ops.py:61` (修复前) — `state_path = base_dir / "daily_ops_state.json"`
+  - Source 4: `core/state/catalog.py:321` — `path_template="state/daily_ops_state.json"` (SSOT)
+- **是否被推翻**: 否 — 所有三处 bug 均已代码审计确认
+- **关联 ReB Pattern**: `ORPHAN_WATCHDOG_MIGRATION_SWEEP_INCOMPLETE`
+- **关联 FIX**: FIX-20260625-125 (路径修正 + 字段名修正 + never-run auto_run)
+- **状态**: **CLOSED** — FIX-20260625-125 deployed. Leaderboard 手动恢复: XAU 69 brains 1192 decisions
