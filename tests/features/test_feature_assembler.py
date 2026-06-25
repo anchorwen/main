@@ -162,10 +162,44 @@ class TestSwingSchemas:
         assert result.shape == (35,)
 
     def test_btc_macro_enhanced_41_with_augment(self) -> None:
-        """BTC schema with valid btc_augment 41-dim vector."""
+        """BTC legacy schema: augmenter output gets legacy reorder shim applied.
+
+        FIX-20260625-137: The legacy ``btc_macro_enhanced_41`` schema triggers
+        a 3-cycle permutation on slots 35-40 (Order B → Order C) so V4 receives
+        bit-identical tensor to pre-fix.  Slots 0-34 are unaffected.
+        """
         btc_aug = np.arange(41, dtype=np.float64) + 500.0
         result = assemble_features_by_schema(
             "btc_macro_enhanced_41",
+            daily_features=np.arange(24, dtype=np.float64) + 100.0,
+            micro_features=np.arange(9, dtype=np.float64) + 200.0,
+            tf_ou=0.2,
+            tf_hurst=0.7,
+            btc_augment=btc_aug,
+            legacy_v9_vector=np.arange(40, dtype=np.float64),
+        )
+        assert result.shape == (41,)
+        # Legacy shim permutes slots 35-40: (35←39, 36←40, 37←35, 38←36, 39←37, 40←38)
+        expected = np.arange(41, dtype=np.float64) + 500.0
+        expected[35], expected[36], expected[37], expected[38], expected[39], expected[40] = (
+            expected[39],
+            expected[40],
+            expected[35],
+            expected[36],
+            expected[37],
+            expected[38],
+        )
+        assert np.array_equal(result, expected)
+
+    def test_btc_macro_enhanced_41_v2_with_augment(self) -> None:
+        """BTC v2 schema: augmenter output passes through unchanged (no shim).
+
+        FIX-20260625-137: The clean ``btc_macro_enhanced_41_v2`` schema skips
+        the legacy reorder shim — augmenter already outputs in Schema Order B.
+        """
+        btc_aug = np.arange(41, dtype=np.float64) + 500.0
+        result = assemble_features_by_schema(
+            "btc_macro_enhanced_41_v2",
             daily_features=np.arange(24, dtype=np.float64) + 100.0,
             micro_features=np.arange(9, dtype=np.float64) + 200.0,
             tf_ou=0.2,

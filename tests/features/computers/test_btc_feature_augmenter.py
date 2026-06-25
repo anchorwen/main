@@ -142,8 +142,8 @@ class TestAugmentRegimeDerivatives:
         daily = np.zeros(24)
         micro = np.zeros(9)
         result = aug.augment(daily, micro, btc_price=60000.0, tf_ou=0.5, tf_hurst=0.6)
-        assert result[37] == 0.0  # delta_ou
-        assert result[38] == 0.0  # delta_hurst
+        assert result[35] == 0.0  # delta_ou (FIX-20260625-137: slot 37→35)
+        assert result[36] == 0.0  # delta_hurst (FIX-20260625-137: slot 38→36)
 
     def test_second_call_deltas_computed(self) -> None:
         aug = BTCFeatureAugmenter()
@@ -151,15 +151,17 @@ class TestAugmentRegimeDerivatives:
         micro = np.zeros(9)
         aug.augment(daily, micro, btc_price=60000.0, tf_ou=0.5, tf_hurst=0.6)
         result = aug.augment(daily, micro, btc_price=60000.0, tf_ou=0.7, tf_hurst=0.4)
-        assert result[37] == pytest.approx(0.2)  # 0.7 - 0.5
-        assert result[38] == pytest.approx(-0.2)  # 0.4 - 0.6
+        assert result[35] == pytest.approx(0.2)  # 0.7 - 0.5 (FIX-20260625-137: slot 37→35)
+        assert result[36] == pytest.approx(-0.2)  # 0.4 - 0.6 (FIX-20260625-137: slot 38→36)
 
     def test_ou_x_hurst_computed(self) -> None:
         aug = BTCFeatureAugmenter()
         daily = np.zeros(24)
         micro = np.zeros(9)
         result = aug.augment(daily, micro, btc_price=60000.0, tf_ou=0.5, tf_hurst=0.6)
-        assert result[39] == pytest.approx(0.5 * 0.4)  # ou * (1-hurst)
+        assert result[37] == pytest.approx(
+            0.5 * 0.4
+        )  # ou * (1-hurst) (FIX-20260625-137: slot 39→37)
 
     def test_ou_div_adx_computed(self) -> None:
         aug = BTCFeatureAugmenter()
@@ -168,7 +170,9 @@ class TestAugmentRegimeDerivatives:
         daily[7] = 2.0  # ADX
         micro = np.zeros(9)
         result = aug.augment(daily, micro, btc_price=60000.0, tf_ou=1.0, tf_hurst=0.6)
-        assert result[40] == pytest.approx(1.0 / 2.0)  # ou / max(ADX, 1)
+        assert result[38] == pytest.approx(
+            1.0 / 2.0
+        )  # ou / max(ADX, 1) (FIX-20260625-137: slot 40→38)
 
     def test_ou_div_adx_minimum_one(self) -> None:
         aug = BTCFeatureAugmenter()
@@ -176,7 +180,9 @@ class TestAugmentRegimeDerivatives:
         daily[7] = 0.5  # ADX below 1
         micro = np.zeros(9)
         result = aug.augment(daily, micro, btc_price=60000.0, tf_ou=1.0, tf_hurst=0.6)
-        assert result[40] == pytest.approx(1.0)  # ou / max(0.5, 1) = 1.0 / 1.0
+        assert result[38] == pytest.approx(
+            1.0
+        )  # ou / max(0.5, 1) = 1.0 / 1.0 (FIX-20260625-137: slot 40→38)
 
 
 # ── _compute_xauusdc_return ────────────────────────────────────────────────
