@@ -228,6 +228,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/register_fix.py",
         "scripts/reconcile_fix_registry.py",
         "scripts/shadow_rca.py",
+        "scripts/audit_memory.py",
         "scripts/check_blueprint_compliance.py",
         "scripts/hook_blueprint_precheck.py",
         "scripts/hook_mypy_check.py",

@@ -299,9 +299,9 @@ def check_quarterly_fix_consistency() -> list[str]:
         if "## Fix Details" not in text:
             errors.append(f"STRUCTURE: {qf_rel} missing '## Fix Details' section")
 
-        # Extract FIX IDs from detail headings
+        # Extract FIX IDs from detail headings (exact match — must end with NNN)
         detail_ids: list[str] = []
-        for m in re.finditer(r"^###\s+(FIX-\d{8}-\d{3})", text, re.MULTILINE):
+        for m in re.finditer(r"^###\s+(FIX-\d{8}-\d{3})\s*$", text, re.MULTILINE):
             detail_ids.append(m.group(1))
 
         # Check for duplicates

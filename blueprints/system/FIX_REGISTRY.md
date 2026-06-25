@@ -850,6 +850,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260621-035 | 2026-06-21 | execution-orders | cursor-agent | RC-06 |
 | FIX-20260624-100 | 2026-06-24 | runtime-live | cursor-agent | RC-06 |
 | FIX-20260625-126 | 2026-06-25 | deployment-lifecycle | Quarterly split: FIX_REGISTRY.md detail entries extracted to fixes/FIX_2026_Q2.md. Main file 4603→879 lines (-81%). Index table retained as central SSOT. register_fix.py writes detail to quarter file + index to main file. validate_blueprints.py gains quarterly consistency + duplicate detection check. shadow_rca.py searches quarterly files for context. | RC-10 |
+| FIX-20260625-127 | 2026-06-25 | deployment-lifecycle | Memory audit script: detects stale/untracked/completed memory files. Classifies 39 memory files by staleness, completion, and tracking. --sweep archives completed to _archive/ and updates MEMORY.md. | RC-12 |
 
 
 

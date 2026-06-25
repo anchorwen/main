@@ -40,6 +40,8 @@ ROOT_CAUSE_MAP = {
     "RC-08": "incomplete-cleanup",
     "RC-09": "config-drift",
     "RC-10": "dependency-order",
+    "RC-11": "stale-data",
+    "RC-12": "missing-feature",
 }
 
 FIX_ID_RE = re.compile(r"^FIX-\d{8}-\d{3}$")
