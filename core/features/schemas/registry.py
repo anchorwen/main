@@ -16,6 +16,7 @@ from typing import Any
 from core.features.schemas.btc_macro_enhanced_schema import (
     BTC_MACRO_ENHANCED_37_FEATURES,
     BTC_MACRO_ENHANCED_41_FEATURES,  # noqa: F401 — canonical name, imported for re-export
+    BTC_MACRO_ENHANCED_41_V2_FEATURES,  # noqa: F401 — FIX-20260625-137: clean contract
 )
 from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
@@ -48,6 +49,8 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
     "swing_enhanced_21": 21,  # 21 swing macro only — pure daily, no micro/TF
     # FIX-20260616-091: Renamed 37→41 — schema ALWAYS was 41 dims, name was lying
     "btc_macro_enhanced_41": 41,  # 37 macro + 4 regime derivatives (delta_OU, delta_Hurst, OU_x_Hurst, OU_div_ADX)
+    # FIX-20260625-137: V2 clean contract — same features as v1 but signals router to skip legacy shim
+    "btc_macro_enhanced_41_v2": 41,
 }
 
 # Canonical name resolution (alias → canonical)
@@ -114,7 +117,14 @@ def get_schema_feature_names(schema_name: str) -> list[str]:
 
     if canonical == "btc_macro_enhanced_41":
         from core.features.schemas.btc_macro_enhanced_schema import BTC_MACRO_ENHANCED_41_FEATURES
+
         names = list(BTC_MACRO_ENHANCED_41_FEATURES)
+    elif canonical == "btc_macro_enhanced_41_v2":
+        from core.features.schemas.btc_macro_enhanced_schema import (
+            BTC_MACRO_ENHANCED_41_V2_FEATURES,
+        )
+
+        names = list(BTC_MACRO_ENHANCED_41_V2_FEATURES)
     elif canonical == "v9_institutional_40":
         names = list(V9_INSTITUTIONAL_40_FEATURES)
     elif canonical == "v9_micro_49":

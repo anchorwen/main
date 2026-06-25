@@ -45,6 +45,7 @@ SCHEMA_CONTRACTS: dict[str, list[str]] = {}
 
 for _schema_id in [
     "btc_macro_enhanced_41",
+    "btc_macro_enhanced_41_v2",  # FIX-20260625-137: clean contract
     "btc_macro_enhanced_37",  # legacy alias → 41 dims (kept for backward compat)
     "swing_enhanced_35",
     "swing_enhanced_29",
@@ -60,6 +61,42 @@ for _schema_id in [
             SCHEMA_CONTRACTS[_schema_id] = _names
     except KeyError:
         pass  # Schema not yet registered with feature names
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FIX-20260625-137: Legacy BTC 41-dim reorder shim
+# ═══════════════════════════════════════════════════════════════════════════
+# V4 was trained with the old training script (Order A) and has been trading
+# live with corrupted feature values (Order C augmenter zipped with Order B
+# schema names).  The augmenter now outputs in canonical Schema Order B.
+# To keep V4's tensor BIT-IDENTICAL to pre-fix, this shim reverts the
+# augmenter output back to Order C for the legacy "btc_macro_enhanced_41"
+# schema only.  New models use "btc_macro_enhanced_41_v2" which skips the shim.
+#
+# Permutation: Order B → Order C (swap REGIME block with BTC_MACRO block)
+#   Order B:  [35]=delta_ou [36]=delta_h [37]=ou*hurst [38]=ou/adx [39]=btc_au [40]=btc_au_roc
+#   Order C:  [35]=btc_au   [36]=btc_au_roc [37]=delta_ou [38]=delta_h [39]=ou*hurst [40]=ou/adx
+_LEGACY_BTC_41_PERMUTATION: tuple[tuple[int, int], ...] = (
+    (35, 39),  # btc_xau_ratio     ← from pos 39
+    (36, 40),  # btc_xau_ratio_roc ← from pos 40
+    (37, 35),  # delta_ou          ← from pos 35
+    (38, 36),  # delta_hurst       ← from pos 36
+    (39, 37),  # ou_x_hurst        ← from pos 37
+    (40, 38),  # ou_div_adx        ← from pos 38
+)
+
+
+def _apply_legacy_btc_41_shim(btc_vector: np.ndarray) -> np.ndarray:
+    """Permute slots 35-40 from Schema Order B back to legacy Order C.
+
+    This makes the tensor BIT-IDENTICAL to what V4 received before the
+    FIX-20260625-137 augmenter refactor.  Only applied when the requested
+    schema is ``"btc_macro_enhanced_41"`` (the legacy contract).
+    """
+    _v = np.copy(btc_vector)
+    for _dst, _src in _LEGACY_BTC_41_PERMUTATION:
+        _v[_dst] = btc_vector[_src]
+    return _v
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -91,8 +128,7 @@ class FeatureRouter:
         required_keys = SCHEMA_CONTRACTS.get(schema_name)
         if required_keys is None:
             raise SchemaNotFoundError(
-                f"Unknown schema: {schema_name!r}. "
-                f"Known: {sorted(SCHEMA_CONTRACTS.keys())}"
+                f"Unknown schema: {schema_name!r}. " f"Known: {sorted(SCHEMA_CONTRACTS.keys())}"
             )
 
         try:
@@ -128,6 +164,7 @@ class FeatureRouter:
         ou_half_life: float = 0.0,
         ou_theta: float = 0.0,
         extra_features: dict[str, float] | None = None,
+        schema_name: str = "",  # FIX-20260625-137: controls legacy shim for BTC 41
     ) -> dict[str, float]:
         """Build a SUPERSET feature lake from ALL available sources.
 
@@ -175,18 +212,39 @@ class FeatureRouter:
                     break  # Use the first schema that matches
 
         # Source 5: TF-specific scalars
-        lake["TF_OU_Theta"] = float(tf_ou) if (tf_ou is not None and np.isfinite(float(tf_ou))) else 0.0
-        lake["TF_Hurst"] = float(tf_hurst) if (tf_hurst is not None and np.isfinite(float(tf_hurst))) else 0.5
+        lake["TF_OU_Theta"] = (
+            float(tf_ou) if (tf_ou is not None and np.isfinite(float(tf_ou))) else 0.0
+        )
+        lake["TF_Hurst"] = (
+            float(tf_hurst) if (tf_hurst is not None and np.isfinite(float(tf_hurst))) else 0.5
+        )
 
         # Source 6: OU physics (for v9_40dim_ou3 schema — MetaLabel/OU brains)
-        lake["ou_z_score"] = float(ou_z_score) if (ou_z_score is not None and np.isfinite(float(ou_z_score))) else 0.0
-        lake["ou_half_life"] = float(ou_half_life) if (ou_half_life is not None and np.isfinite(float(ou_half_life))) else 0.0
-        lake["ou_theta"] = float(ou_theta) if (ou_theta is not None and np.isfinite(float(ou_theta))) else 0.0
+        lake["ou_z_score"] = (
+            float(ou_z_score)
+            if (ou_z_score is not None and np.isfinite(float(ou_z_score)))
+            else 0.0
+        )
+        lake["ou_half_life"] = (
+            float(ou_half_life)
+            if (ou_half_life is not None and np.isfinite(float(ou_half_life)))
+            else 0.0
+        )
+        lake["ou_theta"] = (
+            float(ou_theta) if (ou_theta is not None and np.isfinite(float(ou_theta))) else 0.0
+        )
 
         # Source 7: BTC augmented vector (41-dim pre-computed with regime derivatives)
         if btc_augment is not None:
             _btc = np.asarray(btc_augment, dtype=np.float64).ravel()
-            _btc_names = get_schema_feature_names("btc_macro_enhanced_41")
+            # FIX-20260625-137: Select schema contract for name→position mapping.
+            # Legacy "btc_macro_enhanced_41" → apply reorder shim so V4 receives
+            # bit-identical tensor.  "btc_macro_enhanced_41_v2" → direct zip
+            # (augmenter already outputs in Schema Order B).
+            _btc_schema = schema_name if schema_name else "btc_macro_enhanced_41"
+            if _btc_schema == "btc_macro_enhanced_41":
+                _btc = _apply_legacy_btc_41_shim(_btc)
+            _btc_names = get_schema_feature_names(_btc_schema)
             if _btc_names and len(_btc) >= len(_btc_names):
                 for name, val in zip(_btc_names, _btc, strict=False):
                     lake[name] = float(val)
@@ -196,6 +254,7 @@ class FeatureRouter:
         # Feature Lake reads it here.  Graceful degradation on any failure.
         try:
             from pathlib import Path as _Path
+
             _ofi_path = _Path("data_btc/reports/ofi_snapshot.json")
             if _ofi_path.exists():
                 _ofi_data = json.loads(_ofi_path.read_text(encoding="utf-8"))

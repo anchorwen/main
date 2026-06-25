@@ -78,6 +78,7 @@ ignore = [
 "scripts/validate_magic_sync.py" = ["BLE001"]  # DQAF-059: CI gate, YAML parse uses fail_open pattern
 "scripts/augment_journal_strategy.py" = ["BLE001"]  # DQAF-059: augment tool, JSON parse uses fail_open pattern
 "core/contracts/strategy_magic.py" = ["BLE001"]  # DQAF-059: YAML config parse uses fail_open pattern
+"core/features/computers/btc_feature_augmenter.py" = ["BLE001"]  # DQAF-059: pre-existing FOG patterns, MT5 data fetch fail_open
 "scripts/train_*.py" = ["UP038", "I001"]
 # Pre-existing tech debt — documented, not urgent
 "core/runtime/data_health_monitor.py" = ["SIM105", "F401", "UP017"]

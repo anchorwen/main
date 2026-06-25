@@ -210,6 +210,7 @@ def _build_swing_vector(
         tf_ou=_ou,
         tf_hurst=_hur,
         btc_augment=btc_augment,
+        schema_name=canonical,  # FIX-20260625-137: controls legacy BTC 41 shim
     )
     try:
         return _router.dispatch(_lake, canonical)

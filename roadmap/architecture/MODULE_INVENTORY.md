@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T08:53:13Z
+> **自动生成**: 2026-06-25T10:14:32Z
 > **扫描模块数**: 678
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -282,9 +282,9 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
-| `feature_assembler.py` | ✅ active | — | 3 | 256 | — | |
-| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 3 | 227 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 404 | — | |
+| `feature_assembler.py` | ✅ active | — | 3 | 257 | — | |
+| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 286 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 405 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
 | `meta_feature_builder.py` | ✅ active | — | 1 | 135 | — | |
@@ -304,7 +304,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 379 | — | |
+| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 388 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 223 | — | |
 | `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 573 | — | |
@@ -315,10 +315,10 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 101 | — | |
+| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 106 | — | |
 | `daily_swing_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `microstructure_schema.py` | ✅ active | — | 1 | 32 | — | |
-| `registry.py` | ✅ active | — | 4 | 219 | — | |
+| `registry.py` | ✅ active | — | 4 | 229 | — | |
 | `swing_enhanced_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `v9_institutional_schema.py` | 📄 config | — | 0 | 42 | — | |
 | `v9_micro_schema.py` | ✅ active | — | 1 | 27 | — | |
@@ -674,7 +674,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 688 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 691 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -897,7 +897,7 @@
 | `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2075 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
-| `train_btc_swing_v9.py` | ✅ active | — | 16 | 956 | — | |
+| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1142 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 7 | 342 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |

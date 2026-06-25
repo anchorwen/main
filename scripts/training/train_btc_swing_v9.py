@@ -61,27 +61,59 @@ OU_LOOKBACK = 20
 HURST_MAX_LAG = 20
 ADX_PERIOD = 14
 BB_PERIOD = 20
-MIN_BARS = max(
-    ATR_PERIOD, RSI_PERIOD, MACD_SLOW + MACD_SIGNAL,
-    VOL_ZS_LOOKBACK, OU_LOOKBACK, HURST_MAX_LAG, ADX_PERIOD, BB_PERIOD,
-) + 2
+MIN_BARS = (
+    max(
+        ATR_PERIOD,
+        RSI_PERIOD,
+        MACD_SLOW + MACD_SIGNAL,
+        VOL_ZS_LOOKBACK,
+        OU_LOOKBACK,
+        HURST_MAX_LAG,
+        ADX_PERIOD,
+        BB_PERIOD,
+    )
+    + 2
+)
 
 # ── BTC 37-dim feature schema (FIX-20260604-081) ────────────────────────────
 
 BTC_MACRO_24 = [
-    "D1_Ret_1", "D1_Body_Ratio", "D1_ATR_14", "D1_RSI_14", "D1_MACD",
-    "D1_Vol_ZScore", "D1_Bollinger_Width", "D1_ADX_14",
-    "H4_Trend_Strength", "H4_ATR_Ratio", "H4_RSI_Divergence", "H4_vs_D1_Alignment",
-    "XAUUSDc_return", "Cross_DXY_Return", "Cross_EURUSD_Return", "Cross_Risk_On_Off",
-    "Derived_Weekday_Sin", "Derived_Weekday_Cos",
-    "Derived_Days_To_MonthEnd", "Derived_Is_MonthEnd_Week",
-    "Derived_Weekend_Gap", "Derived_Vol_Regime",
-    "Derived_Momentum_5D", "Derived_Momentum_20D",
+    "D1_Ret_1",
+    "D1_Body_Ratio",
+    "D1_ATR_14",
+    "D1_RSI_14",
+    "D1_MACD",
+    "D1_Vol_ZScore",
+    "D1_Bollinger_Width",
+    "D1_ADX_14",
+    "H4_Trend_Strength",
+    "H4_ATR_Ratio",
+    "H4_RSI_Divergence",
+    "H4_vs_D1_Alignment",
+    "XAUUSDc_return",
+    "Cross_DXY_Return",
+    "Cross_EURUSD_Return",
+    "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin",
+    "Derived_Weekday_Cos",
+    "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week",
+    "Derived_Weekend_Gap",
+    "Derived_Vol_Regime",
+    "Derived_Momentum_5D",
+    "Derived_Momentum_20D",
 ]
 
 BTC_MICRO_9 = [
-    "tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM", "tick_velocity",
-    "AUDJPYc_return", "EURUSDc_return", "USDJPYc_return",
+    "tick_return",
+    "hl_ratio",
+    "co_ratio",
+    "avg_spread",
+    "OIM",
+    "tick_velocity",
+    "AUDJPYc_return",
+    "EURUSDc_return",
+    "USDJPYc_return",
 ]
 
 BTC_CROSS_2 = ["Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"]
@@ -91,13 +123,16 @@ TF_SPECIFIC_2 = ["TF_OU_Theta", "TF_Hurst"]
 # Raw OU/Hurst are too slow for per-bar tree splits → derivatives capture
 # the REGIME TRANSITION, not the absolute level.
 REGIME_DERIVED_4 = [
-    "TF_delta_OU",       # OU acceleration: OU(t) - OU(t-1)
-    "TF_delta_Hurst",    # Hurst velocity: Hurst(t) - Hurst(t-1)
-    "TF_OU_x_Hurst",     # Combined signal: high OU + low Hurst = mean-reversion
-    "TF_OU_div_ADX",     # Mean-reversion strength relative to trend
+    "TF_delta_OU",  # OU acceleration: OU(t) - OU(t-1)
+    "TF_delta_Hurst",  # Hurst velocity: Hurst(t) - Hurst(t-1)
+    "TF_OU_x_Hurst",  # Combined signal: high OU + low Hurst = mean-reversion
+    "TF_OU_div_ADX",  # Mean-reversion strength relative to trend
 ]
 
-ALL_FEATURE_NAMES = BTC_MACRO_24 + BTC_MICRO_9 + BTC_CROSS_2 + TF_SPECIFIC_2 + REGIME_DERIVED_4
+# FIX-20260625-137: Schema canonical order (Order B) — aligned with live inference
+# augmenter output.  Previously BTC_CROSS_2 was before TF_SPECIFIC_2 (Order A),
+# causing 4-feature swap in slots 33-36 between training and live dispatch.
+ALL_FEATURE_NAMES = BTC_MACRO_24 + BTC_MICRO_9 + TF_SPECIFIC_2 + REGIME_DERIVED_4 + BTC_CROSS_2
 N_FEATURES = len(ALL_FEATURE_NAMES)  # 37 → 41
 
 
@@ -107,7 +142,7 @@ N_FEATURES = len(ALL_FEATURE_NAMES)  # 37 → 41
 def _atr(h: np.ndarray, l: np.ndarray, c: np.ndarray, period: int = ATR_PERIOD) -> float:
     if len(c) < period + 1:
         return 0.0
-    prev_c = c[-(period + 1):-1]
+    prev_c = c[-(period + 1) : -1]
     cur_h = h[-period:]
     cur_l = l[-period:]
     tr = np.maximum(cur_h - cur_l, np.maximum(np.abs(cur_h - prev_c), np.abs(cur_l - prev_c)))
@@ -117,7 +152,7 @@ def _atr(h: np.ndarray, l: np.ndarray, c: np.ndarray, period: int = ATR_PERIOD) 
 def _rsi(c: np.ndarray, period: int = RSI_PERIOD) -> float:
     if len(c) < period + 1:
         return 50.0
-    deltas = np.diff(c[-(period + 1):])
+    deltas = np.diff(c[-(period + 1) :])
     gains = np.maximum(deltas, 0)
     losses = np.maximum(-deltas, 0)
     avg_gain = float(np.mean(gains))
@@ -153,7 +188,7 @@ def _ema(data: np.ndarray, period: int) -> float:
 def _adx(h: np.ndarray, l: np.ndarray, c: np.ndarray, period: int = ADX_PERIOD) -> float:
     if len(c) < period + 1:
         return 25.0
-    prev_c = c[-(period + 1):-1]
+    prev_c = c[-(period + 1) : -1]
     cur_h = h[-period:]
     cur_l = l[-period:]
     tr = np.maximum(cur_h - cur_l, np.maximum(np.abs(cur_h - prev_c), np.abs(cur_l - prev_c)))
@@ -185,7 +220,7 @@ def _bollinger_width(c: np.ndarray, period: int = BB_PERIOD) -> float:
 def _vol_zscore(c: np.ndarray, lookback: int = VOL_ZS_LOOKBACK) -> float:
     if len(c) < lookback + 1:
         return 0.0
-    returns = np.diff(c[-(lookback + 1):]) / c[-(lookback + 1):-1]
+    returns = np.diff(c[-(lookback + 1) :]) / c[-(lookback + 1) : -1]
     vol = float(np.std(returns))
     returns_full = np.diff(c) / c[:-1]
     mean_vol = float(np.std(returns_full[-200:])) if len(returns_full) >= 200 else vol
@@ -202,17 +237,25 @@ from core.features.computers.v9_live_computer import _hurst, _ou_theta
 # ── Feature Computation ──────────────────────────────────────────────────────
 
 
-def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
-                        c: np.ndarray, v: np.ndarray, spreads: np.ndarray,
-                        day_features: dict[int, dict[str, float]],
-                        daily_ts: np.ndarray, daily_o: np.ndarray,
-                        daily_h: np.ndarray, daily_l: np.ndarray,
-                        daily_c: np.ndarray,
-                        btc_price_hist: np.ndarray,
-                        tf_minutes: float = 5.0,
-                        prev_ou: float | None = None,
-                        prev_hurst: float | None = None,
-                        ) -> tuple[list[float], float, float]:
+def compute_feature_row(
+    idx: int,
+    o: np.ndarray,
+    h: np.ndarray,
+    l: np.ndarray,
+    c: np.ndarray,
+    v: np.ndarray,
+    spreads: np.ndarray,
+    day_features: dict[int, dict[str, float]],
+    daily_ts: np.ndarray,
+    daily_o: np.ndarray,
+    daily_h: np.ndarray,
+    daily_l: np.ndarray,
+    daily_c: np.ndarray,
+    btc_price_hist: np.ndarray,
+    tf_minutes: float = 5.0,
+    prev_ou: float | None = None,
+    prev_hurst: float | None = None,
+) -> tuple[list[float], float, float]:
     """Compute 41-dim BTC feature vector at bar *idx*.
 
     Returns (row, ou_val, hurst_val) — ou_val/hurst_val are returned so
@@ -224,7 +267,9 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
 
     # ── D1 features ──
     bar_ts = daily_ts[idx] if idx < len(daily_ts) else 0
-    bar_date = datetime.fromtimestamp(float(bar_ts), tz=UTC).strftime("%Y-%m-%d") if bar_ts > 0 else ""
+    bar_date = (
+        datetime.fromtimestamp(float(bar_ts), tz=UTC).strftime("%Y-%m-%d") if bar_ts > 0 else ""
+    )
     day_idx = len(day_features) - 1
     d_feat = day_features.get(day_idx, {}) if day_features else {}
 
@@ -255,6 +300,7 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
     weekday_sin = math.sin(2 * math.pi * weekday / 7.0)
     weekday_cos = math.cos(2 * math.pi * weekday / 7.0)
     import calendar as _cal
+
     days_in_month = _cal.monthrange(dt_obj.year, dt_obj.month)[1]
     days_to_end = (days_in_month - dt_obj.day) / float(days_in_month)
     is_month_end = 1.0 if dt_obj.day >= days_in_month - 4 else 0.0
@@ -262,12 +308,20 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
 
     # ── Vol regime + momentum ──
     atr_val = _atr(h_slice, l_slice, c_slice)
-    atr_5d = _atr(h_slice, l_slice, c_slice) if len(c_slice) < 288 * 5 else _atr(
-        h_slice[-288 * 5:], l_slice[-288 * 5:], c_slice[-288 * 5:]
+    atr_5d = (
+        _atr(h_slice, l_slice, c_slice)
+        if len(c_slice) < 288 * 5
+        else _atr(h_slice[-288 * 5 :], l_slice[-288 * 5 :], c_slice[-288 * 5 :])
     )
     vol_regime = atr_val / atr_5d if atr_5d > 0 else 1.0
-    mom_5d = (c[idx] - c[max(0, idx - 288 * 5)]) / c[max(0, idx - 288 * 5)] if len(c) > 288 * 5 else 0.0
-    mom_20d = (c[idx] - c[max(0, idx - 288 * 20)]) / c[max(0, idx - 288 * 20)] if len(c) > 288 * 20 else 0.0
+    mom_5d = (
+        (c[idx] - c[max(0, idx - 288 * 5)]) / c[max(0, idx - 288 * 5)] if len(c) > 288 * 5 else 0.0
+    )
+    mom_20d = (
+        (c[idx] - c[max(0, idx - 288 * 20)]) / c[max(0, idx - 288 * 20)]
+        if len(c) > 288 * 20
+        else 0.0
+    )
 
     # ── Micro features (M5 bar-level) ──
     prev_c_val = c[idx - 1] if idx > 0 else c[idx]
@@ -277,11 +331,13 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
     co_ratio_val = abs(c[idx] - o[idx]) / (h[idx] - l[idx]) if (h[idx] - l[idx]) > 0 else 0.0
     avg_spread_val = float(spreads[idx]) if idx < len(spreads) else 10.0
     oim = (c[idx] - o[idx]) / (h[idx] - l[idx]) if (h[idx] - l[idx]) > 0 else 0.0
-    tick_vel = float(v[idx]) / (float(np.mean(v[max(0, idx - 20):end])) + 1e-8) if idx > 20 else 1.0
+    tick_vel = (
+        float(v[idx]) / (float(np.mean(v[max(0, idx - 20) : end])) + 1e-8) if idx > 20 else 1.0
+    )
 
     # Cross-market micro returns (use synthetic when unavailable)
     audjpy_ret = 0.0  # placeholder
-    eur_ret = 0.0     # placeholder
+    eur_ret = 0.0  # placeholder
     usdjpy_ret = 0.0  # placeholder
 
     # ── BTC-specific cross features ──
@@ -291,7 +347,9 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
         btc_gold_ratio = btc_price_hist[idx] / d_feat["XAUUSDc_close"]
         if idx >= 288:
             prev_ratio = btc_price_hist[idx - 288] / max(d_feat.get("XAUUSDc_close", 1.0), 1.0)
-            btc_gold_ratio_roc = (btc_gold_ratio - prev_ratio) / prev_ratio if prev_ratio > 0 else 0.0
+            btc_gold_ratio_roc = (
+                (btc_gold_ratio - prev_ratio) / prev_ratio if prev_ratio > 0 else 0.0
+            )
 
     # ── TF-specific (timeframe-aware dt for OU_Theta) ──
     tf_ou = _ou_theta(price_slice)  # FIX-B3: production parity, dt=1 implicit
@@ -310,28 +368,51 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
     # ── Assemble in schema order ──
     values_map: dict[str, float] = {
         # BTC_MACRO_24
-        "D1_Ret_1": d1_ret, "D1_Body_Ratio": d1_body, "D1_ATR_14": d1_atr,
-        "D1_RSI_14": d1_rsi, "D1_MACD": d1_macd, "D1_Vol_ZScore": d1_vol_z,
-        "D1_Bollinger_Width": d1_bb, "D1_ADX_14": d1_adx,
-        "H4_Trend_Strength": h4_trend, "H4_ATR_Ratio": h4_atr_r,
-        "H4_RSI_Divergence": h4_rsi_d, "H4_vs_D1_Alignment": h4_d1_align,
-        "XAUUSDc_return": xau_return, "Cross_DXY_Return": dxy_return,
-        "Cross_EURUSD_Return": eurusd_return, "Cross_Risk_On_Off": risk_on_off,
-        "Derived_Weekday_Sin": weekday_sin, "Derived_Weekday_Cos": weekday_cos,
-        "Derived_Days_To_MonthEnd": days_to_end, "Derived_Is_MonthEnd_Week": is_month_end,
-        "Derived_Weekend_Gap": weekend_gap, "Derived_Vol_Regime": vol_regime,
-        "Derived_Momentum_5D": mom_5d, "Derived_Momentum_20D": mom_20d,
+        "D1_Ret_1": d1_ret,
+        "D1_Body_Ratio": d1_body,
+        "D1_ATR_14": d1_atr,
+        "D1_RSI_14": d1_rsi,
+        "D1_MACD": d1_macd,
+        "D1_Vol_ZScore": d1_vol_z,
+        "D1_Bollinger_Width": d1_bb,
+        "D1_ADX_14": d1_adx,
+        "H4_Trend_Strength": h4_trend,
+        "H4_ATR_Ratio": h4_atr_r,
+        "H4_RSI_Divergence": h4_rsi_d,
+        "H4_vs_D1_Alignment": h4_d1_align,
+        "XAUUSDc_return": xau_return,
+        "Cross_DXY_Return": dxy_return,
+        "Cross_EURUSD_Return": eurusd_return,
+        "Cross_Risk_On_Off": risk_on_off,
+        "Derived_Weekday_Sin": weekday_sin,
+        "Derived_Weekday_Cos": weekday_cos,
+        "Derived_Days_To_MonthEnd": days_to_end,
+        "Derived_Is_MonthEnd_Week": is_month_end,
+        "Derived_Weekend_Gap": weekend_gap,
+        "Derived_Vol_Regime": vol_regime,
+        "Derived_Momentum_5D": mom_5d,
+        "Derived_Momentum_20D": mom_20d,
         # BTC_MICRO_9
-        "tick_return": tick_ret, "hl_ratio": hl_ratio_val, "co_ratio": co_ratio_val,
-        "avg_spread": avg_spread_val, "OIM": oim, "tick_velocity": tick_vel,
-        "AUDJPYc_return": audjpy_ret, "EURUSDc_return": eur_ret, "USDJPYc_return": usdjpy_ret,
+        "tick_return": tick_ret,
+        "hl_ratio": hl_ratio_val,
+        "co_ratio": co_ratio_val,
+        "avg_spread": avg_spread_val,
+        "OIM": oim,
+        "tick_velocity": tick_vel,
+        "AUDJPYc_return": audjpy_ret,
+        "EURUSDc_return": eur_ret,
+        "USDJPYc_return": usdjpy_ret,
         # BTC_CROSS_2
-        "Cross_BTC_Gold_Ratio": btc_gold_ratio, "Cross_BTC_Gold_Ratio_ROC": btc_gold_ratio_roc,
+        "Cross_BTC_Gold_Ratio": btc_gold_ratio,
+        "Cross_BTC_Gold_Ratio_ROC": btc_gold_ratio_roc,
         # TF_SPECIFIC_2
-        "TF_OU_Theta": tf_ou, "TF_Hurst": tf_hurst,
+        "TF_OU_Theta": tf_ou,
+        "TF_Hurst": tf_hurst,
         # REGIME_DERIVED_4
-        "TF_delta_OU": delta_ou, "TF_delta_Hurst": delta_hurst,
-        "TF_OU_x_Hurst": ou_x_hurst, "TF_OU_div_ADX": ou_div_adx,
+        "TF_delta_OU": delta_ou,
+        "TF_delta_Hurst": delta_hurst,
+        "TF_OU_x_Hurst": ou_x_hurst,
+        "TF_OU_div_ADX": ou_div_adx,
     }
     return [values_map.get(name, 0.0) for name in ALL_FEATURE_NAMES], tf_ou, tf_hurst
 
@@ -340,9 +421,16 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
 
 
 def compute_labels(
-    o: np.ndarray, h: np.ndarray, l: np.ndarray, c: np.ndarray,
-    horizon: int, sl_atr_mult: float, tp_atr_mult: float,
-    spread_points: float, slippage_points: float, tick_value: float,
+    o: np.ndarray,
+    h: np.ndarray,
+    l: np.ndarray,
+    c: np.ndarray,
+    horizon: int,
+    sl_atr_mult: float,
+    tp_atr_mult: float,
+    spread_points: float,
+    slippage_points: float,
+    tick_value: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute forward barrier labels with real friction.
 
@@ -367,7 +455,7 @@ def compute_labels(
         if ref_price <= 0:
             continue
 
-        atr_val = _atr(h[:i + 2], l[:i + 2], c[:i + 2])
+        atr_val = _atr(h[: i + 2], l[: i + 2], c[: i + 2])
         if atr_val <= 0:
             continue
 
@@ -376,7 +464,7 @@ def compute_labels(
         tp_dist = max(tp_dist, sl_dist * 0.3)  # minimum TP = 0.3 × SL
 
         # Direction-specific entry prices
-        entry_long = ref_price + slippage_points   # buy at ask
+        entry_long = ref_price + slippage_points  # buy at ask
         entry_short = ref_price - slippage_points  # sell at bid
 
         sl_long = entry_long - sl_dist
@@ -420,7 +508,8 @@ def compute_labels(
 
 
 def compute_time_decay_weights(
-    timestamps: np.ndarray, half_life_days: float = 90.0,
+    timestamps: np.ndarray,
+    half_life_days: float = 90.0,
 ) -> np.ndarray:
     """Exponential time-decay weights favoring recent samples.
 
@@ -446,8 +535,10 @@ def compute_time_decay_weights(
 
 
 def walk_forward_purged_splits(
-    n_samples: int, timestamps: np.ndarray,
-    n_folds: int = 5, purge_bars: int = 144,
+    n_samples: int,
+    timestamps: np.ndarray,
+    n_folds: int = 5,
+    purge_bars: int = 144,
 ) -> list[dict[str, np.ndarray]]:
     """Generate walk-forward purged CV split indices.
 
@@ -472,15 +563,17 @@ def walk_forward_purged_splits(
         train_idx = np.arange(0, test_start - purge_bars, dtype=np.int64)
         test_idx = np.arange(test_start, test_end, dtype=np.int64)
 
-        splits.append({
-            "fold": fold,
-            "train_idx": train_idx,
-            "test_idx": test_idx,
-            "train_start_ts": timestamps[train_idx[0]] if len(train_idx) > 0 else 0,
-            "train_end_ts": timestamps[train_idx[-1]] if len(train_idx) > 0 else 0,
-            "test_start_ts": timestamps[test_idx[0]] if len(test_idx) > 0 else 0,
-            "test_end_ts": timestamps[test_idx[-1]] if len(test_idx) > 0 else 0,
-        })
+        splits.append(
+            {
+                "fold": fold,
+                "train_idx": train_idx,
+                "test_idx": test_idx,
+                "train_start_ts": timestamps[train_idx[0]] if len(train_idx) > 0 else 0,
+                "train_end_ts": timestamps[train_idx[-1]] if len(train_idx) > 0 else 0,
+                "test_start_ts": timestamps[test_idx[0]] if len(test_idx) > 0 else 0,
+                "test_end_ts": timestamps[test_idx[-1]] if len(test_idx) > 0 else 0,
+            }
+        )
 
     return splits
 
@@ -521,10 +614,20 @@ def build_dataset(
     print("[B2] Computing day-level context features...")
     # Re-sample to daily for D1 features
     df_dt = pd.to_datetime(df["time"])
-    daily = df.set_index(df_dt).resample("D").agg({
-        "open": "first", "high": "max", "low": "min", "close": "last",
-        "tick_volume": "sum",
-    }).dropna()
+    daily = (
+        df.set_index(df_dt)
+        .resample("D")
+        .agg(
+            {
+                "open": "first",
+                "high": "max",
+                "low": "min",
+                "close": "last",
+                "tick_volume": "sum",
+            }
+        )
+        .dropna()
+    )
     daily_ts = daily.index.astype(np.int64).values // 10**9
     daily_ts_f = daily_ts.astype(np.float64)
     daily_o = daily["open"].values
@@ -545,8 +648,12 @@ def build_dataset(
         d_l = daily_l[:end]
         d_c_s = daily_c[:end]
         feat = {
-            "D1_Ret_1": (d_c_s[-1] - d_c_s[-2]) / d_c_s[-2] if len(d_c_s) >= 2 and d_c_s[-2] > 0 else 0.0,
-            "D1_Body_Ratio": abs(d_c_s[-1] - d_o[-1]) / (d_h[-1] - d_l[-1]) if (d_h[-1] - d_l[-1]) > 0 else 0.5,
+            "D1_Ret_1": (d_c_s[-1] - d_c_s[-2]) / d_c_s[-2]
+            if len(d_c_s) >= 2 and d_c_s[-2] > 0
+            else 0.0,
+            "D1_Body_Ratio": abs(d_c_s[-1] - d_o[-1]) / (d_h[-1] - d_l[-1])
+            if (d_h[-1] - d_l[-1]) > 0
+            else 0.5,
             "D1_ATR_14": _atr(d_h, d_l, d_c_s),
             "D1_RSI_14": _rsi(d_c_s),
             "D1_MACD": _macd(d_c_s)[2],
@@ -566,14 +673,32 @@ def build_dataset(
         day_features[d_idx] = feat
 
     # ── Compute labels (both long and short) ──
-    print(f"[B2] Computing forward-barrier labels (SL={sl_atr_mult} ATR, TP={tp_atr_mult} ATR, spread={spread_points}, slippage={slippage_points})...")
+    print(
+        f"[B2] Computing forward-barrier labels (SL={sl_atr_mult} ATR, TP={tp_atr_mult} ATR, spread={spread_points}, slippage={slippage_points})..."
+    )
     labels_long, pnl_r_long, hold_long = compute_labels(
-        o, h, l, c, horizon, sl_atr_mult, tp_atr_mult,
-        spread_points, slippage_points, tick_value,
+        o,
+        h,
+        l,
+        c,
+        horizon,
+        sl_atr_mult,
+        tp_atr_mult,
+        spread_points,
+        slippage_points,
+        tick_value,
     )
     labels_short, pnl_r_short, hold_short = compute_labels(
-        o, h, l, c, horizon, sl_atr_mult, tp_atr_mult,
-        spread_points, slippage_points, tick_value,
+        o,
+        h,
+        l,
+        c,
+        horizon,
+        sl_atr_mult,
+        tp_atr_mult,
+        spread_points,
+        slippage_points,
+        tick_value,
     )
 
     # Combine: use long label if long triggered, short label if short triggered,
@@ -594,8 +719,19 @@ def build_dataset(
         if (i - start_bar) % 50000 == 0 and i > start_bar:
             print(f"  ... {i}/{n_bars} bars ({100*i/n_bars:.0f}%)")
         row, tf_ou, tf_hurst = compute_feature_row(
-            i, o, h, l, c, v, spreads, day_features,
-            daily_ts_f, daily_o, daily_h, daily_l, daily_c,
+            i,
+            o,
+            h,
+            l,
+            c,
+            v,
+            spreads,
+            day_features,
+            daily_ts_f,
+            daily_o,
+            daily_h,
+            daily_l,
+            daily_c,
             c,
             tf_minutes=timeframe_minutes,
             prev_ou=prev_ou,
@@ -636,7 +772,9 @@ def build_dataset(
     print(f"  Weight mean: {sample_weights.mean():.3f}")
 
     # ── Walk-forward purged CV splits ──
-    print(f"[B2] Generating walk-forward purged CV splits ({cv_folds} folds, {purge_bars} bar purge)...")
+    print(
+        f"[B2] Generating walk-forward purged CV splits ({cv_folds} folds, {purge_bars} bar purge)..."
+    )
     splits = walk_forward_purged_splits(n_total, ts_bin, cv_folds, purge_bars)
     for s in splits:
         train_n = len(s["train_idx"])
@@ -681,7 +819,10 @@ def build_dataset(
     cv_data = {
         "n_folds": len(splits),
         "purge_bars": purge_bars,
-        "splits": [{k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in s.items()} for s in splits],
+        "splits": [
+            {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in s.items()}
+            for s in splits
+        ],
     }
     with open(os.path.join(output_dir, "cv_splits.json"), "w", encoding="utf-8") as f:
         json.dump(cv_data, f, indent=2)
@@ -695,8 +836,12 @@ def build_dataset(
 
 
 def train_xgboost(
-    X_train: np.ndarray, y_train: np.ndarray, w_train: np.ndarray,
-    X_val: np.ndarray, y_val: np.ndarray, w_val: np.ndarray,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    w_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    w_val: np.ndarray,
     params: dict[str, Any],
 ) -> tuple[Any, dict[str, float]]:
     """Train XGBoost classifier with sample weights."""
@@ -730,16 +875,19 @@ def train_xgboost(
 
 
 def train_lightgbm(
-    X_train: np.ndarray, y_train: np.ndarray, w_train: np.ndarray,
-    X_val: np.ndarray, y_val: np.ndarray, w_val: np.ndarray,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    w_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    w_val: np.ndarray,
     params: dict[str, Any],
 ) -> tuple[Any, dict[str, float]]:
     """Train LightGBM classifier with sample weights."""
     import lightgbm as lgb
 
     dtrain = lgb.Dataset(X_train, label=(y_train > 0).astype(int), weight=w_train)
-    dval = lgb.Dataset(X_val, label=(y_val > 0).astype(int), weight=w_val,
-                        reference=dtrain)
+    dval = lgb.Dataset(X_val, label=(y_val > 0).astype(int), weight=w_val, reference=dtrain)
 
     model = lgb.train(
         params,
@@ -805,7 +953,9 @@ def train_models(
         n_pos = int(np.sum(y_tr == 1))
         n_neg = int(np.sum(y_tr == -1))
         scale_pos_weight_val = n_neg / max(n_pos, 1)
-        print(f"  Class balance: {n_pos} TP / {n_neg} SL, scale_pos_weight={scale_pos_weight_val:.1f}")
+        print(
+            f"  Class balance: {n_pos} TP / {n_neg} SL, scale_pos_weight={scale_pos_weight_val:.1f}"
+        )
         xgb_params = {
             "objective": "binary:logistic",
             "eval_metric": "logloss",
@@ -820,8 +970,12 @@ def train_models(
             "scale_pos_weight": scale_pos_weight_val,
             "random_state": 42,
         }
-        model_xgb, metrics_xgb = train_xgboost(X_tr, y_tr, w_tr, X_te, y_te, weights[test_idx], xgb_params)
-        print(f"  val_acc={metrics_xgb['val_accuracy']:.3f}, val_wr={metrics_xgb['val_wr']:.3f}, trees={metrics_xgb['n_trees']}")
+        model_xgb, metrics_xgb = train_xgboost(
+            X_tr, y_tr, w_tr, X_te, y_te, weights[test_idx], xgb_params
+        )
+        print(
+            f"  val_acc={metrics_xgb['val_accuracy']:.3f}, val_wr={metrics_xgb['val_wr']:.3f}, trees={metrics_xgb['n_trees']}"
+        )
         results["xgboost"].append({"fold": fold, "metrics": metrics_xgb})
 
         # Save XGBoost model
@@ -847,8 +1001,12 @@ def train_models(
             "random_state": 42,
             "verbose": -1,
         }
-        model_lgb, metrics_lgb = train_lightgbm(X_tr, y_tr, w_tr, X_te, y_te, weights[test_idx], lgb_params)
-        print(f"  val_acc={metrics_lgb['val_accuracy']:.3f}, val_wr={metrics_lgb['val_wr']:.3f}, trees={metrics_lgb['n_trees']}")
+        model_lgb, metrics_lgb = train_lightgbm(
+            X_tr, y_tr, w_tr, X_te, y_te, weights[test_idx], lgb_params
+        )
+        print(
+            f"  val_acc={metrics_lgb['val_accuracy']:.3f}, val_wr={metrics_lgb['val_wr']:.3f}, trees={metrics_lgb['n_trees']}"
+        )
         results["lightgbm"].append({"fold": fold, "metrics": metrics_lgb})
 
         # Save LightGBM model
@@ -862,7 +1020,9 @@ def train_models(
     for arch in ["xgboost", "lightgbm"]:
         wrs = [r["metrics"]["val_wr"] for r in results[arch]]
         accs = [r["metrics"]["val_accuracy"] for r in results[arch]]
-        print(f"  {arch}: WR={np.mean(wrs):.2%} +/- {np.std(wrs):.2%}, Acc={np.mean(accs):.2%} +/- {np.std(accs):.2%}")
+        print(
+            f"  {arch}: WR={np.mean(wrs):.2%} +/- {np.std(wrs):.2%}, Acc={np.mean(accs):.2%} +/- {np.std(accs):.2%}"
+        )
 
     # ── Save full results ──
     summary = {
@@ -872,17 +1032,23 @@ def train_models(
             arch: {
                 "mean_val_wr": float(np.mean([r["metrics"]["val_wr"] for r in results[arch]])),
                 "std_val_wr": float(np.std([r["metrics"]["val_wr"] for r in results[arch]])),
-                "mean_val_acc": float(np.mean([r["metrics"]["val_accuracy"] for r in results[arch]])),
+                "mean_val_acc": float(
+                    np.mean([r["metrics"]["val_accuracy"] for r in results[arch]])
+                ),
                 "folds": len(results[arch]),
             }
             for arch in ["xgboost", "lightgbm"]
         },
         "params": {
             "xgboost": {
-                "max_depth": 5, "learning_rate": 0.02, "n_estimators": 500,
+                "max_depth": 5,
+                "learning_rate": 0.02,
+                "n_estimators": 500,
             },
             "lightgbm": {
-                "max_depth": 5, "learning_rate": 0.02, "num_leaves": 31,
+                "max_depth": 5,
+                "learning_rate": 0.02,
+                "num_leaves": 31,
             },
         },
         "trained_at": datetime.now(UTC).isoformat(),
@@ -901,19 +1067,39 @@ def main():
     parser = argparse.ArgumentParser(description="BTC Swing V9 Training Pipeline")
     parser.add_argument("--full", action="store_true", help="Run full pipeline (build + train)")
     parser.add_argument("--build-only", action="store_true", help="Build dataset only")
-    parser.add_argument("--train-only", action="store_true", help="Train only (requires pre-built dataset)")
-    parser.add_argument("--csv", default="data/raw/btcusdc_h1_merged.csv", help="BTC OHLC CSV path (H1 default)")
-    parser.add_argument("--data-dir", default="data/training/btc_swing_v9_h1", help="Dataset output dir")
-    parser.add_argument("--model-dir", default="data/models/btc_swing_v9_h1", help="Model output dir")
-    parser.add_argument("--timeframe-minutes", type=float, default=60.0, help="Bar interval in minutes (H1=60)")
+    parser.add_argument(
+        "--train-only", action="store_true", help="Train only (requires pre-built dataset)"
+    )
+    parser.add_argument(
+        "--csv", default="data/raw/btcusdc_h1_merged.csv", help="BTC OHLC CSV path (H1 default)"
+    )
+    parser.add_argument(
+        "--data-dir", default="data/training/btc_swing_v9_h1", help="Dataset output dir"
+    )
+    parser.add_argument(
+        "--model-dir", default="data/models/btc_swing_v9_h1", help="Model output dir"
+    )
+    parser.add_argument(
+        "--timeframe-minutes", type=float, default=60.0, help="Bar interval in minutes (H1=60)"
+    )
     parser.add_argument("--horizon", type=int, default=24, help="Forward barrier horizon in bars")
-    parser.add_argument("--sl-atr-mult", type=float, default=3.0, help="SL distance in ATR multiples")
-    parser.add_argument("--tp-atr-mult", type=float, default=2.0, help="TP distance in ATR multiples")
+    parser.add_argument(
+        "--sl-atr-mult", type=float, default=3.0, help="SL distance in ATR multiples"
+    )
+    parser.add_argument(
+        "--tp-atr-mult", type=float, default=2.0, help="TP distance in ATR multiples"
+    )
     parser.add_argument("--spread-points", type=float, default=10.0, help="Spread in price points")
-    parser.add_argument("--slippage-points", type=float, default=10.0, help="Slippage in price points")
-    parser.add_argument("--decay-half-life-days", type=float, default=180.0, help="Time-decay half-life")
+    parser.add_argument(
+        "--slippage-points", type=float, default=10.0, help="Slippage in price points"
+    )
+    parser.add_argument(
+        "--decay-half-life-days", type=float, default=180.0, help="Time-decay half-life"
+    )
     parser.add_argument("--cv-folds", type=int, default=5, help="Number of walk-forward CV folds")
-    parser.add_argument("--purge-bars", type=int, default=24, help="Purge window between train/test (match horizon)")
+    parser.add_argument(
+        "--purge-bars", type=int, default=24, help="Purge window between train/test (match horizon)"
+    )
     parser.add_argument("--optuna-trials", type=int, default=50, help="Optuna TPE trials")
     parser.add_argument("--n-seeds", type=int, default=3, help="Number of random seeds")
     args = parser.parse_args()

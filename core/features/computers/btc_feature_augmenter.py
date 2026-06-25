@@ -173,28 +173,35 @@ class BTCFeatureAugmenter:
             float(tf_hurst) if (tf_hurst is not None and math.isfinite(float(tf_hurst))) else 0.5
         )
 
-        # Slots [35-36]: BTC/XAU ratio
-        fv[35] = btc_xau_ratio
-        fv[36] = btc_xau_ratio_roc
+        # ── FIX-20260625-137: Regime derivative slots [35-38] ──
+        # Order aligned to btc_macro_enhanced_41 Schema canonical (TF → REGIME → BTC_MACRO).
+        # Previously slots 35-40 were Order C (TF → BTC_MACRO → REGIME) which caused
+        # feature value swap when build_lake() zipped by position with schema names.
+        fv[35] = delta_ou
+        fv[36] = delta_hurst
+        fv[37] = ou_x_hurst
+        fv[38] = ou_div_adx
 
-        # ── FIX-B3-feat: Regime derivative slots [37-40] ──
-        fv[37] = delta_ou
-        fv[38] = delta_hurst
-        fv[39] = ou_x_hurst
-        fv[40] = ou_div_adx
+        # Slots [39-40]: BTC/XAU ratio
+        fv[39] = btc_xau_ratio
+        fv[40] = btc_xau_ratio_roc
 
         # ── Safeguard 3: Post-assertion ──
-        assert fv.shape == (
-            41,
-        ), f"CRITICAL: BTCFeatureAugmenter output shape {fv.shape} != (41,)"
+        assert fv.shape == (41,), f"CRITICAL: BTCFeatureAugmenter output shape {fv.shape} != (41,)"
         assert not np.isnan(fv).any(), "CRITICAL: NaN detected in BTC augmented feature vector"
 
         if not self._first_augment_logged:
             self._first_augment_logged = True
             _log.info(
-                "BTCFeatureAugmenter: 41-dim pipeline activated (FIX-B3). "
-                "Regime slots: [37]=%.4f [38]=%.4f [39]=%.4f [40]=%.4f",
-                fv[37], fv[38], fv[39], fv[40],
+                "BTCFeatureAugmenter: 41-dim pipeline activated (FIX-20260625-137 Schema Order B). "
+                "Regime slots: [35]=%.4f [36]=%.4f [37]=%.4f [38]=%.4f, "
+                "BTC/XAU slots: [39]=%.4f [40]=%.4f",
+                fv[35],
+                fv[36],
+                fv[37],
+                fv[38],
+                fv[39],
+                fv[40],
             )
 
         return fv
@@ -266,6 +273,7 @@ class BTCFeatureAugmenter:
                     self._xau_fail_count,
                 )
             return 0.0
+
     def _compute_audjpyc_return(self) -> float:
         """Compute AUDJPYc return from MT5 tick data.
 
@@ -312,6 +320,7 @@ class BTCFeatureAugmenter:
                     self._audjpy_fail_count,
                 )
             return 0.0
+
     def _compute_btc_xau_ratio(self, btc_price: float) -> tuple[float, float]:
         """Compute Cross_BTC_Gold_Ratio and its 1-bar ROC from MT5 XAU price.
 

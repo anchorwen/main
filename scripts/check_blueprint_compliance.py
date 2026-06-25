@@ -263,6 +263,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/features/computers/v9_micro_computer.py",
         "core/features/computers/v9_live_computer.py",
         "core/features/computers/microstructure_computer.py",
+        "core/features/computers/btc_feature_augmenter.py",  # FIX-20260625-137
         "core/features/adapters/v9_feature_adapter.py",
         "core/features/adapters/microstructure_feature_adapter.py",
         "core/features/computers/daily_computer.py",
@@ -271,7 +272,9 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/features/schemas/v9_institutional_schema.py",
         "core/features/schemas/swing_enhanced_schema.py",
         "core/features/schemas/registry.py",
+        "core/features/schemas/btc_macro_enhanced_schema.py",  # FIX-20260625-137
         "core/features/feature_assembler.py",
+        "core/features/feature_router.py",  # FIX-20260625-137
         "core/features/rolling_normalizer.py",
         "core/market/calendar.py",
         "core/deployment/feature_update_producer.py",

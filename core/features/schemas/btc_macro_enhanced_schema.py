@@ -25,9 +25,9 @@ _BTC_MICRO_FEATURES = [
     "avg_spread",
     "OIM",
     "tick_velocity",
-    "AUDJPYc_return",       # NEW: risk appetite (forex NASDAQ)
-    "EURUSDc_return",       # KEPT: dollar liquidity mirror
-    "USDJPYc_return",       # KEPT: carry-trade unwinding
+    "AUDJPYc_return",  # NEW: risk appetite (forex NASDAQ)
+    "EURUSDc_return",  # KEPT: dollar liquidity mirror
+    "USDJPYc_return",  # KEPT: carry-trade unwinding
 ]
 
 # ── Trading-TF specific features (2) ──
@@ -46,8 +46,8 @@ _REGIME_DERIVED_FEATURES = [
 
 # ── BTC-specific macro features (2) ──
 _BTC_MACRO_FEATURES = [
-    "Cross_BTC_Gold_Ratio",       # BTC/USD / XAU/USD = digital vs physical gold
-    "Cross_BTC_Gold_Ratio_ROC",   # Rate of change of the ratio (5-period)
+    "Cross_BTC_Gold_Ratio",  # BTC/USD / XAU/USD = digital vs physical gold
+    "Cross_BTC_Gold_Ratio_ROC",  # Rate of change of the ratio (5-period)
 ]
 
 # ── D1 macro features (24) — with BTC-specific cross-pair replacements ──
@@ -65,10 +65,10 @@ _BTC_MACRO_24 = [
     "H4_ATR_Ratio",
     "H4_RSI_Divergence",
     "H4_vs_D1_Alignment",
-    "XAUUSDc_return",            # NEW: physical gold return (replaces Cross_Gold_Silver_Ratio)
-    "Cross_DXY_Return",          # KEPT: dollar strength proxy
-    "Cross_EURUSD_Return",       # KEPT: EUR inverse of DXY
-    "Cross_Risk_On_Off",         # KEPT: risk regime detection
+    "XAUUSDc_return",  # NEW: physical gold return (replaces Cross_Gold_Silver_Ratio)
+    "Cross_DXY_Return",  # KEPT: dollar strength proxy
+    "Cross_EURUSD_Return",  # KEPT: EUR inverse of DXY
+    "Cross_Risk_On_Off",  # KEPT: risk regime detection
     "Derived_Weekday_Sin",
     "Derived_Weekday_Cos",
     "Derived_Days_To_MonthEnd",
@@ -91,11 +91,16 @@ BTC_MACRO_ENHANCED_37_FEATURES = (
 # ── Canonical name (FIX-20260616-091: renamed 37→41) ──
 BTC_MACRO_ENHANCED_41_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES
 
+# ── FIX-20260625-137: V2 clean contract ──
+# Identical feature names to v1 (same Order B), but signals to the feature router
+# that NO legacy reorder shim should be applied — the augmenter already outputs
+# in Schema canonical order.  Used by new models trained with corrected feature
+# ordering (train_btc_swing_v9.py Order B).
+BTC_MACRO_ENHANCED_41_V2_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES
+
 # ── Verify dimension ──
-assert len(BTC_MACRO_ENHANCED_41_FEATURES) == 41, (
-    f"BTC schema dimension mismatch: {len(BTC_MACRO_ENHANCED_41_FEATURES)} != 41"
-)
+assert (
+    len(BTC_MACRO_ENHANCED_41_FEATURES) == 41
+), f"BTC schema dimension mismatch: {len(BTC_MACRO_ENHANCED_41_FEATURES)} != 41"
 # ── Verify uniqueness ──
-assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 41, (
-    "BTC schema has duplicate feature names"
-)
+assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 41, "BTC schema has duplicate feature names"
