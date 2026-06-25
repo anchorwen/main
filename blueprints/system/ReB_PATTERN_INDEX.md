@@ -20,6 +20,23 @@
 
 ---
 
+### ReB-20260626-001
+- **Pattern Signature**: `BLE001_NARROW_CATCH_CASCADE`
+- **Date Cataloged**: 2026-06-26
+- **Source Docket**: DQAF-20260626-001
+- **Related**: ReB-20260622-058 (`SCALER_DEPLOYMENT_ACTIVATION_GAP`)
+
+**Definition**: BLE001 Phase 3a 将 `except Exception` 收窄为显式异常类型元组, 但在非阻塞 telemetry 路径 (golden_master) 上收窄过度 — 调用链中存在未被类型系统保护的隐式数据契约 (regime_info 类型为 dict|None 但调用方可传入非 dict 对象), 其抛出的 AttributeError 不在收窄元组内 → 功能静默丧失 → 无告警/无日志/无自愈 → 5 天盲区 → 下游级联 (regime_snapshots→label_builder→所有 regime 分析)。第二因子: golden_master.py 自身 `except OSError: pass` 盲 catch 零日志吞没 I/O 错误 — 即使同文件内错误也完全不可观测。
+
+**Prevention Strategy**:
+1. 非阻塞 telemetry 路径使用 `fail_open_guard()` 而非显式异常类型元组 — broad catch + 结构化日志是 telemetry 的正确模式
+2. BLE001 收窄前必须审计调用链完整异常剖面 (包括隐式数据契约的类型安全边界)
+3. 关键数据管道 (golden_master/regime_snapshots) 增加独立监控告警 (gap > N cycles → 主动推送)
+4. 数据管道避免单一源依赖 — build_regime_snapshots 应有独立 Feature Store 回退 (已有, 但 GM 优先 — 应自动回退)
+5. `dict.get()` 调用前加防御: try/except AttributeError 或 isinstance check
+
+**Detection Method**: `python scripts/data_integrity_check.py --data-dir data_btc` Section 10 (Golden Master cycles) — gap > 50 cycles → CRITICAL. Alternatively: `grep -c "timestamp_utc" data_btc/golden_master.jsonl | awk -F: '{print "daily avg:", $2/30}'`
+
 ### ReB-20260622-060
 - **Pattern Signature**: `PSI_RAW_FEATURE_FALSE_POSITIVE_AND_DUAL_MODE_DECOUPLING`
 - **Date Cataloged**: 2026-06-22

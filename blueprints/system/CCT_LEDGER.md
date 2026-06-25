@@ -27,6 +27,25 @@
 
 ---
 
+### CCT-20260626-001
+- **Docket ID**: DQAF-20260626-001
+- **日期**: 2026-06-26
+- **置信度**: confirmed (git diff confirmed BLE001 narrowing + evidence from 6 sources)
+- **因果链**:
+  - [Layer 1 — 症状]: `data_btc/golden_master.jsonl` 06-20~06-24 连续 5 天零记录 (正常每天 ~150 周期)。`data_btc/regime_snapshots.jsonl` 06-21 起跟随停止 (cascade: build_regime_snapshots.py 以 GM 为主数据源)。所有下游 regime 分析工具盲化。
+  - [Layer 2 — 中间异常]: (A) BLE001 Phase 3a (FIX-20260619-057) 将 live_cycle.py golden_master 异常处理从 `except Exception` 收窄为 `except (ValueError, TypeError, OSError)`。`record_cycle_inputs()` 内部 `regime_info.get()` 对非 dict 类型抛 `AttributeError` — 不在收窄元组内 → 静默逃逸。(B) `golden_master.py:170` `except OSError: pass` 为盲 catch 零日志吞没 — 即使同文件内的 I/O 错误也完全不可观测。
+  - [Layer 3 — 根因]: L3 架构缺陷 — 非阻塞 telemetry 路径异常处理契约脆弱。(a) `record_cycle_inputs()` 无内部防御深度 — 依赖调用方猜对异常类型。(b) BLE001 收窄时未审计调用链完整异常剖面。(c) golden_master 失败无告警/监控/自动恢复 — 5 天盲区。(d) build_regime_snapshots 单一数据源依赖 — GM 故障直接级联。
+- **证据引用**:
+  - Source 1: `data_btc/golden_master.jsonl` — 06-19 cycle 153 停止, 06-20~06-24 零条, 06-25 仅 6 条
+  - Source 2: `git diff 0002ea83..49e46a4c -- core/runtime/live_cycle.py` — except Exception → except (ValueError, TypeError, OSError)
+  - Source 3: `core/runtime/golden_master.py:76-77` — regime_info.get() 无防御
+  - Source 4: `core/runtime/golden_master.py:170` — except OSError: pass 盲 catch
+  - Source 5: `scripts/build_regime_snapshots.py:27-29` — golden_master.jsonl 为主数据源
+  - Source 6: XAU `data/golden_master.jsonl` — 5,890 条持续至 06-25 (同一 period 正常), 证实 BTC-only 问题
+- **是否被推翻**: 否 — AR 5 条假设全被推翻 (GOLDEN_MASTER_RECORD=0 / base_dir 变化 / 系统宕机 / block_new_entries / 收窄类型足够)
+- **关联 ReB Pattern**: ReB-20260626-001
+- **关联 FIX**: FIX-20260626-001
+
 ### CCT-20260622-060
 - **Docket ID**: DQAF-20260622-060
 - **日期**: 2026-06-22
