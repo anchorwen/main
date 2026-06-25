@@ -144,8 +144,7 @@ brains:
   #   +$64 across 105 trades.  Router serves btc_macro_enhanced_41 contract.
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V4.json
-  - enabled: true
-    path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
+  # ── V9_H1 RETIRED (FIX-20260625-136): -34.7R, WR=39.7%, vote_weight=0.0 ghost node → archive ──
   # ── V10_M15 REMOVED (DQAF-20260615-009g): stale 37-dim model, magic collision, artifact_hash mismatch ──
   # ── DQAF-20260615-003: V12 H1 Survival (Route B, 41-dim with delta_OU/Hurst) ──
   - enabled: true
@@ -365,7 +364,7 @@ strategy_lines:
     max_volume: 0.1
     min_p_win: 0.45
     min_valid_brains: 1
-    mode: probation  # FIX-20260613-090-deploy: V9/V10 probation — observe before full capital
+    mode: live  # FIX-20260625-136: probation→live — fleet audit confirmed +49.4R top profit engine
     sl:
       base_atr_mult: 1.5
       dynamic: true

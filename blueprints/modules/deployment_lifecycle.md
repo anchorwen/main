@@ -51,6 +51,7 @@ startup → LifecycleManager.initialize()
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260625-136 | 2026-06-25 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/audit_entry_spread_coverage.py` in check_blueprint_compliance.py to monitor_dashboard module. | RC-09 |
+| FIX-20260625-137 | 2026-06-25 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/diagnose_mypy_baseline.py` in check_blueprint_compliance.py to monitor_dashboard module. Mypy baseline diagnostic tool. | RC-09 |
 | FIX-20260625-132 | 2026-06-25 | cursor-agent | 1ee64d8f | Plan A+E: Test-only commit auto-exemption (Scene F) + redundant mypy hook removal. Added is_test_only_commit() to omega_constants.py with path normalization and root conftest.py whitelist. omega_gate.py and validate_commit_msg.py auto-detect test-only staged files and bypass quality gates (DQAF/FIX_REGISTRY/4D/closing). Removed redundant mypy pre-commit hook (verify.py --quick already covers it). Updated CLAUDE.md Scene F trigger definition. | missing-feature |
 | FIX-20260625-129 | 2026-06-25 | cursor-agent | c94a1d22 | Phase 4 shadow verification scripts: phase4_shadow_review.py + phase4_final_audit.py, MODULE_SOURCE_MAP update for 7 new files | missing-feature |
 | FIX-20260625-127 | 2026-06-25 | cursor-agent | 62aa0e2d | Memory audit script: detects stale/untracked/completed memory files. Classifies 39 memory files by staleness, completion, and tracking. --sweep archives completed to _archive/ and updates MEMORY.md. | missing-feature |

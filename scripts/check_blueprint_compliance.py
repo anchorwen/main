@@ -314,11 +314,13 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/monitor_pwin_fix.py",
         "scripts/verify_dqaf044_fix_effect.py",
         "scripts/audit_entry_spread_coverage.py",
+        "scripts/diagnose_mypy_baseline.py",
     ],
     "runtime_live": [
         "main.py",
         "core/runtime/",
         "scripts/check_preconditions.py",
+        "scripts/verify_pnl_data_integrity.py",
         "scripts/daily_ops.py",
         "scripts/watchdog_daily_ops.py",
         "core/runtime/daily_ops_scheduler.py",

@@ -1,6 +1,7 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-25T06:25:59Z> **自动生成**: 2026-06-25T07:05:30Z
+> **自动生成**: 2026-06-25T08:50:34Z
+
 ## Package-Level Dependencies
 
 ### `apps/engine/`

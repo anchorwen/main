@@ -1,8 +1,8 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T06:25:59Z
-> **扫描模块数**: 677> **自动生成**: 2026-06-25T07:05:30Z
-> **扫描模块数**: 678> **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
+> **自动生成**: 2026-06-25T08:50:34Z
+> **扫描模块数**: 678
+> **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
 
@@ -674,7 +674,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 686 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 688 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -702,7 +702,7 @@
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |
-| `diagnose_mypy_baseline.py` | ✅ active | — | 6 | 192 | — | |
+| `diagnose_mypy_baseline.py` | ✅ active | — | 6 | 210 | — | |
 | `diagnose_process_health.py` | ✅ active | — | 10 | 555 | — | |
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |

@@ -88,6 +88,7 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 | FIX-20260612-015 | 2026-06-12 | cursor-agent | — | **Brain registry ↔ governance alignment cross-check**: new FULL-mode check detects triple-bookkeeping bugs (registry status≠governance, vote_weight=0, live.yaml disabled). Would have caught DQAF-20260612-002 before trading was blocked. 3 cross-checks now: journal-ledger, open-close, brain-gov alignment. | RC-09 |
 | FIX-20260613-088r | 2026-06-13 | cursor-agent | — | **AlertService context_snapshot filter fix**: isinstance check only allowed str\ | int\ |
 | FIX-20260613-089 | 2026-06-13 | cursor-agent | — | **journal_completeness dupes threshold desensitization**: raised `dupes > 0` → `dupes > 5` in `check_journal_completeness()`. Original threshold caused alert fatigue (CRITICAL alert for 2 dupes with zero PnL impact). In async retry-reentrant architecture, occasional dupes are expected until Phase 2 Event Sourcing delivers idempotent journal writes. Tech debt: `TODO-20260711-journal-idempotency`. | RC-06 |
+| FIX-20260625-137 | 2026-06-25 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/diagnose_mypy_baseline.py`. Iron Law #11 diagnostic script for mypy baseline regression analysis and roadmap target gap assessment. | RC-09 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
