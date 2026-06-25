@@ -33,10 +33,16 @@ def _hours_since_last_run(state_path: Path) -> float | None:
         return None
     try:
         data = json.loads(state_path.read_text(encoding="utf-8"))
-        last_utc = data.get("last_run_utc") or data.get("updated_utc", "")
-        if not last_utc:
+        # FIX-20260625-125: field is "last_daily_ops_utc" (float Unix timestamp),
+        # NOT "last_run_utc" / "updated_utc".  Also accept ISO string for
+        # backward-compat with any legacy format.
+        last_utc = data.get("last_daily_ops_utc")
+        if last_utc is None:
             return None
-        last_dt = datetime.fromisoformat(last_utc.replace("Z", "+00:00"))
+        if isinstance(last_utc, int | float):
+            last_dt = datetime.fromtimestamp(float(last_utc), tz=UTC)
+        else:
+            last_dt = datetime.fromisoformat(str(last_utc).replace("Z", "+00:00"))
         now = datetime.now(UTC)
         return (now - last_dt).total_seconds() / 3600.0
     except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
@@ -58,7 +64,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     base_dir = Path(args.base_dir)
-    state_path = base_dir / "daily_ops_state.json"
+    # FIX-20260625-125: state file lives under "state/" subdirectory
+    # (Plan B FIX-20260622-001 migrated all state writes to StateWriter gate,
+    #  which writes to state/daily_ops_state.json — but watchdog was missed)
+    state_path = base_dir / "state" / "daily_ops_state.json"
 
     print(
         f"[watchdog:{args.base_dir}] Starting — check every {args.interval_hours}h, "
@@ -69,10 +78,26 @@ def main(argv: list[str] | None = None) -> int:
         age_h = _hours_since_last_run(state_path)
 
         if age_h is None:
-            print(
-                f"[watchdog:{args.base_dir}] {_utc_iso()[:19]} "
-                f"daily_ops never run — run: python scripts/daily_ops.py --base-dir {args.base_dir}"
-            )
+            msg = f"[watchdog:{args.base_dir}] {_utc_iso()[:19]} " f"daily_ops never run"
+            if args.auto_run:
+                print(f"{msg} — auto-running...")
+                try:
+                    subprocess.run(
+                        [sys.executable, "scripts/daily_ops.py", "--base-dir", str(args.base_dir)],
+                        check=False,
+                        timeout=600,
+                    )
+                    print(f"[watchdog:{args.base_dir}] daily_ops completed")
+                except (
+                    RuntimeError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                    OSError,
+                ) as exc:  # BLE001:FOG
+                    print(f"[watchdog:{args.base_dir}] daily_ops failed: {exc}")
+            else:
+                print(f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}")
         elif age_h > args.max_age_hours:
             msg = (
                 f"[watchdog:{args.base_dir}] {_utc_iso()[:19]} "

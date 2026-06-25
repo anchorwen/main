@@ -308,6 +308,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/runtime/",
         "scripts/check_preconditions.py",
         "scripts/daily_ops.py",
+        "scripts/watchdog_daily_ops.py",
+        "core/runtime/daily_ops_scheduler.py",
         "scripts/analyze_trail_impact.py",
         "scripts/live_intent_loop.py",
         "scripts/live_launcher.py",

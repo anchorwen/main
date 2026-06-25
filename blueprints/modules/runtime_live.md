@@ -29,6 +29,8 @@ The central live trading cycle orchestration. Wires together market data ingress
 | `core/runtime/signal_order_builder.py` | `SignalOrderRequestBuilder` |
 | `core/runtime/gods_eye_bridge.py` | `feed_gods_eye()` — RegimeGate→GodsEye translation bridge (Strangler Fig) |
 | `scripts/daily_ops.py` | Daily ops pipeline — feedback, retraining, governance, alpha lifecycle orchestration |
+| `scripts/watchdog_daily_ops.py` | Lightweight watchdog — checks `state/daily_ops_state.json`, optionally auto-runs overdue daily_ops |
+| `core/runtime/daily_ops_scheduler.py` | `run_scheduled_daily_ops()` — Strangler Fig extraction from live_cycle, persists state via StateWriter |
 
 ## Data Flow
 ```
@@ -79,6 +81,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260624-103 | 2026-06-24 | cursor-agent | 8b4b786e | UGR-A09c: fail_open_guard + log_and_continue full sweep — core/runtime/ (25 files, 172→8 sites). Replaced all fail_open_guard/log_and_continue context managers with specific exception types (RuntimeError, ValueError, KeyError, TypeError, OSError). Removed from core.runtime.fault_handler import fail_open_guard/log_and_continue from 23 files. | missing-validation |
+| FIX-20260625-125 | 2026-06-25 | cursor-agent | — | **DQAF-125: Watchdog daily_ops 三连盲修复**. FIX-20260622-001 (Plan B StateWriter) 迁移遗漏 `watchdog_daily_ops.py`。修复: 路径→`state/daily_ops_state.json` + 字段名→`last_daily_ops_utc` + never-run auto_run。XAU leaderboard 手动恢复 (69 brains, 1192 decisions)。 | RC-09 + L1 |
 | FIX-20260625-124 | 2026-06-25 | cursor-agent | — | **God's Eye Phase 2 — Live Pipeline Integration**. Created `core/runtime/gods_eye_bridge.py` (Strangler Fig extraction). Added God's Eye gate (Cut 7) in strategy_evaluator. live_cycle only +12 lines: state field + bridge import/call + param forwarding. Advisory-only, never fails cycle. | RC-12 |
 | FIX-20260624-100 | 2026-06-24 | cursor-agent | — | Sev 2 fix — runtime-live module. | RC-06 |
 | FIX-20260605-119 | 2026-06-05 | cursor-agent | — | **四维度交叉审计——合约/启动链/品种分叉/配置校验**: Cross-audit across runtime-live, deployment-config, and execution-guards modules. | RC-09 |
