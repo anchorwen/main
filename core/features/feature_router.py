@@ -92,7 +92,14 @@ def _apply_legacy_btc_41_shim(btc_vector: np.ndarray) -> np.ndarray:
     This makes the tensor BIT-IDENTICAL to what V4 received before the
     FIX-20260625-137 augmenter refactor.  Only applied when the requested
     schema is ``"btc_macro_enhanced_41"`` (the legacy contract).
+
+    Short-vector guard: if the input has fewer than 41 elements, the
+    permutation would raise IndexError.  Pass through unchanged so
+    downstream dimension checks (in the assembler) can raise the correct
+    ``RuntimeError`` instead of a cryptic index crash.
     """
+    if len(btc_vector) < 41:
+        return np.copy(btc_vector)
     _v = np.copy(btc_vector)
     for _dst, _src in _LEGACY_BTC_41_PERMUTATION:
         _v[_dst] = btc_vector[_src]

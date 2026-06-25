@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T10:14:32Z
+> **自动生成**: 2026-06-25T11:18:57Z
 > **扫描模块数**: 678
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -283,7 +283,7 @@
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
 | `feature_assembler.py` | ✅ active | — | 3 | 257 | — | |
-| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 286 | — | |
+| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 293 | — | |
 | `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 405 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
