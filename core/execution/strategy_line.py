@@ -1396,6 +1396,9 @@ class StrategyLine:
 
         # ── Build entry context for journal ──
         _brain_preds: list[dict[str, Any]] = []
+        # ── DQAF-20260625-134: Build brain_votes from proposals ──
+        # For live_trade_journal.jsonl brain attribution (was always empty).
+        brain_votes: list[dict[str, object]] = []
         for p in proposals:
             _dir = getattr(p, "direction", None)
             _conf = float(getattr(p, "confidence", 0.5))
@@ -1409,13 +1412,21 @@ class StrategyLine:
                 _up, _down = round(1.0 - _conf, 4), _conf
             else:
                 _up, _down = 0.5, 0.5
+            _bid = getattr(p, "brain_id", "unknown")
             _brain_preds.append(
                 {
-                    "brain_id": getattr(p, "brain_id", "unknown"),
+                    "brain_id": _bid,
                     "up_prob": _up,
                     "down_prob": _down,
                     "confidence": round(_conf, 4),
                     "direction_bias": _dir,
+                }
+            )
+            brain_votes.append(
+                {
+                    "brain_id": _bid,
+                    "direction_bias": _dir,
+                    "confidence": round(_conf, 4),
                 }
             )
         # ── Build entry_features snapshot (Phase 1: 40-dim V9 vector) ──
@@ -1463,6 +1474,7 @@ class StrategyLine:
             tp=levels["take_profit"],
             hard_sl=levels["hard_sl"],
             brain_ids=brain_ids,
+            brain_votes=brain_votes,
             supporting_count=support_count,
             total_count=total_count,
             regime_mode=regime_gate_mode,

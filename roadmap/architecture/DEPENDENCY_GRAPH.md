@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-25T03:59:00Z
+> **自动生成**: 2026-06-25T06:25:59Z
 
 ## Package-Level Dependencies
 
@@ -617,6 +617,7 @@
 - `diagnose_data_health_failures.py` → (无内部依赖)
 - `diagnose_feature_drift.py` → (无内部依赖)
 - `diagnose_journal_mt5_sev2.py` → (无内部依赖)
+- `diagnose_mypy_baseline.py` → (无内部依赖)
 - `diagnose_process_health.py` → (无内部依赖)
 - `diagnose_sl_performance.py` → (无内部依赖)
 - `dqaf053_phase1_sanitize.py` → `core.alpha.performance_store`, `core.alpha.registry`, `core.execution.conformal_calibrator`
