@@ -106,7 +106,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 self._num_features = input_shape[2]
             self._onnx_model_path = artifact_path
             self._backend = "onnxruntime:transformer"
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # noqa: BLE001  # BLE001:FOG
             self._backend = f"stub:{type(exc).__name__}"
             self._session = None
             emit_brain_alert(
@@ -114,6 +114,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 "model_load_failed",
                 {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
             )
+
     def run(self, snapshot, feature_source=None) -> BrainSignal:
         """Override to handle dict (single bar) or (n_bars, 9) pre-built sequence.
 
@@ -157,9 +158,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                     "falling back to dict.values() positional extraction",
                     self._brain_entry.get("brain_id", "unknown"),
                 )
-                feature_vector = np.asarray(
-                    list(feature_source.values()), dtype=np.float64
-                )
+                feature_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
         else:
             feature_vector = np.zeros(NUM_FEATURES, dtype=np.float64)
         return self.inference(feature_vector)
@@ -271,6 +270,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 for k, v in raw_output.items()
                 if k not in ("raw_score", "runtime_ms", "fallback")
             },
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
         )
 
     # ------------------------------------------------------------------

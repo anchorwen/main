@@ -149,6 +149,9 @@ brains:
   # ── DQAF-20260615-003: V12 H1 Survival (Route B, 41-dim with delta_OU/Hurst) ──
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V12_H1_Survival.json
+  # ── FIX-20260625-138: V12_H1_15 shadow variant — H1, SL=1.5/TP=1.5, horizon=12, vote_weight=0.0 ──
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_V12_H1_15.json
   # ── DLR-001 config drift fix (2026-06-17): Retired fleet removed from registry.
   #   Archive brain configs preserved in configs/brains_btc/archive/ for reference.
 capital_allocator:

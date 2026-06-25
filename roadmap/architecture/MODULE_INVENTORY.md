@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T10:29:19Z
+> **自动生成**: 2026-06-25T14:47:18Z
 > **扫描模块数**: 678
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -71,13 +71,13 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `base_adapter.py` | ✅ active | BaseBrainAdapter | 13 | 250 | — | |
-| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 207 | — | |
+| `base_adapter.py` | ✅ active | BaseBrainAdapter | 13 | 251 | — | |
+| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 209 | — | |
 | `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
-| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 594 | — | |
-| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 268 | — | |
+| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 596 | — | |
+| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 270 | — | |
 | `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 285 | — | |
-| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 311 | — | |
+| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 313 | — | |
 | `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 291 | — | |
 
 ## core/brains/services
@@ -555,7 +555,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `trading_contracts.py` | ✅ active | BrainSignal, ConsensusResult, StrategyDecision, DegradedResult | 0 | 135 | — | |
+| `trading_contracts.py` | ✅ active | BrainSignal, ConsensusResult, StrategyDecision, DegradedResult | 0 | 142 | — | |
 
 ## core/simulation
 
@@ -768,7 +768,7 @@
 | `scan_barrier_params.py` | ✅ active | — | 5 | 286 | — | |
 | `send_data_health_alert.py` | ✅ active | — | 6 | 231 | — | |
 | `send_live_order.py` | ✅ active | — | 4 | 148 | — | |
-| `shadow_decision_recorder.py` | ✅ active | — | 7 | 199 | — | |
+| `shadow_decision_recorder.py` | ✅ active | — | 7 | 200 | — | |
 | `shadow_live_compare_report.py` | ✅ active | — | 9 | 218 | — | |
 | `shadow_pnl_loop.py` | ✅ active | — | 9 | 812 | — | |
 | `shadow_rca.py` | ✅ active | — | 12 | 525 | — | |
@@ -791,7 +791,7 @@
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 409 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
-| `verify.py` | ✅ active | — | 15 | 992 | — | |
+| `verify.py` | ✅ active | — | 15 | 1011 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 90 | — | |
 | `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector, CapResultOkPlacementDetector, RawAccessDetector, FailOpenGuardDetector, ProofLeakDetector | 31 | 650 | ✅ | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |

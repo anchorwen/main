@@ -163,6 +163,7 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
                 emit_brain_alert(
                     brain_id, "model_load_failed", {"reason": "SGD weights load failed"}
                 )
+
     def _init_zeros(self) -> None:
         n_classes = len(LABEL_CLASSES)
         self._coef = np.zeros((n_classes, self._n_features), dtype=np.float64)
@@ -270,6 +271,7 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
             diagnostics={
                 k: v for k, v in raw_output.items() if k not in ("runtime_ms", "fallback")
             },
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
         )
 
     # ------------------------------------------------------------------
@@ -417,7 +419,7 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
 
         try:
             clf.partial_fit(x, y, classes=self._classes)
-        except Exception as e:  # BLE001:FOG
+        except Exception as e:  # noqa: BLE001  # BLE001:FOG
             logger.error("OnlineLearnerAdapter: SGD step failed: %s", e)
             return False
         self._coef = clf.coef_.copy()

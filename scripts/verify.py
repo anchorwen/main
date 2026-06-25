@@ -472,24 +472,43 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
                         )
 
                 # ── Check 3a: train-serve SL/TP alignment (FATAL — DQAF-20260622-051) ──
+                # FIX-20260625-139: Shadow brains (vote_weight=0.0 or status=shadow)
+                # are exempt from FATAL SL/TP mismatch — they cannot trade, so
+                # the mismatch is harmless.  Downgraded to WARNING.
                 if contract_sl is not None and contract_tp is not None and strat_line:
                     serve_sl = strat_line.get("sl", {}).get("base_atr_mult")
                     serve_tp = strat_line.get("tp", {}).get("base_atr_mult")
 
+                    _brain_cfg = _load_brain(brain_path) or {}
+                    _is_shadow = (
+                        float(_brain_cfg.get("vote_weight", 1.0) or 1.0) <= 0.0
+                        or str(_brain_cfg.get("status", "")).lower() == "shadow"
+                    )
+
                     if serve_sl is not None and serve_sl != contract_sl:
-                        errors.append(
+                        _msg = (
                             f"{config_path.name}: brain '{brain_path}' TRAIN-SERVE SL MISMATCH — "
                             f"label_contract declares SL={contract_sl}×ATR, "
                             f"but strategy '{contract_group}' serves SL={serve_sl}×ATR "
                             f"(DQAF-20260622-051)"
                         )
+                        if _is_shadow:
+                            _msg += " [SHADOW: harmless, brain vote_weight=0.0]"
+                            warnings.append(_msg)
+                        else:
+                            errors.append(_msg)
                     if serve_tp is not None and serve_tp != contract_tp:
-                        errors.append(
+                        _msg = (
                             f"{config_path.name}: brain '{brain_path}' TRAIN-SERVE TP MISMATCH — "
                             f"label_contract declares TP={contract_tp}×ATR, "
                             f"but strategy '{contract_group}' serves TP={serve_tp}×ATR "
                             f"(DQAF-20260622-051)"
                         )
+                        if _is_shadow:
+                            _msg += " [SHADOW: harmless, brain vote_weight=0.0]"
+                            warnings.append(_msg)
+                        else:
+                            errors.append(_msg)
 
     # ── Check 4: contract_path regression gate (WARN — DQAF-20260622-057 Phase 2) ──
     # Verify daily_ops.py always passes contract_path to _step_label_builder().

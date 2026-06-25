@@ -112,6 +112,7 @@ class BaseBrainAdapter(ABC):
             fallback=fallback,
             runtime_ms=runtime_ms,
             diagnostics=_extra,
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
         )
 
     # ------------------------------------------------------------------

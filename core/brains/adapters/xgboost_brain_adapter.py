@@ -76,10 +76,8 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                 )
                 # ── Shadow validation (48h transitional, remove after 2026-06-14) ──
                 try:
-                    old_vector = np.asarray(
-                        list(feature_source.values()), dtype=np.float64
-                    )
-                    if not np.array_equal(old_vector[:len(new_vector)], new_vector):
+                    old_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
+                    if not np.array_equal(old_vector[: len(new_vector)], new_vector):
                         logger.warning(
                             "[SHADOW_MISMATCH] XGBoost feature order skew detected "
                             "for brain=%s schema=%s. "
@@ -101,9 +99,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                     "falling back to dict.values() positional extraction",
                     self._brain_entry.get("brain_id", "unknown"),
                 )
-                feature_vector = np.asarray(
-                    list(feature_source.values()), dtype=np.float64
-                )
+                feature_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
         else:
             feature_vector = np.zeros(self._num_features, dtype=np.float64)
         return self.inference(feature_vector)
@@ -158,7 +154,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             if self._num_features is not None:
                 self._feature_dimension = self._num_features
             self._backend = "xgboost:json"
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # noqa: BLE001  # BLE001:FOG
             self._backend = f"stub:{type(exc).__name__}"
             self._booster = None
             emit_brain_alert(
@@ -166,6 +162,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                 "model_load_failed",
                 {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
             )
+
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run XGBoost inference on a 1-D feature vector.
 
@@ -200,7 +197,9 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             # Remove 3 XAU cross indices (12,13,14) from 24-dim daily vector.
             if self._num_features == 21 and n_cols == 24:
                 _xau = {12, 13, 14}
-                vec_arr = np.array([vec_arr[i] for i in range(24) if i not in _xau], dtype=np.float64)
+                vec_arr = np.array(
+                    [vec_arr[i] for i in range(24) if i not in _xau], dtype=np.float64
+                )
                 n_cols = len(vec_arr)
             # swing_enhanced_29 (29-dim) ← daily_swing_24 (24-dim):
             # Rebuild from 24 daily + zeros for 6 micro + 2 TF, then drop XAU indices.
@@ -277,6 +276,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                 for k, v in raw_output.items()
                 if k not in ("raw_score", "runtime_ms", "fallback")
             },
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
         )
 
     # ------------------------------------------------------------------

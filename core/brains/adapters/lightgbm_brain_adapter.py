@@ -53,7 +53,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
             self._booster = booster
             self._num_features = booster.num_feature()
             self._backend = "lightgbm:txt"
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # noqa: BLE001  # BLE001:FOG
             self._backend = f"stub:{type(exc).__name__}"
             self._booster = None
             emit_brain_alert(
@@ -61,6 +61,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
                 "model_load_failed",
                 {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
             )
+
     def run(self, snapshot, feature_source: dict | None = None) -> BrainSignal:
         """Metadata-driven feature extraction with three defense lines.
 
@@ -197,6 +198,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
                 for k, v in raw_output.items()
                 if k not in ("raw_score", "runtime_ms", "fallback")
             },
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
         )
 
     def describe(self) -> dict[str, Any]:

@@ -66,6 +66,7 @@ so downstream modules can decide whether to degrade, skip, or circuit-break.
 | FIX-20260621-036 | 2026-06-21 | cursor-agent | — | **DQAF-033 P1: position_identifier 注入两路径对账主键。** PositionClosed 新增 position_identifier 字段，PCA 从 MT5 deal.position_id 捕获，bridge worker detail + journal record 同步注入。0 行路由/资金逻辑变更。 | RC-08 |
 | FIX-20260624-106 | 2026-06-24 | cursor-agent | — | test_stub_sequence_gap_detectable: fix field tracking — test used record.seq (WAL sequential numbering) instead of record.payload.recorded_at_wal_seq (where the intentional gap at seq 4 lives in the stub payload). | RC-06 |
 | FIX-20260531-005 | 2026-05-31 | cursor-agent | — | **Architectural Defense 1**: Global Asset Registry `core/config/asset_registry.py` — SSOT for symbol physical properties. XAUUSDc + BTCUSDc registered. Adding new asset = 1 line. | RC-09 |
+| FIX-20260625-139 | 2026-06-25 | cursor-agent | — | **BrainSignal vote_weight contract gap — shadow brain bypass**: Added `vote_weight: float = 1.0` field to `BrainSignal` frozen dataclass in `trading_contracts.py`. Config-level binary permission gate (0.0=muted) now carried through pipeline to `_compute_weighted()` fail-fast gate. Previously missing → shadow brains (vote_weight=0.0) bypassed consensus mute. Part of multi-file fix: 7 adapters + base + shadow_decision_recorder updated. | L3 — contract gap: BrainSignal replaced BrainDecisionProposal but omitted vote_weight field |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

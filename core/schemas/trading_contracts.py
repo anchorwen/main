@@ -45,6 +45,13 @@ class BrainSignal:
     confidence: float  # [0.0, 1.0]
     raw_score: float  # original model output (BPS, z-score, logit, …)
 
+    # Config-level binary permission gate (FIX-20260625-139).
+    # 0.0 = muted (shadow/retired) — brain cannot vote regardless of PnL.
+    # >0.0 = voting rights proportional to weight.
+    # Read from brain JSON config; carried through pipeline to _compute_weighted()
+    # fail-fast gate in contract_groups.py.
+    vote_weight: float = 1.0
+
     # Diagnostics — carried through the pipeline but not used for voting.
     fallback: bool = False
     runtime_ms: float = 0.0

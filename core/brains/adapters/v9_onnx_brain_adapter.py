@@ -53,7 +53,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 self._output_names = []  # guard handles real names
                 self._backend = "onnxruntime:isolated"
                 return
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # noqa: BLE001  # BLE001:FOG
                 self._guard = None
                 print(
                     f"[v9_onnx_adapter] inference_isolation failed for "
@@ -75,7 +75,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             if len(input_shape) >= 2 and isinstance(input_shape[1], int) and input_shape[1] > 0:
                 self._num_features = input_shape[1]
             self._backend = "onnxruntime"
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # noqa: BLE001  # BLE001:FOG
             self._backend = f"stub:{type(exc).__name__}"
             bid = self._brain_entry.get("brain_id", "unknown")
             print(
@@ -88,6 +88,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 "model_load_failed",
                 {"artifact": artifact, "error": f"{type(exc).__name__}: {exc}"},
             )
+
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run ONNX inference on a 1-D feature vector.
 
@@ -212,6 +213,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             diagnostics={
                 k: v for k, v in raw_output.items() if k not in ("runtime_ms", "fallback")
             },
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
         )
 
     # ------------------------------------------------------------------

@@ -78,6 +78,7 @@ def _result_to_proposal(
         raw_score=result.get("raw_score", 0.0),
         fallback=result.get("fallback", False),
         runtime_ms=result.get("runtime_ms", 0.0),
+        vote_weight=float(result.get("vote_weight", 1.0) or 1.0),
     )
 
 

@@ -75,8 +75,9 @@ class ParamsBrainAdapter(BaseBrainAdapter):
             self._max_half_life = float(opt.get("max_half_life", 20))
             self._theta_min = float(opt.get("theta_min", 0.005))
             self._backend = "params:ou"
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # noqa: BLE001  # BLE001:FOG
             self._backend = f"stub:{type(exc).__name__}"
+
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Compute OU process statistics from the current price and rolling buffer.
 
@@ -149,6 +150,7 @@ class ParamsBrainAdapter(BaseBrainAdapter):
                 for k, v in raw_output.items()
                 if k not in ("z_score", "runtime_ms", "fallback")
             },
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
         )
 
     # ------------------------------------------------------------------

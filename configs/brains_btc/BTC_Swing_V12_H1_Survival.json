@@ -27,7 +27,7 @@
         "num_leaves": 31,
         "optuna_trials": 20,
         "n_seeds": 3,
-        "ou_hurst_source": "core.features.computers.v9_live_computer (absolute production parity)",
+        "ou_hurst_source": "core.features.computers.v9_live_computer (absolute production parity)"
     },
     "training_metrics": {
         "test_trade_win_rate": 0.89,
@@ -37,7 +37,7 @@
         "val_walk_forward_cv_wr_std": 0.0154,
         "val_walk_forward_cv_folds": 5,
         "ev_per_trade_r": 0.321,
-        "note": "FIX-20260625-137: Retrained with Schema Order B (corrected). Training & live now share identical feature column order. 60,545 samples, SL=3.0/TP=2.0, LightGBM fold1.",
+        "note": "FIX-20260625-137: Retrained with Schema Order B (corrected). Training & live now share identical feature column order. 60,545 samples, SL=3.0/TP=2.0, LightGBM fold1."
     },
     "features": [
         "D1_Ret_1",
@@ -80,7 +80,7 @@
         "TF_OU_x_Hurst",
         "TF_OU_div_ADX",
         "Cross_BTC_Gold_Ratio",
-        "Cross_BTC_Gold_Ratio_ROC",
+        "Cross_BTC_Gold_Ratio_ROC"
     ],
     "n_features": 41,
     "n_train_samples": 60545,
@@ -91,8 +91,8 @@
         "contract_type": "survival",
         "requires_dedicated_strategy_line": true,
         "aligned_with": null,
-        "graduation_path": "create btc_swing_survival_h1 with matching SL=3.0/TP=2.0",
+        "graduation_path": "create btc_swing_survival_h1 with matching SL=3.0/TP=2.0"
     },
     "governance": {"min_confidence": 0.5, "cooldown_cycles": 3},
-    "last_retrained": "2026-06-25T09:50:37.919010+00:00",
+    "last_retrained": "2026-06-25T09:50:37.919010+00:00"
 }
