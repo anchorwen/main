@@ -14,11 +14,14 @@ Default: RECORDING ON.  Opt-out: GOLDEN_MASTER_RECORD=0.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
 
 _ENV_DISABLE = "GOLDEN_MASTER_RECORD"  # set to "0" to disable
 _ENV_REPLAY = "GOLDEN_MASTER_REPLAY"  # set to "1" to enable replay mode
@@ -69,12 +72,45 @@ def record_cycle_inputs(
 
     now_ts = time.time()
     fv_sample = (
-        [round(float(x), 6) for x in (list(feature_vector_sample)[:8] if hasattr(feature_vector_sample, '__iter__') else [])]
+        [
+            round(float(x), 6)
+            for x in (
+                list(feature_vector_sample)[:8]
+                if hasattr(feature_vector_sample, "__iter__")
+                else []
+            )
+        ]
         if feature_vector_sample is not None
         else []
     )
-    regime = regime_info.get("regime", "normal") if regime_info else "normal"
-    detected_regime = regime_info.get("detected_regime", regime) if regime_info else regime
+    # ── DQAF-20260626-001: defensive .get() for non-dict regime_info ──
+    # BLE001 narrowing exposed a contract gap: regime_info is typed
+    # dict[str,Any]|None but callers can pass non-dict objects.
+    # AttributeError from .get() on non-dict types escapes the
+    # narrowed exception handler in live_cycle, causing silent
+    # golden_master gaps.  Defense-in-depth: catch AttributeError
+    # here so the function never raises on malformed regime_info.
+    _regime = "normal"
+    _detected = "normal"
+    try:
+        _regime = regime_info.get("regime", "normal") if regime_info else "normal"
+    except AttributeError:
+        _LOGGER.warning(
+            "Golden Master: regime_info.get('regime') failed — "
+            "non-dict type %s, falling back to 'normal'",
+            type(regime_info).__name__,
+        )
+    try:
+        _detected = regime_info.get("detected_regime", _regime) if regime_info else _regime
+    except AttributeError:
+        _LOGGER.warning(
+            "Golden Master: regime_info.get('detected_regime') failed — "
+            "non-dict type %s, falling back to %r",
+            type(regime_info).__name__,
+            _regime,
+        )
+    regime = _regime
+    detected_regime = _detected
 
     return {
         "cycle": cycle_count,
@@ -147,14 +183,16 @@ def record_cycle_outputs(
     _strategy_summary: list[dict[str, Any]] = []
     if isinstance(strategy_results, list):
         for r in strategy_results:
-            _strategy_summary.append({
-                "strategy": r.get("strategy", r.get("strategy_name", "?")),
-                "should_trade": bool(r.get("should_trade", False)),
-                "direction": r.get("direction", "neutral"),
-                "confidence": round(float(r.get("confidence", 0)), 4),
-                "volume": round(float(r.get("volume", 0)), 4),
-                "reason": str(r.get("reason", "")),
-            })
+            _strategy_summary.append(
+                {
+                    "strategy": r.get("strategy", r.get("strategy_name", "?")),
+                    "should_trade": bool(r.get("should_trade", False)),
+                    "direction": r.get("direction", "neutral"),
+                    "confidence": round(float(r.get("confidence", 0)), 4),
+                    "volume": round(float(r.get("volume", 0)), 4),
+                    "reason": str(r.get("reason", "")),
+                }
+            )
     capture["summary"] = {
         "trade_decisions": trade_decisions,
         "queued": queued,
@@ -163,12 +201,17 @@ def record_cycle_outputs(
     }
 
     _path = Path(data_dir) / "golden_master.jsonl"
-    try:
+    # DQAF-20260626-001: Non-fatal — golden_master is telemetry.
+    # BLE001/FOG: fail_open_guard replaces the old blind
+    # except OSError:pass (zero diagnostics).  Golden Master
+    # failure must never block trading; structured logging
+    # via fail_open_guard ensures ops can detect gaps.
+    from core.runtime.fault_handler import fail_open_guard
+
+    with fail_open_guard("GoldenMasterWrite"):
         _path.parent.mkdir(parents=True, exist_ok=True)
         with open(_path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(capture, ensure_ascii=False) + "\n")
-    except OSError:
-        pass  # Disk I/O failure is non-fatal for golden master recording
 
 
 # ── Replay / Verification ───────────────────────────────────────────────────
@@ -231,17 +274,13 @@ def replay_check_cycle(
             exp_val = expected.get(field)
             act_val = actual.get(field)
             if not _fuzzy_equal(exp_val, act_val):
-                mismatches.append(
-                    f"{strategy}.{field}: expected={exp_val!r}, got={act_val!r}"
-                )
+                mismatches.append(f"{strategy}.{field}: expected={exp_val!r}, got={act_val!r}")
         # Numeric fields with tolerance
         for field in ("confidence", "volume"):
             exp_val = expected.get(field, 0.0)
             act_val = actual.get(field, 0.0)
             if not _fuzzy_equal(float(exp_val), float(act_val), rel_tol=0.01, abs_tol=0.001):
-                mismatches.append(
-                    f"{strategy}.{field}: expected={exp_val}, got={act_val}"
-                )
+                mismatches.append(f"{strategy}.{field}: expected={exp_val}, got={act_val}")
     # Check for unexpected new strategies
     for strategy in live_outputs:
         if strategy not in recorded:

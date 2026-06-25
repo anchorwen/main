@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-25T14:47:18Z
+> **自动生成**: 2026-06-25T16:44:54Z
 
 ## Package-Level Dependencies
 
@@ -443,7 +443,7 @@
 - `feature_freshness.py` → `core.execution.pre_trade_guards`, `core.runtime.time_utils`
 - `gate_audit_recorder.py` → (无内部依赖)
 - `gods_eye_bridge.py` → `core.execution.gods_eye`, `core.runtime.time_utils`
-- `golden_master.py` → (无内部依赖)
+- `golden_master.py` → `core.runtime.fault_handler`
 - `integration_contracts.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
 - `legacy_dispatch_reference.py` → (无内部依赖)
 - `live_bootstrap.py` → `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.live_daily_provider`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.runtime.time_utils`
@@ -609,6 +609,7 @@
 - `coverage_baseline.py` → (无内部依赖)
 - `daily_cost_report.py` → (无内部依赖)
 - `daily_ops.py` → `core.alpha.contracts`, `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.brain_registry`, `core.brains.services.brain_leaderboard`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.exceptions`, `core.contracts.training.label_contract`, `core.data.ticket_resolver`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.services.journal_cleanup`, `core.observability.data_health_service`, `core.state.catalog`, `core.state.freshness_guard`, `core.state.writer`, `scripts.brain`, `scripts.check_training_readiness`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
+- `data_integrity_check.py` → (无内部依赖)
 - `data_pipeline_audit.py` → (无内部依赖)
 - `dedup_journal.py` → (无内部依赖)
 - `dedup_journal_by_ticket.py` → `core.infrastructure.distributed_lock`

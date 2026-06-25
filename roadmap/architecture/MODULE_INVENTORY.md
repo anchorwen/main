@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T14:47:18Z
-> **扫描模块数**: 678
+> **自动生成**: 2026-06-25T16:44:54Z
+> **扫描模块数**: 679
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -511,11 +511,11 @@
 | `feature_freshness.py` | ✅ active | — | 2 | 81 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `gods_eye_bridge.py` | ✅ active | — | 2 | 148 | — | |
-| `golden_master.py` | ✅ active | — | 8 | 249 | — | |
+| `golden_master.py` | ✅ active | — | 8 | 288 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4267 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4253 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1625 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
@@ -693,6 +693,7 @@
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 35 | 2811 | — | |
+| `data_integrity_check.py` | ✅ active | — | 9 | 552 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 169 | — | |

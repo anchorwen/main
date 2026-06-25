@@ -33,6 +33,7 @@ from core.parliament.contract_groups import (
 from core.runtime.fault_handler import (
     FaultLevel,
     FaultTolerantContext,
+    fail_open_guard,
 )
 
 # ── Strategy line imports ──
@@ -3287,7 +3288,10 @@ def execute_live_cycle(
 
         # ── Golden Master recording: capture inputs before evaluation ──
         _gm_capture = None
-        try:
+        # DQAF-20260626-001/BLE001: fail_open_guard replaces narrowed
+        # except (...) handler.  Golden Master is non-blocking telemetry —
+        # broad catch with structured logging is the correct pattern.
+        with fail_open_guard("GoldenMasterInputs"):
             from core.runtime.golden_master import record_cycle_inputs
 
             _fv_sample = None
@@ -3312,15 +3316,6 @@ def execute_live_cycle(
                 hurst=_m5_hurst,  # FIX-20260607-143: trend maturity observability
                 feature_vector_sample=_fv_sample,
                 data_dir=config.base_dir,
-            )
-        except (ValueError, TypeError, OSError) as _gm_exc:
-            # DQAF-076/BLE001-P0: record_cycle_inputs() writes golden
-            # master JSONL.  ValueError/TypeError on bad data, OSError
-            # on file I/O.  Non-blocking: golden master is telemetry.
-            import logging as _gm_log
-
-            _gm_log.getLogger(__name__).warning(
-                "Golden Master record_cycle_inputs failed: %s", _gm_exc
             )
 
         # ── FIX-20260613-052: resolved placeholder: BTC 37-dim feature augmentation ──
@@ -3470,7 +3465,9 @@ def execute_live_cycle(
 
         # ── Golden Master recording: capture outputs after evaluation ──
         if _gm_capture is not None:
-            try:
+            # DQAF-20260626-001/BLE001: fail_open_guard replaces narrowed
+            # except (...) handler.  Non-blocking telemetry.
+            with fail_open_guard("GoldenMasterOutputs"):
                 from core.runtime.golden_master import record_cycle_outputs
 
                 _decisions_map = eval_summary.get("decisions_map", {})
@@ -3493,17 +3490,6 @@ def execute_live_cycle(
                     queued=eval_summary.get("queued", 0),
                     data_dir=config.base_dir,
                 )
-            except (ValueError, TypeError, OSError) as _gm_exc:
-                # DQAF-076/BLE001-P0: record_cycle_outputs() writes
-                # golden master JSONL.  Non-blocking telemetry.
-                try:
-                    import logging as _gm_log
-
-                    _gm_log.getLogger(__name__).warning(
-                        "Golden Master record_cycle_outputs failed: %s", _gm_exc
-                    )
-                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
-                    pass
         # ── FIX-20260610-010: Persist main eval decisions for Phase 10 gate alignment ──
         _last_decisions: dict[str, dict[str, Any]] = {}
         for _sr in eval_summary.get("strategy_results", []):
