@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-25T01:14:32Z
+> **自动生成**: 2026-06-25T01:48:03Z
 
 ## Package-Level Dependencies
 
@@ -566,6 +566,7 @@
 - `audit_institutional_performance.py` → (无内部依赖)
 - `audit_live_brains.py` → (无内部依赖)
 - `audit_live_health.py` → (无内部依赖)
+- `audit_memory.py` → (无内部依赖)
 - `audit_physics_thresholds.py` → (无内部依赖)
 - `audit_pnl_ledger_integrity.py` → (无内部依赖)
 - `audit_profitability.py` → (无内部依赖)

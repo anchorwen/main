@@ -189,7 +189,13 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/verify_capresult_ast.py",
         "scripts/verify_phantom_contracts.py",
     ],
-    "contracts_training": ["core/contracts/training/"],
+    "contracts_training": [
+        "core/contracts/training/",
+        "scripts/scan_barrier_params.py",
+        "scripts/backtest_rule_strategies.py",
+        "configs/training/barrier_12bar_lightgbm_v1.2.1.yaml",
+        "configs/training/label_contracts/label-survival-barrier-1.2.1.json",
+    ],
     "data_infrastructure": [
         "core/data/",
         "scripts/migration/migrate_to_event_stream.py",
@@ -243,6 +249,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/training/register_brain.py",
         "scripts/validate_magic_sync.py",
         "scripts/system_trust_report.py",
+        "scripts/phase4_shadow_review.py",
+        "scripts/phase4_final_audit.py",
     ],
     "features_rolling": [
         "core/features/rolling_normalizer.py",
@@ -333,6 +341,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "apps/engine/main_v9_shadow.py",
         "apps/engine/v9_shadow_sse.py",
         "scripts/position_query.py",
+        "scripts/diagnose_process_health.py",
         "scripts/ble001_phase3e_deferred_fog_wrap.py",
         "scripts/ble001_phase3d_coldpath_fog_wrap.py",
         "scripts/ble001_phase3c_fog_wrap.py",

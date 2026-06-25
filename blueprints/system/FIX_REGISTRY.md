@@ -851,6 +851,9 @@ FIX-YYYYMMDD-NNN
 | FIX-20260624-100 | 2026-06-24 | runtime-live | cursor-agent | RC-06 |
 | FIX-20260625-126 | 2026-06-25 | deployment-lifecycle | Quarterly split: FIX_REGISTRY.md detail entries extracted to fixes/FIX_2026_Q2.md. Main file 4603→879 lines (-81%). Index table retained as central SSOT. register_fix.py writes detail to quarter file + index to main file. validate_blueprints.py gains quarterly consistency + duplicate detection check. shadow_rca.py searches quarterly files for context. | RC-10 |
 | FIX-20260625-127 | 2026-06-25 | deployment-lifecycle | Memory audit script: detects stale/untracked/completed memory files. Classifies 39 memory files by staleness, completion, and tracking. --sweep archives completed to _archive/ and updates MEMORY.md. | RC-12 |
+| FIX-20260625-128 | 2026-06-25 | contracts-training | Barrier v1.2.1 contract: scan_barrier_params.py + backtest_rule_strategies.py + training config (SL=2.0, TP=1.25, H=12) + label contract | RC-12 |
+| FIX-20260625-129 | 2026-06-25 | deployment-lifecycle | Phase 4 shadow verification scripts: phase4_shadow_review.py + phase4_final_audit.py, MODULE_SOURCE_MAP update for 7 new files | RC-12 |
+| FIX-20260625-130 | 2026-06-25 | runtime-live | Process health diagnostic script: diagnose_process_health.py, Iron Law #11 compliant | RC-12 |
 
 
 

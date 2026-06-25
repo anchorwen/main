@@ -1,0 +1,56 @@
+schema_version: training_contract.v2.1
+contract_id: barrier_12bar_lightgbm_v1.2.1
+dataset:
+  path: data/training/barrier_v1.2.1/train_binary.npz
+  feature_schema: v9_institutional_40
+  min_samples_per_class: 100
+  sample_weighting: return_magnitude
+label:
+  contract_id: label-survival-barrier-1.2.1
+  sl_atr_mult: 2.0
+  tp_atr_mult: 1.25
+  horizon_bars: 12
+  profitability_calibrated: false
+  spread_points: 30
+  slippage_points: 10
+  tick_size: 0.001
+  tick_value: 0.01
+architecture:
+  type: lightgbm
+  objective_function: binary_logloss
+  search_space: default
+  optuna_trials: 50
+  n_seeds: 5
+  custom_params:
+    num_leaves: 31
+    learning_rate: 0.05
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    min_data_in_leaf: 20
+validation:
+  method: cpcv
+  n_groups: 6
+  n_test_groups: 2
+  purge_bars: 12
+  embargo_bars: 5
+  val_ratio: 0.15
+  test_ratio: 0.1
+quality_gates:
+  model_type: tree
+  min_train_sharpe: 0.20
+  min_train_win_rate: 0.30
+  min_sortino_ratio: 1.0
+  min_calmar_ratio: 0.0
+  max_vol_scaled_dd_pct: 40.0
+  min_forward_sharpe: 0.20
+  min_forward_win_rate: 0.30
+  max_overfit_gap: 0.3
+  require_shap_stability: true
+output:
+  brain_id_template: lgb_barrier_v121_{timestamp}
+  model_dir: data/models/institutional
+  config_dir: configs/brains
+  registry_db: data/training/registry.db
+  auto_register: true
+  initial_status: shadow

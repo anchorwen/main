@@ -1,0 +1,35 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-survival-barrier-1.2.1",
+  "type": "survival_barrier",
+  "horizon_bars": 12,
+  "bar_timeframe": "M5",
+  "barriers": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 1.25
+  },
+  "atr_config": {
+    "timeframe": "M5",
+    "period": 14
+  },
+  "timeout_label": "timeout",
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "metadata": {
+    "description": "Tight-TP survival barrier label contract -- optimized for training signal yield. SL=2.0xATR(14), TP=1.25xATR(14), horizon=12 bars (M5=1hr). Empirically calibrated via scan_barrier_params.py on 352K XAUUSD M5 bars (2021-2026): 17.3% timeout, 52.3% TP, 30.4% SL, EV=+0.045 ATR. Replaces v1.0.0 (TP=3.5xATR) which produced 83% timeout -- a 4.8x improvement in trainable label yield.",
+    "author": "cursor-agent",
+    "created": "2026-06-24",
+    "version": "1.2.1",
+    "rationale": "M5-level XAUUSD price action rarely sustains momentum beyond 1.25xATR within 1 hour. Wide TP (3.5xATR) resulted in 83% of trades expiring as timeout -- useless for supervised learning. Tightening TP to 1.25xATR captures frequent small moves while maintaining a 2.0xATR SL buffer. The 0.625:1 reward:risk ratio is compensated by a 63% conditional win rate (TP hit given resolution). Blind-entry EV is thin (+0.045 ATR ~ $0.15-0.25 pre-spread) -- the model must learn to select above-average entries to be net profitable after costs.",
+    "calibration_source": "scripts/scan_barrier_params.py -- 352,541 M5 bars, 168 combos (SL=0.5-2.0, TP=0.75-3.0, H=6/12/24/48), 58K blind entries/combos",
+    "references": [
+      "data/barrier_scan_results.csv",
+      "scripts/scan_barrier_params.py",
+      "core/contracts/training/label_contract.py",
+      "core/risk/regime_detector.py"
+    ]
+  }
+}

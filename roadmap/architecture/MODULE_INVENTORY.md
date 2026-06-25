@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T01:14:32Z
-> **扫描模块数**: 675
+> **自动生成**: 2026-06-25T01:48:03Z
+> **扫描模块数**: 676
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -650,6 +650,7 @@
 | `audit_institutional_performance.py` | ✅ active | — | 10 | 604 | — | |
 | `audit_live_brains.py` | ✅ active | — | 1 | 231 | — | |
 | `audit_live_health.py` | ✅ active | — | 3 | 201 | — | |
+| `audit_memory.py` | ✅ active | — | 8 | 399 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
 | `audit_profitability.py` | ✅ active | — | 7 | 371 | — | |
@@ -659,7 +660,7 @@
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
 | `augment_journal_strategy.py` | ✅ active | — | 4 | 182 | — | |
 | `backfill_journal_pnl.py` | ✅ active | — | 7 | 353 | — | |
-| `backtest_rule_strategies.py` | ✅ active | — | 7 | 516 | — | |
+| `backtest_rule_strategies.py` | ✅ active | — | 7 | 572 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 271 | — | |
 | `backtest_structural_swing.py` | ✅ active | — | 5 | 340 | — | |
 | `benchmark_zmq_latency.py` | ✅ active | — | 5 | 189 | — | |
@@ -672,7 +673,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 675 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 685 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -700,7 +701,7 @@
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |
-| `diagnose_process_health.py` | ✅ active | — | 10 | 457 | — | |
+| `diagnose_process_health.py` | ✅ active | — | 10 | 555 | — | |
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 564 | — | |
@@ -748,8 +749,8 @@
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
-| `phase4_final_audit.py` | ✅ active | — | 7 | 571 | — | |
-| `phase4_shadow_review.py` | ✅ active | — | 11 | 405 | — | |
+| `phase4_final_audit.py` | ✅ active | — | 7 | 594 | — | |
+| `phase4_shadow_review.py` | ✅ active | — | 11 | 419 | — | |
 | `position_query.py` | ✅ active | — | 6 | 193 | — | |
 | `position_snapshot.py` | ✅ active | — | 3 | 176 | — | |
 | `pre_commit_blueprint.py` | ✅ active | — | 5 | 204 | — | |
@@ -757,12 +758,12 @@
 | `probe_xau_signal_generation.py` | ✅ active | — | 7 | 362 | — | |
 | `purge_backtest_from_governance.py` | ✅ active | — | 5 | 249 | — | |
 | `reconcile_fix_registry.py` | ✅ active | — | 6 | 381 | — | |
-| `register_fix.py` | ✅ active | — | 10 | 383 | — | |
+| `register_fix.py` | ✅ active | — | 10 | 385 | — | |
 | `repair_brain_configs.py` | ✅ active | — | 4 | 141 | — | |
 | `restore_btc_schema_41.py` | ✅ active | — | 4 | 177 | — | |
 | `run_data_health.py` | ✅ active | — | 3 | 172 | — | |
 | `runtime_protection_guard.py` | ✅ active | — | 1 | 22 | — | |
-| `scan_barrier_params.py` | ✅ active | — | 5 | 236 | — | |
+| `scan_barrier_params.py` | ✅ active | — | 5 | 286 | — | |
 | `send_data_health_alert.py` | ✅ active | — | 6 | 231 | — | |
 | `send_live_order.py` | ✅ active | — | 4 | 148 | — | |
 | `shadow_decision_recorder.py` | ✅ active | — | 7 | 199 | — | |
