@@ -19,9 +19,9 @@ features:
 brains:
   registry_entries:
   - path: configs/brains/OU_Params_V6_Sniper.json
-    enabled: false
+    enabled: false  # FIX-20260625-136: retired — -60.8R fleet audit
   - path: configs/brains/OU_Params_V7_M15.json
-    enabled: true
+    enabled: false  # FIX-20260625-136: retired — -25.9R fleet audit
   - path: configs/brains/Meta_Stage1_Huber_V1.json
     enabled: false
   - path: configs/brains/Meta_Stage1_Binary_Cls_V1.json
@@ -31,7 +31,7 @@ brains:
   - path: configs/brains/Swing_V9_M30_V2.json
     enabled: true
   - path: configs/brains/Swing_V9_M15_V2.json
-    enabled: true
+    enabled: false  # FIX-20260625-136: retired — -31.2R fleet audit, throttle/promote oscillation
   - path: configs/brains/Brain_Trend_M30_V1.json
     enabled: false
   - path: configs/brains/Brain_Rev_M30_V1.json
