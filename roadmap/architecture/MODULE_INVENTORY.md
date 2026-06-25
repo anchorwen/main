@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-25T00:42:05Z
+> **自动生成**: 2026-06-25T01:09:10Z
 > **扫描模块数**: 675
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -672,7 +672,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 673 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 675 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -757,7 +757,7 @@
 | `probe_xau_signal_generation.py` | ✅ active | — | 7 | 362 | — | |
 | `purge_backtest_from_governance.py` | ✅ active | — | 5 | 249 | — | |
 | `reconcile_fix_registry.py` | ✅ active | — | 6 | 381 | — | |
-| `register_fix.py` | ✅ active | — | 8 | 329 | — | |
+| `register_fix.py` | ✅ active | — | 10 | 383 | — | |
 | `repair_brain_configs.py` | ✅ active | — | 4 | 141 | — | |
 | `restore_btc_schema_41.py` | ✅ active | — | 4 | 177 | — | |
 | `run_data_health.py` | ✅ active | — | 3 | 172 | — | |
@@ -768,7 +768,7 @@
 | `shadow_decision_recorder.py` | ✅ active | — | 7 | 199 | — | |
 | `shadow_live_compare_report.py` | ✅ active | — | 9 | 218 | — | |
 | `shadow_pnl_loop.py` | ✅ active | — | 9 | 812 | — | |
-| `shadow_rca.py` | ✅ active | — | 12 | 504 | — | |
+| `shadow_rca.py` | ✅ active | — | 12 | 525 | — | |
 | `smoke_test_e2e.py` | ✅ active | — | 15 | 381 | — | |
 | `system_health.py` | ✅ active | — | 5 | 293 | — | |
 | `system_trust_report.py` | ✅ active | — | 20 | 992 | — | |
@@ -783,7 +783,7 @@
 | `train_regime_aware_btc.py` | ✅ active | — | 3 | 256 | — | |
 | `training_strategy_report.py` | ⬜ empty | — | 0 | 172 | — | |
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
-| `validate_blueprints.py` | ✅ active | — | 7 | 303 | — | |
+| `validate_blueprints.py` | ✅ active | — | 8 | 358 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 406 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |

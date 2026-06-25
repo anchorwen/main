@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MODULES_DIR = ROOT / "blueprints" / "modules"
 SYSTEM_DIR = ROOT / "blueprints" / "system"
 FIX_REGISTRY = SYSTEM_DIR / "FIX_REGISTRY.md"
+FIXES_DIR = SYSTEM_DIR / "fixes"
 DEPS_FILE = SYSTEM_DIR / "DEPENDENCY_GRAPH.md"
 OVERVIEW_FILE = SYSTEM_DIR / "OVERVIEW.md"
 
@@ -266,6 +267,59 @@ def check_dependency_graph_consistency() -> list[str]:
     return errors
 
 
+def check_quarterly_fix_consistency() -> list[str]:
+    """Check quarterly fix files ↔ FIX_REGISTRY index consistency.
+
+    Checks:
+      1. Quarterly files have valid structure (## Fix Details section).
+      2. All FIX IDs in quarterly detail files also exist in the index table.
+      3. No duplicate detail entries (same FIX ID heading appearing >1 time).
+    Returns list of errors.
+    """
+    errors: list[str] = []
+    if not FIXES_DIR.exists() or not FIX_REGISTRY.exists():
+        return errors
+
+    # Collect all FIX IDs from the index table (FIX_REGISTRY.md)
+    registry_text = FIX_REGISTRY.read_text(encoding="utf-8")
+    index_ids: set[str] = set()
+    for m in FIX_ID_RE.finditer(registry_text):
+        index_ids.add(m.group(0))
+
+    # Scan each quarterly file
+    for qf in sorted(FIXES_DIR.glob("FIX_*.md")):
+        qf_rel = qf.relative_to(ROOT)
+        try:
+            text = qf.read_text(encoding="utf-8")
+        except OSError as exc:
+            errors.append(f"CANNOT READ {qf_rel}: {exc}")
+            continue
+
+        # Check structure
+        if "## Fix Details" not in text:
+            errors.append(f"STRUCTURE: {qf_rel} missing '## Fix Details' section")
+
+        # Extract FIX IDs from detail headings
+        detail_ids: list[str] = []
+        for m in re.finditer(r"^###\s+(FIX-\d{8}-\d{3})", text, re.MULTILINE):
+            detail_ids.append(m.group(1))
+
+        # Check for duplicates
+        seen: dict[str, int] = {}
+        for fid in detail_ids:
+            seen[fid] = seen.get(fid, 0) + 1
+        for fid, count in seen.items():
+            if count > 1:
+                errors.append(f"DUPLICATE: {fid} appears {count}× in {qf_rel}")
+
+        # Check all detail IDs are in the index
+        for fid in set(detail_ids):
+            if fid not in index_ids:
+                errors.append(f"SHADOW: {fid} in {qf_rel} but not in FIX_REGISTRY index table")
+
+    return errors
+
+
 def main() -> int:
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
 
@@ -276,6 +330,7 @@ def main() -> int:
         ("Module sections complete", check_module_sections),
         ("System files exist", check_system_files_exist),
         ("Fix registry consistency", check_fix_registry_consistency),
+        ("Quarterly fix file consistency", check_quarterly_fix_consistency),
         ("Source-blueprint freshness", check_source_blueprint_freshness),
         ("Dependency graph coverage", check_dependency_graph_consistency),
     ]

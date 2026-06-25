@@ -121,23 +121,44 @@ def _git_recent_fixes(file_path: str, n: int = GIT_LOG_DEPTH) -> list[dict]:
 
 
 def _fix_registry_context(fix_ids: list[str]) -> str:
-    """Extract relevant sections from FIX_REGISTRY.md for given FIX IDs."""
+    """Extract relevant sections from FIX_REGISTRY.md and quarterly files for given FIX IDs.
+
+    Quarterly split (2026-06-25): detail entries live in fixes/FIX_YYYY_QN.md.
+    FIX_REGISTRY.md retains only the Fix Index table (brief entries).
+    This function searches quarterly files first for rich detail, falling back
+    to the index for IDs not yet migrated.
+    """
     registry_path = ROOT / "blueprints" / "system" / "FIX_REGISTRY.md"
-    if not registry_path.exists():
-        return ""
-    try:
-        text = registry_path.read_text(encoding="utf-8")
-    except OSError:
+    fixes_dir = ROOT / "blueprints" / "system" / "fixes"
+
+    # Collect all searchable files: quarterly files first (rich detail), index last (fallback)
+    search_paths: list[Path] = []
+    if fixes_dir.exists():
+        search_paths.extend(sorted(fixes_dir.glob("FIX_*.md")))
+    if registry_path.exists():
+        search_paths.append(registry_path)
+
+    if not search_paths:
         return ""
 
     snippets: list[str] = []
-    for fid in fix_ids:
-        # Find the FIX ID and grab surrounding lines
-        idx = text.find(fid)
-        if idx >= 0:
-            start = max(0, idx - 50)
-            end = min(len(text), idx + 400)
-            snippets.append(text[start:end].strip())
+    found_fids: set[str] = set()
+
+    for search_path in search_paths:
+        try:
+            text = search_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for fid in fix_ids:
+            if fid in found_fids:
+                continue
+            idx = text.find(fid)
+            if idx >= 0:
+                start = max(0, idx - 50)
+                end = min(len(text), idx + 400)
+                snippets.append(text[start:end].strip())
+                found_fids.add(fid)
+
     return "\n---\n".join(snippets[:3])  # limit to 3 entries
 
 

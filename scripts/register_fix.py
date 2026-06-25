@@ -26,6 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MODULES_DIR = ROOT / "blueprints" / "modules"
 FIX_REGISTRY = ROOT / "blueprints" / "system" / "FIX_REGISTRY.md"
+FIXES_DIR = ROOT / "blueprints" / "system" / "fixes"
+FIXES_TEMPLATE = FIXES_DIR / "_TEMPLATE.md"
 
 ROOT_CAUSE_MAP = {
     "RC-01": "missing-null-check",
@@ -97,6 +99,38 @@ def _resolve_module_file(module: str) -> Path | None:
     if underscore.exists():
         return underscore
     return None
+
+
+def _quarter_for_date(date_str: str) -> tuple[str, str]:
+    """Map a date string (YYYY-MM-DD) to quarter info.
+
+    Returns (quarter_label, filename).
+    Example: '2026-06-25' → ('2026 Q2', 'FIX_2026_Q2.md')
+    """
+    parts = date_str.split("-")
+    year = int(parts[0])
+    month = int(parts[1])
+    quarter = (month - 1) // 3 + 1
+    return (f"{year} Q{quarter}", f"FIX_{year}_Q{quarter}.md")
+
+
+def _ensure_quarter_file(quarter_file: Path) -> bool:
+    """Create a quarterly fix file from template if it doesn't exist."""
+    if quarter_file.exists():
+        return True
+    if not FIXES_TEMPLATE.exists():
+        print(f"WARNING: Template not found: {FIXES_TEMPLATE}", file=sys.stderr)
+        return False
+    template = FIXES_TEMPLATE.read_text(encoding="utf-8")
+    # Replace placeholder fields
+    quarter_name = quarter_file.stem.replace("FIX_", "").replace("_", " ")
+    content = template.replace("YYYY QN", quarter_name)
+    content = content.replace("Mon–Mon", "TBD–TBD")
+    content = content.replace("YYYY-MM-DD to YYYY-MM-DD", "TBD to TBD")
+    content = content.replace("FIX-YYYYMMDD-NNN", "(none yet)")
+    quarter_file.write_text(content, encoding="utf-8")
+    print(f"  [OK] Created new quarter file: {quarter_file.relative_to(ROOT)}")
+    return True
 
 
 def append_to_module(
@@ -175,12 +209,15 @@ def append_to_registry(
     root_cause: str,
     depends_on: str = "",
 ) -> bool:
-    """Append fix detail to FIX_REGISTRY.md and update the index table."""
+    """Append fix detail to the quarterly file and update the index in FIX_REGISTRY.md.
+
+    Quarterly split (2026-06-25): detail entries go to fixes/FIX_YYYY_QN.md.
+    FIX_REGISTRY.md retains only the Fix Index table (central lookup).
+    """
     if not FIX_REGISTRY.exists():
         print(f"ERROR: FIX_REGISTRY not found: {FIX_REGISTRY}", file=sys.stderr)
         return False
 
-    content = FIX_REGISTRY.read_text(encoding="utf-8")
     rc_name = ROOT_CAUSE_MAP.get(root_cause, root_cause)
 
     # Build detail block
@@ -198,45 +235,62 @@ def append_to_registry(
 - **Dependents Checked**: {depends_on if depends_on else "(none)"}
 """
 
-    # Append detail block before the closing --- (if any) or at end
-    lines = content.split("\n")
-    # Find the "## Fix Details" section and append after it
+    # ── Step 1: Write detail to the quarterly file ──
+    _quarter_label, quarter_filename = _quarter_for_date(date_str)
+    quarter_file = FIXES_DIR / quarter_filename
+    if not _ensure_quarter_file(quarter_file):
+        print(f"ERROR: Cannot create quarter file: {quarter_file}", file=sys.stderr)
+        return False
+
+    quarter_content = quarter_file.read_text(encoding="utf-8")
+    quarter_lines = quarter_content.split("\n")
+
+    # Append detail after the "## Fix Details" section header + template comment
     detail_marker = "## Fix Details"
-    if detail_marker in content:
-        insert_idx = len(lines)
-        for i, line in enumerate(lines):
+    if detail_marker in quarter_content:
+        insert_idx = len(quarter_lines)
+        for i, line in enumerate(quarter_lines):
             if line.strip() == detail_marker:
-                # Skip the section header and any template comment
-                for j in range(i + 1, len(lines)):
-                    if lines[j].strip().startswith("<!--"):
+                for j in range(i + 1, len(quarter_lines)):
+                    if quarter_lines[j].strip().startswith("<!--"):
                         continue
                     insert_idx = j
                     break
                 break
-        lines.insert(insert_idx, detail.rstrip())
+        quarter_lines.insert(insert_idx, detail.rstrip())
     else:
-        lines.append(detail.rstrip())
+        quarter_lines.append(detail.rstrip())
 
-    # Update Fix Index table
-    index_entry = f"| {fix_id} | {date_str} | {module} | {description} | {root_cause} |\n"
-    for i, line in enumerate(lines):
+    quarter_file.write_text("\n".join(quarter_lines), encoding="utf-8")
+    print(f"  [OK] Detail → {quarter_file.relative_to(ROOT)}")
+
+    # ── Step 2: Update Fix Index table in FIX_REGISTRY.md ──
+    registry_content = FIX_REGISTRY.read_text(encoding="utf-8")
+    registry_lines = registry_content.split("\n")
+
+    index_entry = f"| {fix_id} | {date_str} | {module} | {description} | {root_cause} |"
+    inserted = False
+    for i, line in enumerate(registry_lines):
         if line.strip().startswith("| Fix ID") and "Module" in line:
-            # Find the separator row after the header
-            for j in range(i + 1, min(i + 5, len(lines))):
-                if lines[j].strip().startswith("|---"):
-                    # Find first empty or "—" row after separator
-                    for k in range(j + 1, len(lines)):
-                        if lines[k].strip().startswith("| —"):
-                            lines[k] = index_entry.rstrip()
+            for j in range(i + 1, min(i + 5, len(registry_lines))):
+                if registry_lines[j].strip().startswith("|---"):
+                    for k in range(j + 1, len(registry_lines)):
+                        if registry_lines[k].strip().startswith("| —"):
+                            registry_lines[k] = index_entry
+                            inserted = True
                             break
-                        if not lines[k].strip().startswith("|"):
-                            lines.insert(k, index_entry.rstrip())
+                        if not registry_lines[k].strip().startswith("|"):
+                            registry_lines.insert(k, index_entry)
+                            inserted = True
                             break
                     break
             break
 
-    FIX_REGISTRY.write_text("\n".join(lines), encoding="utf-8")
-    print(f"  [OK] Updated {FIX_REGISTRY.relative_to(ROOT)}")
+    if not inserted:
+        print("WARNING: Could not find index insertion point in FIX_REGISTRY.md", file=sys.stderr)
+
+    FIX_REGISTRY.write_text("\n".join(registry_lines), encoding="utf-8")
+    print(f"  [OK] Index → {FIX_REGISTRY.relative_to(ROOT)}")
     return True
 
 
