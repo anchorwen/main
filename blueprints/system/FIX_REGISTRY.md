@@ -856,6 +856,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260625-130 | 2026-06-25 | runtime-live | Process health diagnostic script: diagnose_process_health.py, Iron Law #11 compliant | RC-12 |
 | FIX-20260625-131 | 2026-06-25 | monitor_dashboard | Flaky test: test_summary_emission — time.sleep(0.06) insufficient on Windows (~15.6ms timer quantum), raised to 0.15s to safely exceed 50ms storm_summary_interval | RC-01 |
 | FIX-20260625-132 | 2026-06-25 | deployment_lifecycle | Plan A+E: Test-only commit auto-exemption (Scene F) + redundant mypy hook removal. Added is_test_only_commit() to omega_constants.py with path normalization and root conftest.py whitelist. omega_gate.py and validate_commit_msg.py auto-detect test-only staged files and bypass quality gates (DQAF/FIX_REGISTRY/4D/closing). Removed redundant mypy pre-commit hook (verify.py --quick already covers it). Updated CLAUDE.md Scene F trigger definition. | RC-12 |
+| FIX-20260625-133 | 2026-06-25 | brains, features | **Tier 2 零覆盖歼灭 9/9 — 6/26 Checkpoint**: All 9 remaining Tier 2 zero-coverage files → covered (~216 tests). schema_versions(1→100%), brain_registry(0→98%), online_mlp_model(0→99%), brain_attribution_service(0→96%), brain_promotion(0→89%), feature_assembler(0→88%), meta_feature_builder(0→100%), btc_feature_augmenter(0→90%), live_daily_provider(0→78%). New dirs: tests/brains/services/, tests/features/computers/. Cumulative: Tier 2 14/14 files with coverage (up from 0/14 before FIX-050). | RC-12 |
 
 
 
