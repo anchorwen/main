@@ -510,6 +510,11 @@ def _evaluate_brain_ensemble(
                 # No stamping needed — frozen objects reject mutation.
                 raw_proposals.append(prop)
 
+        current_consensus: dict[str, Any] = {}
+        current_supporting: list[str] = []
+        meta_consensus: dict[str, Any] = {}
+        meta_supporting: list[str] = []
+
         if raw_proposals:
             try:
                 from core.execution.capital_allocator import resolve_conflicts
@@ -868,10 +873,10 @@ def _evaluate_brain_ensemble(
     # Not closed — return consensus for downstream layers
     return {
         "closed": False,
-        "current_consensus": current_consensus if "current_consensus" in dir() else {},
-        "current_supporting": current_supporting if "current_supporting" in dir() else [],
-        "meta_consensus": meta_consensus if "meta_consensus" in dir() else {},
-        "meta_supporting": meta_supporting if "meta_supporting" in dir() else [],
+        "current_consensus": current_consensus,
+        "current_supporting": current_supporting,
+        "meta_consensus": meta_consensus,
+        "meta_supporting": meta_supporting,
     }
 
 

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-26T04:55:36Z
+> **自动生成**: 2026-06-26T05:38:25Z
 > **扫描模块数**: 681
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -57,7 +57,7 @@
 | `execution_simulator.py` | ✅ active | SimulatedFill, ExecutionSimulator | 8 | 105 | — | |
 | `metrics.py` | ✅ active | — | 1 | 72 | — | |
 | `portfolio.py` | ✅ active | VirtualPosition, VirtualPortfolio | 13 | 186 | — | |
-| `strategy_adapter.py` | ✅ active | StrategyLineAdapter | 9 | 264 | — | |
+| `strategy_adapter.py` | ✅ active | StrategyLineAdapter | 9 | 265 | — | |
 
 ## core/brains
 
@@ -116,7 +116,7 @@
 | `exceptions.py` | ✅ active | DomainError, RiskError, RiskPolicyViolation, GovernanceError, InvalidTransitionError, BrainNotFoundError, ExecutionError, OrderNotFoundError, DuplicateOrderError, ProtocolError, DispatchError, IdempotencyError, ConfigurationError, ContractViolationError, DataIntegrityError | 10 | 159 | — | |
 | `ids.py` | ✅ active | — | 14 | 57 | — | |
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 218 | — | |
-| `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 940 | — | |
+| `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 938 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 150 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
 | `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
@@ -517,7 +517,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4251 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 8 | 1625 | — | |
+| `management_phase.py` | ✅ active | — | 8 | 1630 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 179 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |

@@ -221,6 +221,7 @@ class StrategyLineAdapter:
                 name=name,
                 magic=magic,
                 brain_types=brain_types,
+                base_dir=cfg.get("base_dir", "data"),
                 base_volume=cfg.get("base_volume", 0.01),
                 max_volume=cfg.get("max_volume", 0.05),
                 confidence_threshold=cfg.get("confidence_threshold", 0.5),

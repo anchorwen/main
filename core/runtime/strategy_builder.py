@@ -165,7 +165,7 @@ def build_strategy_lines(
     h1_swing_brains = _known_groups["h1_swing"]
     h4_swing_brains = _known_groups["h4_swing"]
     btc_swing_brains = _known_groups["btc_swing"]
-    btc_swing_h1_brains = _known_groups.get("btc_swing_h1", {})  # type: ignore[var-annotated]
+    btc_swing_h1_brains = _known_groups.get("btc_swing_h1", [])
 
     def _cfg(name: str, key: str, default: Any) -> Any:
         return config.strategy_configs.get(name, {}).get(key, default)

@@ -872,8 +872,8 @@ def _write_phantom_stub(
     within_quota, quota_reason = _wal.check_quota()
     if not within_quota:
         import sys as _sys
-        print(f"[phantom] WAL quota exceeded, dropping stub: {quota_reason}",
-              file=_sys.stderr)
+
+        print(f"[phantom] WAL quota exceeded, dropping stub: {quota_reason}", file=_sys.stderr)
         return
 
     with contextlib.suppress(Exception):
@@ -917,15 +917,13 @@ def _alert_violation(contract_id: str, message: str, severity: str) -> None:
     try:
         from core.observability.live_alert_hub import LiveAlertHub
 
-        hub = LiveAlertHub.instance()
-        if hub is not None:
-            hub.send_critical(
-                component=f"phantom:{contract_id}",
-                message=f"[{contract_id}] {message}",
-                metadata={"contract_id": contract_id, "severity": severity},
-            )
-            return
-    except (ImportError, AttributeError):
+        hub = LiveAlertHub(base_dir="data")
+        hub.send_critical(
+            reason=f"phantom:{contract_id}",
+            detail={"contract_id": contract_id, "severity": severity, "message": message},
+        )
+        return
+    except ImportError:
         pass  # Alert hub unavailable — fall back to stderr
 
     print(

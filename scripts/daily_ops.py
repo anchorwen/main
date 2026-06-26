@@ -332,7 +332,7 @@ def _step_journal_backfill(base_dir: str, *, dry_run: bool = False) -> dict[str,
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "journal_backfill", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "journal_backfill", "status": "error", "error": "unknown"}
 
 
 def _step_label_builder(
@@ -451,7 +451,7 @@ def _step_label_builder(
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "label_builder", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "label_builder", "status": "error", "error": "unknown"}
 
 
 def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
@@ -478,7 +478,7 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "shadow_ensemble", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "shadow_ensemble", "status": "error", "error": "unknown"}
 
 
 def _step_feedback_loop(
@@ -506,7 +506,7 @@ def _step_feedback_loop(
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "feedback_loop", "status": "error", "error": "unknown"}
 
 
 def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -768,7 +768,7 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "paper_trade_simulation", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "paper_trade_simulation", "status": "error", "error": "unknown"}
 
 
 def _step_governance(
@@ -828,7 +828,7 @@ def _step_governance(
                 "error": f"{type(exc).__name__}: {str(exc)[:400]}",
             }
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "governance", "status": "error", "error": "unknown"}
 
 
 def _cross_check_governance_with_leaderboard(
@@ -938,7 +938,7 @@ def _step_champion_challenger(
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "champion_challenger", "status": "error", "error": "unknown"}
 
 
 def _step_retraining_check(
@@ -1256,7 +1256,7 @@ def _step_retraining_check(
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "retraining_check", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "retraining_check", "status": "error", "error": "unknown"}
 
 
 def _load_prev_critical_ids(base: Path) -> set[str]:
@@ -1432,7 +1432,7 @@ def _step_param_optimization(
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "param_optimization", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "param_optimization", "status": "error", "error": "unknown"}
 
 
 def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -1656,7 +1656,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
             "total_trades_fed": sum(alpha_trades.values()),
         }
     except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-        pass
+        return {"step": "alpha_feed", "status": "error", "error": "unknown"}
 
 
 # ── DQAF-20260622-049: Nomination thresholds (aligned with governance_scheduler.py) ──
@@ -1878,7 +1878,7 @@ def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[st
                 "error": str(exc)[:500],
             }
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "alpha_registration", "status": "error", "error": "unknown"}
 
 
 def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -2057,7 +2057,7 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "alpha_lifecycle", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "alpha_lifecycle", "status": "error", "error": "unknown"}
 
 
 def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -2103,7 +2103,7 @@ def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str,
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "alpha_allocation", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "alpha_allocation", "status": "error", "error": "unknown"}
 
 
 def _step_feature_store_maintenance(
@@ -2148,7 +2148,7 @@ def _step_feature_store_maintenance(
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "feature_store_maintenance", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "feature_store_maintenance", "status": "error", "error": "unknown"}
 
 
 def _step_data_health(
@@ -2205,7 +2205,7 @@ def _step_data_health(
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "data_health", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "data_health", "status": "error", "error": "unknown"}
 
 
 def _step_reconcile_governance_pnl(base_dir: str) -> dict[str, Any]:
@@ -2384,7 +2384,7 @@ def _step_freshness_check(base_dir: str) -> dict[str, Any]:
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "freshness_check", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "freshness_check", "status": "error", "error": "unknown"}
 
 
 def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) -> dict[str, Any]:
@@ -2409,7 +2409,7 @@ def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) ->
         try:  # BLE001:FOG (was: FOG/LAC)
             return {"step": "daily_recap", "status": "error", "error": str(exc)[:500]}
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-            pass
+            return {"step": "daily_recap", "status": "error", "error": "unknown"}
 
 
 def _resolve_base_dir(base_dir: str | Path) -> str:
