@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-26T01:50:14Z
+> **自动生成**: 2026-06-26T04:23:25Z
 
 ## Package-Level Dependencies
 
@@ -545,6 +545,7 @@
 - `analyze_live_journal.py` → (无内部依赖)
 - `analyze_ou_pnl.py` → (无内部依赖)
 - `analyze_recent_losses.py` → (无内部依赖)
+- `analyze_shadow_predictions.py` → (无内部依赖)
 - `analyze_swing_pnl.py` → (无内部依赖)
 - `analyze_trail_impact.py` → (无内部依赖)
 - `analyze_xau_recent_entries.py` → (无内部依赖)
@@ -667,6 +668,7 @@
 - `omega_gate.py` → `scripts.omega_constants`
 - `online_feedback_hook.py` → `core.brains.adapters.online_learner_adapter`, `core.feedback.online_feedback_hook`
 - `optimize_sl_tp.py` → `scripts.paper_trade_simulator`
+- `optimize_sltp_params.py` → `scripts.training.train_btc_swing_v9`
 - `paper_trade_simulator.py` → `core.simulation.spread_model`
 - `phase4_final_audit.py` → (无内部依赖)
 - `phase4_shadow_review.py` → (无内部依赖)

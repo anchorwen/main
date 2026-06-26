@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-26T01:50:14Z
-> **扫描模块数**: 679
+> **自动生成**: 2026-06-26T04:23:25Z
+> **扫描模块数**: 681
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -629,6 +629,7 @@
 | `analyze_live_journal.py` | ✅ active | — | 6 | 542 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
+| `analyze_shadow_predictions.py` | ✅ active | — | 11 | 569 | — | |
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
 | `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |
 | `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 460 | — | |
@@ -674,7 +675,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 692 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 694 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -751,6 +752,7 @@
 | `omega_gate.py` | ✅ active | — | 4 | 558 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
+| `optimize_sltp_params.py` | ✅ active | — | 4 | 310 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
 | `phase4_final_audit.py` | ✅ active | — | 7 | 594 | — | |
 | `phase4_shadow_review.py` | ✅ active | — | 11 | 419 | — | |

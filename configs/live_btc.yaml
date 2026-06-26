@@ -146,8 +146,8 @@ brains:
     path: configs/brains_btc/BTC_Swing_V4.json
   # ── V9_H1 RETIRED (FIX-20260625-136): -34.7R, WR=39.7%, vote_weight=0.0 ghost node → archive ──
   # ── V10_M15 REMOVED (DQAF-20260615-009g): stale 37-dim model, magic collision, artifact_hash mismatch ──
-  # ── DQAF-20260615-003: V12 H1 Survival (Route B, 41-dim with delta_OU/Hurst) ──
-  - enabled: true
+  # ── V12_H1_Survival RETIRED (FIX-20260626-140): SL=3.0/TP=2.0 → 87.1% TP degenerate labels → constant model (σ=0.014). Replaced by V12_H1_15. ──
+  - enabled: false
     path: configs/brains_btc/BTC_Swing_V12_H1_Survival.json
   # ── FIX-20260625-138: V12_H1_15 shadow variant — H1, SL=1.5/TP=1.5, horizon=12, vote_weight=0.0 ──
   - enabled: true
