@@ -50,6 +50,7 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260626-140 | 2026-06-26 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/data_integrity_check.py` to monitor_dashboard module. Resolved 13 mypy errors + 1 ruff UP038. Iron Law #11 data integrity verification script. | RC-09 |
 | FIX-20260625-136 | 2026-06-25 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/audit_entry_spread_coverage.py` to monitor_dashboard module. Iron Law #11 audit script for journal entry_spread coverage. | RC-09 |
 | FIX-20260625-131 | 2026-06-25 | cursor-agent | d0513d53 | Flaky test: test_summary_emission — time.sleep(0.06) insufficient on Windows (~15.6ms timer quantum), raised to 0.15s to safely exceed 50ms storm_summary_interval | missing-null-check |
 | FIX-20260624-119 | 2026-06-24 | cursor-agent | — | **BLE001:FOG over-narrowing in EventBus.publish()** — restore `except Exception` for pub/sub fire-and-forget handler dispatch. 5-type FOG tuple excluded ZeroDivisionError, crashing publisher. Same class as FIX-20260624-104. | RC-05 — one-size-fits-all narrow tuple on generic callable dispatch |

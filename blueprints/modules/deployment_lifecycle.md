@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260626-140 | 2026-06-26 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/data_integrity_check.py` to monitor_dashboard module in check_blueprint_compliance.py. | RC-09 |
 | FIX-20260625-139 | 2026-06-25 | cursor-agent | — | **verify.py: shadow brain SL/TP mismatch exemption**. Brains with vote_weight=0.0 or status=shadow are exempt from FATAL TRAIN-SERVE SL/TP mismatch — downgraded to WARNING with "[SHADOW: harmless]" tag. Shadow brains cannot trade, so training-vs-serving SL/TP mismatch is harmless. Fixes false-positive config consistency failure blocking commits for shadow deployment. | L2 — config check didn't account for shadow-brain semantics |
 | FIX-20260625-136 | 2026-06-25 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/audit_entry_spread_coverage.py` in check_blueprint_compliance.py to monitor_dashboard module. | RC-09 |
 | FIX-20260625-137 | 2026-06-25 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/diagnose_mypy_baseline.py` in check_blueprint_compliance.py to monitor_dashboard module. Mypy baseline diagnostic tool. | RC-09 |
