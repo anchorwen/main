@@ -93,3 +93,5 @@ python -m pytest tests/ -k "capresult or typed_clock or phantom or wal or invari
 python scripts/verify_capresult_ast.py --enforce
 python scripts/verify_phantom_contracts.py
 ```
+
+| FIX-20260626-144 | 2026-06-26 | journal_contract.py + journal_sla.py: _pnl_status field, unknown_pnl_pending label, float tolerance table. Contract enforcement for PnL integrity. | L3 — missing-feature |

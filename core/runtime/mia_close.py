@@ -148,21 +148,45 @@ def enrich_mia_from_deals(
                 close_volume = _deal_volume
                 mia_entry["volume"] = close_volume
 
-        if isinstance(entry_price, int | float) and entry_price > 0 and close_price > 0:
+        # FIX-20260626-143: Prefer MT5 deal.profit over spread-based PnL calc.
+        # deal.profit is broker-authoritative — accounts for slippage,
+        # commission, and swap.  Fall back to spread calc only if no profit
+        # data is available in the deals.
+        _deal_profit: float | None = None
+        for _d in deals:
+            _dp = getattr(_d, "profit", None)
+            if _dp is not None and _dp != 0:
+                _deal_profit = float(_dp)
+                break
+
+        if _deal_profit is not None:
+            mia_entry["pnl"] = _deal_profit
+            mia_entry["_pnl_status"] = "verified_from_mt5_deal"
+            if isinstance(mia_entry.get("detail"), dict):
+                mia_entry["detail"]["pnl"] = _deal_profit
+        elif isinstance(entry_price, int | float) and entry_price > 0 and close_price > 0:
             if side == "long":
                 mia_entry["pnl"] = round((close_price - entry_price) * float(close_volume), 2)
             elif side == "short":
                 mia_entry["pnl"] = round((entry_price - close_price) * float(close_volume), 2)
+            mia_entry["_pnl_status"] = "estimated_from_close_price"
             if isinstance(mia_entry.get("detail"), dict):
                 mia_entry["detail"]["pnl"] = mia_entry["pnl"]
+
         if mia_entry.get("pnl") is not None:
-            pnl = mia_entry["pnl"]
-            if pnl < 0:
-                mia_entry["label"] = "loss"
-            elif pnl > 0:
-                mia_entry["label"] = "win"
+            # Use PnlGuard for safe label classification
+            from core.ledger.services.pnl_guard import PnlGuard
+
+            if mia_entry.get("_pnl_status") != "verified_from_mt5_deal":
+                mia_entry["label"] = PnlGuard.classify_label(mia_entry)
             else:
-                mia_entry["label"] = "breakeven"
+                pnl = mia_entry["pnl"]
+                if pnl < 0:
+                    mia_entry["label"] = "loss"
+                elif pnl > 0:
+                    mia_entry["label"] = "win"
+                else:
+                    mia_entry["label"] = "breakeven"
 
         if close_reason == 4:
             _tc = mia_entry.get("trail_contribution", {})

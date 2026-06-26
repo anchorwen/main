@@ -181,3 +181,5 @@ startup → LifecycleManager.initialize()
 ```bash
 python -m pytest tests/ -k "lifecycle or health" -q
 ```
+
+| FIX-20260626-144 | 2026-06-26 | Add journal_contract.py + journal_sla.py to MODULE_SOURCE_MAP (contracts_resilience). Previously unmapped. | L1 — config-drift |

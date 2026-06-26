@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-26T05:38:25Z
-> **扫描模块数**: 681
+> **自动生成**: 2026-06-26T08:40:32Z
+> **扫描模块数**: 689
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -115,7 +115,8 @@
 | `events.py` | ✅ active | DataSource, EventType, PnLEvent, GovernanceTransitionEvent | 0 | 168 | — | |
 | `exceptions.py` | ✅ active | DomainError, RiskError, RiskPolicyViolation, GovernanceError, InvalidTransitionError, BrainNotFoundError, ExecutionError, OrderNotFoundError, DuplicateOrderError, ProtocolError, DispatchError, IdempotencyError, ConfigurationError, ContractViolationError, DataIntegrityError | 10 | 159 | — | |
 | `ids.py` | ✅ active | — | 14 | 57 | — | |
-| `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 218 | — | |
+| `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 232 | — | |
+| `journal_sla.py` | ✅ active | ReconStatus, JournalHealthSLA | 2 | 133 | — | |
 | `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 938 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 150 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
@@ -378,7 +379,9 @@
 | `execution_event_writer.py` | ✅ active | ExecutionEventWriter | 3 | 47 | — | |
 | `execution_reconciliation_service.py` | ✅ active | ExecutionReconciliationService | 9 | 264 | — | |
 | `gate_decision_refs.py` | ✅ active | — | 4 | 30 | — | |
-| `journal_cleanup.py` | ✅ active | — | 13 | 795 | — | |
+| `journal_cleanup.py` | ✅ active | — | 13 | 845 | — | |
+| `journal_gate.py` | ✅ active | JournalGate | 13 | 240 | — | |
+| `pnl_guard.py` | ✅ active | PnlGuard | 2 | 138 | — | |
 | `replay_execution_reader.py` | ✅ active | ReplayExecutionReader | 5 | 35 | — | |
 | `replay_execution_writer.py` | ✅ active | ReplayExecutionWriter | 2 | 26 | — | |
 | `replay_plan_refs.py` | ✅ active | — | 11 | 85 | — | |
@@ -519,13 +522,13 @@
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1630 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
-| `mia_close.py` | ✅ active | — | 2 | 179 | — | |
+| `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
 | `modify_trail_dispatch.py` | ✅ active | — | 1 | 85 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 565 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 575 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 314 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
@@ -675,7 +678,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 694 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 696 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -693,7 +696,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 35 | 2811 | — | |
+| `daily_ops.py` | ✅ active | — | 39 | 3275 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -702,11 +705,15 @@
 | `deep_audit_probes.py` | ✅ active | — | 7 | 363 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
+| `diagnose_dual_instrument.py` | ✅ active | — | 5 | 315 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
+| `diagnose_journal_gaps.py` | ✅ active | — | 1 | 182 | — | |
 | `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |
 | `diagnose_mypy_baseline.py` | ✅ active | — | 6 | 210 | — | |
 | `diagnose_process_health.py` | ✅ active | — | 10 | 555 | — | |
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
+| `diagnose_xau_journal.py` | ✅ active | — | 2 | 156 | — | |
+| `diagnose_xau_orphans.py` | ✅ active | — | 2 | 237 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 564 | — | |
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
@@ -743,7 +750,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 33 | 2001 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 34 | 2060 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 185 | — | |
@@ -796,6 +803,7 @@
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
 | `verify.py` | ✅ active | — | 15 | 1011 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 90 | — | |
+| `verify_all_claims.py` | ✅ active | — | 1 | 359 | — | |
 | `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector, CapResultOkPlacementDetector, RawAccessDetector, FailOpenGuardDetector, ProofLeakDetector | 31 | 650 | ✅ | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |

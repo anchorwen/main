@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 
 # ── Accepted (open) entry ──────────────────────────────────────────────
 
+
 class JournalAccepted(BaseModel):
     """An accepted entry in the live trade journal.
 
@@ -79,6 +80,7 @@ class JournalAccepted(BaseModel):
             raise ValueError(f"Timestamp is not valid ISO-8601: '{v}' — {e}") from e
         if not has_explicit_tz:
             import logging
+
             logging.getLogger("JournalContract").info(
                 f"Implicit UTC timestamp accepted (no 'Z' suffix): '{v}'. "
                 f"Consider updating write path to emit explicit UTC."
@@ -114,6 +116,7 @@ class JournalAccepted(BaseModel):
         """
         if v is None:
             import logging
+
             logging.getLogger("JournalContract").warning(
                 "entry_context is None — open entry written without feature context. "
                 "This entry will be unusable for training. "
@@ -121,9 +124,7 @@ class JournalAccepted(BaseModel):
             )
             return v
         if not isinstance(v, dict):
-            raise ValueError(
-                f"entry_context must be a dict, got {type(v).__name__}"
-            )
+            raise ValueError(f"entry_context must be a dict, got {type(v).__name__}")
         vector = v.get("vector")
         if vector is None:
             raise ValueError(
@@ -144,6 +145,7 @@ class JournalAccepted(BaseModel):
 
 # ── Closed entry ───────────────────────────────────────────────────────
 
+
 class JournalClosed(BaseModel):
     """A closed entry in the live trade journal."""
 
@@ -160,6 +162,7 @@ class JournalClosed(BaseModel):
     position_ticket: int | None = Field(default=None)
     recorded_at: str = Field(default="", min_length=0)
     pnl: float | None = None
+    _pnl_status: str | None = None
     label: str | None = None
     open_message_id: str | None = None
     brain_ids: list[str] | None = Field(default=None)
@@ -167,13 +170,26 @@ class JournalClosed(BaseModel):
     target: str = "exec_bridge"
     detail: dict[str, Any] = Field(default_factory=dict)
 
-    VALID_LABELS: ClassVar[frozenset[str]] = frozenset({
-        "win", "loss", "breakeven",
-        "tp_hit_first", "sl_hit_first", "sl_hit_trailed",
-        "auto_orphan_rejected",
-        # Legacy aliases
-        "close_accepted",
-    })
+    VALID_LABELS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "win",
+            "loss",
+            "breakeven",
+            "tp_hit_first",
+            "sl_hit_first",
+            "sl_hit_trailed",
+            "auto_orphan_rejected",
+            # Legacy aliases
+            "close_accepted",
+            # PnL integrity labels (PnlGuard — prevents null→0→breakeven cascade)
+            "unknown_pnl_pending",
+            "unknown_pnl",
+            # Synthetic orphan close labels (cleanup_orphan_opens — unverified PnL)
+            "auto_orphan_rejected_unverified",
+            "auto_orphan_stale_unverified",
+            "auto_orphan_no_ticket_unverified",
+        }
+    )
 
     @field_validator("recorded_at")
     @classmethod
@@ -210,9 +226,7 @@ class JournalClosed(BaseModel):
         if v is None:
             return v
         if v not in cls.VALID_LABELS:
-            raise ValueError(
-                f"Unknown label '{v}'. Valid labels: {sorted(cls.VALID_LABELS)}"
-            )
+            raise ValueError(f"Unknown label '{v}'. Valid labels: {sorted(cls.VALID_LABELS)}")
         return v
 
     model_config = {"extra": "allow"}

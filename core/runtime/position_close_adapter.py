@@ -238,10 +238,15 @@ class PositionCloseAdapter:
         event: PositionClosed,
         journal_path: str | Path,
         state: Any = None,
+        gate: Any | None = None,
     ) -> bool:
         """Write event to Journal (atomic anchor), then notify downstream.
 
         Returns True if written, False if duplicate (already recorded).
+
+        FIX-20260626-143: *gate* is a JournalGate instance for orphan
+        prevention.  Close events for untracked tickets are rejected
+        before write.
         """
         # ── Dedup by deal_id ──
         _dedup_key = (event.position_ticket, event.deal_id)
@@ -280,7 +285,7 @@ class PositionCloseAdapter:
         try:
             from core.ledger.services.journal_cleanup import _append_journal
 
-            _append_journal(_path, _entry, lock_dir=_lock_dir)
+            _append_journal(_path, _entry, lock_dir=_lock_dir, gate=gate)
             _journal_ok = True
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             pass  # _journal_ok stays False
@@ -522,11 +527,16 @@ class PositionCloseAdapter:
         event: PositionOpened,
         journal_path: str | Path,
         state: Any = None,
+        gate: Any | None = None,
     ) -> bool:
         """Write PositionOpened event to Journal (atomic anchor).
 
         Dedup by message_id to prevent double-writes from bridge worker
         and live_cycle both recording the same open.
+
+        FIX-20260626-143: *gate* is a JournalGate instance for orphan
+        prevention.  After writing the open entry, the ticket is
+        registered with the gate.
         """
 
         _now = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -538,7 +548,7 @@ class PositionCloseAdapter:
         try:
             from core.ledger.services.journal_cleanup import _append_journal
 
-            _append_journal(_path, _entry, lock_dir=_lock_dir)
+            _append_journal(_path, _entry, lock_dir=_lock_dir, gate=gate)
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             _log.exception(
                 "PositionCloseAdapter: open journal write failed for ticket=%s",

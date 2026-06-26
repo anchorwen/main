@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-26T05:38:25Z
+> **自动生成**: 2026-06-26T08:40:32Z
 
 ## Package-Level Dependencies
 
@@ -96,6 +96,7 @@
 - `exceptions.py` → (无内部依赖)
 - `ids.py` → (无内部依赖)
 - `journal_contract.py` → (无内部依赖)
+- `journal_sla.py` → (无内部依赖)
 - `phantom_contract.py` → `core.data.write_ahead_log`, `core.observability.live_alert_hub`
 - `position_events.py` → (无内部依赖)
 - `schema_versions.py` → (无内部依赖)
@@ -329,6 +330,8 @@
 - `execution_reconciliation_service.py` → `core.contracts.domain_keys`, `core.observability.metric_names`
 - `gate_decision_refs.py` → `core.contracts.domain_keys`
 - `journal_cleanup.py` → `core.contracts.strategy_magic`, `core.infrastructure.distributed_lock`
+- `journal_gate.py` → `core.contracts.journal_sla`
+- `pnl_guard.py` → (无内部依赖)
 - `replay_execution_reader.py` → `core.contracts.domain_keys`, `core.ledger.stream_names`
 - `replay_execution_writer.py` → `core.contracts.domain.replay_execution_record`, `core.contracts.ids`, `core.ledger.stream_names`
 - `replay_plan_refs.py` → `core.contracts.domain_keys`
@@ -451,7 +454,7 @@
 - `live_startup.py` → `core.governance.governance_service`, `core.risk.risk_evaluation_service`, `core.risk.risk_policies`, `core.runtime.fault_handler`
 - `management_phase.py` → `core.contracts.domain.dispatch_context`, `core.contracts.strategy_magic`, `core.execution.capital_allocator`, `core.execution.live_order_sender`, `core.execution.managed_close`, `core.features.schemas.registry`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.live_cycle`, `core.runtime.market_ingress`, `core.runtime.mia_close`, `core.runtime.modify_trail_dispatch`, `core.runtime.ou_hurst`, `core.runtime.signal_health`, `core.runtime.time_utils`, `core.runtime.trail_dispatch`
 - `market_ingress.py` → `core.config.asset_registry`, `core.execution.mt5_worker`, `core.runtime.fault_handler`
-- `mia_close.py` → `core.contracts.strategy_magic`, `core.runtime.time_utils`
+- `mia_close.py` → `core.contracts.strategy_magic`, `core.ledger.services.pnl_guard`, `core.runtime.time_utils`
 - `micro_persist.py` → `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.features.store_contracts`
 - `modify_trail_dispatch.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`
 - `order_dispatch.py` → `apps.engine.runtime_loop`, `core.brains.brain_registry`, `core.contracts.domain.decision_intent`, `core.contracts.domain.system_mode_state`, `core.contracts.enums`, `core.contracts.ids`, `core.state.schema_versions`
@@ -609,7 +612,7 @@
 - `commander_guardrails_arch.py` → (无内部依赖)
 - `coverage_baseline.py` → (无内部依赖)
 - `daily_cost_report.py` → (无内部依赖)
-- `daily_ops.py` → `core.alpha.contracts`, `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.brain_registry`, `core.brains.services.brain_leaderboard`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.exceptions`, `core.contracts.training.label_contract`, `core.data.ticket_resolver`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.services.journal_cleanup`, `core.observability.data_health_service`, `core.state.catalog`, `core.state.freshness_guard`, `core.state.writer`, `scripts.brain`, `scripts.check_training_readiness`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
+- `daily_ops.py` → `core.alpha.contracts`, `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.brain_registry`, `core.brains.services.brain_leaderboard`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.exceptions`, `core.contracts.journal_sla`, `core.contracts.training.label_contract`, `core.data.ticket_resolver`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.services.journal_cleanup`, `core.ledger.services.journal_gate`, `core.observability.data_health_service`, `core.state.catalog`, `core.state.freshness_guard`, `core.state.writer`, `scripts.brain`, `scripts.check_training_readiness`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
 - `data_integrity_check.py` → (无内部依赖)
 - `data_pipeline_audit.py` → (无内部依赖)
 - `dedup_journal.py` → (无内部依赖)
@@ -618,11 +621,15 @@
 - `deep_audit_probes.py` → (无内部依赖)
 - `deploy_blue_green.py` → `core.deployment.blue_green`
 - `diagnose_data_health_failures.py` → (无内部依赖)
+- `diagnose_dual_instrument.py` → (无内部依赖)
 - `diagnose_feature_drift.py` → (无内部依赖)
+- `diagnose_journal_gaps.py` → (无内部依赖)
 - `diagnose_journal_mt5_sev2.py` → (无内部依赖)
 - `diagnose_mypy_baseline.py` → (无内部依赖)
 - `diagnose_process_health.py` → (无内部依赖)
 - `diagnose_sl_performance.py` → (无内部依赖)
+- `diagnose_xau_journal.py` → (无内部依赖)
+- `diagnose_xau_orphans.py` → (无内部依赖)
 - `dqaf053_phase1_sanitize.py` → `core.alpha.performance_store`, `core.alpha.registry`, `core.execution.conformal_calibrator`
 - `dqaf_collect.py` → (无内部依赖)
 - `extract_health_checks.py` → (无内部依赖)
@@ -659,7 +666,7 @@
 - `monitor_feature_drift.py` → `scripts.alert_dispatcher`
 - `monitor_pwin_fix.py` → (无内部依赖)
 - `mt5_bridge_healthcheck.py` → (无内部依赖)
-- `mt5_bridge_worker.py` → `core.contracts.strategy_magic`, `core.features.ofi_collector`, `core.infrastructure.distributed_lock`, `core.protocol.live_execution_contract`, `core.runtime.fault_handler`, `core.state.catalog`, `core.state.writer`
+- `mt5_bridge_worker.py` → `core.contracts.strategy_magic`, `core.features.ofi_collector`, `core.infrastructure.distributed_lock`, `core.ledger.services.journal_gate`, `core.protocol.live_execution_contract`, `core.runtime.fault_handler`, `core.state.catalog`, `core.state.writer`
 - `mt5_positions_snapshot.py` → (无内部依赖)
 - `mt5_spread_probe.py` → (无内部依赖)
 - `normalize_journal_pnl.py` → (无内部依赖)
@@ -712,6 +719,7 @@
 - `validate_magic_sync.py` → `core.contracts.strategy_magic`
 - `verify.py` → `core.runtime.golden_master`
 - `verify_all_brains.py` → `core.brains.services.brain_factory`
+- `verify_all_claims.py` → (无内部依赖)
 - `verify_capresult_ast.py` → (无内部依赖)
 - `verify_dqaf044_fix_effect.py` → (无内部依赖)
 - `verify_dqaf_002_fix.py` → `core.execution.position_manager`

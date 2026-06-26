@@ -125,3 +125,5 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 ```bash
 python -m pytest tests/ -k "protocol or dispatch or circuit" -q
 ```
+
+| FIX-20260626-144 | 2026-06-26 | JournalGate + PnlGuard + JournalSLA integration in _append_journal. Orphan prevention, pnl null-guard, quarantine poison pill. | L3 — missing-feature |

@@ -185,6 +185,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/contracts/adapters.py",
         "core/contracts/cap_result.py",
         "core/contracts/phantom_contract.py",
+        "core/contracts/journal_contract.py",
+        "core/contracts/journal_sla.py",
         "scripts/verify_phantom_contracts.py",
         "scripts/verify_capresult_ast.py",
         "scripts/verify_phantom_contracts.py",

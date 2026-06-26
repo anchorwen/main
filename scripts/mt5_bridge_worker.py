@@ -279,7 +279,19 @@ def _write_receipt(
     return path
 
 
-def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
+# ── JournalGate instance (set at worker startup) ──
+# FIX-20260626-143: Module-level gate so all _append_journal calls get
+# orphan prevention without plumbing gate through every call chain.
+_journal_gate: Any | None = None
+
+
+def set_journal_gate(gate: Any | None) -> None:
+    """Set the module-level JournalGate instance. Called at worker startup."""
+    global _journal_gate
+    _journal_gate = gate
+
+
+def _append_journal(journal_path: Path, record: dict[str, Any], *, gate: Any | None = None) -> None:
     """Append a record to the trade journal with advisory file locking.
 
     The lock serialises concurrent writes from the bridge worker, live_cycle
@@ -291,6 +303,11 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     entry is written to a per-process overflow file.  A 60-second merge tick
     in the Bridge main loop periodically drains the overflow into the main
     journal — zero data loss, zero hot-path blocking.
+
+    FIX-20260626-143 (JournalGate L3): *gate* is a JournalGate instance for
+    orphan prevention.  Close entries for untracked tickets are rejected
+    before lock acquisition (no lock contention from doomed writes).
+    After writing an open entry, the ticket is registered with the gate.
     """
     # ── FIX-20260617-101/P0: Entry boundary assertion ──
     _action = record.get("action")
@@ -306,6 +323,13 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 record.get("message_id"),
             )
             return
+
+    # ── JournalGate: validate close entries BEFORE lock acquisition ──
+    # Reject early to avoid lock contention from doomed writes.
+    _effective_gate = gate if gate is not None else _journal_gate
+    if _effective_gate is not None and _action == "close":
+        if not _effective_gate.validate_close(record):
+            return  # Gate rejected — quarantine handled internally
 
     from core.infrastructure.distributed_lock import FileLock
 
@@ -366,6 +390,15 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 pass  # journal dedup is best-effort
         with journal_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        # Register open ticket with gate AFTER successful write
+        _ticket = record.get("position_ticket")
+        if (
+            _effective_gate is not None
+            and _action == "open"
+            and isinstance(_ticket, int)
+            and _ticket > 0
+        ):
+            _effective_gate.register_open(_ticket)
     finally:
         lock.release()
 
@@ -991,6 +1024,9 @@ def process_one(
     # ── FIX-20260612-004: Prefer actual fill PnL over mid-price estimate ──
     _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
     _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
+    _pnl_status = (
+        "verified_from_mt5_deal" if _actual_profit is not None else "pending_mt5_confirmation"
+    )
     journal_record = {
         "schema_version": "live_trade_journal.v2",
         "recorded_at": _utc_now(),
@@ -1003,6 +1039,7 @@ def process_one(
         "side": msg_payload.get("side"),
         "volume": vol_disp,
         "pnl": _pnl,
+        "_pnl_status": _pnl_status,
         "label": _label,
         "comment": _comment,
         "magic": _magic,
@@ -1109,6 +1146,15 @@ def run_worker(args: argparse.Namespace) -> int:
     archive_dir = Path(args.archive_dir)
     journal_path = Path(args.journal_path)
     protection_flag_path = Path(args.protection_flag_path)
+
+    # ── JournalGate initialization (FIX-20260626-143) ──
+    try:
+        from core.ledger.services.journal_gate import JournalGate
+
+        _gate = JournalGate(journal_path, policy="quarantine")
+        set_journal_gate(_gate)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        set_journal_gate(None)  # Gate unavailable — bridge runs without protection
 
     # ── Initialize MT5 once at startup ──
     mt5 = None
@@ -1462,6 +1508,9 @@ def _write_zmq_journal_entry(
     _label = _derive_label(action, msg_payload, detail) if detail else None
     _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
     _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
+    _pnl_status = (
+        "verified_from_mt5_deal" if _actual_profit is not None else "pending_mt5_confirmation"
+    )
     vol_disp = detail.get("volume") if isinstance(detail, dict) else None
     if vol_disp is None:
         vol_disp = msg_payload.get("volume") or default_volume
@@ -1478,6 +1527,7 @@ def _write_zmq_journal_entry(
         "side": msg_payload.get("side"),
         "volume": vol_disp,
         "pnl": _pnl,
+        "_pnl_status": _pnl_status,
         "label": _label,
         "comment": msg_payload.get("comment", ""),
         "magic": _magic,
@@ -1538,6 +1588,15 @@ def run_zmq_worker(
     ZMQ_PUB publishes ACK receipts for all SUB consumers.
     """
     import zmq
+
+    # ── JournalGate initialization (FIX-20260626-143) ──
+    try:
+        from core.ledger.services.journal_gate import JournalGate
+
+        _gate = JournalGate(journal_path, policy="quarantine")
+        set_journal_gate(_gate)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        set_journal_gate(None)
 
     ctx = zmq.Context.instance()  # type: ignore[attr-defined]
 

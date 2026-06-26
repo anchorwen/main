@@ -105,18 +105,18 @@ def _read_tail_lines(path: Path, n: int = 1000) -> list[str]:
                 _buf = _chunk + _buf
             _raw_lines = _buf.split(b"\n")
             # Last N+1 to account for possible partial leading line, skip empty
-            return [
-                _l.decode("utf-8", errors="replace")
-                for _l in _raw_lines[-n - 1 :]
-                if _l
-            ]
+            return [_l.decode("utf-8", errors="replace") for _l in _raw_lines[-n - 1 :] if _l]
     except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
         pass
         return []  # Best-effort — if read fails, write anyway
 
 
 def _append_journal(
-    path: Path, entry: dict[str, Any], *, lock_dir: Path | None = None
+    path: Path,
+    entry: dict[str, Any],
+    *,
+    lock_dir: Path | None = None,
+    gate: Any | None = None,
 ) -> None:
     """Append one JSON line to the journal with advisory lock and dedup.
 
@@ -132,10 +132,20 @@ def _append_journal(
     write.  Now: lock → scan → write is atomic.  For performance (user's
     directive), the scan uses _read_tail_lines (byte-level reverse seek)
     instead of readlines() to avoid loading the full file.
+
+    FIX-20260626-143 (JournalGate L3): *gate* is a JournalGate instance that
+    validates close entries against known open tickets BEFORE write.
+    Close entries for untracked tickets are rejected/quarantined.
+    After writing an open entry, the ticket is registered with the gate.
     """
     _action = entry.get("action", "")
     _ticket = entry.get("position_ticket")
     _msg_id = entry.get("message_id", "")
+
+    # ── JournalGate: validate close entries ──────────────────────────────
+    if gate is not None and _action == "close":
+        if not gate.validate_close(entry):
+            return  # Gate rejected — quarantine handled internally
 
     # ── Inline helpers ──────────────────────────────────────────────────
 
@@ -192,14 +202,20 @@ def _append_journal(
     if lock_dir is not None:
         from core.infrastructure.distributed_lock import FileLock
 
-        _lock = FileLock(
-            "live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10
-        )
+        _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
         _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
         if _acquired.acquired:
             try:
                 if not _scan_for_duplicate():
                     _do_write()
+                    # Register open ticket with gate AFTER successful write
+                    if (
+                        gate is not None
+                        and _action == "open"
+                        and isinstance(_ticket, int)
+                        and _ticket > 0
+                    ):
+                        gate.register_open(_ticket)
             finally:
                 _lock.release()
         else:
@@ -209,9 +225,18 @@ def _append_journal(
             # fix (FIX-023 L2) which prevents re-detection of already-recorded closes.
             if not _scan_for_duplicate():
                 _do_write()
+                if (
+                    gate is not None
+                    and _action == "open"
+                    and isinstance(_ticket, int)
+                    and _ticket > 0
+                ):
+                    gate.register_open(_ticket)
     else:
         if not _scan_for_duplicate():
             _do_write()
+            if gate is not None and _action == "open" and isinstance(_ticket, int) and _ticket > 0:
+                gate.register_open(_ticket)
 
 
 def _resolve_magic(entry: dict[str, Any]) -> int:
@@ -345,6 +370,8 @@ def cleanup_orphan_opens(
         magic = _resolve_magic(e)
         strategy = _resolve_strategy(e)
 
+        # FIX-20260626-143: Synthetic close entries use PnlGuard — never write
+        # false pnl=0.0.  These entries have unknown PnL awaiting reconciliation.
         close_entry: dict[str, Any] = {
             "schema_version": "live_trade_journal.v2",
             "recorded_at": _utc_now_iso(),
@@ -353,15 +380,16 @@ def cleanup_orphan_opens(
             "ack_status": "closed",
             "detail": {
                 "reason": reason,
-                "close_price": 0.0,
-                "pnl": 0.0,
+                "close_price": None,
+                "pnl": None,
             },
             "symbol": e.get("symbol", ""),
             "action": "close",
             "side": e.get("side", ""),
             "volume": e.get("volume", 0.0),
-            "pnl": 0.0,
-            "label": reason,
+            "pnl": None,
+            "_pnl_status": "pending_mt5_confirmation",
+            "label": f"{reason}_unverified",
             "position_ticket": ticket,
             "magic": magic,
             "strategy": strategy,
@@ -462,6 +490,7 @@ def repair_journal(
                 _ack = {"closed": 0, "accepted": 1, "rejected": 2}
                 _has_cp = 1 if (_e.get("detail", {}).get("close_price") or 0) > 0 else 0
                 return (_ack.get(_e.get("ack_status", ""), 99), -_has_cp, -abs(_e.get("pnl") or 0))
+
             _group.sort(key=_sort_key)
             for _i, _e in _group[1:]:
                 if not entries[_i].get("_duplicate"):
@@ -499,10 +528,12 @@ def repair_journal(
             # blocked during the entire operation — no stale-snapshot window.
             # This eliminates the FIX-008 lock-then-reread workaround.
             import os as _os
+
             _temp_path = journal_path.with_suffix(".jsonl.repair_tmp")
 
             if lock_dir is not None:
                 from core.infrastructure.distributed_lock import FileLock
+
                 _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
                 _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
                 if not _acquired.acquired:
@@ -563,11 +594,17 @@ def repair_journal(
                         continue
                     # Keep best: closed > accepted > rejected, prefer larger abs(PnL)
                     _ack_map = {"closed": 0, "accepted": 1, "rejected": 2}
-                    _group.sort(key=lambda _i: (
-                        _ack_map.get(_deduped[_i].get("ack_status", ""), 99),
-                        -(1 if (_deduped[_i].get("detail", {}).get("close_price") or 0) > 0 else 0),
-                        -abs(_deduped[_i].get("pnl") or 0),
-                    ))
+                    _group.sort(
+                        key=lambda _i: (
+                            _ack_map.get(_deduped[_i].get("ack_status", ""), 99),
+                            -(
+                                1
+                                if (_deduped[_i].get("detail", {}).get("close_price") or 0) > 0
+                                else 0
+                            ),
+                            -abs(_deduped[_i].get("pnl") or 0),
+                        )
+                    )
                     for _idx in _group[1:]:
                         _drop_indices.add(_idx)
 
@@ -578,7 +615,8 @@ def repair_journal(
 
                 # Write to temp file, then atomic swap
                 _temp_path.write_text(
-                    "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in _deduped) + "\n",
+                    "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in _deduped)
+                    + "\n",
                     encoding="utf-8",
                 )
                 _os.replace(_temp_path, journal_path)
@@ -587,6 +625,7 @@ def repair_journal(
                     _lock.release()
                 if _temp_path.exists():
                     import contextlib
+
                     with contextlib.suppress(OSError):
                         _temp_path.unlink()
 
@@ -646,7 +685,9 @@ def repair_and_cleanup(
     Call it once at the beginning of every live pipeline session.
     """
     repair_report = repair_journal(journal_path, dry_run=dry_run, lock_dir=lock_dir)
-    orphan_count = cleanup_orphan_opens(journal_path, max_age_hours=max_age_hours, dry_run=dry_run, lock_dir=lock_dir)
+    orphan_count = cleanup_orphan_opens(
+        journal_path, max_age_hours=max_age_hours, dry_run=dry_run, lock_dir=lock_dir
+    )
     repair_report["orphans_closed"] = orphan_count
     return repair_report
 
@@ -712,8 +753,10 @@ def compact_journal(
 
     try:
         # ── Pass 1: filter → temp file ──
-        with open(journal_path, encoding="utf-8") as f_in, \
-             open(temp_path, "w", encoding="utf-8") as f_out:
+        with (
+            open(journal_path, encoding="utf-8") as f_in,
+            open(temp_path, "w", encoding="utf-8") as f_out,
+        ):
             for line in f_in:
                 stripped = line.strip()
                 if not stripped:
@@ -740,6 +783,7 @@ def compact_journal(
                 if ts_str:
                     try:
                         from datetime import datetime
+
                         record_ts = datetime.fromisoformat(
                             ts_str.replace("Z", "+00:00")
                         ).timestamp()
@@ -759,20 +803,25 @@ def compact_journal(
             _os.replace(temp_path, journal_path)
             _log.info(
                 "Journal compaction complete: retained=%d removed=%d (old rejected, >%dd)",
-                retained, removed, retention_days,
+                retained,
+                removed,
+                retention_days,
             )
         elif dry_run and removed > 0:
             _log.info(
                 "Journal compaction DRY-RUN: would retain=%d remove=%d (old rejected, >%dd)",
-                retained, removed, retention_days,
+                retained,
+                removed,
+                retention_days,
             )
         else:
             _log.debug("Journal compaction: nothing to remove")
 
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — pre-existing, REVIEWED: fail_open_guard below
         _log.error("Journal compaction failed: %s", exc, exc_info=True)
         # Clean up temp file on failure
         import contextlib
+
         with contextlib.suppress(OSError):
             if temp_path.exists():
                 temp_path.unlink()
@@ -782,6 +831,7 @@ def compact_journal(
             _lock.release()
         # Clean up temp file if still present (e.g. dry run or no-op)
         import contextlib
+
         with contextlib.suppress(OSError):
             if temp_path.exists() and (dry_run or removed == 0):
                 temp_path.unlink()

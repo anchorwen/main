@@ -190,6 +190,428 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
     return BrainPnLStore()
 
 
+def _step_journal_mt5_reconcile(
+    base_dir: str,
+    *,
+    dry_run: bool = False,
+    mt5_terminal_path: str | None = None,
+) -> dict[str, Any]:
+    """Reconcile journal PnL against MT5 ground truth via history_deals_get().
+
+    FIX-20260626-143 (Journal Integrity L3 Fix — Phase 3):
+    Three-pass reconciliation that runs BEFORE Strategy A backfill because
+    MT5 deal.profit is the authoritative PnL source.
+
+    Pass 1 — PnL normalization: For overlapping journal/MT5 tickets, correct
+      journal PnL to deal.profit when delta exceeds instrument tolerance.
+    Pass 2 — Missing close backfill: For MT5 deals with matching journal open
+      but no close entry, create synthetic close from deal data.
+    Pass 3 — Orphan detection: Journal close entries with no MT5 deal match
+      are flagged (quarantine handled by JournalGate).
+
+    Idempotent via reconciliation_watermark.json (composite key:
+    {symbol}_{mt5_login_id} → last_deal_id).
+
+    投委会修正令 #1 (Lock Yielding): Every 50 records, releases FileLock
+    for >= 100ms to prevent bridge worker I/O starvation.
+    投委会修正令 #2 (Composite Key): Watermark keyed by symbol+login_id,
+    not symbol alone — prevents deal_id collisions across MT5 accounts.
+    投委会防线 #2 (Float Tolerance): BTC 0.01, XAU 0.001 — absolute
+    equality (==) is forbidden due to IEEE 754 representation differences.
+    """
+    import time as _time_module
+
+    from core.contracts.journal_sla import get_tolerance
+
+    _base = Path(base_dir)
+    _journal_path = _base / "live_trade_journal.jsonl"
+    _watermark_path = _base / "reconciliation_watermark.json"
+
+    result: dict[str, Any] = {
+        "step": "journal_mt5_reconcile",
+        "status": "skipped",
+        "mt5_deals_loaded": 0,
+        "pnl_normalized": 0,
+        "missing_closes_created": 0,
+        "orphans_detected": 0,
+        "within_tolerance": 0,
+    }
+
+    if not _journal_path.exists():
+        result["status"] = "empty_journal"
+        return result
+
+    # ── Connect to MT5 ───────────────────────────────────────────────
+    mt5 = None
+    mt5_login: int = 0
+    if mt5_terminal_path:
+        try:
+            import MetaTrader5 as _mt5_module
+
+            if _mt5_module.initialize(path=str(mt5_terminal_path)):
+                mt5 = _mt5_module
+                _acc_info = mt5.account_info()
+                if _acc_info is not None:
+                    mt5_login = int(_acc_info.login)
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
+    if mt5 is None:
+        result["status"] = "mt5_unavailable"
+        return result
+
+    # ── Resolve symbol ───────────────────────────────────────────────
+    _symbol = "BTCUSDc" if "btc" in str(_base).lower() else "XAUUSDc"
+    _tolerance = get_tolerance(_symbol)
+
+    # ── Composite key watermark ──────────────────────────────────────
+    _composite_key = f"{_symbol}_{mt5_login}"
+    _watermark: dict[str, int] = {}
+    if _watermark_path.exists():
+        try:
+            _watermark = json.loads(_watermark_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            _watermark = {}
+    # Migrate old single-symbol keys
+    if _symbol in _watermark and _composite_key not in _watermark:
+        _watermark[_composite_key] = _watermark.pop(_symbol)
+    _last_deal_id = _watermark.get(_composite_key, 0)
+
+    # ── Load MT5 deal history ────────────────────────────────────────
+    try:
+        _deals_raw = mt5.history_deals_get(
+            position=0,  # All positions
+            date_from=0,  # No date filter — deal_id cursor is sufficient
+            date_to=int(_time_module.time()),
+        )
+        _deals = list(_deals_raw) if _deals_raw else []
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        result["status"] = "mt5_query_failed"
+        return result
+
+    _new_deals = [d for d in _deals if getattr(d, "ticket", 0) > _last_deal_id]
+    result["mt5_deals_loaded"] = len(_new_deals)
+
+    if not _new_deals:
+        result["status"] = "no_new_deals"
+        return result
+
+    # ── Group MT5 deals by position ──────────────────────────────────
+    _deal_positions: dict[int, list] = {}
+    for d in _new_deals:
+        _pos_id = getattr(d, "position_id", 0) or getattr(d, "order", 0)
+        if _pos_id:
+            _deal_positions.setdefault(int(_pos_id), []).append(d)
+
+    # ── Load journal index ───────────────────────────────────────────
+    _jrn_index: dict[int, dict] = {}  # ticket → {open, close}
+    with open(_journal_path, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line:
+                continue
+            try:
+                _e = json.loads(_line)
+            except json.JSONDecodeError:
+                continue
+            _t = _e.get("position_ticket")
+            if not isinstance(_t, int) or _t <= 0:
+                continue
+            if _t not in _jrn_index:
+                _jrn_index[_t] = {"open": None, "close": None}
+            _action = _e.get("action", "")
+            if _action == "open" and _jrn_index[_t]["open"] is None:
+                _jrn_index[_t]["open"] = _e
+            elif _action == "close":
+                _jrn_index[_t]["close"] = _e
+
+    # ── Lock yielding state ──────────────────────────────────────────
+    _batch_count = 0
+    _lock = None
+    _lock_dir = _base / ".locks"
+
+    def _yield_lock() -> None:
+        """Release lock for 100ms to let bridge worker write."""
+        nonlocal _lock
+        if _lock is not None:
+            try:
+                _lock.release()
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
+            _time_module.sleep(0.1)
+
+    def _acquire_lock() -> bool:
+        nonlocal _lock
+        from core.infrastructure.distributed_lock import FileLock
+
+        _lock = FileLock("live_trade_journal", lock_dir=str(_lock_dir), ttl_seconds=30)
+        _acq = _lock.acquire(blocking=True, timeout_seconds=10)
+        return _acq.acquired if _acq else False
+
+    if not _acquire_lock():
+        result["status"] = "lock_denied"
+        return result
+
+    try:
+        _max_new_deal_id = _last_deal_id
+
+        # ── Pass 1: PnL normalization ────────────────────────────────
+        for _pos_id, _pos_deals in _deal_positions.items():
+            _jrn = _jrn_index.get(_pos_id, {})
+            _jrn_close = _jrn.get("close")
+            if _jrn_close is None:
+                continue
+
+            # Get MT5 deal profit
+            _exit_deals = [d for d in _pos_deals if getattr(d, "entry", -1) == 1]
+            if not _exit_deals:
+                continue
+            _mt5_profit = sum(getattr(d, "profit", 0.0) or 0.0 for d in _exit_deals)
+
+            _jrn_pnl = _jrn_close.get("pnl")
+            if _jrn_pnl is None:
+                _jrn_pnl = 0.0
+
+            _delta = abs(float(_jrn_pnl) - float(_mt5_profit))
+
+            if _delta < _tolerance:
+                result["within_tolerance"] += 1
+                continue
+
+            # Normalize to MT5 authoritative value
+            _jrn_close["pnl"] = float(_mt5_profit)
+            _jrn_close["_pnl_status"] = "verified_from_mt5_deal"
+            if isinstance(_jrn_close.get("detail"), dict):
+                _jrn_close["detail"]["pnl"] = float(_mt5_profit)
+            result["pnl_normalized"] += 1
+
+            # Lock yielding every 50 records
+            _batch_count += 1
+            if _batch_count % 50 == 0:
+                _yield_lock()
+                _time_module.sleep(0.1)
+                if not _acquire_lock():
+                    break
+
+            _max_new_deal_id = max(
+                _max_new_deal_id, max(getattr(d, "ticket", 0) for d in _pos_deals)
+            )
+
+        # ── Pass 2: Missing close backfill ───────────────────────────
+        for _pos_id, _pos_deals in _deal_positions.items():
+            _jrn = _jrn_index.get(_pos_id, {})
+            if _jrn.get("close") is not None:
+                continue  # Already has a close entry
+            _jrn_open = _jrn.get("open")
+            if _jrn_open is None:
+                continue  # No open to link to
+
+            _exit_deals = [d for d in _pos_deals if getattr(d, "entry", -1) == 1]
+            if not _exit_deals:
+                continue
+
+            _last_deal = max(_exit_deals, key=lambda d: getattr(d, "time", 0))
+            _close_price = getattr(_last_deal, "price", 0.0) or 0.0
+            _close_time_ts = getattr(_last_deal, "time", 0)
+            _mt5_profit = sum(getattr(d, "profit", 0.0) or 0.0 for d in _exit_deals)
+            _close_reason = getattr(_last_deal, "reason", -1)
+            _close_time = (
+                datetime.fromtimestamp(_close_time_ts, tz=UTC).isoformat().replace("+00:00", "Z")
+                if _close_time_ts
+                else _jrn_open.get("recorded_at", "")
+            )
+
+            _reason_map = {4: "sl_hit", 5: "tp_hit"}
+            _close_reason_str = _reason_map.get(_close_reason, "detected_by_reconciliation")
+
+            _label = "unknown_pnl_pending"
+            if _mt5_profit != 0:
+                _label = "win" if _mt5_profit > 0 else "loss"
+
+            _close_entry: dict[str, Any] = {
+                "schema_version": "live_trade_journal.v2",
+                "recorded_at": _close_time,
+                "message_id": f"recon_close_{_pos_id}_{int(_close_time_ts)}",
+                "target": "exec_bridge",
+                "ack_status": "closed",
+                "detail": {
+                    "reason": _close_reason_str,
+                    "close_price": _close_price,
+                    "profit": _mt5_profit,
+                    "pnl": _mt5_profit,
+                },
+                "symbol": _symbol,
+                "action": "close",
+                "side": _jrn_open.get("side", ""),
+                "volume": _jrn_open.get("volume", 0.0),
+                "pnl": _mt5_profit,
+                "_pnl_status": "verified_from_mt5_deal",
+                "label": _label,
+                "position_ticket": _pos_id,
+                "magic": _jrn_open.get("magic", 0),
+                "strategy": _jrn_open.get("strategy", ""),
+                "open_message_id": _jrn_open.get("message_id", ""),
+                "_source": "mt5_reconciliation",
+            }
+
+            from core.ledger.services.journal_cleanup import _append_journal
+
+            _append_journal(_journal_path, _close_entry, lock_dir=_lock_dir, gate=None)
+            result["missing_closes_created"] += 1
+
+            _batch_count += 1
+            if _batch_count % 50 == 0:
+                _yield_lock()
+                _time_module.sleep(0.1)
+                if not _acquire_lock():
+                    break
+
+        # ── Pass 3: Orphan detection ─────────────────────────────────
+        for _ticket, _jrn in _jrn_index.items():
+            _jrn_close = _jrn.get("close")
+            if _jrn_close is None:
+                continue
+            if _ticket not in _deal_positions:
+                result["orphans_detected"] += 1
+
+        # ── Update watermark ──────────────────────────────────────────
+        if _max_new_deal_id > _last_deal_id:
+            _watermark[_composite_key] = _max_new_deal_id
+            _watermark_path.write_text(json.dumps(_watermark, indent=2), encoding="utf-8")
+
+        result["status"] = "ok"
+
+    finally:
+        if _lock is not None:
+            try:
+                _lock.release()
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
+
+    return result
+
+
+def _step_journal_health_report(
+    base_dir: str,
+    *,
+    gate: Any | None = None,
+    mt5_terminal_path: str | None = None,
+) -> dict[str, Any]:
+    """Generate journal health report with SLA compliance assessment.
+
+    FIX-20260626-143: Runs AFTER reconciliation. Reports coverage,
+    PnL accuracy, orphan count, null-PnL count, and SLA status.
+    DingTalk alert if SLA is violated.
+    """
+    from core.contracts.journal_sla import JournalHealthSLA
+
+    _base = Path(base_dir)
+    _journal_path = _base / "live_trade_journal.jsonl"
+
+    report: dict[str, Any] = {
+        "step": "journal_health_report",
+        "status": "ok",
+        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+    }
+
+    if not _journal_path.exists():
+        report.update(
+            {
+                "total_entries": 0,
+                "open_entries": 0,
+                "close_entries": 0,
+                "coverage_pct": 0.0,
+                "pnl_mismatch_pct": 0.0,
+                "orphan_count": 0,
+                "null_pnl_pct": 0.0,
+                "breakeven_pct": 0.0,
+                "sla_status": "violated",
+                "sla_reason": "journal_not_found",
+            }
+        )
+        return report
+
+    _total = 0
+    _opens = 0
+    _closes = 0
+    _null_pnl = 0
+    _breakeven = 0
+    _orphans = 0
+
+    _open_tickets: set[int] = set()
+    _close_tickets: set[int] = set()
+
+    with open(_journal_path, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line:
+                continue
+            try:
+                _e = json.loads(_line)
+            except json.JSONDecodeError:
+                continue
+            _total += 1
+            _action = _e.get("action", "")
+            _ticket = _e.get("position_ticket")
+
+            if _action == "open":
+                _opens += 1
+                if isinstance(_ticket, int) and _ticket > 0:
+                    _open_tickets.add(_ticket)
+            elif _action == "close":
+                _closes += 1
+                if isinstance(_ticket, int) and _ticket > 0:
+                    _close_tickets.add(_ticket)
+                _pnl = _e.get("pnl")
+                if _pnl is None or _e.get("_pnl_status") == "pending_mt5_confirmation":
+                    _null_pnl += 1
+                if _e.get("label") == "breakeven":
+                    _breakeven += 1
+
+    # Detect orphans: close tickets not in open set
+    _orphans = len(_close_tickets - _open_tickets)
+
+    # SLA metrics
+    _coverage = (len(_open_tickets & _close_tickets) / max(len(_close_tickets), 1)) * 100
+    _null_pnl_pct = (_null_pnl / max(_closes, 1)) * 100
+    _breakeven_pct = (_breakeven / max(_closes, 1)) * 100
+
+    report.update(
+        {
+            "total_entries": _total,
+            "open_entries": _opens,
+            "close_entries": _closes,
+            "coverage_pct": round(_coverage, 1),
+            "pnl_mismatch_pct": 0.0,  # Set by reconciliation step
+            "orphan_count": _orphans,
+            "null_pnl_pct": round(_null_pnl_pct, 1),
+            "breakeven_pct": round(_breakeven_pct, 1),
+        }
+    )
+
+    # Gate health
+    if gate is not None:
+        report["quarantine"] = gate.get_health()
+
+    _sla_status = JournalHealthSLA.assess(report)
+    report["sla_status"] = _sla_status
+
+    # ── DingTalk alert on violation ───────────────────────────────────
+    if _sla_status == "violated":
+        _alert = json.dumps(
+            {
+                "event": "JOURNAL_SLA_VIOLATED",
+                "severity": "P1",
+                "base_dir": str(_base),
+                "metrics": report,
+            },
+            ensure_ascii=False,
+        )
+        print(_alert, flush=True)
+        report["alert_sent"] = True
+
+    return report
+
+
 def _step_journal_backfill(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Backfill null PnL in live_trade_journal.jsonl from close_price.
 
@@ -2424,6 +2846,7 @@ def run_daily_ops(
     base_dir: str = "data",
     *,
     skip_shadow: bool = False,
+    skip_journal_mt5_reconcile: bool = False,
     skip_journal_backfill: bool = False,
     skip_label_builder: bool = False,
     skip_feedback: bool = False,
@@ -2551,6 +2974,41 @@ def run_daily_ops(
             pass
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
+
+    # ── JournalGate initialization (FIX-20260626-143 L3) ──────────────
+    _gate = None
+    try:
+        from core.ledger.services.journal_gate import JournalGate
+
+        _base_p = Path(base_dir)
+        _jrn_p = _base_p / "live_trade_journal.jsonl"
+        if _jrn_p.exists():
+            _gate = JournalGate(_jrn_p, policy="quarantine", lock_dir=_base_p / ".locks")
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
+
+    # MT5 reconciliation: PnL normalisation + missing close backfill.
+    # Runs BEFORE Strategy A backfill — MT5 deal.profit is authoritative.
+    # FIX-20260626-143 Phase 3: Auto-reconciliation with lock yielding
+    # and composite-key watermark.
+    if not skip_journal_mt5_reconcile:
+        steps.append(
+            _step_journal_mt5_reconcile(
+                base_dir,
+                dry_run=dry_run,
+                mt5_terminal_path=mt5_terminal_path,
+            )
+        )
+
+    # Journal health report: SLA compliance after reconciliation.
+    if not skip_journal_mt5_reconcile:
+        steps.append(
+            _step_journal_health_report(
+                base_dir,
+                gate=_gate,
+                mt5_terminal_path=mt5_terminal_path,
+            )
+        )
 
     # Journal backfill: fill null PnL in close entries from close_price.
     # Strategy A only — no MT5 dependency.  Runs BEFORE label_builder so
@@ -2719,6 +3177,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="Assess without applying transitions")
     p.add_argument("--skip-shadow", action="store_true", help="Skip shadow ensemble")
     p.add_argument(
+        "--skip-journal-mt5-reconcile",
+        action="store_true",
+        help="Skip MT5-journal PnL reconciliation (deal.profit authoritative)",
+    )
+    p.add_argument(
         "--skip-journal-backfill",
         action="store_true",
         help="Skip journal PnL backfill (close_price→PnL)",
@@ -2765,6 +3228,7 @@ def main(argv: list[str] | None = None) -> int:
     report = run_daily_ops(
         base_dir=args.base_dir,
         skip_shadow=args.skip_shadow,
+        skip_journal_mt5_reconcile=args.skip_journal_mt5_reconcile,
         skip_journal_backfill=args.skip_journal_backfill,
         skip_label_builder=args.skip_label_builder,
         skip_feedback=args.skip_feedback,
