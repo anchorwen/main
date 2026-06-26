@@ -75,7 +75,7 @@ Valid transitions:
 ## Fix History
 | Fix ID | Date | Summary | Root Cause |
 |--------|------|---------|------------|
-| FIX-20260621-029 | 2026-06-21 | Minimum Live Sample Gate (N=50): bypass ALL promote/throttle/retire for brains with <50 live execution records. Eliminates dual-track data-source conflict (governance_state all-time PnL vs brain_performance rolling window) causing 7-brain live↔probation oscillation every ~50min. Supersedes FIX-024 deferred hysteresis. | RC-12 |
+| FIX-20260626-141 | 2026-06-26 | **V4 governance state correction: probation→live (DQAF-20260626-002)**. Governance log-replay bug: stale live→probation entry at 2026-06-25T10:02:45 was replayed after FIX-20260625-136 IC_MANDATE promotion (12:00). brain_states used log-position order instead of timestamp order. Added IC_MANDATE corrective transition restoring live status. | L2 — append-order vs timestamp-order in governance state rebuild |
 | FIX-20260617-001a | 2026-06-17 | add save() + auto-register to governance pipeline | RC-07 |
 | FIX-20260617-001 | 2026-06-17 | P0 data integrity — governance backtest purge | RC-03 |
 | FIX-20260611-017 | 2026-06-11 | auto_freeze_negative_sr: hard stop-loss for negative Sharpe | RC-07 |
