@@ -36,8 +36,10 @@ def test_cleanup_orphan_rejected(tmp_path: Path):
     close_entry = json.loads(lines[1])
     assert close_entry["action"] == "close"
     assert close_entry["open_message_id"] == "open_001"
-    assert close_entry["label"] == "auto_orphan_rejected"
-    assert close_entry["pnl"] == 0.0
+    # FIX-20260626-144: orphan close labels now carry _unverified suffix;
+    # pnl is None (not 0.0) pending MT5 reconciliation.
+    assert close_entry["label"] == "auto_orphan_rejected_unverified"
+    assert close_entry["pnl"] is None
 
 
 def test_cleanup_stale_no_ticket(tmp_path: Path):
@@ -68,7 +70,8 @@ def test_cleanup_stale_no_ticket(tmp_path: Path):
 
     lines = journal.read_text(encoding="utf-8").strip().split("\n")
     close_entry = json.loads(lines[1])
-    assert close_entry["label"] == "auto_orphan_stale"
+    # FIX-20260626-144: orphan close labels now carry _unverified suffix.
+    assert close_entry["label"] == "auto_orphan_stale_unverified"
 
 
 def test_leaves_real_position_alone(tmp_path: Path):

@@ -831,9 +831,17 @@ class TestNewPredicates:
 
 
 class TestAlertRouting:
-    def test_stderr_fallback(self, capsys) -> None:
+    def test_stderr_fallback(self, capsys, monkeypatch) -> None:
+        import core.observability.live_alert_hub as lah
         from core.contracts.phantom_contract import _alert_violation
 
+        # FIX-20260626-145: _alert_violation now constructs LiveAlertHub directly
+        # (no singleton). Force the constructor to raise ImportError so the
+        # stderr fallback path is triggered and testable.
+        def _fail_init(*args: object, **kwargs: object) -> None:
+            raise ImportError("mocked for test")
+
+        monkeypatch.setattr(lah.LiveAlertHub, "__init__", _fail_init)
         _alert_violation("test_contract", "test message", "critical")
         captured = capsys.readouterr()
         assert "test_contract" in captured.err
