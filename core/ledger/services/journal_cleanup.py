@@ -185,11 +185,23 @@ def _append_journal(
                     return True  # Already recorded — skip
 
             # ── Same-ticket close dedup (FIX-20260611-005) ──
+            # FIX-20260626-144 (Pass 1 PnL Fix): Allow reconciliation
+            # correction entries to supersede original close entries.
+            # Journal is append-only — corrections must write a new line.
+            # Downstream consumers (label builder, calibrator) already
+            # use the latest close per ticket.
             if _action == "close" and _ticket is not None:
                 if (
                     _existing.get("action") == "close"
                     and _existing.get("position_ticket") == _ticket
                 ):
+                    _existing_source = _existing.get("_source", "")
+                    _this_source = entry.get("_source", "")
+                    if (
+                        _this_source == "mt5_reconciliation"
+                        and _existing_source != "mt5_reconciliation"
+                    ):
+                        continue  # Allow correction to supersede original
                     return True  # Already recorded — skip duplicate
 
         return False

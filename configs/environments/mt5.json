@@ -1,7 +1,8 @@
 {
-  "schema_version": "mt5_environment.v1",
+  "schema_version": "mt5_environment.v2",
+  "_comment": "BTC terminal. For XAU, use live.yaml → mt5.terminal_path: D:\\exness\\MetaTrader 5 EXNESS2\\terminal64.exe",
   "terminal_path": "D:\\MetaTrader 5\\terminal64.exe",
-  "default_symbol": "XAUUSDc",
+  "default_symbol": "BTCUSDc",
   "venue": "MT5"
 }
 

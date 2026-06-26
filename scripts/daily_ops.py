@@ -377,11 +377,35 @@ def _step_journal_mt5_reconcile(
                 result["within_tolerance"] += 1
                 continue
 
-            # Normalize to MT5 authoritative value
-            _jrn_close["pnl"] = float(_mt5_profit)
+            # ── FIX-20260626-144 (Pass 1 PnL Fix): Write a correction
+            # close entry via _append_journal instead of mutating the
+            # in-memory dict alone (which was a no-op — never persisted).
+            # Journal is append-only; correction entry supersedes original.
+            _mt5_pnl = float(_mt5_profit)
+
+            # Keep in-memory index updated for Pass 2/3 (A3: secondary guard)
+            _jrn_close["pnl"] = _mt5_pnl
             _jrn_close["_pnl_status"] = "verified_from_mt5_deal"
             if isinstance(_jrn_close.get("detail"), dict):
-                _jrn_close["detail"]["pnl"] = float(_mt5_profit)
+                _jrn_close["detail"]["pnl"] = _mt5_pnl
+
+            # Build correction entry from original close, overriding PnL
+            from core.ledger.services.journal_cleanup import _append_journal
+
+            _correction_entry: dict[str, Any] = {
+                **_jrn_close,
+                "pnl": _mt5_pnl,
+                "_pnl_status": "verified_from_mt5_deal",
+                "_source": "mt5_reconciliation",
+                "message_id": (f"recon_pnl_fix_{_pos_id}_" f"{int(_time_module.time())}"),
+            }
+            if isinstance(_correction_entry.get("detail"), dict):
+                _correction_entry["detail"]["pnl"] = _mt5_pnl
+            if "label" in _correction_entry:
+                del _correction_entry["label"]  # Let label builder re-classify
+
+            # Write correction (dedup allows mt5_reconciliation to supersede)
+            _append_journal(_journal_path, _correction_entry, lock_dir=_lock_dir, gate=None)
             result["pnl_normalized"] += 1
 
             # Lock yielding every 50 records
@@ -2864,6 +2888,7 @@ def run_daily_ops(
     dry_run: bool = False,
     mt5_terminal_path: str | None = None,
     symbol: str = "XAUUSDc",  # FIX-20260601-033: per-symbol feedback
+    force_rebuild: bool = False,  # FIX-20260626-144: reset watermarks before pipeline
 ) -> dict[str, Any]:
     """Run the full daily operations pipeline.
 
@@ -2889,6 +2914,40 @@ def run_daily_ops(
     """
     base_dir = _resolve_base_dir(base_dir)
     steps: list[dict[str, Any]] = []
+
+    # ── FIX-20260626-144: --force-rebuild resets incremental watermarks ──
+    if force_rebuild:
+        _watermark_files = [
+            "calibrator_feed_state.json",
+            "alpha_feed_state.json",
+            "reconciliation_watermark.json",
+        ]
+        for _wf in _watermark_files:
+            _wp = Path(base_dir) / _wf
+            if _wp.exists():
+                _wp.unlink()
+                steps.append({"step": "force_rebuild", "action": "deleted", "file": str(_wp)})
+        if any(Path(base_dir, wf).exists() for wf in _watermark_files):
+            pass  # should not happen — unlink succeeded or file never existed
+        _reset_count = len([s for s in steps if s.get("step") == "force_rebuild"])
+        if _reset_count > 0:
+            steps.append(
+                {
+                    "step": "force_rebuild",
+                    "status": "ok",
+                    "watermarks_reset": _reset_count,
+                    "message": "Full rebuild: all incremental state cleared; pipeline will reprocess from scratch",
+                }
+            )
+        else:
+            steps.append(
+                {
+                    "step": "force_rebuild",
+                    "status": "ok",
+                    "watermarks_reset": 0,
+                    "message": "No watermarks found to reset; pipeline running normally",
+                }
+            )
 
     # Shared tracker + governance + pnl_store: load persisted state so governance
     # and champion see data accumulated by live_intent_loop, and brain registrations
@@ -3215,6 +3274,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--mt5-terminal-path", default=None, help="MT5 terminal64.exe path for P&L snapshot"
     )
+    p.add_argument(
+        "--force-rebuild",
+        action="store_true",
+        help="Reset incremental watermarks before pipeline run (calibrator, alpha feed, reconciliation)",
+    )
     return p
 
 
@@ -3246,6 +3310,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         symbol=args.symbol,
         mt5_terminal_path=args.mt5_terminal_path,
+        force_rebuild=args.force_rebuild,
     )
 
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)

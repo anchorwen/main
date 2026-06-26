@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-26T08:40:32Z
+> **自动生成**: 2026-06-26T09:21:09Z
 
 ## Package-Level Dependencies
 
@@ -621,15 +621,11 @@
 - `deep_audit_probes.py` → (无内部依赖)
 - `deploy_blue_green.py` → `core.deployment.blue_green`
 - `diagnose_data_health_failures.py` → (无内部依赖)
-- `diagnose_dual_instrument.py` → (无内部依赖)
 - `diagnose_feature_drift.py` → (无内部依赖)
-- `diagnose_journal_gaps.py` → (无内部依赖)
 - `diagnose_journal_mt5_sev2.py` → (无内部依赖)
 - `diagnose_mypy_baseline.py` → (无内部依赖)
 - `diagnose_process_health.py` → (无内部依赖)
 - `diagnose_sl_performance.py` → (无内部依赖)
-- `diagnose_xau_journal.py` → (无内部依赖)
-- `diagnose_xau_orphans.py` → (无内部依赖)
 - `dqaf053_phase1_sanitize.py` → `core.alpha.performance_store`, `core.alpha.registry`, `core.execution.conformal_calibrator`
 - `dqaf_collect.py` → (无内部依赖)
 - `extract_health_checks.py` → (无内部依赖)
@@ -719,7 +715,6 @@
 - `validate_magic_sync.py` → `core.contracts.strategy_magic`
 - `verify.py` → `core.runtime.golden_master`
 - `verify_all_brains.py` → `core.brains.services.brain_factory`
-- `verify_all_claims.py` → (无内部依赖)
 - `verify_capresult_ast.py` → (无内部依赖)
 - `verify_dqaf044_fix_effect.py` → (无内部依赖)
 - `verify_dqaf_002_fix.py` → `core.execution.position_manager`
