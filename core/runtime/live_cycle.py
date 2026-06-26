@@ -1645,9 +1645,7 @@ def execute_live_cycle(
 
                     # Update portfolio risk
                     if state.portfolio_risk_controller is not None:
-                        import contextlib as _ctxlib_pf
-
-                        with _ctxlib_pf.suppress(Exception):
+                        with contextlib.suppress(Exception):
                             state.portfolio_risk_controller.update_returns(_strategy, _evt.pnl)
 
                     # ── Budget recording ──
@@ -2307,7 +2305,7 @@ def execute_live_cycle(
                     pass
             # Persist position state every N cycles (trail steps, breakeven, etc.)
             if state.loop_iteration % 5 == 0 and state.position_manager is not None:
-                with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+                with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                     state.position_manager.save_state(config.position_state_path)
 
         # ── Process MIA close entries collected by _execute_management_phase ──
@@ -2743,7 +2741,7 @@ def execute_live_cycle(
             # DQAF-076/BLE001-P0: regime_detector.update() can raise
             # ValueError (bad ATR), RuntimeError (detector state), or
             # TypeError (wrong input type).
-            with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+            with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 logger.warning("Regime detector update failed — using stale regime values")
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
     if not config.no_mt5:
@@ -2795,7 +2793,7 @@ def execute_live_cycle(
     except (ConnectionError, TimeoutError, RuntimeError) as _eq_exc:
         # DQAF-076/BLE001-P0: broker.get_account_equity() can fail on
         # ConnectionError/TimeoutError (network/IPC) or RuntimeError.
-        with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+        with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
             logger.warning("Broker equity fetch failed — falling back to MT5 direct query")
     if _account_equity is None and mt5_worker is not None:
         with FaultTolerantContext(
@@ -3139,7 +3137,7 @@ def execute_live_cycle(
             except (ValueError, TypeError, KeyError) as _sg_exc:
                 # DQAF-076/BLE001-P0: stale gate skip involves dict
                 # lookups + json serialization.  Fail-safe: skip.
-                with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+                with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                     pass
         # Portfolio risk controller (persist for VaR/correlation tracking) + execution queue
         if state.portfolio_risk_controller is None:
@@ -3909,7 +3907,7 @@ def execute_live_cycle(
                                             # DQAF-076/BLE001-P0: force-close
                                             # uses dispatch_live_order() +
                                             # position_manager operations.
-                                            with _ctxlib_pf.suppress(
+                                            with contextlib.suppress(
                                                 RuntimeError,
                                                 ValueError,
                                                 KeyError,
@@ -3946,7 +3944,7 @@ def execute_live_cycle(
                     except (ValueError, TypeError, RuntimeError) as _dd_exc:
                         # DQAF-076/BLE001-P0: intraday drawdown recovery
                         # check involves dict comparisons + math.
-                        with _ctxlib_pf.suppress(
+                        with contextlib.suppress(
                             RuntimeError, ValueError, KeyError, TypeError, OSError
                         ):
                             logger.warning("Intraday drawdown recovery check failed")
@@ -3998,7 +3996,7 @@ def execute_live_cycle(
                             except (ValueError, RuntimeError, TypeError) as _inf_exc:
                                 # DQAF-076/BLE001-P0: adapter.infer()
                                 # / adapter.infer_sequence() fallback.
-                                with _ctxlib_pf.suppress(
+                                with contextlib.suppress(
                                     RuntimeError, ValueError, KeyError, TypeError, OSError
                                 ):
                                     prop = None
@@ -4181,7 +4179,7 @@ def execute_live_cycle(
         except (ValueError, TypeError) as _rp_exc:
             # DQAF-076/BLE001-P0: np.percentile() can raise ValueError
             # on empty array or TypeError on non-numeric data.
-            with _ctxlib_pf.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+            with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 _rolling_p80 = 0.0
     _effective_threshold = (
         max(config.confidence_threshold, _rolling_p80)
