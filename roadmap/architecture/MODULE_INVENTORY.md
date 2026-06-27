@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-27T08:06:09Z
+> **自动生成**: 2026-06-27T08:25:13Z
 > **扫描模块数**: 684
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -93,7 +93,7 @@
 | `brain_registry_service.py` | ✅ active | BrainRegistryService | 7 | 141 | — | |
 | `brain_run_service.py` | ✅ active | BrainRunService | 15 | 281 | — | |
 | `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 420 | — | |
-| `inference_guard.py` | ✅ active | InferenceGuard | 11 | 220 | — | |
+| `inference_guard.py` | ✅ active | InferenceGuard | 11 | 223 | — | |
 | `onnx_worker.py` | ✅ active | — | 1 | 77 | — | |
 | `stability_monitor.py` | ✅ active | StabilityReport | 4 | 201 | — | |
 

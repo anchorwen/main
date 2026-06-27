@@ -155,7 +155,7 @@ class InferenceGuard:
                 self._process.pid,
                 self._model_path,
             )
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             logger.error(
                 "InferenceGuard failed to start worker for %s: %s",
                 self._model_path,
@@ -163,6 +163,7 @@ class InferenceGuard:
             )
             self._running = False
             self._conn = None
+
     def _handle_crash(self) -> None:
         """Called when the worker is unresponsive or pipe is broken."""
         self._crash_count += 1
@@ -213,8 +214,10 @@ class InferenceGuard:
                 self._conn.send(None)
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass
+
     def __del__(self) -> None:
         try:  # noqa: SIM105
             self.shutdown()
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        except (AttributeError, RuntimeError, ValueError, KeyError, TypeError, OSError):
+            # AttributeError: constructor may fail before _lock/_conn are set
             pass

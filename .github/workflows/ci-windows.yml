@@ -13,7 +13,7 @@ permissions:
 jobs:
   test:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -101,33 +101,33 @@ jobs:
           python -m pytest tests/engine/test_live_read_only_preflight.py::test_live_preflight_main_supports_micro_live_mode
 
       # ── Fast-track: split across 2 independent runners (matrix shard 1 / 2) ──
-      # Each runner has dedicated 2 CPU cores → no contention between shards.
-      # --basetemp isolates temp files from system %TEMP%.
-      # tmp_path_retention_count=0 prevents old numbered dirs from persisting.
-      # Pre-run wipe (above) breaks the garbage accumulation cycle entirely.
+      # No step-level timeout — let pytest finish its cleanup naturally.
+      # Job-level 60-min timeout is the safety net.
+      # --basetemp + pre-run wipe break the temp-dir garbage accumulation cycle.
+      # shell: bash avoids PowerShell exit-code inconsistencies on Windows.
 
       - name: Pytest (fast track shard 1/2 — execution, unit, runtime, brains, …)
         if: matrix.shard == 1
-        timeout-minutes: 20
-        run: >
-          python -m pytest
-          tests/execution/ tests/unit/ tests/runtime/ tests/brains/ tests/features/
-          tests/observability/ tests/metrics/ tests/feedback/ tests/alpha/ tests/strategies/
-          tests/risk/ tests/market/ tests/backtest/ tests/deployment/
-          -m "not slow" -o "addopts=" -p no:cov -q --tb=short --durations=20
-          --basetemp=D:\cursor\pytest-tmp -o tmp_path_retention_count=0
+        shell: bash
+        run: |
+          python -m pytest \
+            tests/execution/ tests/unit/ tests/runtime/ tests/brains/ tests/features/ \
+            tests/observability/ tests/metrics/ tests/feedback/ tests/alpha/ tests/strategies/ \
+            tests/risk/ tests/market/ tests/backtest/ tests/deployment/ \
+            -m "not slow" -o "addopts=" -p no:cov -q --tb=short --durations=20 \
+            --basetemp=D:/cursor/pytest-tmp -o tmp_path_retention_count=0
 
       - name: Pytest (fast track shard 2/2 — engine, data, contracts, resilience, …)
         if: matrix.shard == 2
-        timeout-minutes: 20
-        run: >
-          python -m pytest
-          tests/engine/ tests/data/ tests/contracts/ tests/scripts/ tests/resilience/
-          tests/training/ tests/ledger/ tests/infrastructure/ tests/governance/
-          tests/parliament/ tests/protocol/ tests/stress/ tests/consistency/
-          tests/state/ tests/mock_kit/ tests/config/
-          -m "not slow" -o "addopts=" -p no:cov -q --tb=short --durations=20
-          --basetemp=D:\cursor\pytest-tmp -o tmp_path_retention_count=0
+        shell: bash
+        run: |
+          python -m pytest \
+            tests/engine/ tests/data/ tests/contracts/ tests/scripts/ tests/resilience/ \
+            tests/training/ tests/ledger/ tests/infrastructure/ tests/governance/ \
+            tests/parliament/ tests/protocol/ tests/stress/ tests/consistency/ \
+            tests/state/ tests/mock_kit/ tests/config/ \
+            -m "not slow" -o "addopts=" -p no:cov -q --tb=short --durations=20 \
+            --basetemp=D:/cursor/pytest-tmp -o tmp_path_retention_count=0
 
       # ── Slow track + governance contracts: shard 1 only ──
 
