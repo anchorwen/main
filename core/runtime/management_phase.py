@@ -486,6 +486,15 @@ def _evaluate_brain_ensemble(
                                         # (bad input), TypeError (dtype),
                                         # RuntimeError (model), or
                                         # AttributeError (augmenter not init).
+                                        # FIX-20260627-058: log the actual failure for diagnosis
+                                        _exc_type = type(_btc_exc).__name__
+                                        _exc_msg = str(_btc_exc)[:200]
+                                        _log = getattr(state, "logger", None)
+                                        if _log is not None:
+                                            _log.warning(
+                                                f"[mgmt] BTCFeatureAugmenter.augment() failed: "
+                                                f"{_exc_type}: {_exc_msg} — schema={schema_id}"
+                                            )
                                         _mgmt_btc_aug = None  # degrade: fall through to None
                             fv = assemble_swing_features(
                                 schema_id,

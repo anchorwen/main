@@ -3323,16 +3323,23 @@ def execute_live_cycle(
         # XAU-centric fallback path (which has incorrect cross-asset slots).
         _btc_aug: Any = None
         if config.symbol == "BTCUSDc" and daily_feature_vector is not None:
-            try:
-                _aug = getattr(state, "_btc_augmenter", None)
-                if _aug is None:
-                    from core.features.computers.btc_feature_augmenter import (
-                        BTCFeatureAugmenter,
-                    )
+            _aug = getattr(state, "_btc_augmenter", None)
+            if _aug is None:
+                from core.features.computers.btc_feature_augmenter import (
+                    BTCFeatureAugmenter,
+                )
 
-                    _aug = BTCFeatureAugmenter(feature_store, mt5_worker=mt5_worker)
-                    state._btc_augmenter = _aug
-                tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                _aug = BTCFeatureAugmenter(feature_store, mt5_worker=mt5_worker)
+                state._btc_augmenter = _aug
+            tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+            # FIX-20260627-058 / DQAF-20260627-058:
+            # BLE001 → fail_open_guard: bare except...pass replaced with
+            # auditable degradation.  If augment() fails, the system
+            # continues but BTC_Swing_V4 is blind this cycle (btc_augment
+            # stays None → feature_assembler fail-closed RuntimeError →
+            # brain_inference_error logged by swing_strategy.py).
+            # The actual exception is logged by FaultTolerantContext DEGRADE.
+            with fail_open_guard("BTCFeatureAugmenter"):
                 _btc_aug = _aug.augment(
                     daily_feature_vector,
                     micro_feature_vector,
@@ -3340,8 +3347,6 @@ def execute_live_cycle(
                     tf_ou=tf_ou,
                     tf_hurst=tf_hurst,
                 )
-            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
-                pass
 
         # ── FIX-20260609-011: load governance state for degradation gate ──
         # Read once per cycle so the governance degradation gate sees the
