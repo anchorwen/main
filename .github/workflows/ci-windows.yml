@@ -23,11 +23,6 @@ jobs:
       PYTHONIOENCODING: "utf-8"
       TZ: "UTC"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      # Windows CI: isolate pytest temp dirs from system %TEMP% to avoid
-      # Windows Defender scanning during atexit cleanup (can hang 19+ min).
-      TMPDIR: D:\cursor\pytest-tmp
-      TEMP: D:\cursor\pytest-tmp
-      TMP: D:\cursor\pytest-tmp
 
     steps:
       - name: Checkout
