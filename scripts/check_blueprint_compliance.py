@@ -351,6 +351,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "apps/engine/v9_shadow_sse.py",
         "scripts/position_query.py",
         "scripts/diagnose_process_health.py",
+        "scripts/health_check.py",
         "scripts/ble001_phase3e_deferred_fog_wrap.py",
         "scripts/ble001_phase3d_coldpath_fog_wrap.py",
         "scripts/ble001_phase3c_fog_wrap.py",

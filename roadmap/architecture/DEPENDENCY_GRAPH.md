@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-27T10:53:34Z
+> **自动生成**: 2026-06-27T14:09:34Z
 
 ## Package-Level Dependencies
 
@@ -635,6 +635,7 @@
 - `generate_micro_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `governance_promote_m15.py` → (无内部依赖)
 - `guard_git_stash.py` → (无内部依赖)
+- `health_check.py` → (无内部依赖)
 - `hook_architecture_gate.py` → (无内部依赖)
 - `hook_blueprint_precheck.py` → (无内部依赖)
 - `hook_mypy_check.py` → (无内部依赖)
