@@ -75,6 +75,7 @@ Valid transitions:
 ## Fix History
 | Fix ID | Date | Summary | Root Cause |
 |--------|------|---------|------------|
+| FIX-20260627-152 | 2026-06-27 | **RR-adjusted governance channel for low-WR high-RR strategies**. Added exemption before probation catch-all: PF≥1.3 + SR≥0.8 + N≥50 → live, bypassing WR≥45% threshold. V4 (WR=39.1%, PF=1.36, SR=1.08, +81.21R) auto-promoted probation→live on first cycle post-fix. ReB: `WR_THRESHOLD_ONE_SIZE_FITS_ALL`. | L3 — design defect: one-size-fits-all WR threshold incompatible with swing strategies (avg_win/avg_loss > 2:1) |
 | FIX-20260626-141 | 2026-06-26 | **V4 governance state correction: probation→live (DQAF-20260626-002)**. Governance log-replay bug: stale live→probation entry at 2026-06-25T10:02:45 was replayed after FIX-20260625-136 IC_MANDATE promotion (12:00). brain_states used log-position order instead of timestamp order. Added IC_MANDATE corrective transition restoring live status. | L2 — append-order vs timestamp-order in governance state rebuild |
 | FIX-20260617-001a | 2026-06-17 | add save() + auto-register to governance pipeline | RC-07 |
 | FIX-20260617-001 | 2026-06-17 | P0 data integrity — governance backtest purge | RC-03 |

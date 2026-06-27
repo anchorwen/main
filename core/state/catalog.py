@@ -289,6 +289,23 @@ def validate_alert_cooling(data: dict[str, Any]) -> None:
     validate_non_empty_dict(data)
 
 
+def validate_calibrator_feed_state(data: dict[str, Any]) -> None:
+    """Validate calibrator_feed_state.json — calibrator watermark state.
+
+    FIX-20260627-152: CATALOG_COVERAGE_GAP closure.
+    calibrator_feed_state.json was written via raw json.dump() + write_text(),
+    bypassing the 4-layer StateWriter gate (Plan B Phase 1-4).
+    """
+    validate_non_empty_dict(data)
+    if "last_recorded_at" not in data and "last_message_id" not in data:
+        # At least one watermark field must be present
+        raise DataIntegrityError(
+            "calibrator_feed_state.json must contain 'last_recorded_at' or 'last_message_id'",
+            artifact_id="CALIBRATOR_FEED_STATE",
+            violations=["missing:watermark"],
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # The Catalog
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -345,6 +362,16 @@ CATALOG: dict[str, StateArtifact] = {
         schema_validator=validate_non_empty_dict,
         ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
         generator="core/alpha/*",
+    ),
+    # ── FIX-20260627-152: CATALOG_COVERAGE_GAP closure ──
+    # calibrator_feed_state.json was written via raw json.dump() + write_text(),
+    # bypassing the 4-layer StateWriter gate (Plan B Phase 1-4).
+    "CALIBRATOR_FEED_STATE": StateArtifact(
+        logical_id="CALIBRATOR_FEED_STATE",
+        path_template="calibrator_feed_state.json",
+        schema_validator=validate_calibrator_feed_state,
+        ttl_seconds=14400,  # 4h — calibrator updates every daily_ops cycle
+        generator="daily_ops._step_calibrator_feed",
     ),
     # ── Governance / Training ──
     "TRAINING_READINESS": StateArtifact(

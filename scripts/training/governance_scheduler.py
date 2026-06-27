@@ -53,6 +53,14 @@ SHARPE_HIGH_ALPHA = 1.5  # Sharpe above this + WR/PF checks → high_alpha
 WR_HIGH_ALPHA = 0.55  # win rate threshold for high_alpha
 PF_HIGH_ALPHA = 1.5  # profit factor threshold for high_alpha
 
+# ── FIX-20260627-152: RR-adjusted channel for low-WR high-RR strategies ──
+# Swing/directional strategies with WR < 45% but positive expectancy via
+# high reward:risk ratio (>2:1) are profitable engines blocked by the
+# one-size-fits-all WR threshold.  This channel exempts them.
+# V4 example: WR=39.1%, PF=1.36, SR=1.08, implied RR=2.12:1, +81.21R
+PF_RR_ADJUSTED_MIN = 1.3  # profit factor threshold for RR-adjusted live status
+SHARPE_RR_ADJUSTED_MIN = 0.8  # Sharpe threshold for RR-adjusted live status
+
 
 from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
 
@@ -117,6 +125,16 @@ def _compute_pnl_based_status(
     # Retirement: catastrophically bad (requires even worse Sharpe than freeze)
     if n >= MIN_TRADES_FOR_RETIRE and sharpe < SHARPE_RETIRE_THRESHOLD:
         return "retired", "critical"
+
+    # ── FIX-20260627-152: RR-adjusted channel ──
+    # Profitable low-WR high-RR strategies (e.g. swing: avg_win/avg_loss > 2:1)
+    # are blocked by the one-size-fits-all WR >= 45% threshold below.
+    # This channel exempts strategies with positive risk-adjusted returns
+    # and healthy profit factor, even if WR < 45%.
+    # V4: WR=39.1%, PF=1.36, SR=1.08, implied RR = PF×(1-WR)/WR = 2.12:1
+    if n >= MIN_TRADES_FOR_LIVE and pf >= PF_RR_ADJUSTED_MIN and sharpe >= SHARPE_RR_ADJUSTED_MIN:
+        health = "healthy" if sharpe >= 1.0 and pf >= 1.5 else "stable"
+        return "live", health
 
     # Probation: negative expectancy
     if sharpe < SHARPE_PROBATION_THRESHOLD or wr < WR_PROBATION_THRESHOLD:

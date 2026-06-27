@@ -1027,7 +1027,8 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             try:  # BLE001:FOG (was: FOG/LAC)
                 continue
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                pass
+                # FIX-20260627-153: ensure skip on parse failure
+                continue
         _ts = _e.get("recorded_at", "")
         _mid = _e.get("message_id", "")
         if _ts > last_recorded_at or (_ts == last_recorded_at and _mid != last_message_id):
@@ -1057,7 +1058,8 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             try:  # BLE001:FOG (was: FOG/LAC)
                 continue
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                pass
+                # FIX-20260627-153: ensure skip on parse failure
+                continue
         if entry.get("ack_status") != "accepted":
             continue
 
@@ -1086,7 +1088,8 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             try:  # BLE001:FOG (was: FOG/LAC)
                 continue
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                pass
+                # FIX-20260627-153: ensure skip on parse failure
+                continue
         if entry.get("ack_status") != "closed":
             continue
 
@@ -1156,21 +1159,29 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 continue
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass
-    try:  # BLE001:FOG (was: FOG/LAC)
-        state_path.write_text(
-            json.dumps(
+    # ── FIX-20260627-152: Persist watermark via StateWriter gate ──
+    # Was: state_path.write_text(json.dumps({...})) — raw write bypassing
+    # the 4-layer StateWriter gate (Plan B Phase 1-4).
+    if not dry_run:
+        try:  # BLE001:FOG
+            from core.state.catalog import lookup
+            from core.state.writer import StateWriter
+
+            _sym = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
+            _writer = StateWriter(str(base_dir), symbol=_sym)
+            _writer.write_artifact(
+                lookup("CALIBRATOR_FEED_STATE"),
+                _sym,
                 {
                     "last_recorded_at": _last_ts,
                     "last_message_id": _last_mid,
                     "last_line": len(lines),  # retained for backward compatibility
                     "updated_utc": datetime.now(UTC).isoformat(),
                     "sample_count": cal.describe().get("sample_count", 0),
-                }
-            ),
-            encoding="utf-8",
-        )
-    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-        pass
+                },
+            )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
 
     diag = cal.describe()
     return {
@@ -1981,7 +1992,8 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                 try:  # BLE001:FOG (was: FOG/LAC)
                     continue
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                    pass
+                    # FIX-20260627-153: ensure skip on parse failure
+                    continue
             _ts = _e.get("recorded_at", "")
             _mid = _e.get("message_id", "")
             if _ts > last_recorded_at or (_ts == last_recorded_at and _mid != last_message_id):
@@ -2000,7 +2012,9 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
             try:  # BLE001:FOG (was: FOG/LAC)
                 entry = json.loads(line)
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                pass
+                # FIX-20260627-153: missing continue — JSON parse failure
+                # left entry undefined → NameError at entry.get("action") below
+                continue
             if entry.get("action") != "close":
                 continue
             ack = entry.get("ack_status", "")
