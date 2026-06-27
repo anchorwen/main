@@ -18,6 +18,10 @@ jobs:
   test:
     runs-on: windows-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"
@@ -49,17 +53,24 @@ jobs:
           pip install -e ".[dev]"
           pip install pytest-timeout
 
+      # ── Lint / type-check / compliance: shard 1 only (no need to duplicate) ──
+
       - name: Ruff check (lint)
+        if: matrix.shard == 1
         run: python -m ruff check core/ apps/ scripts/
 
       - name: mypy type-check (iron law — no new errors vs baseline)
+        if: matrix.shard == 1
         run: python scripts/pre_commit_mypy.py
 
       - name: Omega Protocol compliance scan
+        if: matrix.shard == 1
         shell: bash
         run: |
           python scripts/omega_gate.py .git/COMMIT_EDITMSG 2>/dev/null || true
           echo "Omega compliance scan complete."
+
+      # ── Fixtures: both shards need V9 shadow data ──
 
       - name: Prepare V9 shadow fixture data
         run: python scripts/ci_prepare_v9_shadow_fixtures.py
@@ -71,45 +82,48 @@ jobs:
           if not exist D:\cursor\data\snapshots\v9_shadow_long.json exit 1
           if not exist D:\cursor\data\replays\v9_shadow_baselines\manifest.json exit 1
 
+      # ── Contract guard: shard 1 only ──
+
       - name: Pytest (runtime contract guard — 4 critical gates)
+        if: matrix.shard == 1
         run: |
           python -m pytest tests/engine/test_runtime_contract_guard.py
           python -m pytest tests/engine/test_communication_replay_executor.py::test_replay_executor_priority_contract_matrix
           python -m pytest tests/engine/test_v9_shadow_smoke.py::test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields
           python -m pytest tests/engine/test_live_read_only_preflight.py::test_live_preflight_main_supports_micro_live_mode
 
-      - name: Pytest (fast track shard 1/2 — execution, unit, runtime, brains, features, …)
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set +e
-          python -m pytest \
-            tests/execution/ tests/unit/ tests/runtime/ tests/brains/ tests/features/ \
-            tests/observability/ tests/metrics/ tests/feedback/ tests/alpha/ tests/strategies/ \
-            tests/risk/ tests/market/ tests/backtest/ tests/deployment/ \
-            -m "not slow" -o "addopts=" -p no:cov -q --tb=short --timeout=120 \
-            > pytest_shard1.txt 2>&1 &
-          PID1=$!
+      # ── Fast-track: split across 2 independent runners (matrix shard 1 / 2) ──
+      # Each runner has dedicated 2 CPU cores → no contention between shards.
+      # ~1500 tests/shard, local ~23s/shard, CI ~6-10 min/shard at 15-25× slowdown.
+      # timeout=120 per-test safety net via pytest-timeout.
 
-          python -m pytest \
-            tests/engine/ tests/data/ tests/contracts/ tests/scripts/ tests/resilience/ \
-            tests/training/ tests/ledger/ tests/infrastructure/ tests/governance/ \
-            tests/parliament/ tests/protocol/ tests/stress/ tests/consistency/ \
-            tests/state/ tests/mock_kit/ tests/config/ \
-            -m "not slow" -o "addopts=" -p no:cov -q --tb=short --timeout=120 \
-            > pytest_shard2.txt 2>&1 &
-          PID2=$!
+      - name: Pytest (fast track shard 1/2 — execution, unit, runtime, brains, …)
+        if: matrix.shard == 1
+        timeout-minutes: 20
+        run: >
+          python -m pytest
+          tests/execution/ tests/unit/ tests/runtime/ tests/brains/ tests/features/
+          tests/observability/ tests/metrics/ tests/feedback/ tests/alpha/ tests/strategies/
+          tests/risk/ tests/market/ tests/backtest/ tests/deployment/
+          -m "not slow" -o "addopts=" -p no:cov -q --tb=short --timeout=120 --durations=20
 
-          wait $PID1; EXIT1=$?
-          wait $PID2; EXIT2=$?
+      - name: Pytest (fast track shard 2/2 — engine, data, contracts, resilience, …)
+        if: matrix.shard == 2
+        timeout-minutes: 20
+        run: >
+          python -m pytest
+          tests/engine/ tests/data/ tests/contracts/ tests/scripts/ tests/resilience/
+          tests/training/ tests/ledger/ tests/infrastructure/ tests/governance/
+          tests/parliament/ tests/protocol/ tests/stress/ tests/consistency/
+          tests/state/ tests/mock_kit/ tests/config/
+          -m "not slow" -o "addopts=" -p no:cov -q --tb=short --timeout=120 --durations=20
 
-          echo "=== Shard 1/2 ===" && cat pytest_shard1.txt
-          echo "=== Shard 2/2 ===" && cat pytest_shard2.txt
-
-          [ $EXIT1 -eq 0 ] && [ $EXIT2 -eq 0 ]
+      # ── Slow track + governance contracts: shard 1 only ──
 
       - name: Pytest (slow track — engine integration/E2E, with coverage)
+        if: matrix.shard == 1
         run: python -m pytest tests/ -m "slow"
 
       - name: Pytest (governance contracts)
+        if: matrix.shard == 1
         run: python -m pytest --governance-contracts

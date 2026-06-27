@@ -65,8 +65,8 @@ def _write_events(events: list[PnLEvent], tmpdir: str) -> Path:
 # ── Invariant 1: Projection is idempotent ─────────────────────────────────
 
 
-@given(pnl_events(min_events=5, max_events=50))
 @pytest.mark.slow  # PBT: 200 random event streams (~4s local, ~40s CI)
+@given(pnl_events(min_events=5, max_events=50))
 @settings(max_examples=200)
 def test_projection_is_idempotent(events):
     """Running the projection twice on the same event stream MUST produce
@@ -87,8 +87,8 @@ def test_projection_is_idempotent(events):
 # ── Invariant 2: Cumulative PnL = sum of individual PnLs ───────────────────
 
 
-@given(pnl_events(min_events=5, max_events=50))
 @pytest.mark.slow  # PBT: 200 random event streams (~3s local, ~30s CI)
+@given(pnl_events(min_events=5, max_events=50))
 @settings(max_examples=200)
 def test_cumulative_pnl_equals_sum(events):
     """The cumulative PnL in the projection MUST equal the arithmetic sum
