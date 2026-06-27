@@ -227,6 +227,11 @@ class TestExecuteExitSuccess:
             captured_payload.update(payload)
             return {"dispatched": True}
 
+        # FIX-20260627-147: mock _poll_ack to skip 5s ACK polling timeout.
+        # Without a real bridge, _poll_ack times out on every attempt
+        # (5 attempts × 5s timeout + backoff = ~15s).
+        wd._poll_ack = lambda intent_id, timeout=5.0: {"ack_status": "accepted"}
+
         wd.execute_exit(
             position_ticket=999888,
             volume=0.03,

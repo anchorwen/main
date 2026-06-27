@@ -9,8 +9,6 @@ Tests parts that don't require actual MT5 C++ terminal.
 
 from __future__ import annotations
 
-import queue
-import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -290,7 +288,11 @@ class TestStart:
         """start stores terminal_path in _mt5_init_kwargs before setting _running."""
         w = MT5Worker()
         with patch("threading.Thread") as mock_thread:
-            mock_thread.return_value = MagicMock()
+            mock_instance = MagicMock()
+            # Patch Thread.start() to set _ready so _ready.wait(timeout=30)
+            # returns immediately instead of blocking 30s (FIX-20260627-147).
+            mock_instance.start.side_effect = w._ready.set
+            mock_thread.return_value = mock_instance
             w.start(terminal_path=r"C:\MT5\terminal64.exe")
             assert w._mt5_init_kwargs == {"path": r"C:\MT5\terminal64.exe"}
 
@@ -409,9 +411,7 @@ class TestApiMethods:
         w._submit = MagicMock(return_value=[(1, 2, 3, 4, 5, 6, 7, 8)])  # type: ignore[assignment]
         result = w.copy_rates_from_pos("XAUUSDc", 5, 0, 100, timeout=10.0)
         assert result == [(1, 2, 3, 4, 5, 6, 7, 8)]
-        w._submit.assert_called_once_with(
-            "copy_rates_from_pos", "XAUUSDc", 5, 0, 100, timeout=10.0
-        )
+        w._submit.assert_called_once_with("copy_rates_from_pos", "XAUUSDc", 5, 0, 100, timeout=10.0)
 
     def test_copy_ticks_from_calls_submit(self) -> None:
         w = MT5Worker()

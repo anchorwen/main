@@ -61,6 +61,7 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260627-147 | 2026-06-27 | cursor-agent | 45852055 | Fix CI fast-track pytest timeout: eliminate 100s of unnecessary test waits. Fixed test_start_stores_terminal_path (mock _ready.set), test_skip_when_ticket_not_in_journal (mock time.sleep for 60x retry loop), test_payload_contains_required_fields (mock _poll_ack). Moved test_history_limited to slow track (25s drain sleeps unavoidable). Total savings: ~100s local → ~5min CI. | config-drift |
 | FIX-20260626-146 | 2026-06-26 | cursor-agent | ab5b0aa2 | CI fast-track pytest timeout 10→20min: local 4min but CI Windows runner 2.5x slower, hitting 10min timeout on every run since CI #588 | config-drift |
 | FIX-20260624-104 | 2026-06-24 | cursor-agent | 5693352d | Restore Exception catch for generic handlers in scheduler_service. BLE001:FOG migration (A09b) narrowed _execute_task and governance_eval outer handler from except Exception to 5-type tuple, causing ZeroDivisionError and DataIntegrityError to crash the scheduler. | boundary-error |
 | FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 交叉感染: scheduler_service ShadowTracker + brain_pnl_ledger + ledger_events 路径使用 container.config.base_dir** | L3 — 硬编码 "data" |

@@ -10,9 +10,7 @@ import json
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, PropertyMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from core.runtime.position_registration import register_dispatched_positions
 
@@ -62,18 +60,32 @@ class TestRegisterDispatchedPositions:
     def test_returns_zero_when_exit_management_disabled(self) -> None:
         config = SimpleNamespace(exit_management_enabled=False, no_mt5=True)
         result = register_dispatched_positions(
-            config=config, position_manager=None, known_open_tickets={},
-            loop_iteration=1, dispatch_results=[], eval_summary={}, brains=[],
-            journal_path=None, current_atr=6.0, mid_price=4700.0,
+            config=config,
+            position_manager=None,
+            known_open_tickets={},
+            loop_iteration=1,
+            dispatch_results=[],
+            eval_summary={},
+            brains=[],
+            journal_path=None,
+            current_atr=6.0,
+            mid_price=4700.0,
         )
         assert result["registered_count"] == 0
 
     def test_returns_zero_when_position_manager_none(self) -> None:
         config = SimpleNamespace(exit_management_enabled=True, no_mt5=True)
         result = register_dispatched_positions(
-            config=config, position_manager=None, known_open_tickets={},
-            loop_iteration=1, dispatch_results=[], eval_summary={}, brains=[],
-            journal_path=None, current_atr=6.0, mid_price=4700.0,
+            config=config,
+            position_manager=None,
+            known_open_tickets={},
+            loop_iteration=1,
+            dispatch_results=[],
+            eval_summary={},
+            brains=[],
+            journal_path=None,
+            current_atr=6.0,
+            mid_price=4700.0,
         )
         assert result["registered_count"] == 0
 
@@ -81,51 +93,79 @@ class TestRegisterDispatchedPositions:
         config = SimpleNamespace(exit_management_enabled=True, no_mt5=True)
         pm = MagicMock()
         result = register_dispatched_positions(
-            config=config, position_manager=pm, known_open_tickets={},
-            loop_iteration=1, dispatch_results=[], eval_summary={}, brains=[],
-            journal_path=None, current_atr=6.0, mid_price=4700.0,
+            config=config,
+            position_manager=pm,
+            known_open_tickets={},
+            loop_iteration=1,
+            dispatch_results=[],
+            eval_summary={},
+            brains=[],
+            journal_path=None,
+            current_atr=6.0,
+            mid_price=4700.0,
         )
         assert result["registered_count"] == 0
 
     def test_skips_not_dispatched(self) -> None:
         config = SimpleNamespace(
-            exit_management_enabled=True, no_mt5=False,
-            strategy_configs={}, position_state_path="/tmp/state.json",
+            exit_management_enabled=True,
+            no_mt5=False,
+            strategy_configs={},
+            position_state_path="/tmp/state.json",
         )
         pm = MagicMock()
         dr = _make_dispatch_result(dispatched=False)
         result = register_dispatched_positions(
-            config=config, position_manager=pm, known_open_tickets={},
-            loop_iteration=1, dispatch_results=[dr],
-            eval_summary={"decisions_map": {}}, brains=[],
-            journal_path=None, current_atr=6.0, mid_price=4700.0,
+            config=config,
+            position_manager=pm,
+            known_open_tickets={},
+            loop_iteration=1,
+            dispatch_results=[dr],
+            eval_summary={"decisions_map": {}},
+            brains=[],
+            journal_path=None,
+            current_atr=6.0,
+            mid_price=4700.0,
         )
         assert result["registered_count"] == 0
 
     def test_skips_when_no_decision_in_map(self) -> None:
         config = SimpleNamespace(
-            exit_management_enabled=True, no_mt5=False,
-            strategy_configs={}, position_state_path="/tmp/state.json",
+            exit_management_enabled=True,
+            no_mt5=False,
+            strategy_configs={},
+            position_state_path="/tmp/state.json",
         )
         pm = MagicMock()
         dr = _make_dispatch_result(strategy_name="unknown_strategy")
         result = register_dispatched_positions(
-            config=config, position_manager=pm, known_open_tickets={},
-            loop_iteration=1, dispatch_results=[dr],
-            eval_summary={"decisions_map": {}}, brains=[],
-            journal_path=None, current_atr=6.0, mid_price=4700.0,
+            config=config,
+            position_manager=pm,
+            known_open_tickets={},
+            loop_iteration=1,
+            dispatch_results=[dr],
+            eval_summary={"decisions_map": {}},
+            brains=[],
+            journal_path=None,
+            current_atr=6.0,
+            mid_price=4700.0,
         )
         assert result["registered_count"] == 0
 
     def test_registers_position_with_valid_data(self) -> None:
         config = SimpleNamespace(
-            exit_management_enabled=True, no_mt5=False,
+            exit_management_enabled=True,
+            no_mt5=False,
             strategy_configs={
                 "test_swing": {
                     "tp": {"partial_tp_enabled": False},
-                    "exit": {"trail_atr_mult": 2.0, "trail_atr_mult_low": 1.5,
-                             "trail_atr_mult_high": 3.0, "breakeven_threshold_atr": 1.0,
-                             "trail_activation_atr": 1.0},
+                    "exit": {
+                        "trail_atr_mult": 2.0,
+                        "trail_atr_mult_low": 1.5,
+                        "trail_atr_mult_high": 3.0,
+                        "breakeven_threshold_atr": 1.0,
+                        "trail_activation_atr": 1.0,
+                    },
                 }
             },
             position_state_path="/tmp/state.json",
@@ -138,20 +178,30 @@ class TestRegisterDispatchedPositions:
         with tempfile.TemporaryDirectory() as tmpdir:
             jpath = Path(tmpdir) / "live_trade_journal.jsonl"
             jpath.write_text(
-                json.dumps({
-                    "message_id": "intent_001", "position_ticket": 5001,
-                    "entry_price": 4700.0, "side": "long",
-                    "brain_votes": [{"brain_id": "b1", "direction": "long"}],
-                }) + "\n",
+                json.dumps(
+                    {
+                        "message_id": "intent_001",
+                        "position_ticket": 5001,
+                        "entry_price": 4700.0,
+                        "side": "long",
+                        "brain_votes": [{"brain_id": "b1", "direction": "long"}],
+                    }
+                )
+                + "\n",
                 encoding="utf-8",
             )
 
             result = register_dispatched_positions(
-                config=config, position_manager=pm, known_open_tickets={},
-                loop_iteration=5, dispatch_results=[dr],
+                config=config,
+                position_manager=pm,
+                known_open_tickets={},
+                loop_iteration=5,
+                dispatch_results=[dr],
                 eval_summary={"decisions_map": {"test_swing": decision}},
                 brains=[{"brain_id": "brain_1", "training_horizon": 24}],
-                journal_path=jpath, current_atr=6.0, mid_price=4700.0,
+                journal_path=jpath,
+                current_atr=6.0,
+                mid_price=4700.0,
             )
 
         assert result["registered_count"] == 1
@@ -159,8 +209,10 @@ class TestRegisterDispatchedPositions:
 
     def test_skip_when_ticket_not_in_journal(self) -> None:
         config = SimpleNamespace(
-            exit_management_enabled=True, no_mt5=False,
-            strategy_configs={}, position_state_path="/tmp/state.json",
+            exit_management_enabled=True,
+            no_mt5=False,
+            strategy_configs={},
+            position_state_path="/tmp/state.json",
         )
         pm = MagicMock()
         decision = _make_decision()
@@ -170,24 +222,39 @@ class TestRegisterDispatchedPositions:
             jpath = Path(tmpdir) / "live_trade_journal.jsonl"
             jpath.write_text("", encoding="utf-8")
 
-            result = register_dispatched_positions(
-                config=config, position_manager=pm, known_open_tickets={},
-                loop_iteration=1, dispatch_results=[dr],
-                eval_summary={"decisions_map": {"test_swing": decision}},
-                brains=[], journal_path=jpath, current_atr=6.0, mid_price=4700.0,
-            )
+            # FIX-20260627-147: DQAF-20260614-008 retry loop
+            # (60 × 0.5s = 30s).  Mock time.sleep so the retry
+            # loop runs instantly instead of blocking CI for 30s.
+            with patch("time.sleep", return_value=None):
+                result = register_dispatched_positions(
+                    config=config,
+                    position_manager=pm,
+                    known_open_tickets={},
+                    loop_iteration=1,
+                    dispatch_results=[dr],
+                    eval_summary={"decisions_map": {"test_swing": decision}},
+                    brains=[],
+                    journal_path=jpath,
+                    current_atr=6.0,
+                    mid_price=4700.0,
+                )
 
         assert result["registered_count"] == 0
 
     def test_known_open_tickets_updated(self) -> None:
         config = SimpleNamespace(
-            exit_management_enabled=True, no_mt5=False,
+            exit_management_enabled=True,
+            no_mt5=False,
             strategy_configs={
                 "test_swing": {
                     "tp": {"partial_tp_enabled": False},
-                    "exit": {"trail_atr_mult": 2.0, "trail_atr_mult_low": 1.5,
-                             "trail_atr_mult_high": 3.0, "breakeven_threshold_atr": 1.0,
-                             "trail_activation_atr": 1.0},
+                    "exit": {
+                        "trail_atr_mult": 2.0,
+                        "trail_atr_mult_low": 1.5,
+                        "trail_atr_mult_high": 3.0,
+                        "breakeven_threshold_atr": 1.0,
+                        "trail_activation_atr": 1.0,
+                    },
                 }
             },
             position_state_path="/tmp/state.json",
@@ -201,18 +268,29 @@ class TestRegisterDispatchedPositions:
         with tempfile.TemporaryDirectory() as tmpdir:
             jpath = Path(tmpdir) / "live_trade_journal.jsonl"
             jpath.write_text(
-                json.dumps({
-                    "message_id": "intent_002", "position_ticket": 5002,
-                    "entry_price": 4710.0, "side": "long",
-                }) + "\n",
+                json.dumps(
+                    {
+                        "message_id": "intent_002",
+                        "position_ticket": 5002,
+                        "entry_price": 4710.0,
+                        "side": "long",
+                    }
+                )
+                + "\n",
                 encoding="utf-8",
             )
 
             register_dispatched_positions(
-                config=config, position_manager=pm, known_open_tickets=known_tickets,
-                loop_iteration=1, dispatch_results=[dr],
+                config=config,
+                position_manager=pm,
+                known_open_tickets=known_tickets,
+                loop_iteration=1,
+                dispatch_results=[dr],
                 eval_summary={"decisions_map": {"test_swing": decision}},
-                brains=[], journal_path=jpath, current_atr=6.0, mid_price=4700.0,
+                brains=[],
+                journal_path=jpath,
+                current_atr=6.0,
+                mid_price=4700.0,
             )
 
         assert 5002 in known_tickets
@@ -220,13 +298,18 @@ class TestRegisterDispatchedPositions:
 
     def test_handles_registration_failure_gracefully(self) -> None:
         config = SimpleNamespace(
-            exit_management_enabled=True, no_mt5=False,
+            exit_management_enabled=True,
+            no_mt5=False,
             strategy_configs={
                 "test_swing": {
                     "tp": {"partial_tp_enabled": False},
-                    "exit": {"trail_atr_mult": 2.0, "trail_atr_mult_low": 1.5,
-                             "trail_atr_mult_high": 3.0, "breakeven_threshold_atr": 1.0,
-                             "trail_activation_atr": 1.0},
+                    "exit": {
+                        "trail_atr_mult": 2.0,
+                        "trail_atr_mult_low": 1.5,
+                        "trail_atr_mult_high": 3.0,
+                        "breakeven_threshold_atr": 1.0,
+                        "trail_activation_atr": 1.0,
+                    },
                 }
             },
             position_state_path="/tmp/state.json",
@@ -240,18 +323,29 @@ class TestRegisterDispatchedPositions:
         with tempfile.TemporaryDirectory() as tmpdir:
             jpath = Path(tmpdir) / "live_trade_journal.jsonl"
             jpath.write_text(
-                json.dumps({
-                    "message_id": "intent_003", "position_ticket": 5003,
-                    "entry_price": 4720.0, "side": "long",
-                }) + "\n",
+                json.dumps(
+                    {
+                        "message_id": "intent_003",
+                        "position_ticket": 5003,
+                        "entry_price": 4720.0,
+                        "side": "long",
+                    }
+                )
+                + "\n",
                 encoding="utf-8",
             )
 
             result = register_dispatched_positions(
-                config=config, position_manager=pm, known_open_tickets={},
-                loop_iteration=1, dispatch_results=[dr],
+                config=config,
+                position_manager=pm,
+                known_open_tickets={},
+                loop_iteration=1,
+                dispatch_results=[dr],
                 eval_summary={"decisions_map": {"test_swing": decision}},
-                brains=[], journal_path=jpath, current_atr=6.0, mid_price=4700.0,
+                brains=[],
+                journal_path=jpath,
+                current_atr=6.0,
+                mid_price=4700.0,
             )
 
         assert result["registered_count"] == 0

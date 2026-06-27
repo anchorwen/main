@@ -284,6 +284,7 @@ class TestBlueGreenManagerHistory:
     def test_empty_history(self, mgr):
         assert mgr.cutover_history() == []
 
+    @pytest.mark.slow  # FIX-20260627-147: 5×promote+rollback, each promote sleeps 5s
     def test_history_limited(self, mgr):
         mgr.register_slot(SlotColor.GREEN, process_id=os.getpid(), brain_id="v9")
         for _ in range(5):
@@ -364,6 +365,7 @@ class TestHealthProbe:
         # Use a timestamp 60 seconds ago — well under 999999s threshold.
         # Hardcoded date (2026-05-21) would drift past threshold over time.
         from datetime import UTC, datetime, timedelta
+
         _recent = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
         slot = DeploymentSlot(
             color=SlotColor.BLUE,
