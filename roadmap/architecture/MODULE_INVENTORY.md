@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-27T16:36:48Z
-> **扫描模块数**: 685
+> **自动生成**: 2026-06-28T00:37:02Z
+> **扫描模块数**: 686
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -520,7 +520,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4256 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 8 | 1639 | — | |
+| `management_phase.py` | ✅ active | — | 8 | 1642 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -678,12 +678,13 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 699 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 700 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
 | `check_omega_pre_push.py` | ✅ active | — | 2 | 86 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
+| `check_symbol_liveness.py` | ✅ active | LivenessVerdict | 8 | 364 | — | |
 | `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1010 | — | |
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
@@ -906,7 +907,7 @@
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1142 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
-| `train_exit_metamodel.py` | ✅ active | — | 7 | 342 | — | |
+| `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |
 | `train_meta_filter.py` | ✅ active | — | 5 | 332 | — | |
 | `train_meta_model.py` | ✅ active | — | 6 | 384 | — | |

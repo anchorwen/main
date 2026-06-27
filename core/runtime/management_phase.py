@@ -1536,7 +1536,10 @@ def execute_management_phase(
                 #
                 # MetaExit is now SHADOW MODE: evaluate + log, but NEVER
                 # dispatch a close.  Layer 1 (Trail SL) + Layer 2 (Brain Flip)
-                # handle exits.  TODO: re-enable when >=500 XAU trades with
+                # handle exits.  TODO: re-enable when >=500 settled trades (any symbol)
+                # with ExitFeatureSnapshot-level features are available for retraining.
+                # Current status (2026-06-28): BTC 600 settled + 1075 snapshots ✅
+                # — see scripts/check_symbol_liveness.py for liveness verification.
                 # ExitFeatureSnapshot-level features are available for retraining.
                 _emit(
                     "meta_exit_shadow_telemetry",

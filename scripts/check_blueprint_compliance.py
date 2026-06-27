@@ -251,6 +251,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/training/register_brain.py",
         "scripts/validate_magic_sync.py",
         "scripts/system_trust_report.py",
+        "scripts/check_symbol_liveness.py",
         "scripts/phase4_shadow_review.py",
         "scripts/phase4_final_audit.py",
     ],

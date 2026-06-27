@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-27T16:36:48Z
+> **自动生成**: 2026-06-28T00:37:02Z
 
 ## Package-Level Dependencies
 
@@ -600,6 +600,7 @@
 - `check_omega_compliance.py` → (无内部依赖)
 - `check_omega_pre_push.py` → (无内部依赖)
 - `check_preconditions.py` → (无内部依赖)
+- `check_symbol_liveness.py` → (无内部依赖)
 - `check_training_readiness.py` → `core.state.catalog`, `core.state.writer`
 - `check_training_triggers.py` → (无内部依赖)
 - `ci_prepare_v9_shadow_fixtures.py` → `apps.engine.main_v9_shadow`

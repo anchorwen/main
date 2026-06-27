@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260628-157 | 2026-06-28 | cursor-agent | 306e8450 | check_symbol_liveness.py: institutional preflight probe. Architecture Committee rectification. SYMBOL_DATA_DIR_MAP corrected: XAUUSDc→data (was data_xau). Iron Law #11 machine enforcement. | missing-feature |
 | FIX-20260627-154 | 2026-06-27 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/health_check.py` to `runtime_live` module in `check_blueprint_compliance.py` (FIX-20260627-154 — Iron Law #11 compliant health check script). | RC-14 |
 | FIX-20260626-142 | 2026-06-26 | cursor-agent | — | **btc_swing_h1 SL/TP alignment with V12_H1_15 (DQAF-20260626-003)**. Strategy line contract parameters changed from Survival (SL=3.0/TP=2.0) to V12_H1_15 training contract (SL=1.5/TP=1.5): sl.base_atr_mult 3.0→1.5, tp.base_atr_mult 2.0→1.5, min_rr_ratio 0.5→1.0, min_p_win 0.55→0.50, trail_atr_mult 3.0→2.0, hesitation_cycles 24→12, time_exit_cycles 144→72, max_consecutive_losses 4→8. | L2 — strategy line contract mismatch |
 | FIX-20260626-141 | 2026-06-26 | cursor-agent | — | **V4 governance state correction: probation→live (DQAF-20260626-002)**. IC_MANDATE corrective transition added to governance_state.json. Governance log-replay bug demoted V4 → ZERO LIVE brains → p_win fallback 0.40. | L2 — governance state rebuild: append-order vs timestamp-order |
