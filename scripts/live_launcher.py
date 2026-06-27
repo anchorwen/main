@@ -101,6 +101,124 @@ def _stream_reader(
         pass
 
 
+def _hours_since_last_run(state_path: Path) -> float | None:
+    """Return hours since daily_ops last ran, or None if never.
+
+    Ported from watchdog_daily_ops.py:30-49.
+    Reads last_daily_ops_utc (float Unix timestamp) from state JSON.
+    """
+    if not state_path.exists():
+        return None
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        last_utc = data.get("last_daily_ops_utc")
+        if last_utc is None:
+            return None
+        if isinstance(last_utc, int | float):
+            last_dt = datetime.fromtimestamp(float(last_utc), UTC)
+        else:
+            last_dt = datetime.fromisoformat(str(last_utc).replace("Z", "+00:00"))
+        now = datetime.now(UTC)
+        return (now - last_dt).total_seconds() / 3600.0
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+        return None
+
+
+def _daily_ops_scheduler(
+    python: str,
+    project_root: Path,
+    base_dir: str,
+    stop_event: threading.Event,
+    log_fh: TextIO | None = None,
+    mt5_terminal_path: str | None = None,
+    interval_hours: float = 4,
+    max_age_hours: float = 6,
+):
+    """Run daily_ops.py when overdue, as a managed subprocess.
+
+    Replaces watchdog_daily_ops.py (previously a persistent subprocess).
+    Follows the same pattern as _feedback_loop_runner — temporary subprocess
+    spawned from a daemon thread, no persistent watchdog process.
+
+    FIX-20260627-149: watchdog→thread integration, eliminates 2 persistent
+    python processes (one per symbol launcher).
+    """
+    import time as _time
+
+    state_path = project_root / base_dir / "state" / "daily_ops_state.json"
+
+    # Initial delay to let the live system stabilise before first check
+    if not stop_event.wait(60):
+        pass
+
+    while not stop_event.is_set():
+        age_h = _hours_since_last_run(state_path)
+
+        if age_h is None or age_h > max_age_hours:
+            reason = (
+                "never run" if age_h is None else f"overdue ({age_h:.0f}h > {max_age_hours}h max)"
+            )
+            msg = f"[daily_ops] Triggering: {reason}"
+            print(msg, flush=True)
+            if log_fh is not None:
+                log_fh.write(msg + "\n")
+                log_fh.flush()
+
+            _cmd = [
+                python,
+                "-u",
+                str(project_root / "scripts" / "daily_ops.py"),
+                "--base-dir",
+                str(project_root / base_dir),
+            ]
+            if mt5_terminal_path:
+                _cmd.extend(["--mt5-terminal-path", mt5_terminal_path])
+
+            try:
+                result = subprocess.run(
+                    _cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    cwd=str(project_root),
+                )
+                if result.returncode == 0:
+                    msg = "[daily_ops] Completed successfully"
+                else:
+                    msg = f"[daily_ops] FAILED (rc={result.returncode})"
+                    if result.stderr:
+                        stderr_short = result.stderr.strip()[:500]
+                        msg += f" — {stderr_short}"
+                print(msg, flush=True)
+                if log_fh is not None:
+                    log_fh.write(msg + "\n")
+                    log_fh.flush()
+            except subprocess.TimeoutExpired:
+                msg = "[daily_ops] WARNING: timed out after 600s"
+                print(msg, flush=True)
+                if log_fh is not None:
+                    log_fh.write(msg + "\n")
+                    log_fh.flush()
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+                msg = f"[daily_ops] ERROR: {exc}"
+                print(msg, flush=True)
+                if log_fh is not None:
+                    log_fh.write(msg + "\n")
+                    log_fh.flush()
+        else:
+            msg = f"[daily_ops] OK: {age_h:.0f}h since last run"
+            print(msg, flush=True)
+            if log_fh is not None:
+                log_fh.write(msg + "\n")
+                log_fh.flush()
+
+        # Responsive sleep — check every interval, but respond to stop_event
+        remaining = int(interval_hours * 3600)
+        while remaining > 0 and not stop_event.is_set():
+            _time.sleep(min(5, remaining))
+            remaining -= 5
+
+
 def _feedback_loop_runner(
     python: str,
     project_root: Path,
@@ -614,35 +732,10 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     log_fh.write(f"[launcher] Intent loop started (pid={intent_proc.pid})\n")
     log_fh.flush()
 
-    # ── FIX-20260612-022: watchdog_daily_ops as managed subprocess ──
-    # Runs daily_ops.py every 6h via the watchdog script.  Prevents
-    # CAL_FEED_STALLED and DAILY_OPS_OVERDUE from recurring.
-    _watchdog_cmd = [
-        python,
-        "-u",
-        str(PROJECT_ROOT / "scripts" / "watchdog_daily_ops.py"),
-        "--base-dir",
-        str(cfg["base_dir"]),
-        "--interval-hours",
-        "4",
-        "--max-age-hours",
-        "6",
-        "--auto-run",
-    ]
-    _watchdog_log_path = logs_dir / f"watchdog_{_utc_compact()}.log"
-    _watchdog_log_fh = open(_watchdog_log_path, "a", encoding="utf-8")
-    _watchdog_proc = subprocess.Popen(
-        _watchdog_cmd,
-        stdout=_watchdog_log_fh,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-        encoding="utf-8",
-        env=subprocess_env,
-    )
-    print(f"[launcher] Watchdog started (pid={_watchdog_proc.pid})", flush=True)
-    log_fh.write(f"[launcher] Watchdog started (pid={_watchdog_proc.pid})\n")
-    log_fh.flush()
+    # ── FIX-20260627-149: daily_ops scheduler as daemon thread ──
+    # Runs daily_ops.py every ~4h when overdue.  Previously a persistent
+    # watchdog_daily_ops.py subprocess; now a thread following the same
+    # pattern as _feedback_loop_runner.  No extra python process needed.
 
     # ── Stream output from all subprocesses ──
     stop_event = threading.Event()
@@ -687,6 +780,23 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     )
     feedback_thread.start()
 
+    # ── Daily ops scheduler thread (FIX-20260627-149: replaces watchdog subprocess) ──
+    _daily_ops_thread = threading.Thread(
+        target=_daily_ops_scheduler,
+        args=(
+            python,
+            PROJECT_ROOT,
+            cfg["base_dir"],
+            stop_event,
+            log_fh,
+            cfg.get("mt5_terminal_path"),
+            4,
+            6,
+        ),
+        daemon=True,
+    )
+    _daily_ops_thread.start()
+
     bridge_thread.start()
     intent_thread.start()
 
@@ -702,7 +812,6 @@ def launch(config_path: str = "configs/live.yaml") -> int:
 
         # Terminate all managed processes
         for proc, name in [
-            (_watchdog_proc, "watchdog"),
             (bridge_proc, "bridge"),
             (intent_proc, "intent"),
         ]:
@@ -726,7 +835,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         print(msg4, flush=True)
         log_fh.write(msg4 + "\n")
         log_fh.flush()
-        for _fh in [_watchdog_log_fh, bridge_log_fh, intent_log_fh, log_fh]:
+        for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
             try:  # noqa: SIM105
                 _fh.close()
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
@@ -967,14 +1076,6 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                 if _restart_process("intent", intent_cmd) is None:
                     break  # give up after too many restarts
 
-            # Watchdog is non-critical — log exit but don't restart
-            _watchdog_rc = _watchdog_proc.poll()
-            if _watchdog_rc is not None:
-                msg_wd = f"[launcher] watchdog exited (code={_watchdog_rc}) — daily_ops auto-run disabled until restart"
-                print(msg_wd, flush=True)
-                log_fh.write(msg_wd + "\n")
-                log_fh.flush()
-
             # Stall detection (every 2nd check = ~10s)
             if int(time_module.time()) % 10 < CHECK_INTERVAL:
                 alerts = _check_stall()
@@ -988,7 +1089,6 @@ def launch(config_path: str = "configs/live.yaml") -> int:
 
     # ── Cleanup: terminate any still-running subprocesses ──
     for _proc, _name in [
-        (_watchdog_proc, "watchdog"),
         (bridge_proc, "bridge"),
         (intent_proc, "intent"),
     ]:
