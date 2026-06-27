@@ -15,6 +15,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
@@ -65,6 +66,7 @@ def _write_events(events: list[PnLEvent], tmpdir: str) -> Path:
 
 
 @given(pnl_events(min_events=5, max_events=50))
+@pytest.mark.slow  # PBT: 200 random event streams (~4s local, ~40s CI)
 @settings(max_examples=200)
 def test_projection_is_idempotent(events):
     """Running the projection twice on the same event stream MUST produce
@@ -86,6 +88,7 @@ def test_projection_is_idempotent(events):
 
 
 @given(pnl_events(min_events=5, max_events=50))
+@pytest.mark.slow  # PBT: 200 random event streams (~3s local, ~30s CI)
 @settings(max_examples=200)
 def test_cumulative_pnl_equals_sum(events):
     """The cumulative PnL in the projection MUST equal the arithmetic sum
@@ -110,6 +113,7 @@ def test_cumulative_pnl_equals_sum(events):
 # ── Invariant 3: Trade count is correct ────────────────────────────────────
 
 
+@pytest.mark.slow  # PBT: 200 random event streams (~3s local, ~30s CI)
 @given(pnl_events(min_events=5, max_events=50))
 @settings(max_examples=200)
 def test_trade_count_matches_events(events):
@@ -137,6 +141,7 @@ def test_trade_count_matches_events(events):
 # ── Invariant 4: Win rate is bounded [0, 1] ───────────────────────────────
 
 
+@pytest.mark.slow  # PBT: 200 random event streams (~3s local, ~30s CI)
 @given(pnl_events(min_events=5, max_events=50))
 @settings(max_examples=200)
 def test_win_rate_is_valid_probability(events):

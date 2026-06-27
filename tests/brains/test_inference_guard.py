@@ -2,16 +2,15 @@
 
 FIX-20260620-070: Project C — Tier 2 zero-coverage breakout.
 """
+
 from __future__ import annotations
 
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from core.brains.services.inference_guard import RESTART_COOLDOWN, InferenceGuard
+from core.brains.services.inference_guard import InferenceGuard
 
 
 class TestInferenceGuardInit:
@@ -20,21 +19,27 @@ class TestInferenceGuardInit:
             InferenceGuard("/nonexistent/path/model.onnx")
 
     def test_accepts_valid_model_path(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             assert guard.model_path.endswith("model.onnx")
 
     def test_default_timeout_and_restarts(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             assert guard._timeout == 5.0
             assert guard._max_restarts == 3
 
     def test_custom_timeout_and_restarts(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx", timeout=10.0, max_restarts=5)
             assert guard._timeout == 10.0
             assert guard._max_restarts == 5
@@ -43,8 +48,10 @@ class TestInferenceGuardInit:
 class TestInferenceGuardInfer:
     @pytest.fixture
     def guard(self) -> InferenceGuard:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             return InferenceGuard("/fake/model.onnx")
 
     def test_returns_none_when_conn_is_none(self, guard: InferenceGuard) -> None:
@@ -71,6 +78,7 @@ class TestInferenceGuardInfer:
         result = guard.infer("input", ["output"], np.array([1.0]))
         assert result is None
 
+    @pytest.mark.slow  # Crash handling retry loop (~3s local, ~30s CI)
     def test_timeout_triggers_crash_handling(self, guard: InferenceGuard) -> None:
         mock_conn = MagicMock()
         mock_conn.poll.return_value = False  # timeout
@@ -80,6 +88,7 @@ class TestInferenceGuardInfer:
         assert result is None
         assert guard.crash_count == 1
 
+    @pytest.mark.slow  # Crash handling retry loop (~3s local, ~30s CI)
     def test_pipe_error_triggers_crash_handling(self, guard: InferenceGuard) -> None:
         mock_conn = MagicMock()
         mock_conn.send.side_effect = BrokenPipeError("pipe broken")
@@ -89,6 +98,7 @@ class TestInferenceGuardInfer:
         assert result is None
         assert guard.crash_count == 1
 
+    @pytest.mark.slow  # Crash handling retry loop (~3s local, ~30s CI)
     def test_eof_error_triggers_crash_handling(self, guard: InferenceGuard) -> None:
         mock_conn = MagicMock()
         mock_conn.send.side_effect = EOFError("eof")
@@ -100,15 +110,19 @@ class TestInferenceGuardInfer:
 
 class TestInferenceGuardShutdown:
     def test_shutdown_cleans_up(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             guard.shutdown()
             assert guard._running is False
 
     def test_shutdown_with_no_conn(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             guard._conn = None
             guard.shutdown()  # should not raise
@@ -117,15 +131,19 @@ class TestInferenceGuardShutdown:
 
 class TestInferenceGuardProperties:
     def test_is_alive_when_not_running(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             guard._running = False
             assert guard.is_alive is False
 
     def test_is_alive_when_running(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             guard._running = True
             guard._process = MagicMock()
@@ -133,24 +151,30 @@ class TestInferenceGuardProperties:
             assert guard.is_alive is True
 
     def test_crash_count_starts_at_zero(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             assert guard.crash_count == 0
 
     def test_model_path_returns_resolved_path(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             assert "model.onnx" in guard.model_path
 
 
 class TestInferenceGuardHandleCrash:
     def test_restart_on_first_crash(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start") as mock_start, \
-             patch("core.brains.services.inference_guard.InferenceGuard._cleanup"), \
-             patch("time.sleep"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start") as mock_start,
+            patch("core.brains.services.inference_guard.InferenceGuard._cleanup"),
+            patch("time.sleep"),
+        ):
             guard = InferenceGuard("/fake/model.onnx")
             guard._running = True  # simulate successful _start
             initial_count = mock_start.call_count
@@ -161,10 +185,12 @@ class TestInferenceGuardHandleCrash:
             assert mock_start.call_count == initial_count + 1
 
     def test_exceed_max_restarts_gives_up(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.InferenceGuard._start"), \
-             patch("core.brains.services.inference_guard.InferenceGuard._cleanup"), \
-             patch("time.sleep"):
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.InferenceGuard._start"),
+            patch("core.brains.services.inference_guard.InferenceGuard._cleanup"),
+            patch("time.sleep"),
+        ):
             guard = InferenceGuard("/fake/model.onnx", max_restarts=2)
             guard._crash_count = 2  # already at max
             guard._handle_crash()
@@ -174,8 +200,10 @@ class TestInferenceGuardHandleCrash:
 
 class TestInferenceGuardStart:
     def test_start_failure_catches_exception(self) -> None:
-        with patch("core.brains.services.inference_guard.Path.exists", return_value=True), \
-             patch("core.brains.services.inference_guard.mp.get_context") as mock_ctx:
+        with (
+            patch("core.brains.services.inference_guard.Path.exists", return_value=True),
+            patch("core.brains.services.inference_guard.mp.get_context") as mock_ctx,
+        ):
             mock_ctx.side_effect = RuntimeError("spawn failed")
             guard = InferenceGuard.__new__(InferenceGuard)
             guard._model_path = "/fake/model.onnx"

@@ -110,6 +110,7 @@ class TestProofLeakASTDetection:
         except SyntaxError as e:
             pytest.fail(f"FOG_DEPRECATED_PATTERN is invalid Python: {e}")
 
+    @pytest.mark.slow  # Subprocess: runs AST scanner (~12s local, ~60s CI)
     def test_proof_leak_ast_detection(self, leak_test_dir):
         """_SuccessProof storage outside success_scope is caught."""
         exit_code, stdout, stderr = _run_ast_scanner_on_source(PROOF_LEAK_PATTERN, leak_test_dir)

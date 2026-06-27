@@ -47,6 +47,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          pip install pytest-timeout
 
       - name: Ruff check (lint)
         run: python -m ruff check core/ apps/ scripts/
@@ -77,16 +78,35 @@ jobs:
           python -m pytest tests/engine/test_v9_shadow_smoke.py::test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields
           python -m pytest tests/engine/test_live_read_only_preflight.py::test_live_preflight_main_supports_micro_live_mode
 
-      - name: Pytest (fast track — non-engine, ~4min local/~8min CI, no coverage)
-        timeout-minutes: 20
+      - name: Pytest (fast track shard 1/2 — execution, unit, runtime, brains, features, …)
+        timeout-minutes: 15
         shell: bash
         run: |
           set +e
-          python -m pytest tests/ -m "not slow" -o "addopts=" -p no:cov -q --tb=short > pytest_fast_out.txt 2>&1
-          PEXIT=$?
-          set -e
-          cat pytest_fast_out.txt
-          exit $PEXIT
+          python -m pytest \
+            tests/execution/ tests/unit/ tests/runtime/ tests/brains/ tests/features/ \
+            tests/observability/ tests/metrics/ tests/feedback/ tests/alpha/ tests/strategies/ \
+            tests/risk/ tests/market/ tests/backtest/ tests/deployment/ \
+            -m "not slow" -o "addopts=" -p no:cov -q --tb=short --timeout=120 \
+            > pytest_shard1.txt 2>&1 &
+          PID1=$!
+
+          python -m pytest \
+            tests/engine/ tests/data/ tests/contracts/ tests/scripts/ tests/resilience/ \
+            tests/training/ tests/ledger/ tests/infrastructure/ tests/governance/ \
+            tests/parliament/ tests/protocol/ tests/stress/ tests/consistency/ \
+            tests/state/ tests/mock_kit/ tests/config/ \
+            -m "not slow" -o "addopts=" -p no:cov -q --tb=short --timeout=120 \
+            > pytest_shard2.txt 2>&1 &
+          PID2=$!
+
+          wait $PID1; EXIT1=$?
+          wait $PID2; EXIT2=$?
+
+          echo "=== Shard 1/2 ===" && cat pytest_shard1.txt
+          echo "=== Shard 2/2 ===" && cat pytest_shard2.txt
+
+          [ $EXIT1 -eq 0 ] && [ $EXIT2 -eq 0 ]
 
       - name: Pytest (slow track — engine integration/E2E, with coverage)
         run: python -m pytest tests/ -m "slow"
