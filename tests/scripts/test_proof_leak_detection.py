@@ -128,6 +128,7 @@ class TestCIProofLeakGate:
         )
         assert scanner_path.exists(), f"AST scanner missing at {scanner_path}"
 
+    @pytest.mark.slow  # Scans entire codebase via subprocess (~3s local, ~15s CI)
     def test_verify_capresult_ast_baseline_runs(self):
         """Baseline mode (detector 1 only) should complete cleanly."""
         result = subprocess.run(
@@ -139,6 +140,7 @@ class TestCIProofLeakGate:
         )
         assert result.returncode in (0, 1), f"Baseline scanner crashed: {result.stderr[:500]}"
 
+    @pytest.mark.slow  # Scans entire codebase via subprocess (~13s local, ~60s CI)
     def test_verify_capresult_ast_enforce_runs(self):
         """Enforce mode (all 5 detectors) should complete successfully."""
         result = subprocess.run(

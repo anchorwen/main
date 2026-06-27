@@ -167,7 +167,7 @@ class TestBlueGreenManagerRegister:
 class TestBlueGreenManagerPromote:
     def test_promote_swaps_active_color(self, mgr):
         mgr.register_slot(SlotColor.GREEN, process_id=os.getpid(), brain_id="v9")
-        result = mgr.promote(skip_health_check=True)
+        result = mgr.promote(skip_health_check=True, drain_timeout_seconds=0)
         assert result.success
         assert result.previous_active == SlotColor.BLUE
         assert result.new_active == SlotColor.GREEN
@@ -193,7 +193,7 @@ class TestBlueGreenManagerPromote:
 
         monkeypatch.setattr(mgr._health_probe, "check", flaky_check)
 
-        result = mgr.promote()
+        result = mgr.promote(drain_timeout_seconds=0)
         assert not result.success
         assert result.rolled_back
         # Should have reverted to blue
@@ -201,7 +201,7 @@ class TestBlueGreenManagerPromote:
 
     def test_promote_records_cutover_history(self, mgr):
         mgr.register_slot(SlotColor.GREEN, process_id=os.getpid(), brain_id="v9")
-        mgr.promote(skip_health_check=True)
+        mgr.promote(skip_health_check=True, drain_timeout_seconds=0)
         history = mgr.cutover_history()
         assert len(history) >= 1
         assert history[0]["success"] is True
@@ -210,7 +210,9 @@ class TestBlueGreenManagerPromote:
 
     def test_promote_updates_deployed_info(self, mgr):
         mgr.register_slot(SlotColor.GREEN, process_id=os.getpid(), brain_id="v9")
-        mgr.promote(deployed_by="alice", version="v3.0.0", skip_health_check=True)
+        mgr.promote(
+            deployed_by="alice", version="v3.0.0", skip_health_check=True, drain_timeout_seconds=0
+        )
         status = mgr.status()
         assert status["deployed_by"] == "alice"
         assert status["version"] == "v3.0.0"
@@ -228,7 +230,7 @@ class TestBlueGreenManagerPromote:
         mgr._post_cutover_hooks = [post_hook]
 
         mgr.register_slot(SlotColor.GREEN, process_id=os.getpid(), brain_id="v9")
-        mgr.promote(skip_health_check=True)
+        mgr.promote(skip_health_check=True, drain_timeout_seconds=0)
 
         assert "pre" in hook_calls
         assert "post" in hook_calls
@@ -238,7 +240,7 @@ class TestBlueGreenManagerRollback:
     def test_rollback_reverts_active(self, mgr):
         # First promote green
         mgr.register_slot(SlotColor.GREEN, process_id=os.getpid(), brain_id="v9")
-        mgr.promote(skip_health_check=True)
+        mgr.promote(skip_health_check=True, drain_timeout_seconds=0)
         assert mgr.status()["active_color"] == "green"
 
         # Then rollback

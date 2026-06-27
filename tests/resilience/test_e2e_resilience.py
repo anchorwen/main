@@ -346,7 +346,7 @@ class TestProcessHangRecovery:
             heartbeat_interval=1.0,
         )
         scheduler.start()
-        time.sleep(4.0)  # Let supervisor detect stall
+        time.sleep(2.5)  # Let supervisor detect stall (threshold=2.0s + buffer)
         stall_detected.set()
         scheduler.shutdown(timeout=3.0)
 
