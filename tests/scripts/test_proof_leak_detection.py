@@ -74,7 +74,7 @@ def _run_ast_scanner_on_source(source: str, tmp_path: Path) -> tuple[int, str, s
         ],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=180,  # --enforce scans entire codebase; Windows CI Defender slows file I/O
     )
     return result.returncode, result.stdout, result.stderr
 
@@ -136,7 +136,7 @@ class TestCIProofLeakGate:
             [sys.executable, "scripts/verify_capresult_ast.py"],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,  # baseline scans entire codebase; CI Defender slows file I/O
             cwd=str(Path(__file__).resolve().parent.parent.parent),
         )
         assert result.returncode in (0, 1), f"Baseline scanner crashed: {result.stderr[:500]}"
@@ -148,7 +148,7 @@ class TestCIProofLeakGate:
             [sys.executable, "scripts/verify_capresult_ast.py", "--enforce"],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=180,  # --enforce runs all 5 detectors; CI Defender slows file I/O
             cwd=str(Path(__file__).resolve().parent.parent.parent),
         )
         # May return 0 (clean) or 1 (violations found) — both are OK

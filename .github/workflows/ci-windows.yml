@@ -101,13 +101,14 @@ jobs:
           python -m pytest tests/engine/test_live_read_only_preflight.py::test_live_preflight_main_supports_micro_live_mode
 
       # ── Fast-track: split across 2 independent runners (matrix shard 1 / 2) ──
-      # No step-level timeout — let pytest finish its cleanup naturally.
-      # Job-level 60-min timeout is the safety net.
       # --basetemp + pre-run wipe break the temp-dir garbage accumulation cycle.
+      # Generous step timeouts (15 min) serve as a safety net against hanging tests
+      # without risking garbage accumulation (pre-run wipe cleans up regardless).
       # shell: bash avoids PowerShell exit-code inconsistencies on Windows.
 
       - name: Pytest (fast track shard 1/2 — execution, unit, runtime, brains, …)
         if: matrix.shard == 1
+        timeout-minutes: 15
         shell: bash
         run: |
           python -m pytest \
@@ -119,6 +120,7 @@ jobs:
 
       - name: Pytest (fast track shard 2/2 — engine, data, contracts, resilience, …)
         if: matrix.shard == 2
+        timeout-minutes: 15
         shell: bash
         run: |
           python -m pytest \
@@ -133,8 +135,10 @@ jobs:
 
       - name: Pytest (slow track — engine integration/E2E, with coverage)
         if: matrix.shard == 1
+        timeout-minutes: 40
         run: python -m pytest tests/ -m "slow"
 
       - name: Pytest (governance contracts)
         if: matrix.shard == 1
+        timeout-minutes: 10
         run: python -m pytest --governance-contracts
