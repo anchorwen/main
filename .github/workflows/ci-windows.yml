@@ -83,6 +83,18 @@ jobs:
           if not exist D:\cursor\data\snapshots\v9_shadow_long.json exit 1
           if not exist D:\cursor\data\replays\v9_shadow_baselines\manifest.json exit 1
 
+      # ── Wipe pytest temp dir: break the garbage accumulation cycle ──
+      # Previous runs that timed out leave garbage-* dirs behind.
+      # Each leftover dir makes the next run's atexit cleanup slower
+      # (Windows Defender scans every file during deletion).
+      # Wiping before pytest ensures a clean slate every time.
+
+      - name: Wipe pytest temp dir (break garbage accumulation cycle)
+        shell: cmd
+        run: |
+          if exist D:\cursor\pytest-tmp rmdir /s /q D:\cursor\pytest-tmp
+          mkdir D:\cursor\pytest-tmp
+
       # ── Contract guard: shard 1 only ──
 
       - name: Pytest (runtime contract guard — 4 critical gates)
@@ -95,8 +107,9 @@ jobs:
 
       # ── Fast-track: split across 2 independent runners (matrix shard 1 / 2) ──
       # Each runner has dedicated 2 CPU cores → no contention between shards.
-      # --basetemp + tmp_path_retention_count=0 avoid Windows Defender
-      # stalling atexit cleanup on thousands of temp files (known GH Actions issue).
+      # --basetemp isolates temp files from system %TEMP%.
+      # tmp_path_retention_count=0 prevents old numbered dirs from persisting.
+      # Pre-run wipe (above) breaks the garbage accumulation cycle entirely.
 
       - name: Pytest (fast track shard 1/2 — execution, unit, runtime, brains, …)
         if: matrix.shard == 1
