@@ -624,9 +624,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         "--base-dir",
         str(cfg["base_dir"]),
         "--interval-hours",
-        "6",
+        "4",
         "--max-age-hours",
-        "24",
+        "6",
         "--auto-run",
     ]
     _watchdog_log_path = logs_dir / f"watchdog_{_utc_compact()}.log"

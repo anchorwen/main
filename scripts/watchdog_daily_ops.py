@@ -53,10 +53,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="daily_ops watchdog")
     parser.add_argument("--base-dir", default="data_btc")
     parser.add_argument(
-        "--interval-hours", type=float, default=6, help="How often to check (default: 6h)"
+        "--interval-hours", type=float, default=4, help="How often to check (default: 4h)"
     )
     parser.add_argument(
-        "--max-age-hours", type=float, default=24, help="Max age before reminder (default: 24h)"
+        "--max-age-hours", type=float, default=6, help="Max age before reminder (default: 6h)"
     )
     parser.add_argument(
         "--auto-run", action="store_true", help="Automatically run daily_ops when overdue"
