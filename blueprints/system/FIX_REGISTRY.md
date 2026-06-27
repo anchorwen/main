@@ -874,9 +874,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260626-145 | 2026-06-26 | tests-contracts, tests-ledger | **CI #588 test failure fix: 3 tests out of sync with production changes**. (a) test_stderr_fallback: _alert_violation changed from LiveAlertHub.instance() singleton (broken→AttributeError→stderr fallback) to direct construction. Mock LiveAlertHub.__init__ to raise ImportError and trigger the stderr fallback path. (b) test_cleanup_orphan_rejected: journal_cleanup orphan close labels now carry _unverified suffix + pnl=None (FIX-20260626-144). (c) test_cleanup_stale_no_ticket: same _unverified suffix update. | L1 — tests not updated when production signatures changed |
 | FIX-20260626-146 | 2026-06-26 | deployment-config | CI fast-track pytest timeout 10→20min: local 4min but CI Windows runner 2.5x slower, hitting 10min timeout on every run since CI #588 | RC-09 |
 | FIX-20260627-147 | 2026-06-27 | deployment-config | Fix CI fast-track pytest timeout: eliminate 100s of unnecessary test waits. Fixed test_start_stores_terminal_path (mock _ready.set), test_skip_when_ticket_not_in_journal (mock time.sleep for 60x retry loop), test_payload_contains_required_fields (mock _poll_ack). Moved test_history_limited to slow track (25s drain sleeps unavoidable). Total savings: ~100s local → ~5min CI. | RC-09 |
-
-
-
+| FIX-20260627-148 | 2026-06-27 | runtime-live | **MT5 Terminal Path Auto-Resolution — Journal PnL Normalization**: `normalize_journal_pnl.py` had hardcoded XAU-EXNESS2 default terminal path → BTC data never normalized (0 entries). `watchdog_daily_ops.py` never passed `--mt5-terminal-path` to `daily_ops.py` → `_step_journal_mt5_reconcile` always returned `status='mt5_unavailable'`. Fix: auto-resolve MT5 terminal path from `base_dir` using existing `"btc" in base_dir` pattern. Added both scripts to MODULE_SOURCE_MAP (`runtime_live`). | L2 — wrong static default + missing parameter propagation |
 ---
 ## Fix Details by Quarter
 

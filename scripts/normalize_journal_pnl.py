@@ -31,8 +31,25 @@ def main() -> int:
     p = argparse.ArgumentParser(prog="normalize_journal_pnl")
     p.add_argument("--data-dir", type=str, default="data")
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--mt5-path", type=str, default=r"D:\exness\MetaTrader 5 EXNESS2\terminal64.exe")
+    p.add_argument(
+        "--mt5-path",
+        type=str,
+        default=None,
+        help="MT5 terminal64.exe path. Auto-resolved from --data-dir if not specified: "
+        "btc→D:\\MetaTrader 5\\terminal64.exe, xau→D:\\exness\\MetaTrader 5 EXNESS1\\terminal64.exe",
+    )
     args = p.parse_args()
+
+    # ── Resolve MT5 terminal path ──────────────────────────────────────
+    # FIX-20260627-148: removed hardcoded XAU-EXNESS2 default that caused
+    # BTC normalization to silently connect to the wrong terminal.
+    # Auto-resolve from data_dir using the same pattern as daily_ops.py.
+    if args.mt5_path is None:
+        if "btc" in args.data_dir.lower():
+            args.mt5_path = r"D:\MetaTrader 5\terminal64.exe"
+        else:
+            args.mt5_path = r"D:\exness\MetaTrader 5 EXNESS1\terminal64.exe"
+        print(f"[INFO] Auto-resolved MT5 path from --data-dir={args.data_dir}: {args.mt5_path}")
 
     jp = Path(args.data_dir) / "live_trade_journal.jsonl"
     if not jp.exists():

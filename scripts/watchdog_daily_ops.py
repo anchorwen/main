@@ -61,7 +61,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--auto-run", action="store_true", help="Automatically run daily_ops when overdue"
     )
+    parser.add_argument(
+        "--mt5-terminal-path",
+        default=None,
+        help="MT5 terminal64.exe path for PnL reconciliation. "
+        "Auto-resolved from --base-dir if not specified: "
+        "btc→D:\\MetaTrader 5\\terminal64.exe, xau→D:\\exness\\MetaTrader 5 EXNESS1\\terminal64.exe",
+    )
     args = parser.parse_args(argv)
+
+    # FIX-20260627-148: auto-resolve MT5 terminal path from base_dir
+    # so daily_ops PnL reconciliation actually runs instead of being
+    # silently skipped (mt5_terminal_path=None → status='mt5_unavailable').
+    if args.mt5_terminal_path is None:
+        if "btc" in str(args.base_dir).lower():
+            args.mt5_terminal_path = r"D:\MetaTrader 5\terminal64.exe"
+        else:
+            args.mt5_terminal_path = r"D:\exness\MetaTrader 5 EXNESS1\terminal64.exe"
 
     base_dir = Path(args.base_dir)
     # FIX-20260625-125: state file lives under "state/" subdirectory
@@ -83,7 +99,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{msg} — auto-running...")
                 try:
                     subprocess.run(
-                        [sys.executable, "scripts/daily_ops.py", "--base-dir", str(args.base_dir)],
+                        [
+                            sys.executable,
+                            "scripts/daily_ops.py",
+                            "--base-dir",
+                            str(args.base_dir),
+                            "--mt5-terminal-path",
+                            args.mt5_terminal_path,
+                        ],
                         check=False,
                         timeout=600,
                     )
@@ -97,7 +120,10 @@ def main(argv: list[str] | None = None) -> int:
                 ) as exc:  # BLE001:FOG
                     print(f"[watchdog:{args.base_dir}] daily_ops failed: {exc}")
             else:
-                print(f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}")
+                print(
+                    f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}"
+                    f' --mt5-terminal-path "{args.mt5_terminal_path}"'
+                )
         elif age_h > args.max_age_hours:
             msg = (
                 f"[watchdog:{args.base_dir}] {_utc_iso()[:19]} "
@@ -107,7 +133,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{msg} — auto-running...")
                 try:
                     subprocess.run(
-                        [sys.executable, "scripts/daily_ops.py", "--base-dir", str(args.base_dir)],
+                        [
+                            sys.executable,
+                            "scripts/daily_ops.py",
+                            "--base-dir",
+                            str(args.base_dir),
+                            "--mt5-terminal-path",
+                            args.mt5_terminal_path,
+                        ],
                         check=False,
                         timeout=600,
                     )
@@ -121,7 +154,10 @@ def main(argv: list[str] | None = None) -> int:
                 ) as exc:  # BLE001:FOG
                     print(f"[watchdog:{args.base_dir}] daily_ops failed: {exc}")
             else:
-                print(f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}")
+                print(
+                    f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}"
+                    f' --mt5-terminal-path "{args.mt5_terminal_path}"'
+                )
         else:
             print(
                 f"[watchdog:{args.base_dir}] {_utc_iso()[:19]} "

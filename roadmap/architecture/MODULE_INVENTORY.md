@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-26T09:21:09Z
+> **自动生成**: 2026-06-27T08:06:09Z
 > **扫描模块数**: 684
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -678,7 +678,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 696 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 698 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -749,7 +749,7 @@
 | `mt5_bridge_worker.py` | ✅ active | — | 34 | 2060 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
-| `normalize_journal_pnl.py` | ✅ active | — | 1 | 185 | — | |
+| `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |
 | `omega_constants.py` | ✅ active | — | 1 | 112 | — | |
 | `omega_crash_snapshot.py` | ✅ active | — | 4 | 158 | — | |
 | `omega_gate.py` | ✅ active | — | 4 | 558 | — | |
@@ -807,7 +807,7 @@
 | `verify_phantom_contracts.py` | ✅ active | Violation, VerificationReport | 7 | 437 | — | |
 | `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 292 | — | |
 | `verify_training_serving_parity.py` | ✅ active | — | 7 | 492 | — | |
-| `watchdog_daily_ops.py` | ✅ active | — | 3 | 135 | — | |
+| `watchdog_daily_ops.py` | ✅ active | — | 3 | 171 | — | |
 
 ## scripts/audit
 

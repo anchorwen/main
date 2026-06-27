@@ -183,3 +183,4 @@ python -m pytest tests/ -k "lifecycle or health" -q
 ```
 
 | FIX-20260626-144 | 2026-06-26 | Add journal_contract.py + journal_sla.py to MODULE_SOURCE_MAP (contracts_resilience). Previously unmapped. | L1 — config-drift |
+| FIX-20260627-148 | 2026-06-27 | Add normalize_journal_pnl.py + backfill_journal_pnl.py to MODULE_SOURCE_MAP (runtime_live). Previously unmapped. | L1 — config-drift |
