@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-27T14:09:34Z
+> **自动生成**: 2026-06-27T14:56:21Z
 > **扫描模块数**: 685
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -719,7 +719,7 @@
 | `generate_micro_scaler.py` | ✅ active | — | 5 | 320 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
 | `guard_git_stash.py` | ✅ active | — | 3 | 111 | — | |
-| `health_check.py` | ✅ active | — | 16 | 758 | — | |
+| `health_check.py` | ✅ active | — | 16 | 759 | — | |
 | `hook_architecture_gate.py` | ✅ active | — | 6 | 397 | — | |
 | `hook_blueprint_precheck.py` | ✅ active | — | 1 | 75 | — | |
 | `hook_mypy_check.py` | ✅ active | — | 1 | 98 | — | |

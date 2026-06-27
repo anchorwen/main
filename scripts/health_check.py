@@ -20,6 +20,7 @@ Architecture:
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import sys
@@ -28,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-UTC = datetime.UTC  # type: ignore[attr-defined]
+UTC = _dt.UTC
 
 # ── Plan B Catalog TTL (from core/state/catalog.py — DO NOT DRIFT) ──
 CATALOG_TTL: dict[str, int] = {
