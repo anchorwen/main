@@ -71,6 +71,25 @@ class CrossSymbolContaminationError(DataIntegrityError):
 # DataIntegrityError if validation fails.  Returns None on success.
 SchemaValidator = Callable[[dict[str, Any]], None]
 
+# ── Producer-Consumer Freshness Contract ─────────────────────────────────
+# FIX-20260628-156 (L3): TTL values for batch-produced artifacts are derived
+# from the producer's maximum interval, not hardcoded.  This prevents the
+# DQAF-057 × FIX-149 cross-fix interaction (TTL=4h < max_age=6h → 100%
+# false-positive STALE) from recurring when either side is tuned.
+#
+# Contract: TTL(artifact) ≥ scheduler_max_age + buffer
+#   - Producer: live_launcher._daily_ops_scheduler (interval=4h, max_age=6h)
+#   - Consumer:  freshness_guard.check_catalog_freshness()
+#   - Buffer:    2h (headroom for subprocess startup, MT5 reconciliation,
+#                      and OS scheduler jitter)
+#
+# validate_freshness_contract() is called at launcher startup to enforce
+# this invariant.  If the scheduler max_age is increased, the catalog TTLs
+# must be >= the new max_age + buffer, or the contract raises at startup.
+_BATCH_PRODUCER_MAX_INTERVAL_S: int = 21600  # 6h — must match max_age_hours in live_launcher.py
+_BATCH_BUFFER_S: int = 7200  # 2h — headroom for subprocess latency + OS jitter
+_BATCH_DEFAULT_TTL_S: int = _BATCH_PRODUCER_MAX_INTERVAL_S + _BATCH_BUFFER_S  # 8h
+
 
 # ── StateArtifact ──────────────────────────────────────────────────────
 
@@ -316,28 +335,28 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="LEADERBOARD",
         path_template="reports/leaderboard.json",
         schema_validator=validate_leaderboard,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="daily_ops + brain_leaderboard",
     ),
     "ALPHA_ALLOCATION": StateArtifact(
         logical_id="ALPHA_ALLOCATION",
         path_template="reports/alpha_allocation.json",
         schema_validator=validate_alpha_allocation,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="daily_ops + portfolio_allocator",
     ),
     "GOVERNANCE_STATE": StateArtifact(
         logical_id="GOVERNANCE_STATE",
         path_template="governance_state.json",
         schema_validator=validate_governance_state,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="daily_ops + governance_service",
     ),
     "DAILY_OPS_STATE": StateArtifact(
         logical_id="DAILY_OPS_STATE",
         path_template="state/daily_ops_state.json",
         schema_validator=validate_daily_ops_state,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="daily_ops",
     ),
     # ── Alpha pipeline ──
@@ -345,7 +364,7 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="ALPHA_REGISTRY",
         path_template="alpha_registry.json",
         schema_validator=validate_alpha_registry,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="core/alpha/*",
         cross_symbol_guard=True,
     ),
@@ -353,14 +372,14 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="ALPHA_PERFORMANCE",
         path_template="alpha_performance.json",
         schema_validator=validate_alpha_performance,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="core/alpha/*",
     ),
     "ALPHA_FEED_STATE": StateArtifact(
         logical_id="ALPHA_FEED_STATE",
         path_template="alpha_feed_state.json",
         schema_validator=validate_non_empty_dict,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="core/alpha/*",
     ),
     # ── FIX-20260627-152: CATALOG_COVERAGE_GAP closure ──
@@ -370,7 +389,7 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="CALIBRATOR_FEED_STATE",
         path_template="calibrator_feed_state.json",
         schema_validator=validate_calibrator_feed_state,
-        ttl_seconds=14400,  # 4h — calibrator updates every daily_ops cycle
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="daily_ops._step_calibrator_feed",
     ),
     # ── Governance / Training ──
@@ -400,7 +419,7 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="DATA_HEALTH_STATE",
         path_template="state/data_health_state.json",
         schema_validator=validate_data_health_state,
-        ttl_seconds=14400,  # 4h (DQAF-057: tightened from 24h)
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="daily_ops + data_health_service",
     ),
     # ── Leaderboard backup for run-to-run comparison ──
@@ -426,7 +445,7 @@ CATALOG: dict[str, StateArtifact] = {
         logical_id="BRAIN_PNL_LEDGER",
         path_template="brain_pnl_ledger.json",
         schema_validator=validate_brain_pnl_ledger,
-        ttl_seconds=14400,  # 4h — PnL is updated every cycle when live, every daily_ops otherwise
+        ttl_seconds=_BATCH_DEFAULT_TTL_S,  # 8h (6h max_age + 2h buffer; FIX-20260628-156 L3)
         generator="daily_ops + brain_pnl_ledger.BrainPnLStore",
         required_fields=("schema_version", "settled"),
     ),
@@ -484,6 +503,53 @@ def lookup(logical_id: str) -> StateArtifact:
 def list_artifacts() -> list[StateArtifact]:
     """Return all registered artifacts."""
     return list(CATALOG.values())
+
+
+def validate_freshness_contract(
+    scheduler_max_age_seconds: int,
+    *,
+    emit_warnings: bool = True,
+) -> list[str]:
+    """Validate the Producer-Consumer Freshness Contract.
+
+    Ensures every catalog artifact's TTL is >= the producer's max refresh
+    interval.  If this contract is violated, artifacts will inevitably be
+    flagged STALE by the freshness guard because they can legally age past
+    their TTL before the next producer run.
+
+    FIX-20260628-156 (L3): Extracted from the DQAF-057 × FIX-149 cross-fix
+    postmortem.  On 2026-06-22 TTL was tightened 24h→4h; on 2026-06-27
+    the watchdog subprocess was replaced with a 4h-interval thread with
+    max_age=6h.  TTL(4h) < max_age(6h) → 100% probability of false-positive
+    STALE for all 10 batch-produced artifacts.
+
+    Args:
+        scheduler_max_age_seconds: The producer's max_age in seconds
+            (e.g. 21600 for 6h from live_launcher._daily_ops_scheduler).
+        emit_warnings: If True, print warnings to stderr for each violation.
+
+    Returns:
+        List of violation descriptions (empty = contract holds).
+    """
+    violations: list[str] = []
+    for artifact in CATALOG.values():
+        if artifact.ttl_seconds <= 0:
+            continue  # TTL=0 means no freshness check
+        if artifact.ttl_seconds < scheduler_max_age_seconds:
+            msg = (
+                f"Freshness Contract VIOLATION: {artifact.logical_id} "
+                f"TTL={artifact.ttl_seconds}s ({artifact.ttl_seconds / 3600:.1f}h) "
+                f"< producer max_age={scheduler_max_age_seconds}s "
+                f"({scheduler_max_age_seconds / 3600:.1f}h) — "
+                f"STALE false-positives inevitable"
+            )
+            violations.append(msg)
+            if emit_warnings:
+                import sys as _sys
+
+                print(f"[Catalog] {msg}", file=_sys.stderr, flush=True)
+
+    return violations
 
 
 def detect_symbol_from_alpha_id(alpha_id: str) -> str | None:

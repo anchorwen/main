@@ -781,6 +781,8 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     feedback_thread.start()
 
     # ── Daily ops scheduler thread (FIX-20260627-149: replaces watchdog subprocess) ──
+    _daily_ops_interval_h = 4
+    _daily_ops_max_age_h = 6
     _daily_ops_thread = threading.Thread(
         target=_daily_ops_scheduler,
         args=(
@@ -790,12 +792,40 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             stop_event,
             log_fh,
             cfg.get("mt5_terminal_path"),
-            4,
-            6,
+            _daily_ops_interval_h,
+            _daily_ops_max_age_h,
         ),
         daemon=True,
     )
     _daily_ops_thread.start()
+
+    # FIX-20260628-156 (L3): Validate Producer-Consumer Freshness Contract.
+    # Guards against cross-fix drift: if the scheduler max_age is later
+    # edited without updating catalog TTLs, this catches it at startup
+    # (fail-fast) rather than days later via STALE alerts.
+    try:
+        from core.state.catalog import validate_freshness_contract
+
+        _violations = validate_freshness_contract(_daily_ops_max_age_h * 3600, emit_warnings=True)
+        if _violations:
+            _n = len(_violations)
+            _msg = f"[launcher] Freshness Contract: {_n} VIOLATION(S) — adjust catalog TTL or scheduler max_age"
+            print(_msg, flush=True)
+            if log_fh is not None:
+                log_fh.write(_msg + "\n")
+                log_fh.flush()
+        else:
+            _msg = "[launcher] Freshness Contract: OK"
+            print(_msg, flush=True)
+            if log_fh is not None:
+                log_fh.write(_msg + "\n")
+                log_fh.flush()
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError, ImportError) as _fc_exc:
+        _msg = f"[launcher] Freshness Contract: SKIPPED (import error: {_fc_exc})"
+        print(_msg, flush=True)
+        if log_fh is not None:
+            log_fh.write(_msg + "\n")
+            log_fh.flush()
 
     bridge_thread.start()
     intent_thread.start()

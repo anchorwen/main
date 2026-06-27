@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-27T15:04:45Z
+> **自动生成**: 2026-06-27T16:36:48Z
 > **扫描模块数**: 685
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -570,7 +570,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `catalog.py` | ✅ active | DataIntegrityError, CrossSymbolContaminationError, StateArtifact | 21 | 497 | — | |
+| `catalog.py` | ✅ active | DataIntegrityError, CrossSymbolContaminationError, StateArtifact | 22 | 563 | — | |
 | `freshness_guard.py` | ✅ active | FreshnessEntry | 8 | 458 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `writer.py` | ✅ active | StateWriter | 13 | 326 | — | |
@@ -696,7 +696,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 39 | 3354 | — | |
+| `daily_ops.py` | ✅ active | — | 39 | 3361 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -735,7 +735,7 @@
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
 | `live_intent_loop.py` | ✅ active | — | 6 | 2808 | — | |
-| `live_launcher.py` | ✅ active | — | 15 | 1127 | — | |
+| `live_launcher.py` | ✅ active | — | 15 | 1157 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |

@@ -3018,6 +3018,13 @@ def run_daily_ops(
                 )
             else:
                 _rec_steps.append({"step": "ledger_retention", "status": "ok", "entries_pruned": 0})
+            # FIX-20260628-156 (L2): Touch the file mtime even when nothing
+            # was pruned.  Without this, the freshness guard flags the
+            # ledger as STALE because its mtime only updates when
+            # retention_prune() returns non-empty entries.  On low-volume
+            # symbols (BTC with <90d history) this may never happen,
+            # causing a permanent STALE alert for a valid file.
+            _ledger_path.touch(exist_ok=True)
         steps.extend(_rec_steps)
     except Exception as _exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         try:  # BLE001:FOG (was: FOG/LAC)
