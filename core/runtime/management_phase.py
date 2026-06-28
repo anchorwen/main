@@ -468,9 +468,14 @@ def _evaluate_brain_ensemble(
                                 _mgmt_aug = getattr(state, "_btc_augmenter", None)
                                 if _mgmt_aug is not None:
                                     try:
+                                        # FIX-20260628-059 / DQAF-059: pass zero-filled
+                                        # micro features (9-dim) instead of None.
+                                        # np.asarray(None, dtype=np.float64) creates
+                                        # array(nan) which propagates into the output
+                                        # vector and triggers AssertionError.
                                         _mgmt_btc_aug = _mgmt_aug.augment(
                                             fv_24,
-                                            None,  # micro features not available in mgmt phase
+                                            np.zeros(9, dtype=np.float64),
                                             btc_price=mid or 0.0,
                                             tf_ou=tf_ou,
                                             tf_hurst=tf_hurst,

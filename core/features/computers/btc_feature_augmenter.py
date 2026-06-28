@@ -80,6 +80,7 @@ class BTCFeatureAugmenter:
         self._xau_stale_count = 0
         self._audjpy_fail_count = 0
         self._xau_price_fail_count = 0  # FIX-138: XAU price fetch for BTC/XAU ratio
+        self._nan_fail_count = 0  # FIX-20260628-059: NaN/Inf sanitization counter
         self._first_augment_logged = False  # one-shot confirmation on first success
 
         # ── FIX-20260614-B3-feat: Stateful regime derivative tracking ──
@@ -124,8 +125,18 @@ class BTCFeatureAugmenter:
             [39]     TF_OU_x_Hurst     = tf_ou * (1-tf_hurst) (mean-reversion signal)
             [40]     TF_OU_div_ADX     = tf_ou / max(ADX,1) (regime vs trend)
         """
-        daily = np.asarray(daily_arr_24, dtype=np.float64).ravel()
-        micro = np.asarray(micro_arr_9, dtype=np.float64).ravel()
+        # ── FIX-20260628-059 / DQAF-059: None-safe array coercion ──
+        # np.asarray(None, dtype=np.float64) produces array(nan) — a scalar
+        # NaN that propagates through padding into the output vector.
+        # Defend with explicit None→zeros conversion BEFORE asarray().
+        if daily_arr_24 is None:
+            daily = np.zeros(24, dtype=np.float64)
+        else:
+            daily = np.asarray(daily_arr_24, dtype=np.float64).ravel()
+        if micro_arr_9 is None:
+            micro = np.zeros(9, dtype=np.float64)
+        else:
+            micro = np.asarray(micro_arr_9, dtype=np.float64).ravel()
 
         if len(daily) < 24:
             daily = np.pad(daily, (0, 24 - len(daily)))
@@ -186,9 +197,39 @@ class BTCFeatureAugmenter:
         fv[39] = btc_xau_ratio
         fv[40] = btc_xau_ratio_roc
 
-        # ── Safeguard 3: Post-assertion ──
-        assert fv.shape == (41,), f"CRITICAL: BTCFeatureAugmenter output shape {fv.shape} != (41,)"
-        assert not np.isnan(fv).any(), "CRITICAL: NaN detected in BTC augmented feature vector"
+        # ── FIX-20260628-059 / DQAF-059: Safeguard 3 — Sanitize, don't crash ──
+        # Replace hard asserts with nan_to_num + debounced warning.
+        # An assertion failure in a trading pipeline is a system crash;
+        # NaN in a feature slot is a data quality issue that should be
+        # sanitized (fail-open with audit trail), not escalated to crash.
+        if fv.shape != (41,):
+            _log.error(
+                "BTCFeatureAugmenter: CRITICAL shape mismatch %s != (41,). "
+                "Truncating/padding to 41.",
+                fv.shape,
+            )
+            if len(fv) < 41:
+                fv = np.pad(fv, (0, 41 - len(fv)))
+            else:
+                fv = fv[:41]
+
+        _nan_mask = np.isnan(fv)
+        _inf_mask = np.isinf(fv)
+        _bad_count = int(np.sum(_nan_mask)) + int(np.sum(_inf_mask))
+        if _bad_count > 0:
+            _nan_slots = np.where(_nan_mask)[0].tolist()
+            _inf_slots = np.where(_inf_mask)[0].tolist()
+            self._nan_fail_count += 1
+            if self._nan_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
+                _log.warning(
+                    "BTCFeatureAugmenter: sanitized %d NaN/Inf values in output vector "
+                    "(NaN slots=%s, Inf slots=%s). Zero-filling. (occurred %d times)",
+                    _bad_count,
+                    _nan_slots,
+                    _inf_slots,
+                    self._nan_fail_count,
+                )
+            fv = np.nan_to_num(fv, nan=0.0, posinf=0.0, neginf=0.0, copy=False)
 
         if not self._first_augment_logged:
             self._first_augment_logged = True

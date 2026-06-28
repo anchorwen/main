@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T03:06:04Z
+> **自动生成**: 2026-06-28T03:33:59Z
 > **扫描模块数**: 688
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -305,7 +305,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 388 | — | |
+| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 429 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 223 | — | |
 | `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 573 | — | |
@@ -520,7 +520,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4256 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 8 | 1642 | — | |
+| `management_phase.py` | ✅ active | — | 8 | 1647 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
