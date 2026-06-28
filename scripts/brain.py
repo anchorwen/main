@@ -514,10 +514,12 @@ def cmd_reconcile(
         perf_data = json.loads(perf_path.read_text(encoding="utf-8"))
 
     # ── 1. Config → Governance status alignment ──
-    # FIX-20260613-076: Config status is a REGISTRATION DEFAULT, not an override.
-    # Once a brain is in governance, the governance system owns its lifecycle.
-    # Runtime promotions (candidate→probation→live) must NOT be reverted to
-    # config defaults.  Only register NEW brains that are missing from governance.
+    # FIX-20260628-163: Config status is a MINIMUM FLOOR, not just a
+    # registration default.  Governance may promote above config
+    # (candidate→live via auto_promote_healthy), but MUST NOT demote
+    # below config (live→probation via auto_demote_degraded).
+    # Config = human SSOT; governance = automated executor within
+    # human-set bounds.
     print("\n── 1. Governance status alignment ──")
     for bid, info in brain_configs.items():
         cfg = info["config"]
@@ -540,14 +542,32 @@ def cmd_reconcile(
                 }
                 issues_fixed += 1
         elif gov_status != cfg_status:
-            # Brain already in governance — config is informational only.
-            # Runtime governance owns the lifecycle.  Log drift for human review
-            # but do NOT auto-correct.
-            direction = "↑" if _status_rank(gov_status) > _status_rank(cfg_status) else "↓"
-            print(
-                f"  INFO: {bid} gov={gov_status} cfg={cfg_status} {direction}"
-                f" — governance owns lifecycle, not auto-correcting"
-            )
+            cfg_rank = _status_rank(cfg_status)
+            gov_rank = _status_rank(gov_status)
+            if gov_rank < cfg_rank:
+                # Governance is BELOW config floor — restore to config.
+                # Config is human SSOT; automated demotion must respect
+                # the floor the human set.
+                direction = "↑"
+                print(
+                    f"  FIX: {bid} gov={gov_status} cfg={cfg_status} {direction}"
+                    f" — governance below config floor, restoring to {cfg_status}"
+                )
+                if auto_fix:
+                    gov_states[bid]["status"] = cfg_status
+                    gov_states[bid]["last_transition_at"] = _utc_now_iso()
+                    gov_states[bid]["transition_count"] = (
+                        gov_states[bid].get("transition_count", 0) + 1
+                    )
+                    issues_fixed += 1
+            else:
+                # Governance promoted ABOVE config floor — legitimate
+                # auto-promotion.  Keep governance status.
+                direction = "↑" if gov_rank > cfg_rank else "→"
+                print(
+                    f"  INFO: {bid} gov={gov_status} cfg={cfg_status} {direction}"
+                    f" — governance promoted above config floor, keeping gov status"
+                )
             # Vote weight sync: only apply if gov has no explicit vote_weight
             gov_vw = gov_state.get("vote_weight")
             if gov_vw is None and cfg_vw != 0.5:

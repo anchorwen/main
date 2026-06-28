@@ -196,7 +196,19 @@ class GovernanceRuleEngine:
             if ctx.get("health_signal") != "degraded" or ctx.get("sample_count", 0) < 15:
                 return False
             state = gs.get_brain_state(ctx["brain_id"])
-            return state is not None and state.get("status") == "live"
+            if state is None or state.get("status") != "live":
+                return False
+            # FIX-20260628-162: Don't demote the LAST live brain.
+            # Demoting the sole live brain triggers DQAF-059 (0 live →
+            # fail-closed p_win=0.40 → all trading blocked).  A degraded
+            # live brain still trades with guard parameters; zero live
+            # brains blocks the entire trading pipeline.
+            live_brains = [
+                bid for bid, bs in gs.get_all_states().items() if bs.get("status") == "live"
+            ]
+            if len(live_brains) <= 1:
+                return False
+            return True
 
         engine.add_rule(
             GovernanceRule(

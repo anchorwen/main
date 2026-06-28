@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T08:58:47Z
+> **自动生成**: 2026-06-28T09:20:13Z
 > **扫描模块数**: 689
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -344,7 +344,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `governance_rule_engine.py` | ✅ active | GovernanceRule, GovernanceRuleEngine | 15 | 349 | — | |
+| `governance_rule_engine.py` | ✅ active | GovernanceRule, GovernanceRuleEngine | 15 | 361 | — | |
 | `governance_service.py` | ✅ active | GovernanceService | 17 | 264 | — | |
 | `shadow_tracker.py` | ✅ active | ShadowBrainMetrics, ShadowTracker | 9 | 132 | — | |
 
@@ -675,7 +675,7 @@
 | `ble001_phase3c_fog_wrap.py` | ✅ active | — | 4 | 159 | — | |
 | `ble001_phase3d_coldpath_fog_wrap.py` | ✅ active | — | 5 | 227 | — | |
 | `ble001_phase3e_deferred_fog_wrap.py` | ✅ active | — | 4 | 231 | — | |
-| `brain.py` | ✅ active | — | 13 | 786 | — | |
+| `brain.py` | ✅ active | — | 13 | 806 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 121 | — | |
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
