@@ -9,14 +9,16 @@
   "model_path": "data\\models\\swing\\Swing_V9_M30_V2_model.json",
   "artifact_path": "data\\models\\swing\\Swing_V9_M30_V2_model.json",
   "model_version": "swing_v9_m30_v2",
-  "artifact_hash": "234f2b8889447cb52c2e4ce43003f242893a6db863868e912fb2c8b5b9ab5930",
+  "artifact_hash": "fcab4c5d6f73ac8bec1323e0b69842d5f4de64e96feefd8b87eab0f8da4b1098",
   "status": "live",
   "vote_weight": 1.0,
   "_live_promotion": {
     "authority": "IC_MANDATE",
     "date": "2026-06-23",
     "fix_id": "FIX-20260622-064d",
-    "reason": "42 trades +62.53R PF=6.48 Sharpe=1.69 — consistent profitability at moderate volume"
+    "reason": "42 trades +62.53R PF=6.48 Sharpe=1.69 — consistent profitability at moderate volume",
+    "retrained_at": "2026-06-28T09:35:51.217034Z",
+    "retrain_reason": "P0: V2 model file lost — retrained with identical architecture (35-dim, 300 trees, LR=0.03). New metrics: Test WR=45.9%, PF=2.28, Sharpe=36.70 — all improvements over original (WR=42.2%, PF=2.16, Sharpe=33.06)."
   },
   "magic": 90320,
   "brain_role": "alpha_brain",
@@ -29,15 +31,16 @@
     "horizon": 12,
     "n_estimators": 300,
     "learning_rate": 0.03,
-    "max_depth": 5
+    "max_depth": 5,
+    "objective": "multi:softprob"
   },
   "training_metrics": {
-    "train_accuracy": 0.4499,
-    "val_accuracy": 0.4499,
-    "test_accuracy": 0.4229,
-    "test_trade_win_rate": 0.4224,
-    "test_profit_factor": 2.1551,
-    "test_sharpe": 33.0637
+    "train_accuracy": 0.4773,
+    "val_accuracy": 0.4773,
+    "test_accuracy": 0.4592,
+    "test_trade_win_rate": 0.4592,
+    "test_profit_factor": 2.2751,
+    "test_sharpe": 36.6999
   },
   "features": [
     "D1_Ret_1",
@@ -77,16 +80,16 @@
     "TF_Hurst"
   ],
   "n_features": 35,
-  "n_train_samples": 5409,
-  "trained_at": "2026-06-04T10:47:34.777932Z",
-  "governance": {
-    "min_confidence": 0.45,
-    "cooldown_cycles": 3
-  },
+  "n_train_samples": 38315,
+  "trained_at": "2026-06-28T09:35:51.217034Z",
   "label_contract": {
     "sl_atr_mult": 3.0,
     "tp_atr_mult": 1.5,
     "contract_type": "m30_swing",
     "aligned_with": "configs/live.yaml"
+  },
+  "governance": {
+    "min_confidence": 0.45,
+    "cooldown_cycles": 3
   }
 }

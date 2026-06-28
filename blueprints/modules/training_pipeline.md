@@ -76,6 +76,7 @@ Promotion pipeline (shadow → live)
 ## Fix History
 | Fix ID | Date | Summary | Root Cause |
 |--------|------|---------|------------|
+| FIX-20260628-164 | 2026-06-28 | **P0: XAU Swing_V9_M30_V2 模型回训 (L1)**. V2 模型文件丢失 (artifact_path 指向不存在文件), 使用同架构 (35-dim xgboost_v9, 300 trees, LR=0.03, SL=3.0/TP=1.5) 完整回训: build_swing_enhanced_dataset.py → train_swing_v9.py。新模型指标全面超越原版: Test WR 42.2%→45.9%, PF 2.16→2.28, Sharpe 33.06→36.70。配置已更新 (artifact_hash, training_metrics, objective=multi:softprob, label_contract). | L1 — model file lost on disk, config/architecture preserved |
 | FIX-20260628-160 | 2026-06-28 | **XAU 训练就绪合约 + check_training_readiness.py 泛化 (L2)**. 创建 training_pipeline_xau_swing_v3.json (35-dim, v9_institutional_40 Feature Store, build_swing_enhanced_dataset.py builder). check_training_readiness.py 符号检测 / 模式处理 / builder 调用全部合约驱动 (builder_script, builder_args, builder_output_arg). XAU training_readiness.json 已生成, audit_state 12/12. | RC-12 — missing-feature: XAU 无训练流水线合约 |
 | FIX-20260617-003 | 2026-06-17 | TECH_DEBT-004 RESOLVED — BTC 41-dim retraining complete | — |
 | FIX-20260617-100 | 2026-06-17 | MetaFilter V3 — 102 samples, 47-dim | — |
