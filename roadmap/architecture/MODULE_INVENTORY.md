@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T16:08:42Z
+> **自动生成**: 2026-06-28T17:00:26Z
 > **扫描模块数**: 691
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -421,7 +421,7 @@
 | `alert_runbook_bridge.py` | ✅ active | RunbookAction, RunbookSOP, AlertRunbookBridge | 10 | 502 | — | |
 | `alert_service.py` | 🧪 stub | AlertRule, AlertChannel, LogAlertChannel, InMemoryAlertChannel, BatchingAlertChannel, SeverityRouter, AlertService | 28 | 479 | — | |
 | `audit_log.py` | ✅ active | StructuredAuditLog | 11 | 180 | — | |
-| `data_health_schema.py` | ✅ active | Tier, SourceStatus, SourceCheckResult, CrossCheckResult, OrphanFinding, BehavioralMetrics, HealthReport, HealthCheckMeta, SourceHealthRecord | 5 | 293 | — | |
+| `data_health_schema.py` | ✅ active | Tier, SourceStatus, SourceCheckResult, CrossCheckResult, OrphanFinding, BehavioralMetrics, HealthReport, HealthCheckMeta, SourceHealthRecord | 5 | 300 | — | |
 | `data_health_service.py` | ✅ active | DataHealthService | 9 | 315 | — | |
 | `data_loss.py` | ✅ active | — | 1 | 103 | — | |
 | `degradation.py` | ✅ active | DegradationLevel, DegradationConstraints | 4 | 267 | — | |
@@ -429,7 +429,7 @@
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
 | `event_bus.py` | ✅ active | EventBus | 7 | 65 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | 🧪 stub | HealthCheckMethods | 40 | 2731 | — | |
+| `health_checks.py` | 🧪 stub | HealthCheckMethods | 40 | 2777 | — | |
 | `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
 | `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 927 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
@@ -892,7 +892,7 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 7 | 686 | — | |
+| `governance_scheduler.py` | ✅ active | — | 7 | 709 | — | |
 | `label_builder.py` | ✅ active | — | 19 | 1044 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |

@@ -170,6 +170,14 @@ def get_checks(tier: Tier | None = None) -> list[HealthCheckMeta]:
 DEFAULT_THRESHOLDS: dict[str, float | int] = {
     # Feature store
     "feature_store_max_age_minutes": 15,
+    # FIX-20260629-172: Cold-start grace — system needs time to bootstrap
+    # features after restart.  During this window FEATURE_STORE_STALE is
+    # downgraded from FAIL to WARN (FEATURE_STORE_COLD_START).
+    "feature_store_cold_start_grace_minutes": 10,
+    # FIX-20260629-172: Post-outage threshold — when feature store age
+    # exceeds 24 h the system was almost certainly shut down over a weekend
+    # or maintenance window, not running with a broken pipeline.
+    "feature_store_post_outage_threshold_minutes": 1440,
     "feature_store_max_zero_pct": 0.30,
     "feature_store_max_nan_pct": 0.05,
     "feature_store_expected_growth_per_hour": 12,  # M5 = 12 records/hour
@@ -252,8 +260,7 @@ def build_alert_context(report: HealthReport) -> dict[str, Any]:
         "cross_source_discrepancy_count": cross_fail,
         "orphan_subsystem_count": len(report.orphans),
         "stale_state_file_count": sum(
-            1 for s in report.sources
-            if "STALE" in s.primary_code or "STALENESS" in s.primary_code
+            1 for s in report.sources if "STALE" in s.primary_code or "STALENESS" in s.primary_code
         ),
         "data_health_overall": report.alert_level,
         # Structured payload (D1): list[dict] — channel renders as bullet sections

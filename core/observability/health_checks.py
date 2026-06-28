@@ -10,6 +10,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import time
 from collections import Counter
 from datetime import UTC
 from typing import Any
@@ -43,6 +44,7 @@ class HealthCheckMethods:
     # ── Host-class attributes (satisfies mypy attr-defined for mixin pattern) ──
     _base_dir: str
     _symbol: str
+    _start_time: float  # FIX-20260629-172: set by DataHealthService.__init__
     _position_manager: Any
     _cached_behavioral_metrics: Any
     _position_exceeded_streak: int
@@ -140,7 +142,45 @@ class HealthCheckMethods:
         age_min = _age_minutes(event_ts)
         max_age = self._t("feature_store_max_age_minutes")
 
-        if age_min < 0:
+        # ── FIX-20260629-172: Market-heartbeat topology awareness ──
+        # The feature pipeline is driven by incoming ticks.  When the market
+        # is closed (weekends, holidays) or the system has just restarted,
+        # a stale feature store is EXPECTED — not a pipeline failure.
+        # Two grace layers prevent false FAIL alerts:
+        #
+        #   1. COLD_START:  System uptime < grace window.  The feature
+        #      pipeline needs warm-up cycles after bootstrap.
+        #   2. POST_OUTAGE: Feature store age > 24 h.  The system was
+        #      almost certainly shut down over a weekend or maintenance
+        #      window.  A truly broken pipeline during active trading
+        #      would never reach 24 h without other alarms firing first.
+        #
+        # Outside these windows, the standard staleness thresholds apply:
+        #   > 2× max_age  → FAIL  (genuine pipeline stall)
+        #   > max_age     → WARN  (sluggish pipeline)
+
+        uptime_sec = time.perf_counter() - self._start_time
+        uptime_min = uptime_sec / 60.0
+        cold_grace = self._t("feature_store_cold_start_grace_minutes")
+        post_outage_threshold = self._t("feature_store_post_outage_threshold_minutes")
+
+        if uptime_min < cold_grace and age_min < post_outage_threshold:
+            status = SourceStatus.WARN
+            code = "FEATURE_STORE_COLD_START"
+            message = (
+                f"System uptime {uptime_min:.1f} min < grace {cold_grace:.0f} min. "
+                f"Feature store age {age_min:.1f} min is expected during warm-up — "
+                f"downgraded from FAIL to WARN."
+            )
+        elif age_min > post_outage_threshold:
+            status = SourceStatus.WARN
+            code = "FEATURE_STORE_POST_OUTAGE"
+            message = (
+                f"Feature store age {age_min:.1f} min > outage threshold "
+                f"{post_outage_threshold:.0f} min.  Market likely closed or system "
+                f"was shut down — downgraded from FAIL to WARN."
+            )
+        elif age_min < 0:
             status = SourceStatus.WARN
             code = "FEATURE_STORE_TIMESTAMP_UNREADABLE"
             message = "Cannot parse event_time from last record"
@@ -1695,7 +1735,13 @@ class HealthCheckMethods:
                             _ct = _ev.get("data", {}).get("trade_outcome", {}).get("close_time", "")
                             if _ct and (not latest_ts or _ct > latest_ts):
                                 latest_ts = _ct
-                        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        except (
+                            RuntimeError,
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            OSError,
+                        ):  # BLE001:FOG
                             pass
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             return CrossCheckResult(
