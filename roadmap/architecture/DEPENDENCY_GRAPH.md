@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-28T09:38:45Z
+> **自动生成**: 2026-06-28T10:51:07Z
 
 ## Package-Level Dependencies
 
@@ -711,6 +711,7 @@
 - `train_btc_metafilter_v2.py` → (无内部依赖)
 - `train_metafilter_path_b.py` → (无内部依赖)
 - `train_regime_aware_btc.py` → (无内部依赖)
+- `train_xau_metafilter.py` → (无内部依赖)
 - `training_strategy_report.py` → (无内部依赖)
 - `validate_artifacts.py` → (无内部依赖)
 - `validate_blueprints.py` → (无内部依赖)

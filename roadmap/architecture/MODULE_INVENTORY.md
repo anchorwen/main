@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T09:38:45Z
-> **扫描模块数**: 689
+> **自动生成**: 2026-06-28T10:51:07Z
+> **扫描模块数**: 690
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -680,7 +680,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 704 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 705 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -795,6 +795,7 @@
 | `train_btc_metafilter_v2.py` | ✅ active | — | 7 | 343 | — | |
 | `train_metafilter_path_b.py` | ✅ active | — | 3 | 223 | — | |
 | `train_regime_aware_btc.py` | ✅ active | — | 3 | 256 | — | |
+| `train_xau_metafilter.py` | ✅ active | — | 10 | 531 | — | |
 | `training_strategy_report.py` | ⬜ empty | — | 0 | 172 | — | |
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
 | `validate_blueprints.py` | ✅ active | — | 8 | 358 | — | |

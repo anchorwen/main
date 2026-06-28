@@ -383,6 +383,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/backtest_structural_swing.py",
         "scripts/build_btc_metafilter_v2_dataset.py",
         "scripts/train_btc_metafilter_v2.py",
+        "scripts/train_xau_metafilter.py",
         "scripts/task_a_directional_closure.py",
         "scripts/analyze_shadow_predictions.py",
         "scripts/optimize_sltp_params.py",
