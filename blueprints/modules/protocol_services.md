@@ -128,3 +128,4 @@ python -m pytest tests/ -k "protocol or dispatch or circuit" -q
 
 | FIX-20260626-144 | 2026-06-26 | JournalGate + PnlGuard + JournalSLA integration in _append_journal. Orphan prevention, pnl null-guard, quarantine poison pill. | L3 — missing-feature |
 | FIX-20260626-144-R1 | 2026-06-26 | _append_journal dedup: allow mt5_reconciliation _source to bypass same-ticket close dedup so Pass 1 correction entries can write (original blocked all second closes → PnL normalization silently discarded). | L2 — in-memory mutation never persisted |
+| FIX-20260628-058b | 2026-06-28 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/audit_btc_live_direction.py` + `scripts/forensic_feature_analysis.py` to `monitor_dashboard` module (DQAF-058 diagnostic tools). | RC-09 |

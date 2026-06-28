@@ -90,6 +90,7 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 | FIX-20260613-088r | 2026-06-13 | cursor-agent | — | **AlertService context_snapshot filter fix**: isinstance check only allowed str\ | int\ |
 | FIX-20260613-089 | 2026-06-13 | cursor-agent | — | **journal_completeness dupes threshold desensitization**: raised `dupes > 0` → `dupes > 5` in `check_journal_completeness()`. Original threshold caused alert fatigue (CRITICAL alert for 2 dupes with zero PnL impact). In async retry-reentrant architecture, occasional dupes are expected until Phase 2 Event Sourcing delivers idempotent journal writes. Tech debt: `TODO-20260711-journal-idempotency`. | RC-06 |
 | FIX-20260625-137 | 2026-06-25 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/diagnose_mypy_baseline.py`. Iron Law #11 diagnostic script for mypy baseline regression analysis and roadmap target gap assessment. | RC-09 |
+| FIX-20260628-058b | 2026-06-28 | cursor-agent | — | DQAF-058 diagnostics: add `scripts/audit_btc_live_direction.py` (Iron Law #11 compliant BTC live brain direction audit) + `scripts/forensic_feature_analysis.py` (feature distribution forensics for direction bias root cause). Both scripts write stats to stdout only. | RC-09 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

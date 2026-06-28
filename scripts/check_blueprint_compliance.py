@@ -322,6 +322,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/verify_dqaf044_fix_effect.py",
         "scripts/audit_entry_spread_coverage.py",
         "scripts/diagnose_mypy_baseline.py",
+        "scripts/audit_btc_live_direction.py",  # DQAF-058: BTC direction bias audit
+        "scripts/forensic_feature_analysis.py",  # DQAF-058: feature distribution forensics
     ],
     "runtime_live": [
         "main.py",

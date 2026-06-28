@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T03:33:59Z
+> **自动生成**: 2026-06-28T03:44:53Z
 > **扫描模块数**: 688
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -641,7 +641,7 @@
 | `audit_behavior_compliance.py` | ✅ active | — | 5 | 437 | — | |
 | `audit_brain_fleet.py` | ✅ active | — | 1 | 307 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
-| `audit_btc_live_direction.py` | ✅ active | — | 7 | 281 | — | |
+| `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
@@ -679,7 +679,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 700 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 702 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -717,7 +717,7 @@
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
-| `forensic_feature_analysis.py` | ✅ active | — | 2 | 280 | — | |
+| `forensic_feature_analysis.py` | ✅ active | — | 2 | 294 | — | |
 | `generate_btc_empirical_scaler.py` | ✅ active | — | 3 | 221 | — | |
 | `generate_micro_scaler.py` | ✅ active | — | 5 | 320 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
