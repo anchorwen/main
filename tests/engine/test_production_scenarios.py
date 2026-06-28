@@ -100,9 +100,12 @@ class TestStressGovernanceCascade:
                 c.brain_tracker.record_outcome(b, {"composite_score": 0.05})
         smap = {s["brain_id"]: s for s in c.brain_tracker.get_all_summaries()}
         fired = c.governance_rule_engine.evaluate(smap)
-        assert len(fired) == 3
-        for b in ["alpha", "beta", "gamma"]:
-            assert c.governance_service.get_brain_state(b)["status"] in ("frozen", "probation")
+        # FIX-20260628-162: last-live guard protects the final live brain
+        # from demotion.  alpha + beta → probation; gamma → stays live.
+        assert len(fired) == 2
+        assert c.governance_service.get_brain_state("alpha")["status"] == "probation"
+        assert c.governance_service.get_brain_state("beta")["status"] == "probation"
+        assert c.governance_service.get_brain_state("gamma")["status"] == "live"
 
     def test_mixed_health_correct_transitions(self, tmp_path):
         c, _ = _sys(tmp_path)

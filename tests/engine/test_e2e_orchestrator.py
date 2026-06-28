@@ -293,6 +293,10 @@ class TestGovernanceRuleEngine:
     def test_auto_demote_degraded_live(self):
         gs = GovernanceService()
         gs.register_brain("degraded", "live")
+        # FIX-20260628-162: last-live guard requires ≥2 live brains
+        # before auto_demote_degraded can fire.  Register a second
+        # live brain so the degraded one is demotable.
+        gs.register_brain("other_live", "live")
         engine = GovernanceRuleEngine.with_default_rules(gs)
         fired = engine.evaluate(
             {
@@ -305,6 +309,8 @@ class TestGovernanceRuleEngine:
         )
         assert any(r.get("transition_to") == "probation" for r in fired)
         assert gs.get_brain_state("degraded")["status"] == "probation"
+        # guard: other_live was not evaluated → stays live
+        assert gs.get_brain_state("other_live")["status"] == "live"
 
     def test_custom_rule(self):
         gs = GovernanceService()
