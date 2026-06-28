@@ -27,6 +27,36 @@
 
 ---
 
+### CCT-20260628-062
+- **Docket ID**: DQAF-20260628-062
+- **日期**: 2026-06-28
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU governance_state.json 仅含 18 大脑条目，但 configs/brains/ 下存在 ~49 个 brain_registry_entry.v1 配置。PnLStore 有 49 大脑的 144K settled 记录，但 governance leaderboard 仅显示 18 大脑有指标注入。`governance_service.py:146-148` — `set_performance_metrics()` 对未注册大脑静默跳过（`_brain_states.get(brain_id)` 返回 None → 无操作，无日志，无告警）。
+  - [Layer 2 — 中间异常]: Config→Governance 仅在 `_load_or_create_governance()` 首次创建时同步一次 (`daily_ops.py:117-144`)。后续新增 config 文件不会触发 governance 注册。配置状态变更 (candidate→live) 只在首次注册时写入 governance，之后 governance 独立演变 → 双轨漂移。
+  - [Layer 3 — 根因]: RC-12 (missing-feature) + RC-09 (config-drift) — 缺少自动化 Config→Governance 对齐管道。FIX-20260613-076 确立 "governance owns lifecycle" 契约（正确），但未补充 "config defines existence" 的匹配机制。两者共同导致：config 定义大脑存在，governance 不知道自己需要管理它们。
+- **证据引用**:
+  - Source 1: `governance_service.py:146-148` — `self._brain_states.get(brain_id)` 静默跳过
+  - Source 2: `daily_ops.py:117-144` — 首次创建时一次性同步，无后续对齐
+  - Source 3: `daily_ops.py:3048-3056` — cmd_reconcile 已存在但仅处理 PnL ledger
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260628-CONFIG_GOVERNANCE_DUAL_TRACK_DRIFT
+
+### CCT-20260628-061
+- **Docket ID**: DQAF-20260628-061
+- **日期**: 2026-06-28
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 49 XAU 大脑在 BrainPnLStore 中有指标数据 (144K+ settled 记录) 但 governance_state 中仅 18 大脑有非空 `performance_metrics`。31 大脑的指标完全不可见于 downstream (leaderboard, weighter, strategy_evaluator)。
+  - [Layer 2 — 中间异常]: (A) `governance_scheduler.py:347-350` — 循环遍历 `all_metrics`（来自 PnLStore 的 49 大脑），调用 `governance.set_performance_metrics()`，但 `governance_service.py:146-148` 因大脑未注册而静默跳过。(B) `scheduler_service.py:298-317` — MT5 调度器 purge 逻辑检查 `source` 字段清除 backtest 指标，但 `daily_ops` → `governance_scheduler` 使用 `_data_source` 字段 → 字段名不匹配 → 合法 daily_ops 注入指标被作为 stale backtest 清除。(C) Journal-based metrics 因 80% XAU entries 缺少 `position_ticket` (有别于 BTC 的 `event` 字段) → `compute_journal_brain_metrics()` 跳过无 ticket 条目 → journal 无法为缺少大脑提供 fallback。
+  - [Layer 3 — 根因]: RC-06 (contract-violation) + RC-09 (config-drift) — `set_performance_metrics()` 的静默跳过是合约违规：调用方期望指标被注入，实现方因未注册而吞没数据。`_data_source` vs `source` 字段名分裂是配置漂移：两个独立演进子系统约定不同的字典键名。
+- **证据引用**:
+  - Source 1: `governance_service.py:146-148` — 静默跳过逻辑
+  - Source 2: `scheduler_service.py:298-301` — purge 仅检查 `source` 不检查 `_data_source`
+  - Source 3: `governance_scheduler.py:377-379` — daily_ops 使用 `_data_source` 键名
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260628-GOVERNANCE_REGISTRATION_SILENT_SKIP
+
 ### CCT-20260626-001
 - **Docket ID**: DQAF-20260626-001
 - **日期**: 2026-06-26

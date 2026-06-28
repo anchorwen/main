@@ -20,6 +20,32 @@
 
 ---
 
+### ReB-20260628-GOVERNANCE_REGISTRATION_SILENT_SKIP
+- **Pattern Signature**: `GOVERNANCE_REGISTRATION_SILENT_SKIP`
+- **Date Cataloged**: 2026-06-28
+- **Source Docket**: DQAF-20260628-061
+- **Related**: ReB-20260628-CONFIG_GOVERNANCE_DUAL_TRACK_DRIFT, FIX-20260529-035 (`P0.1 State Injection`)
+
+**Definition**: A data injection method (`set_performance_metrics()`) accepts data for any brain_id but silently discards it when the brain doesn't exist in `_brain_states`. The caller (PnLStore/metrics pipeline) has no way to know the injection failed — no return value, no exception, no log. Combined with a second factor (field name mismatch `source` vs `_data_source` causing trusted metrics to be purged), this creates a "silent disconnect" where rich data exists in the data layer but never reaches the governance layer.
+
+**Prevention**: Auto-registration gate before injection. Every `set_performance_metrics()` call site must be preceded by `if not governance.get_brain_state(brain_id): governance.register_brain(brain_id, "candidate")`. Purge logic must check ALL source markers (both `source` and `_data_source`). Field name contracts must be validated at integration boundaries.
+
+**Detection**: `bootstrap_registered` count in daily_ops report. If > 0 after initial run, previous cycles were blind. Automated check: `assert len(pnl_store.brain_ids - governance.brain_ids) == 0` in reconcile step.
+
+### ReB-20260628-CONFIG_GOVERNANCE_DUAL_TRACK_DRIFT
+- **Pattern Signature**: `CONFIG_GOVERNANCE_DUAL_TRACK_DRIFT`
+- **Date Cataloged**: 2026-06-28
+- **Source Docket**: DQAF-20260628-062
+- **Related**: FIX-20260613-076 (`Governance Owns Lifecycle`), FIX-20260529-034 (`SSOT Reconciliation`)
+
+**Definition**: Two systems (Config files + Governance state) separately define "which brains exist." Config (brain_registry_entry.v1) is the SSOT for existence — governance is the SSOT for lifecycle status. But the sync between them only runs at governance creation time (`_load_or_create_governance`), not on every cycle. Adding a new brain config → new brain registered only if governance JSON doesn't exist yet. Config status changes (e.g. candidate→live in config) create "drift" because governance independently tracks its own status per the governance-owns-lifecycle contract. This is a correct architectural separation BUT requires an explicit reconciliation gate to prevent the two tracks from diverging permanently.
+
+**Prevention**: Per-cycle reconciliation gate (`_step_config_gov_reconcile()`) that: (1) registers config-present/governance-missing brains as "candidate", (2) detects and logs status drift WITHOUT overriding governance (governance owns lifecycle), (3) reports `bootstrap_registered` and `drifts_detected` counts in daily_ops output. Config defines existence; governance manages lifecycle; reconciliation gate bridges the two.
+
+**Detection**: `drifts_detected > 0` in daily_ops report → config-governance status mismatch. `bootstrap_registered > 0` after initial cycle → previous cycles had registration gaps. Automated check in `cmd_reconcile()`.
+
+---
+
 ### ReB-20260626-001
 - **Pattern Signature**: `BLE001_NARROW_CATCH_CASCADE`
 - **Date Cataloged**: 2026-06-26
