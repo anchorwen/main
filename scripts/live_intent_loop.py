@@ -752,6 +752,14 @@ def main(argv: list[str] | None = None) -> int:
         try:  # BLE001:FOG (was: FOG/LAC)
             pnl_ledger = BrainPnLStore.load_from_stream(_stream_path, event_writer=_event_writer)
             _loaded_from = "event_stream"
+            # ── FIX-20260628-169: Sync JSON cache from immutable event stream ──
+            # On successful stream load, immediately persist the reconstructed
+            # state to JSON so the cache never drifts from the SSOT.
+            # Prevents the "stale JSON overrides stream" loop on restart.
+            try:
+                pnl_ledger.save(pnl_ledger_path)
+            except (OSError, ValueError, TypeError):
+                pass
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass
 

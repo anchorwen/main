@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T14:00:44Z
+> **自动生成**: 2026-06-28T15:01:33Z
 > **扫描模块数**: 691
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -543,7 +543,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 5 | 923 | — | |
+| `strategy_builder.py` | ✅ active | — | 5 | 933 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 2 | 925 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
@@ -739,7 +739,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2813 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2821 | — | |
 | `live_launcher.py` | ✅ active | — | 15 | 1157 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |

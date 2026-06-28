@@ -167,6 +167,14 @@ def build_strategy_lines(
     btc_swing_brains = _known_groups["btc_swing"]
     btc_swing_h1_brains = _known_groups.get("btc_swing_h1", [])
 
+    # ── FIX-20260628-169: Per-asset reference ATR for dynamic SL/TP scaling ──
+    # Default 5.0 is calibrated for XAUUSD M5 ATR (~$3–5).
+    # BTC M5 ATR is ~20× higher (~$50–200), so ref_atr must match.
+    # Without this, vol_ratio = BTC_ATR/5.0 → always >> 1.6 → sl_factor
+    # clamped to ceiling 1.80 → SL locked at 2.70× ATR regardless of
+    # actual volatility regime (training contract: 1.5× ATR).
+    _ref_atr: float = 100.0 if config.symbol.startswith("BTC") else 5.0
+
     def _cfg(name: str, key: str, default: Any) -> Any:
         return config.strategy_configs.get(name, {}).get(key, default)
 
@@ -705,6 +713,7 @@ def build_strategy_lines(
                 min_valid_brains=_cfg("btc_swing", "min_valid_brains", 1),
                 timeframe=_cfg("btc_swing", "timeframe", "M30"),
                 exit_hesitation_cycles=_exit_cfg("btc_swing", "hesitation_cycles", 3),
+                ref_atr=_ref_atr,
             ),
             btc_swing_brains,
             budget=StrategyBudget(
@@ -751,6 +760,7 @@ def build_strategy_lines(
                 min_valid_brains=_cfg("btc_swing_h1", "min_valid_brains", 1),
                 timeframe=_cfg("btc_swing_h1", "timeframe", "H1"),
                 exit_hesitation_cycles=_exit_cfg("btc_swing_h1", "hesitation_cycles", 24),
+                ref_atr=_ref_atr,
             ),
             btc_swing_h1_brains,
             budget=StrategyBudget(
