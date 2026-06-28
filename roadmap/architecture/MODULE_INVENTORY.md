@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T07:41:28Z
-> **扫描模块数**: 688
+> **自动生成**: 2026-06-28T08:30:39Z
+> **扫描模块数**: 689
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -173,7 +173,7 @@
 | `atomic_file_writer.py` | ✅ active | AtomicFileError, AtomicFileWriter | 14 | 169 | — | |
 | `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 521 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
-| `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 17 | 344 | — | |
+| `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 17 | 350 | — | |
 | `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1288 | — | |
 | `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 23 | 548 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
@@ -518,7 +518,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4256 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4260 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 8 | 1647 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
@@ -528,7 +528,7 @@
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 575 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 584 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 314 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
@@ -665,6 +665,7 @@
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
 | `augment_journal_strategy.py` | ✅ active | — | 4 | 182 | — | |
+| `backfill_journal_orphans.py` | ✅ active | — | 2 | 224 | — | |
 | `backfill_journal_pnl.py` | ✅ active | — | 7 | 353 | — | |
 | `backtest_rule_strategies.py` | ✅ active | — | 7 | 572 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 271 | — | |
@@ -679,14 +680,14 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 702 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 704 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
 | `check_omega_pre_push.py` | ✅ active | — | 2 | 86 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `check_symbol_liveness.py` | ✅ active | LivenessVerdict | 8 | 364 | — | |
-| `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1010 | — | |
+| `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1179 | — | |
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
@@ -737,7 +738,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2808 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2813 | — | |
 | `live_launcher.py` | ✅ active | — | 15 | 1157 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |

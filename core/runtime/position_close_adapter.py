@@ -33,11 +33,14 @@ def reconcile_and_record_closes(
     symbol: str,
     journal_path: str,
     state: Any = None,
+    gate: Any = None,
 ) -> list[PositionClosed]:
     """Strangler Fig #11: reconcile MT5 positions, build events, record to Journal.
 
     Replaces the old _reconcile_closed_positions() + manual journal write block.
     Called from live_cycle.py reconciliation section.
+
+    FIX-20260628-XXX: *gate* is a JournalGate instance for orphan prevention.
     """
     adapter = PositionCloseAdapter(
         tick_size=0.01 if "XAU" in symbol else 1.0,
@@ -48,7 +51,7 @@ def reconcile_and_record_closes(
         symbol=symbol,
     )
     for evt in events:
-        adapter.record(evt, journal_path, state=state)
+        adapter.record(evt, journal_path, state=state, gate=gate)
     return events
 
 
@@ -58,11 +61,14 @@ def record_mia_closes(
     symbol: str,
     journal_path: str,
     state: Any = None,
+    gate: Any = None,
 ) -> int:
     """Strangler Fig #12: record MIA-detected closes through the adapter.
 
     Replaces the old FileLock + manual journal append block.
     Returns count of successfully recorded events.
+
+    FIX-20260628-XXX: *gate* is a JournalGate instance for orphan prevention.
     """
     adapter = PositionCloseAdapter(
         tick_size=0.01 if "XAU" in symbol else 1.0,
@@ -77,7 +83,7 @@ def record_mia_closes(
             symbol=symbol,
             mt5_worker=mt5_worker,
         )
-        if evt is not None and adapter.record(evt, journal_path, state=state):
+        if evt is not None and adapter.record(evt, journal_path, state=state, gate=gate):
             recorded += 1
     return recorded
 
@@ -96,10 +102,13 @@ def record_position_opened(
     confidence: float,
     journal_path: str,
     state: Any = None,
+    gate: Any = None,
 ) -> bool:
     """Strangler Fig #13: record a new position open through the adapter.
 
     Called from live_cycle.py at position_registered_for_mgmt point.
+
+    FIX-20260628-XXX: *gate* is a JournalGate instance for orphan prevention.
     """
     try:
         adapter = PositionCloseAdapter(
@@ -118,7 +127,7 @@ def record_position_opened(
             brain_ids=tuple(brain_ids) if brain_ids else (),
             confidence=confidence,
         )
-        return adapter.record_open(evt, journal_path, state=state)
+        return adapter.record_open(evt, journal_path, state=state, gate=gate)
     except (RuntimeError, ValueError, KeyError, TypeError, OSError):
         pass
     return False  # best-effort — never block position registration

@@ -76,6 +76,7 @@ Promotion pipeline (shadow → live)
 ## Fix History
 | Fix ID | Date | Summary | Root Cause |
 |--------|------|---------|------------|
+| FIX-20260628-160 | 2026-06-28 | **XAU 训练就绪合约 + check_training_readiness.py 泛化 (L2)**. 创建 training_pipeline_xau_swing_v3.json (35-dim, v9_institutional_40 Feature Store, build_swing_enhanced_dataset.py builder). check_training_readiness.py 符号检测 / 模式处理 / builder 调用全部合约驱动 (builder_script, builder_args, builder_output_arg). XAU training_readiness.json 已生成, audit_state 12/12. | RC-12 — missing-feature: XAU 无训练流水线合约 |
 | FIX-20260617-003 | 2026-06-17 | TECH_DEBT-004 RESOLVED — BTC 41-dim retraining complete | — |
 | FIX-20260617-100 | 2026-06-17 | MetaFilter V3 — 102 samples, 47-dim | — |
 | FIX-20260616-003 | 2026-06-16 | Directional Balance Filter (Tactic A) | RC-05 |

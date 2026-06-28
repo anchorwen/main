@@ -258,6 +258,7 @@ class LiveCycleState:
     _pending_sl_records: list[dict[str, Any]] = field(default_factory=list)  # {strategy, timestamp}
     _last_daily_ops_utc: float = 0.0  # Unix ts of last successful daily_ops run
     _tracker_reload_pending: bool = False  # set after daily_ops enriches tracker on disk
+    _pnl_ledger: Any = None  # FIX-20260611-005: stashed for adapter downstream notification
     exit_watchdog: Any = None  # ExitWatchdog instance (Pitfall 3 safeguard)
     limit_monitor: Any = None  # LimitOrderMonitor instance (Pitfall 1 safeguard)
     alert_hub: Any = None  # LiveAlertHub instance (FIX-20260529-040)
@@ -922,6 +923,7 @@ def execute_live_cycle(
     feature_adapter: Any,
     daily_feature_provider: Any = None,
     journal_path: Path,
+    journal_gate: Any = None,
     pnl_ledger: Any = None,
     exit_watchdog: Any = None,
     limit_monitor: Any = None,
@@ -1598,6 +1600,7 @@ def execute_live_cycle(
                 config.symbol,
                 str(journal_path),
                 state,
+                gate=journal_gate,
             )
 
             if _events:
@@ -2403,6 +2406,7 @@ def execute_live_cycle(
                         config.symbol,
                         str(journal_path),
                         state,
+                        gate=journal_gate,
                     )
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                     pass

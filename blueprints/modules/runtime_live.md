@@ -80,6 +80,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260628-160 | 2026-06-28 | cursor-agent | — | **JournalGate 接入 live_cycle 写入路径 (L3)**. JournalGate 在 live_intent_loop.py 启动时创建 (policy=quarantine), 通过 journal_gate 参数传入 execute_live_cycle() → reconcile_and_record_closes()/record_mia_closes() → _append_journal(). 开口注册 gate.register_open(), 平仓验证 gate.validate_close(). LiveCycleState._pnl_ledger 类型注解消 mypy 错误. | RC-07 — missing-validation: JournalGate built but write paths bypassed |
 | FIX-20260628-063 | 2026-06-28 | cursor-agent | — | **XAU Swing V9 V3 retrain — live.yaml brain registry update**. V2 disabled (M30/H1/H4), V3 enabled for all 4 TFs. M30_V3 new entry added to registry. M15_V3 already present from prior auto-reg. All V3 models shadow status. | L3 — model lifecycle upgrade |
 | FIX-20260628-062 | 2026-06-28 | cursor-agent | — | **DQAF-062 L3: Config→Governance Reconciliation Gate** — new `_step_config_gov_reconcile()` in daily_ops.py runs before governance cycle. Reads brain_registry_entry.v1 configs, auto-registers missing brains as candidate, detects status drift without overriding governance lifecycle. | RC-09, RC-12 |
 | FIX-20260628-060 | 2026-06-28 | cursor-agent | — | DQAF-060 L3: Event Sourcing semantic conflation — _step_augment_journal() integrated into daily_ops pipeline with entry-loss safety assertion | L3-architecture |

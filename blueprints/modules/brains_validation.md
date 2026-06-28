@@ -116,6 +116,7 @@ Adapter fallback paths
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260628-160 | 2026-06-28 | cursor-agent | — | **Magic 冲突误报消除**: BrainConfigValidator._check_magic_unique() 增加 contract_group 感知 — 同组合约组内共享 magic 不再报警 (架构设计意图), 仅跨组冲突报警。启动 WARNING 从 ~20 降至 0。 | RC-07: validator 过于宽泛 — 未区分同组共享 vs 跨组冲突 |
 | FIX-20260528-017 | 2026-05-28 | cursor-agent | — | Schema Dimension & Feature Order SSOT: replaced local SCHEMA_DIMENSIONS + _get_schema_feature_names() with imports from core.features.schemas.registry. Eliminated ~130 lines of duplicate schema definitions. Backwards-compat alias preserved. | RC-09 |
 | FIX-20260620-070 | 2026-06-20 | cursor-agent | — | **inference_guard tests**: 19 new tests (191 lines) for brains/inference_guard validation. | RC-12 |
 | FIX-20260526-028 | 2026-05-26 | cursor-agent | — | Binary_Cls_V1 brain config feature order corrected: `features` list changed from V9 canonical order (M5→H1, 8 core/TF + OU + Hurst blocks) to model training order (H1→M15→M30→M5, 10 metrics/TF inline). Training meta.json `feature_names` is the authoritative ground truth. Without this, `_reorder_for_brain()` would have no correct target order. | RC-06 |

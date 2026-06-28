@@ -65,7 +65,7 @@ class BrainConfigValidator:
 
     def __init__(self) -> None:
         # Lazy-built reverse index: magic → list of brain_ids (built once, O(n) reads)
-        self._magic_index: dict[int, list[str]] | None = None
+        self._magic_index: dict[int, list[tuple[str, str]]] | None = None
 
     def _build_magic_index(self) -> None:
         """Pre-load all brain configs once and build magic → [brain_id] index."""
@@ -82,8 +82,9 @@ class BrainConfigValidator:
                 continue
             magic = data.get("magic")
             brain_id = data.get("brain_id", "?")
+            contract_group = data.get("contract_group", "")
             if magic is not None:
-                self._magic_index.setdefault(magic, []).append(brain_id)
+                self._magic_index.setdefault(magic, []).append((brain_id, contract_group))
 
     def validate(self, brain_entry: dict) -> ValidationResult:
         brain_id = brain_entry.get("brain_id", "?")
@@ -208,7 +209,12 @@ class BrainConfigValidator:
         if magic is None or self._magic_index is None:
             return
         brain_id = entry.get("brain_id", "?")
-        conflicts = [bid for bid in self._magic_index.get(magic, []) if bid != brain_id]
+        contract_group = entry.get("contract_group", "")
+        conflicts = [
+            bid
+            for bid, cg in self._magic_index.get(magic, [])
+            if bid != brain_id and cg != contract_group
+        ]
         for conflict_bid in conflicts:
             result.warnings.append(
                 f"brain_id={brain_id}: magic={magic} also used by "

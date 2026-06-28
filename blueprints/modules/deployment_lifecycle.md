@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260628-160 | 2026-06-28 | cursor-agent | — | **check_blueprint_compliance.py MODULE_SOURCE_MAP 更新**. 添加 check_training_readiness.py→training, backfill_journal_orphans.py→runtime_live 映射。 | RC-14 — MODULE_SOURCE_MAP 未覆盖新脚本 |
 | FIX-20260628-062 | 2026-06-28 | cursor-agent | — | **DQAF-062 L3: Config→Governance Reconciliation Gate** — new `_step_config_gov_reconcile()` in daily_ops.py runs before governance cycle. Bootstrap-registers config-present but governance-missing brains. Drift detection without lifecycle override. | RC-09, RC-12 |
 | FIX-20260628-061 | 2026-06-28 | cursor-agent | — | **DQAF-061 L3: XAU Governance Blind Eye Recovery** — scheduler_service.py purge now respects `_data_source` field (live_journal/pnl_store) to prevent wiping daily_ops-injected metrics. Field name mismatch (source vs _data_source) previously caused trusted metrics to be cleared. | RC-09, RC-06 |
 | FIX-20260628-157 | 2026-06-28 | cursor-agent | 306e8450 | check_symbol_liveness.py: institutional preflight probe. Architecture Committee rectification. SYMBOL_DATA_DIR_MAP corrected: XAUUSDc→data (was data_xau). Iron Law #11 machine enforcement. | missing-feature |

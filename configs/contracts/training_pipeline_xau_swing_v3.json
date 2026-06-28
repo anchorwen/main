@@ -1,0 +1,142 @@
+{
+  "$schema": "training_pipeline_contract.v1",
+  "contract_id": "xau_swing_v3",
+  "description": "XAU Swing V3 training pipeline contract — SSOT for all pipeline stages. Validates Feature Store (swing_enhanced_35), Journal, Dataset Builder, and Model readiness for XAU swing training.",
+
+  "model_target": {
+    "name": "swing_v3",
+    "path": "data/models/swing",
+    "framework": "xgboost",
+    "input_dimension": 35,
+    "feature_names_ssot": [
+      "D1_Ret_1", "D1_Body_Ratio", "D1_ATR_14", "D1_RSI_14", "D1_MACD",
+      "D1_Vol_ZScore", "D1_Bollinger_Width", "D1_ADX_14",
+      "H4_Trend_Strength", "H4_ATR_Ratio", "H4_RSI_Divergence", "H4_vs_D1_Alignment",
+      "Cross_Gold_Silver_Ratio", "Cross_DXY_Return", "Cross_EURUSD_Return", "Cross_Risk_On_Off",
+      "Derived_Weekday_Sin", "Derived_Weekday_Cos", "Derived_Days_To_MonthEnd",
+      "Derived_Is_MonthEnd_Week", "Derived_Weekend_Gap", "Derived_Vol_Regime",
+      "Derived_Momentum_5D", "Derived_Momentum_20D",
+      "tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM", "tick_velocity",
+      "XAGUSDc_return", "EURUSDc_return", "USDJPYc_return",
+      "TF_OU_Theta", "TF_Hurst"
+    ],
+    "min_training_samples": 100,
+    "min_positive_label_pct": 0.10
+  },
+
+  "stages": {
+    "stage_1_feature_store": {
+      "description": "Feature Store must contain v9_institutional_40 records at M5 granularity. The swing training pipeline selects a 35-dim subset from these 40 features.",
+      "inputs": {},
+      "outputs": {
+        "v9_institutional_40": {
+          "schema_name": "v9_institutional_40",
+          "dimension": 40,
+          "max_age_minutes": 2880,
+          "max_nan_pct": 0.05,
+          "min_records": 100
+        }
+      },
+      "validation": {
+        "check_schema_presence": true,
+        "check_dimension_match": true,
+        "check_freshness": true,
+        "check_nan_rate": true,
+        "check_co_timestamp_coverage": false
+      }
+    },
+
+    "stage_2_journal": {
+      "description": "Journal must contain accepted→closed trade pairs with PnL and labels for swing training.",
+      "inputs": {},
+      "outputs": {
+        "closed_trades": {
+          "min_count": 50,
+          "required_fields": ["position_ticket", "pnl", "label", "recorded_at"],
+          "valid_labels": ["win", "loss", "breakeven", "tp_hit_first", "sl_hit_first", "sl_hit_trailed"],
+          "max_pnl_null_pct": 0.10
+        },
+        "open_entries": {
+          "required_fields": ["position_ticket", "message_id", "recorded_at"],
+          "p_win_coverage_min": 0.0,
+          "entry_context_coverage_min": 0.0
+        }
+      },
+      "validation": {
+        "check_closed_count": true,
+        "check_label_coverage": true,
+        "check_pnl_completeness": true,
+        "check_open_close_linkage": true,
+        "check_p_win_coverage": false,
+        "check_entry_context_coverage": false
+      }
+    },
+
+    "stage_3_dataset_builder": {
+      "description": "ASOF join pairs each trade with the last feature record before entry time. Output must be 35-dim, matching model_target.feature_names_ssot in exact order.",
+      "inputs": {
+        "from_stage_1": ["swing_enhanced_35"],
+        "from_stage_2": ["closed_trades", "open_entries"]
+      },
+      "outputs": {
+        "dataset": {
+          "format": "npz",
+          "dimension": 35,
+          "feature_order": "model_target.feature_names_ssot",
+          "min_matched_samples": 50,
+          "min_asof_join_rate": 0.70
+        }
+      },
+      "builder_script": "scripts/training/build_swing_enhanced_dataset.py",
+      "builder_output_arg": "--output-dir",
+      "builder_args": ["--tf", "M30", "--horizon", "12", "--symbol", "xauusdc",
+                       "--raw-dir", "data/raw", "--cross-raw-dir", "data/raw",
+                       "--sl-atr-mult", "3.0", "--tp-atr-mult", "1.5"],
+      "validation": {
+        "check_dimension_exact": true,
+        "check_feature_order_match": true,
+        "check_asof_join_rate": true,
+        "check_no_future_leak": true,
+        "check_label_distribution": true
+      }
+    },
+
+    "stage_4_training": {
+      "description": "XGBoost multi-class (3-class: SHORT/HOLD/LONG) training with purged walk-forward CV. Output model must satisfy minimum performance gates.",
+      "inputs": {
+        "from_stage_3": ["dataset"]
+      },
+      "outputs": {
+        "model": {
+          "format": "xgboost.json",
+          "input_dimension": 35,
+          "min_cv_folds": 3,
+          "min_post_filter_wr": 0.42,
+          "max_overfitting_gap": 0.20
+        }
+      },
+      "training_script": "scripts/training/train_swing_v9.py",
+      "validation": {
+        "check_dimension_consistency": true,
+        "check_feature_name_isomorphism": true,
+        "check_overfitting_gap": true,
+        "check_min_performance": true
+      }
+    }
+  },
+
+  "sla": {
+    "daily_readiness_check_utc": "04:00",
+    "alert_on_contract_violation": true,
+    "alert_channels": ["log"],
+    "metrics_log_path": "data/reports/training_readiness.json",
+    "stale_after_hours": 25
+  },
+
+  "metadata": {
+    "author": "quant-os",
+    "created_at": "2026-06-28",
+    "rationale": "XAU training pipeline contract — brings XAU training readiness monitoring to parity with BTC. Created as part of FIX-20260628-XXX remediation for missing training_readiness.json (AF-1).",
+    "supersedes": "ad-hoc XAU training validation (pre-June 2026)"
+  }
+}

@@ -789,6 +789,10 @@ def main(argv: list[str] | None = None) -> int:
     # entries that are ≤7 days old and have no matching close.  7-day cutoff
     # aligns with MT5's practical history retention window (broker-dependent).
     _journal_path = Path(args.base_dir) / "live_trade_journal.jsonl"
+    # ── FIX-20260628-XXX: JournalGate — orphan prevention for all journal writes ──
+    from core.ledger.services.journal_gate import JournalGate
+
+    _journal_gate = JournalGate(_journal_path, policy="quarantine")
     known_open_tickets: dict[int, dict[str, Any]] = {}
     from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
@@ -2261,6 +2265,7 @@ def main(argv: list[str] | None = None) -> int:
                     feature_adapter=feature_adapter,
                     daily_feature_provider=daily_feature_provider,
                     journal_path=_journal_path,
+                    journal_gate=_journal_gate,
                     pnl_ledger=pnl_ledger,
                     exit_watchdog=exit_watchdog,
                     limit_monitor=limit_monitor,
