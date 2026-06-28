@@ -181,6 +181,17 @@ class StrategyLineConfig:
     base_volume: float = 0.01
     max_volume: float = 0.05
 
+    # ── FIX-20260629-171: Strategy lifecycle mode ──
+    # Maps to the governance lifecycle state machine (shadow→candidate→probation→live).
+    # "live": unrestricted trading (default, backward compat).
+    # "probation": requires ≥1 brain with governance status ≥ probation; otherwise
+    #   regime_gate_mode forced to "shadow" (virtual signals only, no real orders).
+    # "shadow": virtual tracking only — never places real orders.
+    # This field CLOSES the gap where YAML `mode` was purely documentational with
+    # zero runtime enforcement (DQAF-20260609-011 partial fix — Cut 4 micro-volume
+    # still allowed candidate/archived brains to trade real capital).
+    mode: str = "live"
+
     # Dynamic SL/TP
     base_sl_atr_mult: float = 2.0
     base_tp_atr_mult: float = 3.5

@@ -79,6 +79,7 @@ startup → LifecycleManager.initialize()
 | FIX-20260620-071 | 2026-06-20 | cursor-agent | — | **Script-level fixes**: system_health.py, audit scripts, import boundary checks, training/train.py, verify_pnl_data_integrity.py, verify_training_serving_parity.py. | RC-06 |
 | FIX-20260624-117 | 2026-06-24 | cursor-agent | 018e58e5 | P1-1+P1-2 followup: omega_gate.py + validate_commit_msg.py import from omega_constants (Scene F exemption) | config-drift |
 | FIX-20260628-169 | 2026-06-28 | cursor-agent | — | **BTC PnL 缓存同步 + ref_atr 校正:** (1) live_intent_loop.py: `load_from_stream()` 成功后立即同步 JSON 缓存; (2) strategy_builder.py: BTC strategy lines 注入 `ref_atr=100` 替代 XAU 默认 5.0. | RC-09 |
+| FIX-20260629-171 | 2026-06-29 | cursor-agent | — | **策略 mode 运行时门禁 + Ghost Registration 防御纵深:** (1) StrategyLineConfig 新增 `mode` 字段, strategy_builder 读取, strategy_evaluator 强制执行 probation→shadow; (2) 清理 BTC governance transition_log 83/96 ghost 条目; (3) GovernanceService 新增 `_valid_brain_ids` 白名单 + `resolve_valid_brain_ids()` + `register_brain()` 防御纵深拒绝. | RC-09, RC-11 |
 | FIX-20260628-167 | 2026-06-28 | cursor-agent | — | **DQAF-067: analyze_live_journal.py SSOT Audit Script.**
 | FIX-20260624-115 | 2026-06-24 | cursor-agent | 14b4c6da | P0-3 followup: add check_omega_pre_push.py to MODULE_SOURCE_MAP under runtime_state | config-drift |
 | FIX-20260624-113 | 2026-06-24 | cursor-agent | a2c77b03 | P0-2 followup: add pre_commit_blueprint.py to MODULE_SOURCE_MAP under runtime_state | config-drift |

@@ -40,6 +40,55 @@ class GovernanceService:
         self._transition_log: list[dict] = []
         self._audit_log = audit_log
         self._lock = threading.RLock()  # RLock: transition() may call register_brain()
+        # FIX-20260629-171: Ghost registration defense-in-depth.
+        # When set (non-empty), register_brain() rejects brain_ids NOT in this set.
+        # Populated from config SSOT (brains_dir/*.json) by callers that have
+        # access to the authoritative brain config directory.
+        self._valid_brain_ids: set[str] = set()
+
+    def set_valid_brain_ids(self, brain_ids: set[str]) -> None:
+        """Set the whitelist of valid brain IDs (from config SSOT on disk).
+
+        When non-empty, ``register_brain()`` will reject any brain_id not in
+        this set — preventing ghost registrations from PnL-ledger-only brains
+        that have no config on disk (DQAF-063 / FIX-20260629-171).
+        """
+        with self._lock:
+            self._valid_brain_ids = set(brain_ids)
+
+    @staticmethod
+    def resolve_valid_brain_ids(brains_dir: str | Path) -> set[str]:
+        """Resolve valid brain IDs from config SSOT on disk.
+
+        Reads all ``brain_registry_entry.v1`` configs from *brains_dir*.
+        Only top-level ``*.json`` files are scanned — subdirectories
+        (like ``archive/``) are excluded.
+
+        Args:
+            brains_dir: Path to the brains config directory (e.g.
+                        ``configs/brains_btc`` or ``configs/brains``).
+
+        Returns:
+            Set of brain_id strings that have active configs on disk.
+        """
+        import json as _json
+
+        _dir = Path(brains_dir)
+        if not _dir.is_dir():
+            return set()
+        valid: set[str] = set()
+        for _cfg_path in sorted(_dir.glob("*.json")):
+            if "normalization" in _cfg_path.name.lower():
+                continue
+            try:
+                _cfg = _json.loads(_cfg_path.read_text(encoding="utf-8"))
+                if _cfg.get("schema_version") == "brain_registry_entry.v1":
+                    _bid = _cfg.get("brain_id", "")
+                    if _bid:
+                        valid.add(_bid)
+            except (_json.JSONDecodeError, OSError, KeyError):
+                pass
+        return valid
 
     # ── persistence ──
 
@@ -102,9 +151,33 @@ class GovernanceService:
         svc = cls(audit_log=audit_log)
         svc._brain_states = data.get("brain_states", {})
         svc._transition_log = data.get("transition_log", [])
+        # FIX-20260629-171: Auto-resolve valid brain IDs from config SSOT
+        # when loading.  The brains_dir is inferred from the state file path
+        # (governance_state.json lives alongside the data directory for the
+        # symbol, e.g. data_btc/ or data/).
+        _data_dir = src.parent
+        if _data_dir.name == "data_btc":
+            svc.set_valid_brain_ids(cls.resolve_valid_brain_ids("configs/brains_btc"))
+        elif _data_dir.name == "data":
+            svc.set_valid_brain_ids(cls.resolve_valid_brain_ids("configs/brains"))
         return svc
 
     def register_brain(self, brain_id: str, initial_status: str = "candidate") -> dict:
+        # ── FIX-20260629-171: Ghost registration defense-in-depth ──
+        # Reject brain_ids that have no config on disk (e.g. archived brains
+        # with PnL ledger entries).  This is the LAST LINE of defense — all
+        # other registration paths (daily_ops, governance_scheduler,
+        # scheduler_service) should also filter upstream, but this guarantees
+        # no ghost can reach the transition log regardless of caller.
+        if self._valid_brain_ids and brain_id not in self._valid_brain_ids:
+            return {
+                "action": "rejected_ghost",
+                "brain_id": brain_id,
+                "reason": (
+                    "GHOST REGISTRATION BLOCKED: brain_id has PnL data but "
+                    "no config on disk — archived or orphaned brain"
+                ),
+            }
         with self._lock:
             ts = datetime.now(UTC).replace(tzinfo=None).isoformat()
             state = {

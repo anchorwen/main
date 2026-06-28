@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T15:37:05Z
+> **自动生成**: 2026-06-28T16:08:42Z
 > **扫描模块数**: 691
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -270,7 +270,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1835 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1846 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
@@ -345,7 +345,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `governance_rule_engine.py` | ✅ active | GovernanceRule, GovernanceRuleEngine | 15 | 361 | — | |
-| `governance_service.py` | ✅ active | GovernanceService | 17 | 264 | — | |
+| `governance_service.py` | ✅ active | GovernanceService | 19 | 337 | — | |
 | `shadow_tracker.py` | ✅ active | ShadowBrainMetrics, ShadowTracker | 9 | 132 | — | |
 
 ## core/infrastructure
@@ -543,9 +543,9 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 5 | 933 | — | |
+| `strategy_builder.py` | ✅ active | — | 5 | 939 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 925 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 973 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -700,7 +700,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 41 | 3526 | — | |
+| `daily_ops.py` | ✅ active | — | 41 | 3528 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |

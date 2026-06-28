@@ -281,6 +281,54 @@ def evaluate_strategy_lines(
             )
             continue
 
+        # ── FIX-20260629-171: Strategy mode enforcement ──
+        # When mode=probation, the strategy MUST have ≥1 brain with governance
+        # status ≥ probation to trade real capital.  Otherwise the strategy is
+        # downgraded to shadow mode (virtual signals only — no real orders).
+        # This CLOSES the DQAF-20260609-011 gap where Cut 4 micro-volume
+        # exploration allowed candidate/shadow brains to trade real capital
+        # despite the strategy being explicitly marked probation.
+        #
+        # Cold-start path: virtual shadow signals accumulate → Rule 85
+        # (auto_promote_shadow_to_probation) → brain reaches probation →
+        # mode enforcement passes → Cut 4 micro-volume trading → Rule 75
+        # (auto_promote_probation_to_live) → full trading.
+        _strategy_mode = getattr(strategy.config, "mode", "live")
+        if _strategy_mode == "probation" and governance_state is not None:
+            _has_probation_plus = False
+            _strategy_brains = getattr(strategy, "brains", [])
+            for _b_info in _strategy_brains or []:
+                _bid = (
+                    _b_info.get("brain_id", "")
+                    if isinstance(_b_info, dict)
+                    else getattr(_b_info, "brain_id", "")
+                )
+                if _bid:
+                    _gs = governance_state.get(_bid, {})
+                    _status = _gs.get("status", "") if isinstance(_gs, dict) else ""
+                    if _status in ("probation", "live"):
+                        _has_probation_plus = True
+                        break
+            if not _has_probation_plus:
+                gate_mode = "shadow"
+                print(
+                    json.dumps(
+                        {
+                            "event": "strategy_mode_enforcement",
+                            "time": _utc_iso(),
+                            "strategy": sname,
+                            "mode": _strategy_mode,
+                            "reason": "probation_mode_no_qualified_brain",
+                            "detail": (
+                                "Strategy mode=probation but no brain has governance "
+                                "status >= probation — forcing shadow mode (virtual only)"
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
         decision = strategy.evaluate(
             feature_vector=_fv,
             micro_feature_vector=micro_feature_vector,

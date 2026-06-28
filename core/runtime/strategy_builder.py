@@ -714,6 +714,9 @@ def build_strategy_lines(
                 timeframe=_cfg("btc_swing", "timeframe", "M30"),
                 exit_hesitation_cycles=_exit_cfg("btc_swing", "hesitation_cycles", 3),
                 ref_atr=_ref_atr,
+                mode=_cfg(
+                    "btc_swing", "mode", "live"
+                ),  # FIX-20260629-171: strategy mode enforcement
             ),
             btc_swing_brains,
             budget=StrategyBudget(
@@ -761,6 +764,9 @@ def build_strategy_lines(
                 timeframe=_cfg("btc_swing_h1", "timeframe", "H1"),
                 exit_hesitation_cycles=_exit_cfg("btc_swing_h1", "hesitation_cycles", 24),
                 ref_atr=_ref_atr,
+                mode=_cfg(
+                    "btc_swing_h1", "mode", "probation"
+                ),  # FIX-20260629-171: strategy mode enforcement
             ),
             btc_swing_h1_brains,
             budget=StrategyBudget(

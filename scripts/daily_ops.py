@@ -110,6 +110,8 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
         if gov_path.exists():
             return GovernanceService.load(gov_path)
         gov = GovernanceService()
+        # FIX-20260629-171: Set ghost registration whitelist from config SSOT
+        gov.set_valid_brain_ids(GovernanceService.resolve_valid_brain_ids(brains_dir))
         if DEFAULT_BRAIN_REGISTRATIONS:
             for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
                 gov.register_brain(brain_id, status)
