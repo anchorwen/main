@@ -321,14 +321,14 @@ strategy_lines:
     magic: 90411
     max_spread_points: 3000
     max_volume: 0.1
-    min_p_win: 0.50                   # symmetric SL=TP: breakeven WR=50%
+    min_p_win: 0.45                   # FIX-20260628-170: 0.50→0.45 — brain_confidence fallback with new brain (1 settled trade), matches btc_swing floor
     min_valid_brains: 1
     mode: probation                   # shadow brain — observe before promotion
     sl:
       base_atr_mult: 1.5              # matches V12_H1_15 training SL
       dynamic: true
       hard_sl_ratio: 1.5
-      min_rr_ratio: 1.0               # symmetric: RR=1.0
+      min_rr_ratio: 0.85              # FIX-20260628-170: 1.0→0.85 — symmetric SL/TP + spread + min_sl_distance floor makes RR≥1.0 mathematically impossible
       min_sl_distance: 100.0
     spread_points: 200
     strategy_family: trend_following
