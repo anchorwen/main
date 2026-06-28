@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T04:58:57Z
+> **自动生成**: 2026-06-28T06:41:29Z
 > **扫描模块数**: 688
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -206,7 +206,7 @@
 | `rollback_drill.py` | ✅ active | RollbackDrillService | 8 | 304 | — | |
 | `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 664 | — | |
 | `scheduled_task_registry.py` | ✅ active | — | 4 | 36 | — | |
-| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 586 | — | |
+| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 597 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
 | `service_container.py` | ✅ active | ServiceContainer | 41 | 638 | — | |
 | `startup_validator.py` | ✅ active | — | 1 | 113 | — | |
@@ -698,7 +698,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 40 | 3426 | — | |
+| `daily_ops.py` | ✅ active | — | 41 | 3526 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -889,7 +889,7 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 6 | 591 | — | |
+| `governance_scheduler.py` | ✅ active | — | 6 | 605 | — | |
 | `label_builder.py` | ✅ active | — | 19 | 1044 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |

@@ -347,6 +347,16 @@ def run_governance_cycle(
             for brain_id, metrics in sorted(all_metrics.items()):
                 # Skip already-retired brains — no further governance actions apply
                 current_state = governance.get_brain_state(brain_id)
+                # ── DQAF-061: Auto-register brains from PnLStore/metrics sources
+                # that haven't been registered in governance yet.
+                # Without this, set_performance_metrics() is a silent no-op
+                # for 31/49 XAU brains — governance never sees their data.
+                # Safety valve: always register as "candidate" regardless of
+                # PnL performance — governance lifecycle transitions are gated
+                # by _compute_pnl_based_status() below.
+                if current_state is None:
+                    governance.register_brain(brain_id, "candidate")
+                    current_state = governance.get_brain_state(brain_id)
                 current_status = current_state["status"] if current_state else "candidate"
                 if current_status == "retired":
                     continue
@@ -377,6 +387,10 @@ def run_governance_cycle(
                 _data_source = (
                     "live_journal" if brain_id in _journal_augmented_bids else "pnl_store"
                 )
+                # DQAF-061: If metrics have 0 trades from both sources,
+                # mark as "no_data" to prevent downstream false confidence.
+                if metrics.sample_count == 0:
+                    _data_source = "no_data"
                 governance.set_performance_metrics(
                     brain_id,
                     {

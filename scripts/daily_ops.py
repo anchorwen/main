@@ -1285,6 +1285,98 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
             return {"step": "paper_trade_simulation", "status": "error", "error": "unknown"}
 
 
+def _step_config_gov_reconcile(
+    base_dir: str,
+    governance: Any,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Contract ①: State Reconciliation Gate — align governance with brain configs.
+
+    Reads all brain_registry_entry.v1 configs from the resolved brains_dir.
+    For each config that exists:
+      - Missing in governance → bootstrap register (candidate)
+      - Present in governance → verify status consistency, log drift
+
+    This gate eliminates the "silent disconnect" where configs define brains
+    that governance has never heard of, making metrics injection a no-op.
+
+    Safety valve: bootstrap always registers as "candidate" regardless of
+    config status, preserving the governance-owns-lifecycle contract
+    (FIX-20260613-076).
+
+    DQAF-062: Config-Governance Dual-Track Drift — L3 architecture fix.
+    """
+    brains_dir = _resolve_brains_dir(base_dir)
+    if not brains_dir.is_dir():
+        return {"step": "config_gov_reconcile", "status": "skipped", "reason": "no_brains_dir"}
+
+    import json as _json
+
+    registered: list[str] = []
+    drift_log: list[dict[str, str]] = []
+
+    for cfg_path in sorted(brains_dir.glob("*.json")):
+        if "normalization" in cfg_path.name.lower():
+            continue
+        try:
+            cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
+            try:  # BLE001:FOG (was: FOG/LAC)
+                continue
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
+        if cfg.get("schema_version") != "brain_registry_entry.v1":
+            continue
+
+        bid = cfg.get("brain_id", "")
+        if not bid:
+            continue
+
+        cfg_status = cfg.get("status", "candidate")
+        gov_state = governance.get_brain_state(bid)
+
+        if gov_state is None:
+            # Brain in config but NOT in governance → bootstrap register
+            if not dry_run:
+                governance.register_brain(bid, "candidate")
+            registered.append(bid)
+            drift_log.append(
+                {
+                    "brain_id": bid,
+                    "action": "bootstrap_register",
+                    "config_status": cfg_status,
+                    "governance_status": "(missing)",
+                }
+            )
+        else:
+            gov_status = (
+                gov_state.get("status", "candidate") if isinstance(gov_state, dict) else "candidate"
+            )
+            # Detect drift: config says X but governance says Y.
+            # We log the drift but do NOT auto-override governance —
+            # governance owns the lifecycle (FIX-20260613-076).
+            # Only report meaningful drifts where config intent ≠ governance reality.
+            if cfg_status != gov_status and cfg_status not in ("candidate", "shadow"):
+                drift_log.append(
+                    {
+                        "brain_id": bid,
+                        "action": "drift_detected",
+                        "config_status": cfg_status,
+                        "governance_status": gov_status,
+                    }
+                )
+
+    return {
+        "step": "config_gov_reconcile",
+        "status": "ok",
+        "bootstrap_registered": len(registered),
+        "drifts_detected": len(drift_log),
+        "drift_details": drift_log[:20],
+        "dry_run": dry_run,
+    }
+
+
 def _step_governance(
     base_dir: str,
     *,
@@ -3202,6 +3294,14 @@ def run_daily_ops(
         steps.append(_step_online_feedback(base_dir, dry_run=dry_run))
 
     if not skip_governance:
+        # ── DQAF-062: Config→Governance Reconciliation Gate (Contract ①) ──
+        # Must run BEFORE _step_governance so newly-registered brains can
+        # receive metrics injection during the governance cycle.
+        # This gate ensures every brain_config entry has a corresponding
+        # governance slot — eliminating the silent disconnect where
+        # set_performance_metrics() was a no-op for 31/49 XAU brains.
+        if shared_governance is not None:
+            steps.append(_step_config_gov_reconcile(base_dir, shared_governance, dry_run=dry_run))
         steps.append(
             _step_governance(
                 base_dir,

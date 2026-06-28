@@ -293,12 +293,23 @@ class SchedulerService:
                                 )
 
                             # ── Purge backtest-contaminated metrics for brains NOT
-                            #    in brain_performance (they only have stale backtest data)
+                            #    in brain_performance (they only have stale backtest data).
+                            #    DQAF-061: daily_ops-injected metrics carry _data_source
+                            #    ("live_journal" or "pnl_store") — these are trusted event-
+                            #    stream or journal-derived metrics, NOT backtest artifacts.
+                            #    Only purge metrics that lack BOTH source markers.
                             _all_states = container.governance_service.get_all_states()
                             for _bid, _state in _all_states.items():
                                 _pm = _state.get("performance_metrics") or {}
                                 _src = _pm.get("source", "")
-                                if _src != "brain_performance" and _pm.get("total_trades", 0) > 0:
+                                _alt_src = _pm.get("_data_source", "")
+                                # brain_performance marker → trusted
+                                if _src == "brain_performance":
+                                    continue
+                                # DQAF-061: daily_ops-injected metrics → trusted
+                                if _alt_src in ("live_journal", "pnl_store"):
+                                    continue
+                                if _pm.get("total_trades", 0) > 0:
                                     # Replace stale backtest metrics with empty sentinel
                                     container.governance_service.set_performance_metrics(
                                         _bid,
