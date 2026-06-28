@@ -56,8 +56,18 @@ def load_jsonl(path: Path) -> list[dict]:
     return records
 
 
-def analyze_journal(data_dir: Path) -> dict:
-    """Analyze live_trade_journal.jsonl with ticket-level dedup."""
+def analyze_journal(
+    data_dir: Path, brain_filter: list[str] | None = None, exclusive: bool = False
+) -> dict:
+    """Analyze live_trade_journal.jsonl with ticket-level dedup.
+
+    Args:
+        data_dir: Path to data directory containing live_trade_journal.jsonl.
+        brain_filter: If provided, only include trades where the open entry's
+            brain_ids intersect with this list.
+        exclusive: If True with brain_filter, only include trades where the
+            filtered brain is the SOLE brain_id (no other brains also voted).
+    """
     journal_path = data_dir / "live_trade_journal.jsonl"
     if not journal_path.exists():
         return {"error": f"Journal not found: {journal_path}"}
@@ -82,7 +92,9 @@ def analyze_journal(data_dir: Path) -> dict:
             orphan_events.append(r)
 
     # ── Dedup: for each ticket, find realized outcome ──
-    realized = []
+    realized_all = []  # all trades before brain filter (for orphan rate calculation)
+    realized = []  # after brain filter
+
     for ticket, events in tickets.items():
         close_events = [
             e for e in events if e.get("action") == "close" and e.get("pnl") is not None
@@ -93,26 +105,57 @@ def analyze_journal(data_dir: Path) -> dict:
         final_close = close_events[-1]
         open_evt = next((e for e in events if e.get("action") == "open"), None)
 
-        realized.append(
-            {
-                "ticket": ticket,
-                "open_time": open_evt.get("recorded_at") if open_evt else None,
-                "close_time": final_close.get("recorded_at"),
-                "side": final_close.get("side", "?"),
-                "pnl": final_close.get("pnl", 0.0),
-                "label": final_close.get("label", "?"),
-                "ack": final_close.get("ack_status", "?"),
-                "close_attempts": len(close_events),
-                "total_events": len(events),
-                "entry_confidence": open_evt.get("confidence") if open_evt else None,
-                "entry_sl": open_evt.get("sl") if open_evt else None,
-                "entry_tp": open_evt.get("tp") if open_evt else None,
-                "entry_price": (
-                    open_evt.get("detail", {}).get("request", {}).get("price") if open_evt else None
-                ),
-                "entry_atr": (open_evt.get("entry_context", {}).get("atr") if open_evt else None),
-            }
-        )
+        # ── Brain attribution from open entry (primary) or close (fallback) ──
+        trade_brain_ids: list[str] = []
+        if open_evt:
+            trade_brain_ids = list(open_evt.get("brain_ids") or [])
+        if not trade_brain_ids:
+            trade_brain_ids = list(final_close.get("brain_ids") or [])
+
+        # ── Orphan detection: close without matching open ──
+        is_orphan = open_evt is None
+
+        trade_data = {
+            "ticket": ticket,
+            "open_time": open_evt.get("recorded_at") if open_evt else None,
+            "close_time": final_close.get("recorded_at"),
+            "side": final_close.get("side", "?"),
+            "pnl": final_close.get("pnl", 0.0),
+            "label": final_close.get("label", "?"),
+            "ack": final_close.get("ack_status", "?"),
+            "close_attempts": len(close_events),
+            "total_events": len(events),
+            "entry_confidence": open_evt.get("confidence") if open_evt else None,
+            "entry_sl": open_evt.get("sl") if open_evt else None,
+            "entry_tp": open_evt.get("tp") if open_evt else None,
+            "entry_price": (
+                open_evt.get("detail", {}).get("request", {}).get("price") if open_evt else None
+            ),
+            "entry_atr": (open_evt.get("entry_context", {}).get("atr") if open_evt else None),
+            "brain_ids": trade_brain_ids,
+            "is_orphan": is_orphan,
+        }
+        realized_all.append(trade_data)
+
+        # ── Brain filter ──
+        if brain_filter:
+            trade_brain_set = set(trade_brain_ids)
+            filter_set = set(brain_filter)
+            if not trade_brain_set & filter_set:
+                continue  # none of the requested brains voted
+            if exclusive and not trade_brain_set.issubset(filter_set):
+                continue  # other brains also voted — skip in exclusive mode
+
+        realized.append(trade_data)
+
+    # ── Orphan stats (computed from the applicable trade set) ──
+    # When brain_filter is active, orphan stats reflect the filtered brain's trades.
+    # When no filter, orphan stats reflect all trades.
+    orphan_source = realized if brain_filter else realized_all
+    orphan_closes = [r for r in orphan_source if r["is_orphan"]]
+    orphan_close_count = len(orphan_closes)
+    orphan_close_pnl = sum(r["pnl"] for r in orphan_closes)
+    total_realized_all = len(realized_all)
 
     # ── Win/Loss/Breakeven ──
     wins = [r for r in realized if r["pnl"] > 0]
@@ -210,6 +253,47 @@ def analyze_journal(data_dir: Path) -> dict:
             tp_atr_list.append(tp_atr)
             rr_list.append(rr)
 
+    # ── Per-brain aggregation (for --by-brain and orphan context) ──
+    brain_index: dict[str, dict] = {}
+    all_brain_ids: set[str] = set()
+    for r in realized:
+        for bid in r["brain_ids"]:
+            all_brain_ids.add(bid)
+            if bid not in brain_index:
+                brain_index[bid] = {"trades": 0, "pnl": 0.0, "wins": 0, "losses": 0}
+            brain_index[bid]["trades"] += 1
+            brain_index[bid]["pnl"] += r["pnl"]
+            if r["pnl"] > 0:
+                brain_index[bid]["wins"] += 1
+            elif r["pnl"] < 0:
+                brain_index[bid]["losses"] += 1
+
+    # Compute per-brain WR/PF
+    per_brain_stats = {}
+    for bid, stats in brain_index.items():
+        n_wins = stats["wins"]
+        n_losses = stats["losses"]
+        n_total = n_wins + n_losses
+        wr_brain = n_wins / n_total * 100 if n_total else 0
+        pf_brain = (
+            abs(
+                sum(r["pnl"] for r in realized if bid in r["brain_ids"] and r["pnl"] > 0)
+                / sum(r["pnl"] for r in realized if bid in r["brain_ids"] and r["pnl"] < 0)
+            )
+            if n_wins
+            and n_losses
+            and sum(r["pnl"] for r in realized if bid in r["brain_ids"] and r["pnl"] < 0) != 0
+            else float("inf")
+        )
+        per_brain_stats[bid] = {
+            "trades": stats["trades"],
+            "pnl_usd": round(stats["pnl"], 2),
+            "wins": n_wins,
+            "losses": n_losses,
+            "win_rate_pct": round(wr_brain, 2),
+            "profit_factor": round(pf_brain, 4),
+        }
+
     return {
         "raw": {
             "total_entries": len(records),
@@ -230,6 +314,17 @@ def analyze_journal(data_dir: Path) -> dict:
             "avg_loss_usd": round(sum(r["pnl"] for r in losses) / len(losses), 2) if losses else 0,
             "max_win_usd": round(max(r["pnl"] for r in wins), 2) if wins else 0,
             "max_loss_usd": round(min(r["pnl"] for r in losses), 2) if losses else 0,
+        },
+        "data_quality": {
+            "orphan_close_count": orphan_close_count,
+            "orphan_close_pnl_usd": round(orphan_close_pnl, 2),
+            "orphan_close_pct": round(orphan_close_count / len(orphan_source) * 100, 1)
+            if orphan_source
+            else 0,
+            "total_realized_all": total_realized_all,
+            "brain_filter_applied": brain_filter if brain_filter else None,
+            "distinct_brains": sorted(all_brain_ids),
+            "per_brain": per_brain_stats,
         },
         "pnl_by_label": {
             lbl: {
@@ -393,12 +488,38 @@ def print_report(journal: dict, snapshots: dict) -> None:
 
     # ── Section 1: Raw Data Overview ──
     raw = journal.get("raw", {})
+    dq = journal.get("data_quality", {})
     print("\n── 1. RAW DATA OVERVIEW ──")
     print(f"  Total journal entries:        {raw.get('total_entries', 'N/A')}")
     print(f"  Unique position tickets:      {raw.get('unique_tickets', 'N/A')}")
     print(f"  Orphan events (no ticket):    {raw.get('orphan_events', 'N/A')}")
     print(f"  Actions:                      {raw.get('actions', {})}")
     print(f"  Ack status distribution:      {raw.get('ack_status', {})}")
+
+    # ── Data Quality & Brain Context ──
+    bf = dq.get("brain_filter_applied")
+    print(f"\n── 1.1 DATA QUALITY & CONTEXT ──")
+    if bf:
+        print(f"  Brain filter:                 {bf}")
+    else:
+        print(f"  Brain filter:                 (none — all brains aggregated)")
+    print(f"  Distinct brains in data:      {dq.get('distinct_brains', [])}")
+    print(f"  Orphan closes (close w/o open): {dq.get('orphan_close_count', 0)}")
+    print(f"  Orphan close PnL:            ${dq.get('orphan_close_pnl_usd', 0):.2f}")
+    if raw.get("unique_tickets", 1):
+        print(
+            f"  Orphan close rate:            {dq.get('orphan_close_pct', 0):.1f}% of all realized trades"
+        )
+        if dq.get("orphan_close_count", 0) > 0:
+            print(
+                f"  [!] NOTE: {dq.get('orphan_close_count', 0)} orphan closes (close without matching open)"
+            )
+            print(
+                f"     are INCLUDED above. Their aggregate PnL: ${dq.get('orphan_close_pnl_usd', 0):.2f}."
+            )
+            print(
+                f"     These come from early journal period (pre ~June 7) with missing open entries."
+            )
 
     # ── Section 2: Realized Trade Performance ──
     real = journal.get("realized", {})
@@ -423,6 +544,22 @@ def print_report(journal: dict, snapshots: dict) -> None:
         print(
             f"  {lbl:<55s} {s['count']:>5d}  {s['pnl_usd']:>10.2f}  {s['wins']:>3d}  {s['losses']:>3d}"
         )
+
+    # ── Section 3.1: Per-Brain Breakdown ──
+    per_brain = dq.get("per_brain", {})
+    if per_brain and len(per_brain) > 1:
+        print(f"\n── 3.1 PER-BRAIN BREAKDOWN ──")
+        print(
+            f"  {'Brain ID':<35s} {'Trades':>7s} {'PnL($)':>10s} {'WR%':>7s} {'PF':>6s} {'W':>4s} {'L':>4s}"
+        )
+        print(f"  {'-'*35} {'-'*7} {'-'*10} {'-'*7} {'-'*6} {'-'*4} {'-'*4}")
+        for bid in sorted(per_brain.keys()):
+            s = per_brain[bid]
+            wr_str = f"{s['win_rate_pct']:.1f}" if s["win_rate_pct"] != float("inf") else "N/A"
+            pf_str = f"{s['profit_factor']:.2f}" if s["profit_factor"] != float("inf") else "inf"
+            print(
+                f"  {bid:<35s} {s['trades']:>7d} {s['pnl_usd']:>10.2f} {wr_str:>7s} {pf_str:>6s} {s['wins']:>4d} {s['losses']:>4d}"
+            )
 
     # ── Section 4: Direction Distribution ──
     direction = journal.get("direction", {})
@@ -514,6 +651,30 @@ def main():
         default="data_btc",
         help="Path to data directory containing live_trade_journal.jsonl and position_snapshots.jsonl",
     )
+    parser.add_argument(
+        "--brain",
+        action="append",
+        dest="brains",
+        default=None,
+        help="Filter to trades attributed to this brain_id. Repeatable: --brain BTC_Swing_V4 --brain BTC_Swing_V7. "
+        "Uses brain_ids from the open entry (or close entry as fallback). "
+        "Without this flag, all brains are aggregated.",
+    )
+    parser.add_argument(
+        "--exclusive",
+        action="store_true",
+        default=False,
+        help="When used with --brain, only include trades where the specified brain is "
+        "the SOLE brain_id (exclude multi-brain trades). Without this, all trades "
+        "where the brain participated are included, even if other brains also voted.",
+    )
+    parser.add_argument(
+        "--by-brain",
+        action="store_true",
+        default=False,
+        help="Run a separate audit for each distinct brain_id found in the journal, "
+        "then print a summary comparison table.",
+    )
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -527,7 +688,101 @@ def main():
         print(f"ERROR: data directory not found: {data_dir}")
         sys.exit(1)
 
-    journal = analyze_journal(data_dir)
+    if args.by_brain:
+        # ── First pass: discover all distinct brain_ids ──
+        journal_path = data_dir / "live_trade_journal.jsonl"
+        all_brains: set[str] = set()
+        with open(journal_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                r = json.loads(line)
+                bids = r.get("brain_ids") or []
+                for bid in bids:
+                    all_brains.add(bid)
+
+        if not all_brains:
+            print("ERROR: No brain_ids found in journal entries.")
+            sys.exit(1)
+
+        print("=" * 70)
+        print("  PER-BRAIN AUDIT SUMMARY")
+        print(f"  Data dir: {data_dir}")
+        print(f"  Brains found: {len(all_brains)}")
+        print("=" * 70)
+
+        # ── Run per-brain audit ──
+        all_results: dict[str, dict] = {}
+        for bid in sorted(all_brains):
+            result = analyze_journal(data_dir, brain_filter=[bid], exclusive=args.exclusive)
+            if "error" in result:
+                print(f"  {bid}: ERROR — {result['error']}")
+                continue
+            all_results[bid] = result
+
+        # ── Print per-brain summary table ──
+        print(
+            f"\n{'Brain ID':<35s} {'Trades':>7s} {'PnL($)':>10s} {'WR%':>7s} {'PF':>6s} {'W':>4s} {'L':>4s} {'Orphans':>8s}"
+        )
+        print(f"{'-'*35} {'-'*7} {'-'*10} {'-'*7} {'-'*6} {'-'*4} {'-'*4} {'-'*8}")
+        total_trades = 0
+        total_pnl = 0.0
+        total_wins = 0
+        total_losses = 0
+        total_orphans = 0
+        for bid in sorted(all_results.keys()):
+            r = all_results[bid]
+            real = r.get("realized", {})
+            dq = r.get("data_quality", {})
+            trades = real.get("total_trades", 0)
+            pnl = real.get("total_pnl_usd", 0)
+            wr = real.get("win_rate_pct", 0)
+            pf = real.get("profit_factor", 0)
+            w = real.get("wins", 0)
+            l = real.get("losses", 0)
+            orphans = dq.get("orphan_close_count", 0)
+            total_trades += trades
+            total_pnl += pnl
+            total_wins += w
+            total_losses += l
+            total_orphans += orphans
+            wr_str = f"{wr:.1f}" if wr else "N/A"
+            pf_str = f"{pf:.2f}" if pf != float("inf") else "inf"
+            print(
+                f"{bid:<35s} {trades:>7d} {pnl:>10.2f} {wr_str:>7s} {pf_str:>6s} {w:>4d} {l:>4d} {orphans:>8d}"
+            )
+        # Totals row
+        total_wr = (
+            total_wins / (total_wins + total_losses) * 100 if (total_wins + total_losses) else 0
+        )
+        total_pf = (
+            abs(
+                sum(
+                    r.get("realized", {}).get("total_pnl_usd", 0)
+                    for r in all_results.values()
+                    if r.get("realized", {}).get("total_pnl_usd", 0) > 0
+                )
+                / sum(
+                    r.get("realized", {}).get("total_pnl_usd", 0)
+                    for r in all_results.values()
+                    if r.get("realized", {}).get("total_pnl_usd", 0) < 0
+                )
+            )
+            if total_losses
+            else float("inf")
+        )
+        print(f"{'─'*35} {'─'*7} {'─'*10} {'─'*7} {'─'*6} {'─'*4} {'─'*4} {'─'*8}")
+        print(
+            f"{'TOTAL':<35s} {total_trades:>7d} {total_pnl:>10.2f} {total_wr:>7.1f} {total_pf:>6.2f} {total_wins:>4d} {total_losses:>4d} {total_orphans:>8d}"
+        )
+        print(f"\n  [!] NOTE: Totals may differ from no-filter run — trades attributed to")
+        print(f"     multiple brains are counted once per brain above (not deduped).")
+        print(f"     For strictly deduped aggregate, run without --by-brain.")
+        print("=" * 70)
+        return
+
+    journal = analyze_journal(data_dir, brain_filter=args.brains, exclusive=args.exclusive)
     snapshots = analyze_position_snapshots(data_dir)
 
     if "error" in journal:

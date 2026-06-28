@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-28T10:55:09Z
+> **自动生成**: 2026-06-28T14:00:44Z
 
 ## Package-Level Dependencies
 
@@ -599,6 +599,7 @@
 - `check_blueprint_compliance.py` → (无内部依赖)
 - `check_data_health_contract.py` → (无内部依赖)
 - `check_import_boundaries.py` → (无内部依赖)
+- `check_live_status.py` → (无内部依赖)
 - `check_omega_compliance.py` → (无内部依赖)
 - `check_omega_pre_push.py` → (无内部依赖)
 - `check_preconditions.py` → (无内部依赖)

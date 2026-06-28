@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T10:55:09Z
-> **扫描模块数**: 690
+> **自动生成**: 2026-06-28T14:00:44Z
+> **扫描模块数**: 691
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -629,7 +629,7 @@
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
 | `analyze_feature_shift.py` | ✅ active | — | 5 | 323 | — | |
 | `analyze_live_brain_performance.py` | ✅ active | — | 6 | 672 | — | |
-| `analyze_live_journal.py` | ✅ active | — | 6 | 542 | — | |
+| `analyze_live_journal.py` | ✅ active | — | 6 | 797 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
 | `analyze_shadow_predictions.py` | ✅ active | — | 11 | 569 | — | |
@@ -683,6 +683,7 @@
 | `check_blueprint_compliance.py` | ✅ active | — | 10 | 705 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
+| `check_live_status.py` | ✅ active | — | 3 | 320 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
 | `check_omega_pre_push.py` | ✅ active | — | 2 | 86 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
