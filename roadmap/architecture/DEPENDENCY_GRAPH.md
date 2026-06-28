@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-28T17:31:15Z
+> **自动生成**: 2026-06-28T23:57:28Z
 
 ## Package-Level Dependencies
 
@@ -794,7 +794,7 @@
 - `export_mt5_data.py` → (无内部依赖)
 - `generate_batch_plan.py` → (无内部依赖)
 - `generate_brain_config.py` → `core.features.schemas.registry`
-- `governance_scheduler.py` → `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`, `core.training.utils`
+- `governance_scheduler.py` → `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`, `core.governance.shadow_tracker`, `core.training.utils`
 - `label_builder.py` → `core.contracts.training.label_contract`, `core.data.ticket_resolver`
 - `label_builder_d1.py` → (无内部依赖)
 - `monitor_training.py` → (无内部依赖)

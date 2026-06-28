@@ -304,7 +304,7 @@ def evaluate_strategy_lines(
                     else getattr(_b_info, "brain_id", "")
                 )
                 if _bid:
-                    _gs = governance_state.get(_bid, {})
+                    _gs = governance_state.get("brain_states", {}).get(_bid, {})
                     _status = _gs.get("status", "") if isinstance(_gs, dict) else ""
                     if _status in ("probation", "live"):
                         _has_probation_plus = True
@@ -545,7 +545,7 @@ def evaluate_strategy_lines(
             _live_count = sum(
                 1
                 for bid in _voted_brain_ids
-                if governance_state.get(bid, {}).get("status") == "live"
+                if governance_state.get("brain_states", {}).get(bid, {}).get("status") == "live"
             )
             _total_voters = len(_voted_brain_ids)
             if _live_count == 0:

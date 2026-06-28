@@ -290,6 +290,84 @@ def _dict_to_pnl_metrics(brain_id: str, d: dict[str, Any]) -> BrainPnLMetrics:
     )
 
 
+def _promote_shadow_brains(
+    governance: GovernanceService,
+    base_dir: str,
+    *,
+    dry_run: bool = False,
+) -> list[dict[str, Any]]:
+    """Scan shadow/candidate brains for Rule 85 promotion eligibility.
+
+    Rule 85 (auto_promote_shadow_to_probation) thresholds:
+    - ≥50 shadow signals (non-neutral directional votes)
+    - ≥5 long AND ≥5 short signals (bidirectional competence)
+    - average confidence ≥0.50
+
+    This bridges the local deployment gap: daily_ops → run_governance_cycle()
+    was PnL-first only, so candidate brains accumulated shadow signals but
+    were never evaluated for promotion.  The cloud scheduler_service.py path
+    already calls GovernanceRuleEngine.with_default_rules() which includes
+    Rule 85 — this adds the equivalent for the local daily_ops path.
+    """
+    from core.governance.shadow_tracker import ShadowTracker
+
+    applied: list[dict[str, Any]] = []
+    tracker = ShadowTracker(base_dir=base_dir, shadow_target=50)
+
+    all_states = governance.get_all_states()
+    shadow_candidate_ids = [
+        bid for bid, bs in all_states.items() if bs.get("status") in ("shadow", "candidate")
+    ]
+
+    if not shadow_candidate_ids:
+        return applied
+
+    metrics_map = tracker.all_candidate_metrics(shadow_candidate_ids)
+
+    for bid, m in metrics_map.items():
+        # Rule 85 thresholds
+        if m.shadow_signal_count < 50:
+            continue
+        if m.long_count < 5 or m.short_count < 5:
+            continue
+        if m.avg_confidence < 0.50:
+            continue
+
+        reason = (
+            f"auto_promote_shadow_to_probation: "
+            f"{m.shadow_signal_count} signals, "
+            f"long/short={m.long_count}/{m.short_count}, "
+            f"avg_conf={m.avg_confidence:.3f}"
+        )
+
+        entry: dict[str, Any] = {
+            "brain_id": bid,
+            "from_status": all_states[bid].get("status"),
+            "to_status": "probation",
+            "shadow_signal_count": m.shadow_signal_count,
+            "long_count": m.long_count,
+            "short_count": m.short_count,
+            "avg_confidence": round(m.avg_confidence, 4),
+        }
+
+        if dry_run:
+            entry["result"] = {
+                "action": "would_transition",
+                "brain_id": bid,
+                "from": entry["from_status"],
+                "to": "probation",
+            }
+            applied.append(entry)
+        else:
+            result = governance.transition(bid, "probation", reason=reason)
+            entry["result"] = result
+            if result.get("action") in ("transitioned",):
+                applied.append(entry)
+                logger.info("SHADOW→PROBATION: %s — %s", bid, reason)
+
+    return applied
+
+
 def run_governance_cycle(
     tracker: BrainPerformanceTracker,
     governance: GovernanceService,
@@ -572,6 +650,16 @@ def run_governance_cycle(
                     else:
                         flagged.append(entry)
 
+            # ── ShadowTracker integration (local path gap bridge) ──
+            # Scan shadow/candidate brains that have no PnL data for
+            # Rule 85 promotion eligibility.  This closes the gap
+            # between the local daily_ops PnL-first path and the cloud
+            # scheduler_service rule-engine path (which calls
+            # GovernanceRuleEngine.with_default_rules() → Rule 85).
+            _shadow_results = _promote_shadow_brains(governance, base_dir, dry_run=dry_run)
+            if _shadow_results:
+                applied.extend(_shadow_results)
+
             return {
                 "schema_version": SCHEMA_VERSION,
                 "generated_at": _utc_now_iso(),
@@ -624,6 +712,11 @@ def run_governance_cycle(
         elif recommendation in REQUIRE_CONFIRMATION:
             entry["note"] = "requires_manual_confirmation"
             flagged.append(entry)
+
+    # ── ShadowTracker integration (fallback path) ──
+    _shadow_results = _promote_shadow_brains(governance, base_dir, dry_run=dry_run)
+    if _shadow_results:
+        applied.extend(_shadow_results)
 
     return {
         "schema_version": SCHEMA_VERSION,
