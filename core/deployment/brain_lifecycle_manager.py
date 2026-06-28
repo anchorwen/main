@@ -847,12 +847,21 @@ class BrainLifecycleManager:
             for bid in sorted(missing_from_gov):
                 cfg = disk_brains[bid]
                 cfg_status = cfg.get("status", "candidate")
-                # Use the config's declared status, default to candidate
-                # for safety (never auto-promote to live).
-                # "shadow" is a valid config status but governance
-                # treats it as a substate of candidate; always register
-                # as "candidate" for governance consistency.
-                initial = "candidate"
+                # FIX-20260628-161: SSOT enforcement — config status is law.
+                # Previously always registered as "candidate" for "safety",
+                # which caused config-declared "live" brains to silently
+                # degrade to candidate after governance rebuild (DQAF-059:
+                # 0 live brains → BTC trading blocked).
+                # "shadow" maps to "candidate" for governance consistency
+                # (shadow is a config-level concept, not a governance lifecycle
+                #  status — it lives under candidate in governance).
+                _GOV_STATUSES = {"live", "candidate", "probation", "frozen", "retired"}
+                if cfg_status == "shadow":
+                    initial = "candidate"
+                elif cfg_status in _GOV_STATUSES:
+                    initial = cfg_status
+                else:
+                    initial = "candidate"
                 gov.register_brain(bid, initial_status=initial)
                 # FIX-20260529-034: record transition for audit trail
                 try:
@@ -862,9 +871,11 @@ class BrainLifecycleManager:
                             "brain_id": bid,
                             "from": None,
                             "to": initial,
-                            "reason": f"auto-registered from disk config (config status={cfg_status})",
+                            "reason": (
+                                f"auto-registered from disk config " f"(config status={cfg_status})"
+                            ),
                             "timestamp": ts,
-                            "fix_id": "FIX-20260529-034",
+                            "fix_id": "FIX-20260628-161",
                         }
                     )
                     if bid in gov._brain_states:
@@ -874,9 +885,11 @@ class BrainLifecycleManager:
                     pass
                 report.auto_registered.append(f"{bid}:{initial}")
                 logging.warning(
-                    "BrainLifecycleManager: auto-registered '%s' in governance as '%s'",
+                    "BrainLifecycleManager: auto-registered '%s' in governance as '%s' "
+                    "(config status=%s)",
                     bid,
                     initial,
+                    cfg_status,
                 )
             self._save_governance_service(gov)
             # Reload gov_data for subsequent checks
@@ -937,46 +950,65 @@ class BrainLifecycleManager:
                 pass
 
         # ── SSOT status reconciliation: config (law) → governance (vassal) ──
-        # FIX-20260529-034: When a brain has an active config on disk but its
-        # governance status is "retired", the config wins.  This prevents
-        # governance-state drift where a manually-restored brain reverts to
-        # "retired" after any governance save cycle (register_brain, orphan
-        # cleanup, etc.) that re-serializes the stale in-memory state.
+        # FIX-20260628-161: Expanded from retired-only to full status drift
+        # detection.  Previously only reconciled "retired" → "candidate",
+        # which left live→probation, live→shadow, probation→candidate, and
+        # all other config↔governance mismatches permanently unrepaired
+        # (DQAF-059: BTC 0 live brains after governance rebuild — config V4
+        #  declared "live" but governance held stale "probation").
+        #
+        # Rule: For every brain present in BOTH governance and on disk, the
+        # config status (SSOT) wins unconditionally.  "shadow" maps to
+        # "candidate" for governance lifecycle consistency.
+        _GOV_STATUSES = {"live", "candidate", "probation", "frozen", "retired"}
         if gov_data and auto_repair and disk_brains:
             gov2 = self._load_governance_service()
             reconciled = []
             for bid, bs in list(gov2._brain_states.items()):
-                if bs.get("status") == "retired" and bid in disk_brains:
-                    cfg_status = disk_brains[bid].get("status", "candidate")
-                    if cfg_status != "retired":
-                        restored = "candidate"  # never auto-promote
-                        gov2._brain_states[bid]["status"] = restored
-                        gov2._brain_states[bid]["last_transition_at"] = _utc_now_iso()
-                        gov2._brain_states[bid]["transition_count"] = (
-                            gov2._brain_states[bid].get("transition_count", 0) + 1
-                        )
-                        gov2._transition_log.append(
-                            {
-                                "brain_id": bid,
-                                "from": "retired",
-                                "to": restored,
-                                "reason": "SSOT reconciliation: active config on disk overrides retired governance",
-                                "timestamp": _utc_now_iso(),
-                                "fix_id": "FIX-20260529-034",
-                            }
-                        )
-                        reconciled.append(f"{bid}:retired→{restored}")
-                        logging.warning(
-                            "BrainLifecycleManager: SSOT reconciliation — '%s' governance "
-                            "was 'retired' but active config exists on disk (status=%s). "
-                            "Restored to '%s'.",
-                            bid,
-                            cfg_status,
-                            restored,
-                        )
+                if bid not in disk_brains:
+                    continue
+                cfg_status = disk_brains[bid].get("status", "candidate")
+                # Map config status to governance status
+                if cfg_status == "shadow":
+                    target = "candidate"
+                elif cfg_status in _GOV_STATUSES:
+                    target = cfg_status
+                else:
+                    target = "candidate"
+                current = bs.get("status")
+                if current == target:
+                    continue
+                old_status = current
+                gov2._brain_states[bid]["status"] = target
+                gov2._brain_states[bid]["last_transition_at"] = _utc_now_iso()
+                gov2._brain_states[bid]["transition_count"] = (
+                    gov2._brain_states[bid].get("transition_count", 0) + 1
+                )
+                gov2._transition_log.append(
+                    {
+                        "brain_id": bid,
+                        "from": old_status,
+                        "to": target,
+                        "reason": (
+                            f"SSOT reconciliation: config ({cfg_status}) "
+                            f"overrides governance ({old_status})"
+                        ),
+                        "timestamp": _utc_now_iso(),
+                        "fix_id": "FIX-20260628-161",
+                    }
+                )
+                reconciled.append(f"{bid}:{old_status}→{target}")
+                logging.warning(
+                    "BrainLifecycleManager: SSOT reconciliation — '%s' governance "
+                    "was '%s' but config declares '%s'. Corrected to '%s'.",
+                    bid,
+                    old_status,
+                    cfg_status,
+                    target,
+                )
             if reconciled:
                 report.hardcoded_path_mismatches.append(
-                    f"SSOT reconciled (config overrides retired governance): {reconciled}"
+                    f"SSOT reconciled (config overrides governance): {reconciled}"
                 )
                 self._save_governance_service(gov2)
                 try:  # noqa: SIM105

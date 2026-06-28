@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T08:30:39Z
+> **自动生成**: 2026-06-28T08:58:47Z
 > **扫描模块数**: 689
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -174,7 +174,7 @@
 | `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 521 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 17 | 350 | — | |
-| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1288 | — | |
+| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1320 | — | |
 | `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 23 | 548 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
