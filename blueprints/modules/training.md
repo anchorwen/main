@@ -74,6 +74,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260628-063 | 2026-06-28 | cursor-agent | — | **XAU Swing V9 全系列 V3 回训**. M30/M15/H1/H4 4个模型使用 profitability-aligned label contracts (SL=3.0/TP=1.5~2.0) 重建数据集+重训。M5→TF 重采样对齐数据边界至 2026-06-24。M15_V3 填补 config 真空。H4_V3 样本从 717→5,261 (+7.3x), PF 0.74→2.16。全部 shadow 状态孵化。 | L3 — label contract EV misalignment + data staleness + M15 config gap |
 | FIX-20260628-061 | 2026-06-28 | cursor-agent | — | **DQAF-061 L3: governance_scheduler.py auto-register + _data_source "no_data"**. Auto-registers unregistered brains before set_performance_metrics() (silent skip → 31 XAU brains now reachable). _data_source "no_data" marker for 0-trade brains. | RC-09, RC-06 |
 | FIX-20260628-060 | 2026-06-28 | cursor-agent | — | DQAF-060 L3: Event Sourcing semantic conflation — governance_scheduler.py: inf-safe pf handling, honest _data_source lineage (live_journal vs pnl_store), math.isinf() guards | L3-architecture |
 | FIX-20260628-158 | 2026-06-28 | cursor-agent | 306e8450 | train_exit_metamodel.py: 19-dim ExitFeatureSnapshot upgrade + hard assertion. Architecture Committee rectification. Hard assertion (sys.exit(1)) on 8-dim journal contamination. First training: 32 paired/7 wins/21.88% WR. | missing-feature |

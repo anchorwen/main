@@ -80,6 +80,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260628-063 | 2026-06-28 | cursor-agent | — | **XAU Swing V9 V3 retrain — live.yaml brain registry update**. V2 disabled (M30/H1/H4), V3 enabled for all 4 TFs. M30_V3 new entry added to registry. M15_V3 already present from prior auto-reg. All V3 models shadow status. | L3 — model lifecycle upgrade |
 | FIX-20260628-062 | 2026-06-28 | cursor-agent | — | **DQAF-062 L3: Config→Governance Reconciliation Gate** — new `_step_config_gov_reconcile()` in daily_ops.py runs before governance cycle. Reads brain_registry_entry.v1 configs, auto-registers missing brains as candidate, detects status drift without overriding governance lifecycle. | RC-09, RC-12 |
 | FIX-20260628-060 | 2026-06-28 | cursor-agent | — | DQAF-060 L3: Event Sourcing semantic conflation — _step_augment_journal() integrated into daily_ops pipeline with entry-loss safety assertion | L3-architecture |
 | FIX-20260628-159 | 2026-06-28 | cursor-agent | — | **position_query.py: MT5 history deals query + dual-terminal support**. Added `--deals` mode (mt5.history_deals_get() for authoritative broker trade records), `--xau` preset (Exness terminal), `--days N` lookback, `--symbol` filter. W/L/BE summary with total PnL, JSON output. Supports BTC terminal (D:\MetaTrader 5\) and XAU terminal (D:\exness\MetaTrader 5 EXNESS2\). | L1 — tooling gap: no script-based MT5 history query |

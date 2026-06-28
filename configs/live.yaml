@@ -1,7 +1,7 @@
 schema_version: live_config.v2
 description: Quant OS live & shadow unified configuration
 adapter:
-  name: mt5_zmq  # Phase 1 ZMQ bridge (2026-06-13). Revert to "mt5" for file IPC fallback.
+  name: mt5_zmq
 zmq:
   order_endpoint: tcp://127.0.0.1:5556
   ack_endpoint: tcp://127.0.0.1:5557
@@ -19,9 +19,9 @@ features:
 brains:
   registry_entries:
   - path: configs/brains/OU_Params_V6_Sniper.json
-    enabled: false  # FIX-20260625-136: retired — -60.8R fleet audit
+    enabled: false
   - path: configs/brains/OU_Params_V7_M15.json
-    enabled: false  # FIX-20260625-136: retired — -25.9R fleet audit
+    enabled: false
   - path: configs/brains/Meta_Stage1_Huber_V1.json
     enabled: false
   - path: configs/brains/Meta_Stage1_Binary_Cls_V1.json
@@ -29,15 +29,15 @@ brains:
   - path: configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json
     enabled: false
   - path: configs/brains/Swing_V9_M30_V2.json
+    enabled: false
+  - path: configs/brains/Swing_V9_M30_V3.json
     enabled: true
   - path: configs/brains/Swing_V9_M15_V2.json
-    enabled: false  # FIX-20260625-136: retired — -31.2R fleet audit, throttle/promote oscillation
+    enabled: false
   - path: configs/brains/Brain_Trend_M30_V1.json
     enabled: false
   - path: configs/brains/Brain_Rev_M30_V1.json
     enabled: false
-  # ── FIX-20260615-010: Phantom entries removed — files do not exist on disk ──
-  # ── DLR-001 config drift fix (2026-06-17): V1 archived, V2 promoted to live ──
   - path: configs/brains/Barrier_V9_12B_V2.json
     enabled: true
   - path: configs/brains/Brain_Trend_M30_V2.json
@@ -51,20 +51,21 @@ brains:
   - path: configs/brains/Swing_V10_M15.json
     enabled: false
   - path: configs/brains/Swing_V9_H4_V2.json
-    enabled: true  # FIX-20260615-009h: RE-ENABLED — h4_swing had zero enabled brains
+    enabled: false
   - path: configs/brains/Swing_V9_H1_V2.json
-    enabled: true  # FIX-20260615-009h: RE-ENABLED — V10 schema was broken (swing_enhanced_37→BTC alias, now deleted)
-  # ── FIX-20260611-005: XAU Directional brains ──
+    enabled: false
   - path: configs/brains/Swing_V10_H1_Directional.json
-    enabled: true  # FIX-20260615-010/P2: RE-ENABLED — retrained 35-dim swing_enhanced_35, DirAcc=51.8%, sandbox passed
+    enabled: true
   - path: configs/brains/Swing_LGB_M30_V1.json
     enabled: false
   - path: configs/brains/Swing_LGB_M15_V1.json
     enabled: false
-  # ── DQAF-20260615-005: BTC_Swing_V5 REMOVED from XAU config ──
-  # This entry caused XAU's live_intent_loop to discover and load BTC brains,
-  # leading to BTC position management on the wrong MT5 terminal (EXNESS2).
-  # 43 BTC trail stops were sent to XAU terminal — all rejected.
+  - path: configs/brains/Swing_V9_M15_V3.json
+    enabled: true
+  - path: configs/brains/Swing_V9_H1_V3.json
+    enabled: true
+  - path: configs/brains/Swing_V9_H4_V3.json
+    enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
@@ -451,9 +452,6 @@ strategy_lines:
       trail_atr_mult_low: 1.8
       trail_atr_mult_high: 2.5
       breakeven_threshold_atr: 0.5
-      # ── FIX-20260611-017: StatArb exit unbundling ──
-      # trail_activation_atr: 0.3→1.0 — prevents trail from killing mean-reversion
-      # hesitation_cycles: 6→24 — mean-reversion needs time for price oscillation
       trail_activation_atr: 1.0
       flip_exit_enabled: false
       time_exit_cycles: 40
@@ -613,7 +611,8 @@ strategy_lines:
       time_exit_cycles: 36
       hesitation_cycles: 3
       trail_activation_atr: 0.4
-      _comment_trail_activation: 'DQAF-005: medium trend, balance noise vs breathing room'
+      _comment_trail_activation: 'DQAF-005: medium trend, balance noise vs breathing
+        room'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
@@ -734,7 +733,8 @@ strategy_lines:
       min_r_for_hold: 0.0
       hesitation_cycles: 3
       trail_activation_atr: 0.7
-      _comment_trail_activation: 'DQAF-051: V10 directional — trained SL=2.0/TP=3.5, symmetric to training contract'
+      _comment_trail_activation: 'DQAF-051: V10 directional — trained SL=2.0/TP=3.5,
+        symmetric to training contract'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 3
@@ -781,14 +781,16 @@ strategy_lines:
   structural_swing_v1:
     enabled: true
     mode: probation
-    _comment: 'FIX-20260613-C: Zero-ML rule-based strategy. Backtest +252R, Sharpe 0.93.'
+    _comment: 'FIX-20260613-C: Zero-ML rule-based strategy. Backtest +252R, Sharpe
+      0.93.'
     timeframe: M5
     magic: 90501
     strategy_family: rule_based
     rule_engine: structural_swing_v1
     min_valid_brains: 0
     brain_types: []
-    _comment_brainless: 'Pure math — no ML models. Calibrated SL=3.0/TP=1.5 labels are the alpha.'
+    _comment_brainless: Pure math — no ML models. Calibrated SL=3.0/TP=1.5 labels
+      are the alpha.
     base_volume: 0.01
     max_volume: 0.01
     max_positions_per_direction: 1
@@ -806,15 +808,8 @@ strategy_lines:
       trail_enabled: false
       flip_exit_enabled: false
       time_exit_cycles: 12
-      _comment_timeout: 'M5×12=1h. Calibration shows 35.6% timeout rate at -0.60R avg.'
+      _comment_timeout: M5×12=1h. Calibration shows 35.6% timeout rate at -0.60R avg.
       hesitation_cycles: 0
-      # ── DQAF-20260616-001: Disable breakeven guard ──
-      # Training labels assume exactly 3 outcomes (TP=+1.5ATR, SL=-3.0ATR, timeout=12b).
-      # Default breakeven at 1.0ATR introduces a 4th outcome not in the calibration model,
-      # invalidating the EV=+0.2044R estimate.  At R:R=0.50, the breakeven guard needs to
-      # save >2 SLs per killed TP to be net-positive — but P(TP)=47.6% >> P(SL)=16.8%,
-      # so it is structurally net-negative for this specific risk:reward profile.
-      # 999 = effectively disabled (requires price to move 999×ATR before breakeven).
       breakeven_threshold_atr: 999
     budget:
       daily_loss_limit_pct: -0.05
@@ -822,12 +817,9 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
     _monitoring:
-      _comment_timeout_tracking: 'Track timeout PnL separately for ML training data collection'
+      _comment_timeout_tracking: Track timeout PnL separately for ML training data
+        collection
 regime_gate:
-  # DQAF-20260622-059 (P0-3): ADX filter THERMALLY FUSED — thresholds set to
-  # unrealistically high values to disable counter-trend blocking.  The ADX
-  # gate was suffocating XAU short signals during strong downtrends.
-  # RESTORE: set trending_threshold back to 30, mild_trend_threshold to 20.
   adx:
     trending_threshold: 999
     mild_trend_threshold: 999
