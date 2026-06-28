@@ -56,6 +56,11 @@ def compute_contract_group_consensus(
     weighter.apply_weights(raw_proposals)
 
     # ── Capacity-aware position sizing (P&L Phase 4) ──
+    # FIX-20260629-172: Unified weighting contract — capacity allocation
+    # must use base_weight × dynamic_scale (same contract as voting in
+    # contract_groups.py).  Bare get_weights() returns PnL-driven
+    # dynamic_scale only, which allows vote_weight=0 (shadow/muted)
+    # brains to receive positive capacity allocations.
     capacity_allocations: dict[str, float] = {}
     if total_budget > 0:
         with FaultTolerantContext(
@@ -63,7 +68,24 @@ def compute_contract_group_consensus(
             component="CapitalAllocator:allocate_capacity",
         ):
             allocator = CapitalAllocator()
-            brain_weights = weighter.get_weights()
+            # ── Build unified weights: base_weight × dynamic_scale ──
+            # base_weight: config-level vote_weight from BrainSignal (SSOT).
+            #   0.0 = muted (shadow/retired) — must receive 0 capacity.
+            # dynamic_scale: PnL-driven performance multiplier from weighter.
+            _base_vote_weights: dict[str, float] = {}
+            for p in raw_proposals:
+                _bid = getattr(p, "brain_id", "")
+                if _bid:
+                    _base_vote_weights[_bid] = float(getattr(p, "vote_weight", 1.0) or 1.0)
+            _pnl_dynamic_weights = weighter.get_weights()
+            brain_weights: dict[str, float] = {}
+            for _bid, _pnl_w in _pnl_dynamic_weights.items():
+                _base = _base_vote_weights.get(_bid, 1.0)
+                brain_weights[_bid] = _base * _pnl_w
+            # Brains present only in proposals (not yet in PnL tracker)
+            for _bid, _base in _base_vote_weights.items():
+                if _bid not in brain_weights:
+                    brain_weights[_bid] = _base * 1.0
             capacity_allocations = allocator.allocate_capacity(
                 total_budget=total_budget,
                 brain_weights=brain_weights,

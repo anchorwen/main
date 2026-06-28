@@ -579,6 +579,28 @@ class StrategyLine:
                     name,
                 )
 
+        # ── FIX-20260629-171 Phase 2 + FIX-20260629-172: Strategy mode enforcement ──
+        # Derive regime_gate_mode from config.mode so that callers cannot
+        # bypass shadow/probation restrictions by passing "full" blindly.
+        # This closes the gap where YAML `mode` was purely documentational
+        # (DQAF-20260609-011 Cut 4 — micro-volume still allowed candidate
+        # brains to trade real capital).
+        if self.config.mode == "shadow":
+            regime_gate_mode = "shadow"
+        elif self.config.mode == "probation":
+            # Probation strategies require ≥1 brain at governance probation+
+            # status.  Without a qualified brain, force shadow mode (virtual
+            # signals only, no real orders).
+            _has_qualified_brain = False
+            if governance_state is not None and isinstance(governance_state, dict):
+                _gov_brains = governance_state.get("brain_states", {})
+                _has_qualified_brain = any(
+                    isinstance(bs, dict) and bs.get("status") in ("live", "probation")
+                    for bs in _gov_brains.values()
+                )
+            if not _has_qualified_brain:
+                regime_gate_mode = "shadow"
+
         # ── 1. Regime gate ──
         if regime_gate_mode == "off":
             return self._make_decision(
