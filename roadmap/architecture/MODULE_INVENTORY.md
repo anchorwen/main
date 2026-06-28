@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T00:57:45Z
-> **扫描模块数**: 686
+> **自动生成**: 2026-06-28T03:06:04Z
+> **扫描模块数**: 688
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -173,9 +173,9 @@
 | `atomic_file_writer.py` | ✅ active | AtomicFileError, AtomicFileWriter | 14 | 169 | — | |
 | `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 521 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
-| `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 13 | 226 | — | |
+| `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 17 | 344 | — | |
 | `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1288 | — | |
-| `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 22 | 500 | — | |
+| `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 23 | 548 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
 | `compliance_control_matrix.py` | ✅ active | ComplianceControlMatrixService | 11 | 424 | — | |
@@ -641,6 +641,7 @@
 | `audit_behavior_compliance.py` | ✅ active | — | 5 | 437 | — | |
 | `audit_brain_fleet.py` | ✅ active | — | 1 | 307 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
+| `audit_btc_live_direction.py` | ✅ active | — | 7 | 281 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
@@ -716,6 +717,7 @@
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
+| `forensic_feature_analysis.py` | ✅ active | — | 2 | 280 | — | |
 | `generate_btc_empirical_scaler.py` | ✅ active | — | 3 | 221 | — | |
 | `generate_micro_scaler.py` | ✅ active | — | 5 | 320 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
@@ -905,7 +907,7 @@
 | `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2075 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
-| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1142 | — | |
+| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1423 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |
@@ -939,7 +941,7 @@
 | `online_mlp_trainer.py` | ✅ active | — | 6 | 285 | — | |
 | `sur_trainer.py` | ✅ active | — | 5 | 312 | — | |
 | `transformer_trainer.py` | ✅ active | UpgradedQuantTransformer, _Model | 13 | 784 | — | |
-| `xgb_trainer.py` | ✅ active | — | 9 | 625 | — | |
+| `xgb_trainer.py` | ✅ active | — | 9 | 624 | — | |
 
 ## scripts/tuning
 

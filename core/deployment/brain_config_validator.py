@@ -100,6 +100,7 @@ class BrainConfigValidator:
         self._check_artifact_hash(brain_entry, result)
         self._check_features_field(brain_entry, result)
         self._check_magic_unique(brain_entry, result)
+        self._check_training_objective(brain_entry, result)
 
         result.ok = len(result.errors) == 0
         return result
@@ -213,6 +214,123 @@ class BrainConfigValidator:
                 f"brain_id={brain_id}: magic={magic} also used by "
                 f"brain_id='{conflict_bid}' — may cause signal routing conflicts"
             )
+
+    # ── training objective validation with dynamic inference (IC Mandate #2) ──
+    # FIX-20260628-058 / DQAF-058: binary models without explicit objective
+    # declaration produce incorrect direction mapping.  When objective is
+    # missing, attempt to infer it from the model artifact; if inference
+    # fails, flag as ERROR (ghost brain — unknown direction dimensionality).
+
+    def _check_training_objective(self, entry: dict, result: ValidationResult) -> None:
+        brain_id = entry.get("brain_id", "?")
+        brain_type = entry.get("brain_type", "")
+
+        # Meta brains skip — they use their own predict_proba(), not _score_to_direction()
+        if brain_type.startswith("meta_"):
+            return
+
+        training_params = entry.get("training_params")
+        if training_params is None:
+            # No training_params at all — try to auto-populate from artifact
+            training_params = {}
+            entry["training_params"] = training_params
+
+        if training_params.get("objective"):
+            return  # already set — nothing to do
+
+        # Try dynamic inference from model artifact
+        inferred = self._infer_objective_from_artifact(entry)
+        if inferred:
+            training_params["objective"] = inferred
+            result.warnings.append(
+                f"brain_id={brain_id}: auto-inferred objective='{inferred}' "
+                f"from model artifact — consider adding to brain config explicitly"
+            )
+        else:
+            # Ghost brain: no objective declared, can't infer from model
+            result.errors.append(
+                f"brain_id={brain_id}: missing training_params.objective — "
+                f"cannot determine direction dimensionality. "
+                f"Add 'objective' to training_params in brain config, "
+                f"or ensure model artifact is accessible for dynamic inference."
+            )
+
+    def _infer_objective_from_artifact(self, entry: dict) -> str | None:
+        """Read model file header to infer training objective.
+
+        XGBoost (.json): parse learner.learner_model_param.num_class
+          - num_class >= 3 → multi:softprob
+          - num_class <= 1 → binary:logistic
+        LightGBM (.txt): parse objective= and num_class= from file header
+          - num_class >= 3 → multiclass
+          - objective contains 'binary' → binary
+          - otherwise → regression
+        Returns None if inference fails.
+        """
+        artifact_path = entry.get("artifact_path", "")
+        if not artifact_path:
+            return None
+
+        path = Path(artifact_path)
+        if not path.exists():
+            return None
+
+        brain_type = entry.get("brain_type", "")
+
+        if brain_type.startswith("xgboost"):
+            return self._infer_xgboost_objective(path)
+        elif brain_type.startswith("lightgbm"):
+            return self._infer_lightgbm_objective(path)
+
+        return None
+
+    @staticmethod
+    def _infer_xgboost_objective(path: Path) -> str | None:
+        """Infer objective from XGBoost JSON model file."""
+        try:
+            with open(path, encoding="utf-8") as f:
+                # Read only the first few KB for the learner config header
+                header = f.read(4096)
+            # XGBoost JSON models can be large single-line files.
+            # Try parsing the header; if truncated, fall back to full parse.
+            try:
+                data = json.loads(header)
+            except json.JSONDecodeError:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+
+            num_class_str = (
+                data.get("learner", {}).get("learner_model_param", {}).get("num_class", "0")
+            )
+            nc = int(num_class_str) if num_class_str and str(num_class_str) != "" else 0
+            return "multi:softprob" if nc >= 3 else "binary:logistic"
+        except (json.JSONDecodeError, OSError, ValueError, KeyError):
+            return None
+
+    @staticmethod
+    def _infer_lightgbm_objective(path: Path) -> str | None:
+        """Infer objective from LightGBM .txt model file header."""
+        try:
+            nc = 1
+            obj = ""
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("num_class="):
+                        nc = int(line.split("=", 1)[1].strip())
+                    elif line.startswith("objective="):
+                        obj = line.split("=", 1)[1].strip()
+                    elif line.startswith("Tree="):
+                        break  # stop at first tree definition
+
+            if nc >= 3:
+                return "multiclass"
+            elif "binary" in obj.lower():
+                return "binary"
+            elif obj:
+                return "regression"
+            return None
+        except (OSError, ValueError):
+            return None
 
 
 # Singleton for use by BrainFactory

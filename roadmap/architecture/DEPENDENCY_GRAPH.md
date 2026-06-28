@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-28T00:57:45Z
+> **自动生成**: 2026-06-28T03:06:04Z
 
 ## Package-Level Dependencies
 
@@ -557,6 +557,7 @@
 - `audit_behavior_compliance.py` → (无内部依赖)
 - `audit_brain_fleet.py` → (无内部依赖)
 - `audit_btc_cross_validate.py` → (无内部依赖)
+- `audit_btc_live_direction.py` → (无内部依赖)
 - `audit_btc_v11_ledger.py` → (无内部依赖)
 - `audit_cross_symbol_consistency.py` → `scripts.alert_dispatcher`
 - `audit_data_exhaustive.py` → `core.data.ticket_resolver`
@@ -632,6 +633,7 @@
 - `extract_health_checks.py` → (无内部依赖)
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`
 - `feedback_loop.py` → `core.feedback.brain_performance_tracker`
+- `forensic_feature_analysis.py` → (无内部依赖)
 - `generate_btc_empirical_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `generate_micro_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `governance_promote_m15.py` → (无内部依赖)

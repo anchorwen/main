@@ -62,7 +62,7 @@ DEFAULT_PARAMS_MULTI: dict[str, Any] = {
     "learning_rate": 0.05,
     "subsample": 0.8,
     "colsample_bytree": 0.8,
-    "objective": "multi:softmax",
+    "objective": "multi:softprob",
     "num_class": 3,
     "eval_metric": "mlogloss",
     "random_state": 42,
@@ -103,10 +103,9 @@ def load_npz(
             y = data["y"].astype(np.float64)
     elif multi_class:
         y = data["y"].astype(np.int32)
-        # Map -1,0,1 → 0,1,2 for XGBoost multi:softmax
-        y = np.where(y == -1, 2, y)  # -1 → 2 (sl_hit_first)
-        y = np.where(y == 1, 1, y)  #  1 → 1 (tp_hit_first)
-        # 0 stays 0 (timeout)
+        # Map -1,0,1 → 0,1,2 for XGBoost multi:softprob
+        # class 0=SHORT, class 1=NEUTRAL, class 2=LONG (adapter: probs[2] - probs[0])
+        y = y + 1  # -1→0(SHORT), 0→1(NEUTRAL), 1→2(LONG)
     else:
         y = data["y"]
     pnl_arr = data.get("pnl")
@@ -181,7 +180,7 @@ def train_xgboost(
         val_data: Optional (X_val, y_val) for early stopping and eval.
         feature_names: Optional list of feature names.
         regression: If True, use reg:squarederror.
-        multi_class: If True, use multi:softmax with num_class=3.
+        multi_class: If True, use multi:softprob with num_class=3.
         custom_obj: Optional custom objective callable for XGBoost.
         sample_weight: Optional per-sample weights (e.g., return-magnitude).
         pnl: Optional P&L array for custom objective computation.
@@ -216,7 +215,7 @@ def train_xgboost(
         multi_weights = cls_weights[y]
         dtrain.set_weight(multi_weights)
         print(
-            f"[xgb_trainer] Multi-class weights: {dict(zip(['timeout','tp','sl'], cls_weights.round(4).tolist(), strict=False))}"
+            f"[xgb_trainer] Multi-class weights: {dict(zip(['short','neutral','long'], cls_weights.round(4).tolist(), strict=False))}"
         )
     elif not regression:
         # Binary classification: scale_pos_weight for class imbalance
@@ -294,12 +293,12 @@ def train_xgboost(
             metrics["val_r2"] = round(val_r2, 6)
             metrics["val_rmse"] = round(val_rmse, 6)
     elif multi_class:
-        # multi:softmax returns class predictions (0,1,2)
-        train_preds = booster.predict(dtrain).astype(np.int32)
+        # multi:softprob returns probability matrix (n, 3) — argmax for class predictions
+        train_preds = booster.predict(dtrain).argmax(axis=1).astype(np.int32)
         train_acc = float((train_preds == y).mean())
         metrics["train_accuracy"] = round(train_acc, 6)
         # Per-class accuracy
-        for cls_idx, cls_name in enumerate(["timeout", "tp_hit", "sl_hit"]):
+        for cls_idx, cls_name in enumerate(["short", "neutral", "long"]):
             mask = y == cls_idx
             if mask.sum() > 0:
                 metrics[f"train_acc_{cls_name}"] = round(
@@ -309,10 +308,10 @@ def train_xgboost(
             dval_post = xgb.DMatrix(val_data[0], label=val_data[1])
             if feature_names:
                 dval_post.feature_names = feature_names
-            val_preds = booster.predict(dval_post).astype(np.int32)
+            val_preds = booster.predict(dval_post).argmax(axis=1).astype(np.int32)
             multi_val_acc = float((val_preds == val_data[1]).mean())
             metrics["val_accuracy"] = round(multi_val_acc, 6)
-            for cls_idx, cls_name in enumerate(["timeout", "tp_hit", "sl_hit"]):
+            for cls_idx, cls_name in enumerate(["short", "neutral", "long"]):
                 mask = val_data[1] == cls_idx
                 if mask.sum() > 0:
                     metrics[f"val_acc_{cls_name}"] = round(

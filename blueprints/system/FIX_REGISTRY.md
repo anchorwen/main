@@ -890,6 +890,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260628-157 | 2026-06-28 | deployment_lifecycle | check_symbol_liveness.py: institutional preflight probe. Architecture Committee rectification. SYMBOL_DATA_DIR_MAP corrected: XAUUSDc→data (was data_xau). Iron Law #11 machine enforcement. | RC-12 |
 | FIX-20260628-158 | 2026-06-28 | training | train_exit_metamodel.py: 19-dim ExitFeatureSnapshot upgrade + hard assertion. Architecture Committee rectification. Hard assertion (sys.exit(1)) on 8-dim journal contamination. First training: 32 paired/7 wins/21.88% WR. | RC-12 |
 | FIX-20260628-159 | 2026-06-28 | runtime-live | cursor-agent | position_query.py: MT5 history deals query + dual-terminal (BTC/XAU) support. --deals --xau --days flags, W/L/BE summary, JSON output. | RC-12 |
+| FIX-20260628-058 | 2026-06-28 | brains-adapters | L3 Architecture Fix: Restore BTC direction diversity by retraining V4+V12_H1_15 as 3-class (multi:softprob/multiclass). Fix xgb_trainer label mapping inversion. Add objective field validation + dynamic inference from model artifacts. Add training gate with direction diversity + Wasserstein distance check. | RC-09 |
 ## Fix Details by Quarter
 
 > Fix detail entries are stored in quarterly files under `fixes/`.

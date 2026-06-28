@@ -594,8 +594,12 @@ def build_dataset(
     cv_folds: int = 5,
     purge_bars: int = 24,
     timeframe_minutes: float = 60.0,
+    multi_class: bool = False,
 ) -> dict[str, Any]:
-    """Full B2 pipeline: CSV → features + labels → weights → CV splits → NPZ."""
+    """Full B2 pipeline: CSV → features + labels → weights → CV splits → NPZ.
+
+    When multi_class=True: trains 3-class (SHORT/NEUTRAL/LONG) instead of binary.
+    """
     print(f"[B2] Loading BTC M5 data from {csv_path}...")
     df = pd.read_csv(csv_path)
     n_bars = len(df)
@@ -749,57 +753,101 @@ def build_dataset(
     hold_bars = hold_bars[valid_idx]
     ts_valid = timestamps_f[valid_idx]
 
-    # Remove timeout (label=0) → binary classification TP vs SL
-    non_timeout = labels != 0
-    features_bin = features[non_timeout]
-    labels_bin = labels[non_timeout]
-    pnl_r_bin = pnl_r[non_timeout]
-    ts_bin = ts_valid[non_timeout]
+    # ── Multi-class vs Binary path ──
+    if multi_class:
+        # Keep all 3 classes → SHORT(-1)/NEUTRAL(0)/LONG(+1)
+        labels_out = labels + 1  # [-1,0,1] → [0,1,2] for multi:softprob
+        pnl_r_out = np.nan_to_num(pnl_r, nan=0.0)
+        ts_out = ts_valid
+        features_out = features
 
-    n_total = len(labels_bin)
-    n_tp = int(np.sum(labels_bin == 1))
-    n_sl = int(np.sum(labels_bin == -1))
-    print(f"[B2] Binary samples: {n_total:,} (TP={n_tp}, SL={n_sl}, WR={n_tp/max(n_total,1):.1%})")
-    tp_samples_pnl = float(np.mean(pnl_r_bin[labels_bin == 1])) if n_tp > 0 else 0.0
-    sl_samples_pnl = float(np.mean(pnl_r_bin[labels_bin == -1])) if n_sl > 0 else 0.0
-    ev = float(np.mean(pnl_r_bin))
-    print(f"[B2] Avg PnL: TP={tp_samples_pnl:.3f}R, SL={sl_samples_pnl:.3f}R, EV={ev:.3f}R")
+        n_short = int(np.sum(labels == -1))
+        n_neutral = int(np.sum(labels == 0))
+        n_long = int(np.sum(labels == 1))
+        n_total = len(labels_out)
+        print(
+            f"[B2] 3-class samples: {n_total:,} "
+            f"(SHORT={n_short}, NEUTRAL={n_neutral}, LONG={n_long})"
+        )
+        ev = float(np.mean(pnl_r_out))
 
-    # ── Time-decay weights ──
-    print(f"[B2] Computing time-decay weights (half-life={decay_half_life_days}d)...")
-    sample_weights = compute_time_decay_weights(ts_bin, decay_half_life_days)
-    print(f"  Weight range: [{sample_weights.min():.3f}, {sample_weights.max():.3f}]")
-    print(f"  Weight mean: {sample_weights.mean():.3f}")
+        # ── Time-decay weights ──
+        print(f"[B2] Computing time-decay weights (half-life={decay_half_life_days}d)...")
+        sample_weights = compute_time_decay_weights(ts_out, decay_half_life_days)
+
+        # ── Class-balanced weighting (IC Mandate #1) ──
+        from sklearn.utils.class_weight import compute_sample_weight as csw
+
+        class_bal_weights = csw("balanced", labels_out)
+        sample_weights = sample_weights * class_bal_weights
+        print(
+            f"  Class-balance multipliers: "
+            f"SHORT={class_bal_weights[labels_out==0].mean():.2f}, "
+            f"NEUTRAL={class_bal_weights[labels_out==1].mean():.2f}, "
+            f"LONG={class_bal_weights[labels_out==2].mean():.2f}"
+        )
+        print(f"  Combined weight range: [{sample_weights.min():.3f}, {sample_weights.max():.3f}]")
+        print(f"  Combined weight mean: {sample_weights.mean():.3f}")
+    else:
+        # Remove timeout (label=0) → binary classification TP vs SL
+        non_timeout = labels != 0
+        features_out = features[non_timeout]
+        labels_out = labels[non_timeout]
+        pnl_r_out = pnl_r[non_timeout]
+        ts_out = ts_valid[non_timeout]
+
+        n_total = len(labels_out)
+        n_tp = int(np.sum(labels_out == 1))
+        n_sl = int(np.sum(labels_out == -1))
+        print(
+            f"[B2] Binary samples: {n_total:,} (TP={n_tp}, SL={n_sl}, WR={n_tp/max(n_total,1):.1%})"
+        )
+        tp_samples_pnl = float(np.mean(pnl_r_out[labels_out == 1])) if n_tp > 0 else 0.0
+        sl_samples_pnl = float(np.mean(pnl_r_out[labels_out == -1])) if n_sl > 0 else 0.0
+        ev = float(np.mean(pnl_r_out))
+        print(f"[B2] Avg PnL: TP={tp_samples_pnl:.3f}R, SL={sl_samples_pnl:.3f}R, EV={ev:.3f}R")
+
+        # ── Time-decay weights ──
+        print(f"[B2] Computing time-decay weights (half-life={decay_half_life_days}d)...")
+        sample_weights = compute_time_decay_weights(ts_out, decay_half_life_days)
+        print(f"  Weight range: [{sample_weights.min():.3f}, {sample_weights.max():.3f}]")
+        print(f"  Weight mean: {sample_weights.mean():.3f}")
 
     # ── Walk-forward purged CV splits ──
     print(
         f"[B2] Generating walk-forward purged CV splits ({cv_folds} folds, {purge_bars} bar purge)..."
     )
-    splits = walk_forward_purged_splits(n_total, ts_bin, cv_folds, purge_bars)
+    splits = walk_forward_purged_splits(n_total, ts_out, cv_folds, purge_bars)
     for s in splits:
         train_n = len(s["train_idx"])
         test_n = len(s["test_idx"])
-        test_wr = float(np.mean(labels_bin[s["test_idx"]] == 1)) if test_n > 0 else 0.0
-        print(f"  Fold {s['fold']}: train={train_n:,}, test={test_n:,}, test_WR={test_wr:.1%}")
+        if multi_class:
+            test_wr = float(np.mean(labels_out[s["test_idx"]] == 2)) if test_n > 0 else 0.0
+            test_sr = float(np.mean(labels_out[s["test_idx"]] == 0)) if test_n > 0 else 0.0
+            print(
+                f"  Fold {s['fold']}: train={train_n:,}, test={test_n:,}, "
+                f"test_WR(LONG)={test_wr:.1%}, test_SR(SHORT)={test_sr:.1%}"
+            )
+        else:
+            test_wr = float(np.mean(labels_out[s["test_idx"]] == 1)) if test_n > 0 else 0.0
+            print(f"  Fold {s['fold']}: train={train_n:,}, test={test_n:,}, test_WR={test_wr:.1%}")
 
     # ── Save dataset ──
     os.makedirs(output_dir, exist_ok=True)
     np.savez_compressed(
         os.path.join(output_dir, "train.npz"),
-        X=features_bin,
-        y=labels_bin,
-        pnl_r=pnl_r_bin,
+        X=features_out,
+        y=labels_out,
+        pnl_r=pnl_r_out,
         sample_weight=sample_weights,
-        timestamps=ts_bin,
+        timestamps=ts_out,
     )
     # Save metadata
-    meta = {
+    meta: dict[str, Any] = {
         "schema_version": "btc_swing_v9.v1",
         "feature_names": ALL_FEATURE_NAMES,
         "n_features": N_FEATURES,
         "n_samples": int(n_total),
-        "n_tp": int(n_tp),
-        "n_sl": int(n_sl),
         "horizon": horizon,
         "sl_atr_mult": sl_atr_mult,
         "tp_atr_mult": tp_atr_mult,
@@ -810,8 +858,17 @@ def build_dataset(
         "cv_folds": cv_folds,
         "purge_bars": purge_bars,
         "ev_r": float(ev),
+        "objective": "multi:softprob" if multi_class else "binary:logistic",
+        "num_class": 3 if multi_class else 1,
         "built_at": datetime.now(UTC).isoformat(),
     }
+    if multi_class:
+        meta["n_short"] = int(np.sum(labels_out == 0))
+        meta["n_neutral"] = int(np.sum(labels_out == 1))
+        meta["n_long"] = int(np.sum(labels_out == 2))
+    else:
+        meta["n_tp"] = int(np.sum(labels_out == 1))
+        meta["n_sl"] = int(np.sum(labels_out == -1))
     with open(os.path.join(output_dir, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
@@ -828,7 +885,7 @@ def build_dataset(
         json.dump(cv_data, f, indent=2)
 
     print(f"[B2] Dataset saved to {output_dir}/")
-    print(f"  train.npz: X={features_bin.shape}, y={labels_bin.shape}")
+    print(f"  train.npz: X={features_out.shape}, y={labels_out.shape}")
     return meta
 
 
@@ -843,12 +900,21 @@ def train_xgboost(
     y_val: np.ndarray,
     w_val: np.ndarray,
     params: dict[str, Any],
+    multi_class: bool = False,
 ) -> tuple[Any, dict[str, float]]:
-    """Train XGBoost classifier with sample weights."""
+    """Train XGBoost classifier with sample weights.
+
+    When multi_class=True: y values are class labels 0/1/2 (SHORT/NEUTRAL/LONG).
+    Otherwise: y values are -1 (SL) / +1 (TP), binarized to 0/1.
+    """
     import xgboost as xgb
 
-    dtrain = xgb.DMatrix(X_train, label=(y_train > 0).astype(int), weight=w_train)
-    dval = xgb.DMatrix(X_val, label=(y_val > 0).astype(int), weight=w_val)
+    if multi_class:
+        dtrain = xgb.DMatrix(X_train, label=y_train.astype(int), weight=w_train)
+        dval = xgb.DMatrix(X_val, label=y_val.astype(int), weight=w_val)
+    else:
+        dtrain = xgb.DMatrix(X_train, label=(y_train > 0).astype(int), weight=w_train)
+        dval = xgb.DMatrix(X_val, label=(y_val > 0).astype(int), weight=w_val)
 
     model = xgb.train(
         params,
@@ -860,16 +926,32 @@ def train_xgboost(
     )
 
     # Evaluate
-    y_pred = model.predict(dval)
-    y_pred_binary = (y_pred > 0.5).astype(int)
-    y_true = (y_val > 0).astype(int)
-
-    accuracy = float(np.mean(y_pred_binary == y_true))
-    tp_mask = y_pred_binary == 1
-    if tp_mask.sum() > 0:
-        wr = float(np.mean(y_true[tp_mask] == 1))
+    if multi_class:
+        y_probs = model.predict(dval)  # shape (n, 3)
+        y_pred = y_probs.argmax(axis=1).astype(int)
+        accuracy = float(np.mean(y_pred == y_val.astype(int)))
+        # Directional WR: (class 2 = LONG) vs (class 0 = SHORT), ignoring neutral
+        directional_mask = y_val != 1  # exclude neutral
+        if directional_mask.sum() > 0:
+            long_pred_mask = y_pred == 2
+            wr = (
+                float(np.mean(y_val[long_pred_mask & directional_mask] == 2))
+                if long_pred_mask.sum() > 0
+                else 0.0
+            )
+        else:
+            wr = 0.0
     else:
-        wr = 0.0
+        y_pred = model.predict(dval)
+        y_pred_binary = (y_pred > 0.5).astype(int)
+        y_true = (y_val > 0).astype(int)
+
+        accuracy = float(np.mean(y_pred_binary == y_true))
+        tp_mask = y_pred_binary == 1
+        if tp_mask.sum() > 0:
+            wr = float(np.mean(y_true[tp_mask] == 1))
+        else:
+            wr = 0.0
 
     return model, {"val_accuracy": accuracy, "val_wr": wr, "n_trees": model.best_iteration}
 
@@ -882,12 +964,21 @@ def train_lightgbm(
     y_val: np.ndarray,
     w_val: np.ndarray,
     params: dict[str, Any],
+    multi_class: bool = False,
 ) -> tuple[Any, dict[str, float]]:
-    """Train LightGBM classifier with sample weights."""
+    """Train LightGBM classifier with sample weights.
+
+    When multi_class=True: y values are class labels 0/1/2 (SHORT/NEUTRAL/LONG).
+    Otherwise: y values are -1 (SL) / +1 (TP), binarized to 0/1.
+    """
     import lightgbm as lgb
 
-    dtrain = lgb.Dataset(X_train, label=(y_train > 0).astype(int), weight=w_train)
-    dval = lgb.Dataset(X_val, label=(y_val > 0).astype(int), weight=w_val, reference=dtrain)
+    if multi_class:
+        dtrain = lgb.Dataset(X_train, label=y_train.astype(int), weight=w_train)
+        dval = lgb.Dataset(X_val, label=y_val.astype(int), weight=w_val, reference=dtrain)
+    else:
+        dtrain = lgb.Dataset(X_train, label=(y_train > 0).astype(int), weight=w_train)
+        dval = lgb.Dataset(X_val, label=(y_val > 0).astype(int), weight=w_val, reference=dtrain)
 
     model = lgb.train(
         params,
@@ -896,13 +987,28 @@ def train_lightgbm(
         valid_names=["val"],
     )
 
-    y_pred = model.predict(X_val)
-    y_pred_binary = (y_pred > 0.5).astype(int)
-    y_true = (y_val > 0).astype(int)
+    if multi_class:
+        y_probs = model.predict(X_val)  # shape (n, 3) for multiclass
+        y_pred = y_probs.argmax(axis=1).astype(int)
+        accuracy = float(np.mean(y_pred == y_val.astype(int)))
+        directional_mask = y_val != 1
+        if directional_mask.sum() > 0:
+            long_pred_mask = y_pred == 2
+            wr = (
+                float(np.mean(y_val[long_pred_mask & directional_mask] == 2))
+                if long_pred_mask.sum() > 0
+                else 0.0
+            )
+        else:
+            wr = 0.0
+    else:
+        y_pred = model.predict(X_val)
+        y_pred_binary = (y_pred > 0.5).astype(int)
+        y_true = (y_val > 0).astype(int)
 
-    accuracy = float(np.mean(y_pred_binary == y_true))
-    tp_mask = y_pred_binary == 1
-    wr = float(np.mean(y_true[tp_mask] == 1)) if tp_mask.sum() > 0 else 0.0
+        accuracy = float(np.mean(y_pred_binary == y_true))
+        tp_mask = y_pred_binary == 1
+        wr = float(np.mean(y_true[tp_mask] == 1)) if tp_mask.sum() > 0 else 0.0
 
     return model, {"val_accuracy": accuracy, "val_wr": wr, "n_trees": model.best_iteration}
 
@@ -912,8 +1018,13 @@ def train_models(
     output_dir: str,
     optuna_trials: int = 50,
     n_seeds: int = 3,
+    multi_class: bool | None = None,
 ) -> dict[str, Any]:
-    """B3: Train XGBoost + LightGBM with walk-forward purged CV evaluation."""
+    """B3: Train XGBoost + LightGBM with walk-forward purged CV evaluation.
+
+    When multi_class=True: 3-class training (SHORT/NEUTRAL/LONG).
+    When None (default): auto-detect from meta.json.
+    """
 
     print(f"[B3] Loading dataset from {data_dir}/...")
     data = np.load(os.path.join(data_dir, "train.npz"))
@@ -927,12 +1038,20 @@ def train_models(
     with open(os.path.join(data_dir, "cv_splits.json"), encoding="utf-8") as f:
         cv_data = json.load(f)
 
+    # Auto-detect multi_class from meta if not explicitly set
+    if multi_class is None:
+        multi_class = meta.get("num_class", 1) >= 3
+
     print(f"[B3] Data: {X.shape[0]:,} samples × {X.shape[1]} features")
+    print(f"[B3] Mode: {'3-class (SHORT/NEUTRAL/LONG)' if multi_class else 'binary (TP/SL)'}")
     print(f"[B3] CV: {cv_data['n_folds']} folds, {cv_data['purge_bars']} bar purge")
 
     os.makedirs(output_dir, exist_ok=True)
 
     results: dict[str, list[dict[str, Any]]] = {"xgboost": [], "lightgbm": []}
+    # Accumulate across folds for direction diversity check
+    all_y_te: list[np.ndarray] = []
+    all_y_probs_xgb: list[np.ndarray] = []
 
     for fold_split in cv_data["splits"]:
         fold = fold_split["fold"]
@@ -944,34 +1063,62 @@ def train_models(
 
         print(f"\n{'='*60}")
         print(f"[B3] Fold {fold}: train={len(train_idx):,}, test={len(test_idx):,}")
-        test_wr_baseline = float(np.mean(y_te == 1))
-        print(f"[B3] Test baseline WR: {test_wr_baseline:.1%}")
+        if multi_class:
+            n_short_te = int(np.sum(y_te == 0))
+            n_neutral_te = int(np.sum(y_te == 1))
+            n_long_te = int(np.sum(y_te == 2))
+            print(f"[B3] Test dist: SHORT={n_short_te}, NEUTRAL={n_neutral_te}, LONG={n_long_te}")
+        else:
+            test_wr_baseline = float(np.mean(y_te == 1))
+            print(f"[B3] Test baseline WR: {test_wr_baseline:.1%}")
 
         # ── XGBoost ──
         print(f"\n[B3] --- XGBoost (fold {fold}) ---")
-        # scale_pos_weight = n_negative / n_positive for imbalanced data
-        n_pos = int(np.sum(y_tr == 1))
-        n_neg = int(np.sum(y_tr == -1))
-        scale_pos_weight_val = n_neg / max(n_pos, 1)
-        print(
-            f"  Class balance: {n_pos} TP / {n_neg} SL, scale_pos_weight={scale_pos_weight_val:.1f}"
-        )
-        xgb_params = {
-            "objective": "binary:logistic",
-            "eval_metric": "logloss",
-            "max_depth": 5,
-            "learning_rate": 0.02,
-            "n_estimators": 500,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "min_child_weight": 5,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
-            "scale_pos_weight": scale_pos_weight_val,
-            "random_state": 42,
-        }
+        if multi_class:
+            xgb_params = {
+                "objective": "multi:softprob",
+                "num_class": 3,
+                "eval_metric": "mlogloss",
+                "max_depth": 5,
+                "learning_rate": 0.02,
+                "n_estimators": 500,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "min_child_weight": 5,
+                "reg_alpha": 0.1,
+                "reg_lambda": 1.0,
+                "random_state": 42,
+            }
+        else:
+            n_pos = int(np.sum(y_tr == 1))
+            n_neg = int(np.sum(y_tr == -1))
+            scale_pos_weight_val = n_neg / max(n_pos, 1)
+            print(
+                f"  Class balance: {n_pos} TP / {n_neg} SL, scale_pos_weight={scale_pos_weight_val:.1f}"
+            )
+            xgb_params = {
+                "objective": "binary:logistic",
+                "eval_metric": "logloss",
+                "max_depth": 5,
+                "learning_rate": 0.02,
+                "n_estimators": 500,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "min_child_weight": 5,
+                "reg_alpha": 0.1,
+                "reg_lambda": 1.0,
+                "scale_pos_weight": scale_pos_weight_val,
+                "random_state": 42,
+            }
         model_xgb, metrics_xgb = train_xgboost(
-            X_tr, y_tr, w_tr, X_te, y_te, weights[test_idx], xgb_params
+            X_tr,
+            y_tr,
+            w_tr,
+            X_te,
+            y_te,
+            weights[test_idx],
+            xgb_params,
+            multi_class=multi_class,
         )
         print(
             f"  val_acc={metrics_xgb['val_accuracy']:.3f}, val_wr={metrics_xgb['val_wr']:.3f}, trees={metrics_xgb['n_trees']}"
@@ -985,24 +1132,49 @@ def train_models(
 
         # ── LightGBM ──
         print(f"\n[B3] --- LightGBM (fold {fold}) ---")
-        lgb_params = {
-            "objective": "binary",
-            "metric": "binary_logloss",
-            "max_depth": 5,
-            "learning_rate": 0.02,
-            "n_estimators": 500,
-            "num_leaves": 31,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "min_child_samples": 20,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
-            "scale_pos_weight": scale_pos_weight_val,
-            "random_state": 42,
-            "verbose": -1,
-        }
+        if multi_class:
+            lgb_params = {
+                "objective": "multiclass",
+                "num_class": 3,
+                "metric": "multi_logloss",
+                "max_depth": 5,
+                "learning_rate": 0.02,
+                "n_estimators": 500,
+                "num_leaves": 31,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "min_child_samples": 20,
+                "reg_alpha": 0.1,
+                "reg_lambda": 1.0,
+                "random_state": 42,
+                "verbose": -1,
+            }
+        else:
+            lgb_params = {
+                "objective": "binary",
+                "metric": "binary_logloss",
+                "max_depth": 5,
+                "learning_rate": 0.02,
+                "n_estimators": 500,
+                "num_leaves": 31,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "min_child_samples": 20,
+                "reg_alpha": 0.1,
+                "reg_lambda": 1.0,
+                "scale_pos_weight": scale_pos_weight_val,
+                "random_state": 42,
+                "verbose": -1,
+            }
         model_lgb, metrics_lgb = train_lightgbm(
-            X_tr, y_tr, w_tr, X_te, y_te, weights[test_idx], lgb_params
+            X_tr,
+            y_tr,
+            w_tr,
+            X_te,
+            y_te,
+            weights[test_idx],
+            lgb_params,
+            multi_class=multi_class,
         )
         print(
             f"  val_acc={metrics_lgb['val_accuracy']:.3f}, val_wr={metrics_lgb['val_wr']:.3f}, trees={metrics_lgb['n_trees']}"
@@ -1013,6 +1185,15 @@ def train_models(
         lgb_path = os.path.join(output_dir, f"lightgbm_fold{fold}_s42.txt")
         model_lgb.save_model(lgb_path)
         print(f"  Saved: {lgb_path}")
+
+        # Accumulate for direction diversity check (multi-class only)
+        if multi_class:
+            all_y_te.append(y_te)
+            # Reload XGBoost to get prediction probs
+            import xgboost as xgb
+
+            dmat_te = xgb.DMatrix(X_te)
+            all_y_probs_xgb.append(model_xgb.predict(dmat_te))
 
     # ── Summary ──
     print(f"\n{'='*60}")
@@ -1025,9 +1206,11 @@ def train_models(
         )
 
     # ── Save full results ──
-    summary = {
+    summary: dict[str, Any] = {
         "schema_version": "btc_swing_v9_training.v1",
         "data_dir": data_dir,
+        "objective": "multi:softprob" if multi_class else "binary:logistic",
+        "num_class": 3 if multi_class else 1,
         "cv_summary": {
             arch: {
                 "mean_val_wr": float(np.mean([r["metrics"]["val_wr"] for r in results[arch]])),
@@ -1055,6 +1238,97 @@ def train_models(
     }
     with open(os.path.join(output_dir, "training_summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
+
+    # ── Direction Diversity Gate (multi-class only) ──
+    if multi_class and all_y_probs_xgb:
+        print(f"\n{'='*60}")
+        print("[B3] === Direction Diversity Gate ===")
+        y_all = np.concatenate(all_y_te)
+        probs_all = np.concatenate(all_y_probs_xgb)  # shape (n, 3): [SHORT, NEUTRAL, LONG]
+
+        # 4a: Direction distribution
+        raw_scores = probs_all[:, 2] - probs_all[:, 0]  # LONG - SHORT
+        n_long = int(np.sum(raw_scores > 0.1))
+        n_short = int(np.sum(raw_scores < -0.1))
+        n_neutral = int(np.sum((raw_scores >= -0.1) & (raw_scores <= 0.1)))
+        print(f"[B3] Direction diversity: LONG={n_long}, NEUTRAL={n_neutral}, SHORT={n_short}")
+        short_ratio = n_short / len(raw_scores)
+        gate_warnings: list[str] = []
+        if n_short == 0:
+            gate_warnings.append("ZERO SHORT predictions — model may be degenerate!")
+
+        # 4b: Wasserstein distance with conditional slicing (IC Mandate #3)
+        try:
+            from scipy.stats import wasserstein_distance
+
+            p_neutral = probs_all[:, 1]
+            p_long = probs_all[:, 2]
+            p_short = probs_all[:, 0]
+
+            # Conditional slice: exclude dormant samples (P_neutral > 0.60)
+            active_mask = p_neutral < 0.60
+            n_active = int(np.sum(active_mask))
+
+            if n_active > 50:
+                w_dist = wasserstein_distance(p_long[active_mask], p_short[active_mask])
+                pool_label = "active"
+            else:
+                w_dist = wasserstein_distance(p_long, p_short)
+                pool_label = "full (fallback — <50 active samples)"
+
+            max_long_prob = float(np.max(p_long))
+            max_short_prob = float(np.max(p_short))
+
+            print(
+                f"[B3] Wasserstein({pool_label})={w_dist:.4f}, "
+                f"active={n_active}/{len(probs_all)}, "
+                f"max_LONG={max_long_prob:.3f}, max_SHORT={max_short_prob:.3f}"
+            )
+
+            if w_dist < 0.05:
+                gate_warnings.append(
+                    f"Wasserstein distance {w_dist:.4f} < 0.05 — "
+                    "LONG/SHORT distributions may be indistinguishable!"
+                )
+            if max_long_prob < 0.25:
+                gate_warnings.append(
+                    f"Max P(LONG)={max_long_prob:.3f} < 0.25 — "
+                    "directional confidence too weak on LONG side!"
+                )
+            if max_short_prob < 0.25:
+                gate_warnings.append(
+                    f"Max P(SHORT)={max_short_prob:.3f} < 0.25 — "
+                    "directional confidence too weak on SHORT side!"
+                )
+
+            diversity = {
+                "n_long": n_long,
+                "n_short": n_short,
+                "n_neutral": n_neutral,
+                "short_ratio": float(short_ratio),
+                "wasserstein_long_short": float(w_dist),
+                "wasserstein_pool": pool_label,
+                "n_active_samples": n_active,
+                "max_long_prob": max_long_prob,
+                "max_short_prob": max_short_prob,
+                "warnings": gate_warnings,
+            }
+        except ImportError:
+            print("[B3] (scipy not available — skipping Wasserstein check)")
+            diversity = {
+                "n_long": n_long,
+                "n_short": n_short,
+                "n_neutral": n_neutral,
+                "short_ratio": float(short_ratio),
+                "warnings": gate_warnings,
+            }
+
+        summary["direction_diversity"] = diversity
+
+        for w in gate_warnings:
+            print(f"[B3] WARNING: {w}")
+        if not gate_warnings:
+            print("[B3] Direction diversity gate PASSED")
 
     print(f"\n[B3] Training complete. Results saved to {output_dir}/")
     return summary
@@ -1102,6 +1376,11 @@ def main():
     )
     parser.add_argument("--optuna-trials", type=int, default=50, help="Optuna TPE trials")
     parser.add_argument("--n-seeds", type=int, default=3, help="Number of random seeds")
+    parser.add_argument(
+        "--multi-class",
+        action="store_true",
+        help="Train 3-class model (SHORT/NEUTRAL/LONG) instead of binary (TP/SL only)",
+    )
     args = parser.parse_args()
 
     do_build = args.full or args.build_only
@@ -1125,6 +1404,7 @@ def main():
             cv_folds=args.cv_folds,
             purge_bars=args.purge_bars,
             timeframe_minutes=args.timeframe_minutes,
+            multi_class=args.multi_class,
         )
 
     if do_train:
@@ -1133,6 +1413,7 @@ def main():
             output_dir=args.model_dir,
             optuna_trials=args.optuna_trials,
             n_seeds=args.n_seeds,
+            multi_class=args.multi_class,
         )
 
     print("\n[DONE] BTC Swing V9 pipeline complete.")

@@ -108,6 +108,7 @@ class BrainRegistrationGate:
             ("artifact_hash_match", self._check_artifact_hash),
             ("magic_unique", self._check_magic_unique),
             ("brain_id_unique", self._check_brain_id_unique),
+            ("training_objective_valid", self._check_training_objective),
         ]
 
         for check_name, check_fn in checks:
@@ -273,6 +274,53 @@ class BrainRegistrationGate:
                 ("brain_id_unique", f"brain_id='{brain_id}' already exists in configs/brains/")
             )
             return False
+        return True
+
+    # ── training objective enforcement (IC Mandate #2) ──
+    # Prevents binary models from being registered without explicit direction
+    # capability declaration.  FIX-20260628-058: L3 architecture fix for DQAF-058.
+
+    _VALID_OBJECTIVES: dict[str, frozenset[str]] = {
+        "xgboost_v9": frozenset({"binary:logistic", "multi:softprob", "reg:squarederror"}),
+        "lightgbm_v1": frozenset({"binary", "multiclass", "regression"}),
+        "onnx_v9": frozenset({"classification", "regression"}),
+    }
+
+    @staticmethod
+    def _check_training_objective(entry: dict, result: GateResult) -> bool:
+        brain_type = entry.get("brain_type", "")
+        brain_id = entry.get("brain_id", "?")
+
+        # Meta brains skip — they use their own predict_proba() path, not _score_to_direction()
+        if brain_type.startswith("meta_"):
+            return True
+
+        valid_set = BrainRegistrationGate._VALID_OBJECTIVES.get(brain_type)
+        if valid_set is None:
+            return True  # unknown brain_type — caught by brain_type_valid check
+
+        objective = entry.get("training_params", {}).get("objective")
+        if not objective:
+            result.failures.append(
+                (
+                    "training_objective_valid",
+                    f"brain_id={brain_id}: training_params.objective is missing — "
+                    f"cannot determine direction mapping. "
+                    f"Valid for {brain_type}: {sorted(valid_set)}",
+                )
+            )
+            return False
+
+        if objective not in valid_set:
+            result.failures.append(
+                (
+                    "training_objective_valid",
+                    f"brain_id={brain_id}: objective='{objective}' not valid for "
+                    f"brain_type={brain_type}. Valid: {sorted(valid_set)}",
+                )
+            )
+            return False
+
         return True
 
     @staticmethod
