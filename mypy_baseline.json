@@ -15,7 +15,7 @@
   "scripts/verify_training_serving_parity.py": 2,
   "tests/contracts/test_cap_result.py": 11,
   "tests/data/test_contracts.py": 2,
-  "tests/deployment/test_brain_registration_gate.py": 3,
+  "tests/deployment/test_brain_registration_gate.py": 0,
   "tests/execution/test_conformal_ou_gate.py": 8,
   "tests/execution/test_exit_reason.py": 1,
   "tests/execution/test_mt5_worker.py": 12,

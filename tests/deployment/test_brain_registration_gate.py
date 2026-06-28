@@ -11,15 +11,11 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from core.deployment.brain_registration_gate import (
-    GateResult,
     BrainRegistrationGate,
+    GateResult,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # GateResult dataclass
@@ -60,10 +56,14 @@ class TestGateResult:
 class TestCheckRequiredFields:
     def test_all_fields_present(self) -> None:
         entry = {
-            "brain_id": "test", "brain_type": "xgboost_v9",
-            "feature_schema_id": "v9_institutional_40", "artifact_path": "/fake/model.json",
-            "artifact_hash": "abc123", "features": ["f1", "f2"],
-            "status": "candidate", "magic": 10001,
+            "brain_id": "test",
+            "brain_type": "xgboost_v9",
+            "feature_schema_id": "v9_institutional_40",
+            "artifact_path": "/fake/model.json",
+            "artifact_hash": "abc123",
+            "features": ["f1", "f2"],
+            "status": "candidate",
+            "magic": 10001,
         }
         result = GateResult()
         ok = BrainRegistrationGate._check_required_fields(entry, result)
@@ -132,14 +132,14 @@ class TestCheckFeaturesNonEmpty:
         assert ok is True
 
     def test_features_missing(self) -> None:
-        entry = {}
+        entry: dict = {}
         result = GateResult()
         ok = BrainRegistrationGate._check_features_non_empty(entry, result)
         assert ok is False
         assert result.failures[0][0] == "features_non_empty"
 
     def test_features_empty_list(self) -> None:
-        entry = {"features": []}
+        entry: dict = {"features": []}
         result = GateResult()
         ok = BrainRegistrationGate._check_features_non_empty(entry, result)
         assert ok is False
@@ -188,6 +188,7 @@ class TestCheckFeaturesDimension:
 class TestCheckFeatureNames:
     def test_valid_names(self) -> None:
         from core.deployment.brain_config_validator import _get_schema_feature_names
+
         names = _get_schema_feature_names("v9_institutional_40")
         assert names is not None and len(names) >= 5
         entry = {
@@ -223,7 +224,7 @@ class TestCheckVoteWeight:
         assert result.warnings == []
 
     def test_missing_vote_weight_ok(self) -> None:
-        entry = {}
+        entry: dict = {}
         result = GateResult()
         BrainRegistrationGate._check_vote_weight(entry, result)
         assert result.warnings == []
@@ -317,6 +318,7 @@ class TestCheckArtifactHash:
 
     def test_hash_match_passes(self) -> None:
         import hashlib
+
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "model.json"
             content = b"test content"
@@ -389,6 +391,7 @@ class TestScanAllConfigs:
 class TestValidate:
     def test_valid_entry_passes(self) -> None:
         import hashlib
+
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             brains_dir = root / "configs" / "brains"
@@ -418,7 +421,7 @@ class TestValidate:
         gate = BrainRegistrationGate(project_root=Path("/nonexistent"))
         result = gate.validate({})
         assert result.passed is False
-        assert result.checks_run == 10
+        assert result.checks_run == 11
         assert len(result.failures) >= 1
 
 
