@@ -636,6 +636,63 @@ def _step_journal_health_report(
     return report
 
 
+def _step_augment_journal(base_dir: str) -> dict[str, Any]:
+    """DQAF-060: Regenerate augmented journal view with strategy backfill.
+
+    The augmented journal is consumed preferentially by compute_journal_brain_metrics()
+    and build_live_labeled_dataset().  Stale augmented data causes governance to
+    fall back to PnL store metrics, which may not reflect actual execution P&L.
+
+    This step runs the augmentation script as a library call — no subprocess.
+    """
+    from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
+    from scripts.augment_journal_strategy import (
+        augment_entries,
+        load_journal,
+    )
+
+    data_dir = Path(base_dir)
+    journal_path = data_dir / "live_trade_journal.jsonl"
+    augmented_path = data_dir / "live_trade_journal.augmented.jsonl"
+
+    if not journal_path.exists():
+        return {
+            "step": "augment_journal",
+            "status": "skipped",
+            "reason": "no journal file (symbol may not be active)",
+            "symbol": base_dir,
+        }
+
+    entries = load_journal(journal_path)
+    augmented, backfilled, still_empty = augment_entries(entries, MAGIC_TO_STRATEGY)
+
+    # DQAF-060: Safety assertion — augmented must never lose entries.
+    # A shorter augmented journal indicates a regression in the augmentation script.
+    if len(augmented) != len(entries):
+        raise RuntimeError(
+            f"DQAF-060 AUGMENT_LOSS: augmented journal has {len(augmented)} entries "
+            f"but original has {len(entries)} — {len(entries) - len(augmented)} lost!"
+        )
+
+    # Atomic write: tmp + replace
+    import os
+
+    tmp_path = augmented_path.with_suffix(augmented_path.suffix + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        for entry in augmented:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    os.replace(tmp_path, augmented_path)
+
+    return {
+        "step": "augment_journal",
+        "status": "ok",
+        "original_entries": len(entries),
+        "augmented_entries": len(augmented),
+        "backfilled": backfilled,
+        "still_empty": still_empty,
+    }
+
+
 def _step_journal_backfill(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Backfill null PnL in live_trade_journal.jsonl from close_price.
 
@@ -2885,6 +2942,7 @@ def run_daily_ops(
     *,
     skip_shadow: bool = False,
     skip_journal_mt5_reconcile: bool = False,
+    skip_journal_augment: bool = False,  # DQAF-060: skip augmented journal regeneration
     skip_journal_backfill: bool = False,
     skip_label_builder: bool = False,
     skip_feedback: bool = False,
@@ -3089,6 +3147,13 @@ def run_daily_ops(
                 mt5_terminal_path=mt5_terminal_path,
             )
         )
+
+    # DQAF-060: Augment journal — regenerate the augmented view (strategy backfill).
+    # Runs BEFORE journal_backfill and label_builder so downstream consumers
+    # (compute_journal_brain_metrics, build_live_labeled_dataset) see fresh data.
+    # The augmented journal is the preferred data source for brain governance metrics.
+    if not skip_journal_augment:
+        steps.append(_step_augment_journal(base_dir))
 
     # Journal backfill: fill null PnL in close entries from close_price.
     # Strategy A only — no MT5 dependency.  Runs BEFORE label_builder so

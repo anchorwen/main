@@ -62,6 +62,7 @@ class DynamicBrainWeighter:
                 self._engine = BrainQualityEngine.instance()
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass
+
     # ── public API ──
 
     def get_weights(self) -> dict[str, float]:
@@ -301,6 +302,8 @@ class DynamicBrainWeighter:
 
         # ── Hard gate: auto-retirement (overrides all tiers) ──
         # Condition: trades >= 100, PnL < 0, AND (WR < 30% or PF < 0.60)
+        # DQAF-060: pf may be float('inf') when gross_loss=0 (all wins).
+        # inf is NOT < 0.60, so all-win brains are correctly NOT retired.
         if trades >= 100 and pnl < 0 and (wr < 0.30 or pf < 0.60):
             return 0.0
 

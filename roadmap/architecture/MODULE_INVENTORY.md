@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T03:44:53Z
+> **自动生成**: 2026-06-28T04:58:57Z
 > **扫描模块数**: 688
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -87,12 +87,12 @@
 | `ab_test.py` | ✅ active | ExperimentConfig, TrafficSplitter, ExperimentResult, ExperimentTracker | 11 | 305 | — | |
 | `brain_attribution_service.py` | ✅ active | BrainAttribution, AttributionReport, BrainAttributionService | 11 | 327 | — | |
 | `brain_factory.py` | ✅ active | BrainFactory | 1 | 169 | — | |
-| `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 10 | 362 | — | |
+| `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 10 | 370 | — | |
 | `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 520 | — | |
 | `brain_registry_loader.py` | ✅ active | BrainRegistryLoader | 1 | 7 | — | |
 | `brain_registry_service.py` | ✅ active | BrainRegistryService | 7 | 141 | — | |
 | `brain_run_service.py` | ✅ active | BrainRunService | 15 | 281 | — | |
-| `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 420 | — | |
+| `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 423 | — | |
 | `inference_guard.py` | ✅ active | InferenceGuard | 11 | 223 | — | |
 | `onnx_worker.py` | ✅ active | — | 1 | 77 | — | |
 | `stability_monitor.py` | ✅ active | StabilityReport | 4 | 201 | — | |
@@ -329,7 +329,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `brain_performance_tracker.py` | ✅ active | BrainPerformanceTracker | 9 | 137 | — | |
-| `brain_pnl_ledger.py` | ✅ active | BrainPnLMetrics, BrainPnLStore | 25 | 992 | — | |
+| `brain_pnl_ledger.py` | ✅ active | BrainPnLMetrics, BrainPnLStore | 25 | 1009 | — | |
 | `brain_quality_engine.py` | ✅ active | BrainQualityVerdict, BrainQualityEngine | 13 | 432 | — | |
 | `decision_scorer.py` | ✅ active | DecisionScorer | 5 | 120 | — | |
 | `experience_replay.py` | ✅ active | ExperienceReplayBuffer | 10 | 246 | — | |
@@ -698,7 +698,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 39 | 3361 | — | |
+| `daily_ops.py` | ✅ active | — | 40 | 3426 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -889,7 +889,7 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 6 | 576 | — | |
+| `governance_scheduler.py` | ✅ active | — | 6 | 591 | — | |
 | `label_builder.py` | ✅ active | — | 19 | 1044 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |

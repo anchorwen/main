@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +101,8 @@ def _compute_pnl_based_status(
     n = metrics.sample_count
     sharpe = metrics.sharpe_ratio
     wr = metrics.win_rate
+    # DQAF-060: pf may be float('inf') when gross_loss=0 (all wins).
+    # inf >= threshold checks are True — all-win brains correctly pass gates.
     pf = metrics.profit_factor
 
     # Insufficient data → observe only, don't change governance status
@@ -303,6 +306,10 @@ def run_governance_cycle(
         # but downstream code (set_performance_metrics, _compute_pnl_based_status)
         # expects BrainPnLMetrics dataclass instances with attribute access.
         # Convert dicts → BrainPnLMetrics to prevent AttributeError.
+        #
+        # DQAF-060: Track which brains received journal-augmented metrics
+        # so _data_source reflects honest lineage (live_journal vs pnl_store).
+        _journal_augmented_bids: set[str] = set()
         try:
             from core.feedback.live_journal_metrics import compute_journal_brain_metrics
 
@@ -311,6 +318,7 @@ def run_governance_cycle(
                 if _jm.get("sample_count", 0) > 0:
                     # Convert journal dict → BrainPnLMetrics for type safety
                     all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _jm)
+                    _journal_augmented_bids.add(_bid)  # DQAF-060: track journal lineage
                 elif _bid not in all_metrics:
                     # Brain in journal but with 0 trades — register as
                     # BrainPnLMetrics with zeroed metrics (no backtest leak)
@@ -363,18 +371,25 @@ def run_governance_cycle(
                     continue
 
                 # P0.1: Inject performance_metrics into governance state
-                # FIX-20260621-043: Tag metrics with data source for audit trail.
-                # Journal-augmented metrics are marked "live_journal";
-                # raw PnP store metrics are marked "pnl_store".
+                # DQAF-060: Honest lineage — tag data source based on actual origin.
+                # Journal-augmented = "live_journal" (real MT5 execution data).
+                # PnL store only = "pnl_store" (event stream replay or JSON ledger).
+                _data_source = (
+                    "live_journal" if brain_id in _journal_augmented_bids else "pnl_store"
+                )
                 governance.set_performance_metrics(
                     brain_id,
                     {
                         "win_rate": metrics.win_rate,
-                        "profit_factor": metrics.profit_factor,
+                        "profit_factor": (
+                            metrics.profit_factor
+                            if not math.isinf(metrics.profit_factor)
+                            else None  # DQAF-060: None = "no losses" (JSON-safe)
+                        ),
                         "sharpe_ratio": metrics.sharpe_ratio,
                         "total_trades": metrics.sample_count,
                         "pnl_r": round(metrics.cumulative_pnl, 2),
-                        "_data_source": "live_journal",  # FIX-043: source tag for audit
+                        "_data_source": _data_source,
                     },
                 )
 

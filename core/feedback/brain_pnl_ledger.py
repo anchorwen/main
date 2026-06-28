@@ -71,6 +71,10 @@ class BrainPnLMetrics:
     total_slippage_cost: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
+        # DQAF-060: profit_factor may be float('inf') when gross_loss=0.
+        # JSON cannot serialize inf — use None as the JSON-safe sentinel.
+        _pf_raw = self.profit_factor
+        _pf: float | None = _pf_raw if math.isfinite(_pf_raw) else None
         return {
             "brain_id": self.brain_id,
             "sample_count": self.sample_count,
@@ -80,7 +84,7 @@ class BrainPnLMetrics:
             "std_return": self.std_return,
             "sharpe_ratio": self.sharpe_ratio,
             "max_drawdown": self.max_drawdown,
-            "profit_factor": self.profit_factor,
+            "profit_factor": _pf,
             "recent_pnl_20": self.recent_pnl_20,
             "recent_win_rate": self.recent_win_rate,
             "consecutive_losses": self.consecutive_losses,
@@ -428,14 +432,14 @@ class BrainPnLStore:
                 _already_settled = False
                 if _ticket is not None and brain_id in self._settled:
                     _already_settled = any(
-                        s.get("position_ticket") == _ticket
-                        for s in self._settled[brain_id]
+                        s.get("position_ticket") == _ticket for s in self._settled[brain_id]
                     )
                 if not _already_settled:
                     from core.contracts.events import PnLEvent
 
                     _settled_at = (
-                        outcome.get("close_time") or datetime.now(UTC).replace(tzinfo=None).isoformat()
+                        outcome.get("close_time")
+                        or datetime.now(UTC).replace(tzinfo=None).isoformat()
                     )
                     _event = PnLEvent(
                         timestamp=datetime.now(UTC),
@@ -446,7 +450,9 @@ class BrainPnLStore:
                         direction=direction,
                         entry_price=entry_price,
                         exit_price=close_price,
-                        pnl_r=round(pnl_per_unit / (entry_price * 0.01) if entry_price > 0 else 0.0, 4),
+                        pnl_r=round(
+                            pnl_per_unit / (entry_price * 0.01) if entry_price > 0 else 0.0, 4
+                        ),
                         confidence=float(entry.get("confidence", 0.5)),
                         position_ticket=entry.get("position_ticket"),
                         generated_by="brain_pnl_ledger._settle",
@@ -772,7 +778,12 @@ class BrainPnLStore:
             std_return=round(std_return, 6),
             sharpe_ratio=round(sharpe, 2),
             max_drawdown=round(max_dd, 6),
-            profit_factor=round(profit_factor, 2) if profit_factor != float("inf") else 999.0,
+            # DQAF-060: When gross_loss=0 (all wins), profit_factor is legitimately
+            # infinite.  Preserve float("inf") — downstream consumers handle it via
+            # math.isinf() guards.  No more toxic sentinel values.
+            profit_factor=round(profit_factor, 4)
+            if not math.isinf(profit_factor)
+            else float("inf"),
             recent_pnl_20=round(recent_20, 6),
             recent_win_rate=round(recent_wr, 4),
             consecutive_losses=consecutive_losses,
@@ -805,7 +816,9 @@ class BrainPnLStore:
         return p
 
     @classmethod
-    def load(cls, path: str | Path, event_writer: Any = None, event_source: str = "live") -> BrainPnLStore:
+    def load(
+        cls, path: str | Path, event_writer: Any = None, event_source: str = "live"
+    ) -> BrainPnLStore:
         p = Path(path)
         if not p.exists():
             return cls(event_writer=event_writer, event_source=event_source)
@@ -854,7 +867,7 @@ class BrainPnLStore:
         if not p.exists():
             return store
 
-        from core.contracts.events import PnLEvent
+        from core.contracts.events import EventType, PnLEvent
 
         with open(p, encoding="utf-8") as fh:
             for line in fh:
@@ -867,6 +880,12 @@ class BrainPnLStore:
                     continue
 
                 if event.source not in source_filter:
+                    continue
+
+                # DQAF-060: Only SignalSettled events carry realized P&L.
+                # SignalRecorded events (pnl_r=0, exit_price=None) represent
+                # pending signals and must NEVER enter the settled ledger.
+                if event.event_type != EventType.SIGNAL_SETTLED:
                     continue
 
                 brain_id = event.brain_id
@@ -931,9 +950,7 @@ class BrainPnLStore:
                 # FIX-20260615-011: stream-loaded entries use "close_time",
                 # not "settled_at" or "entry_time". Try all three.
                 _ts_str = (
-                    _t.get("settled_at", "")
-                    or _t.get("entry_time", "")
-                    or _t.get("close_time", "")
+                    _t.get("settled_at", "") or _t.get("entry_time", "") or _t.get("close_time", "")
                 )
                 try:
                     _ts = datetime.fromisoformat(_ts_str)

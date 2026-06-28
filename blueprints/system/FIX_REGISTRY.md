@@ -892,6 +892,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260628-159 | 2026-06-28 | runtime-live | cursor-agent | position_query.py: MT5 history deals query + dual-terminal (BTC/XAU) support. --deals --xau --days flags, W/L/BE summary, JSON output. | RC-12 |
 | FIX-20260628-058 | 2026-06-28 | brains-adapters | L3 Architecture Fix: Restore BTC direction diversity by retraining V4+V12_H1_15 as 3-class (multi:softprob/multiclass). Fix xgb_trainer label mapping inversion. Add objective field validation + dynamic inference from model artifacts. Add training gate with direction diversity + Wasserstein distance check. | RC-09 |
 | FIX-20260628-059 | 2026-06-28 | features_service | DQAF-059: BTCFeatureAugmenter NaN injection via np.asarray(None) — 3-layer institutional fix. Layer 1: None-safe array coercion in augment(). Layer 2: management_phase passes np.zeros(9) instead of None. Layer 3: assert replaced with np.nan_to_num + debounced WARNING log. | RC-02 |
+| FIX-20260628-060 | 2026-06-28 | feedback_pnl | DQAF-060 L3: Event Sourcing semantic conflation — load_from_stream() now filters by event_type (only SignalSettled enters _settled), PF sentinel 999.0 removed (float('inf') preserved), _data_source lineage honesty (live_journal vs pnl_store), augmented journal freshness integrated into daily_ops pipeline | RC-03 |
 ## Fix Details by Quarter
 
 > Fix detail entries are stored in quarterly files under `fixes/`.

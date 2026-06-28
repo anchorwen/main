@@ -312,6 +312,180 @@ class TestPersistence:
         assert store.pending_count == 0
 
 
+class TestDQAF060EventStreamFiltering:
+    """DQAF-060: load_from_stream() must filter out SignalRecorded events."""
+
+    def test_load_from_stream_filters_signal_recorded(self, tmp_path: Path):
+        """Contract 1: Only SignalSettled events enter _settled."""
+        from datetime import UTC, datetime
+
+        from core.contracts.events import EventType, PnLEvent
+
+        stream = tmp_path / "ledger_events.jsonl"
+        _ts = datetime.now(UTC)
+        events = [
+            PnLEvent(
+                event_type=EventType.SIGNAL_RECORDED,
+                source="live",
+                brain_id="test_brain",
+                symbol="BTCUSDc",
+                direction="long",
+                entry_price=60000.0,
+                pnl_r=0.0,
+                confidence=0.8,
+                generated_by="test",
+                timestamp=_ts,
+            ),
+            PnLEvent(
+                event_type=EventType.SIGNAL_SETTLED,
+                source="live",
+                brain_id="test_brain",
+                symbol="BTCUSDc",
+                direction="long",
+                entry_price=60000.0,
+                exit_price=61000.0,
+                pnl_r=1.67,
+                confidence=0.8,
+                generated_by="test",
+                timestamp=_ts,
+            ),
+        ]
+        with open(stream, "w", encoding="utf-8") as f:
+            for e in events:
+                f.write(e.model_dump_json() + "\n")
+
+        store = BrainPnLStore.load_from_stream(stream)
+        metrics = store.get_metrics("test_brain")
+
+        # Only the SignalSettled event should be in _settled
+        assert metrics.sample_count == 1, (
+            f"DQAF-060 VIOLATION: expected 1 settled trade, got {metrics.sample_count} "
+            f"— SignalRecorded events leaked into _settled!"
+        )
+        assert metrics.win_rate == 1.0
+
+    def test_load_from_stream_mixed_brains(self, tmp_path: Path):
+        """SignalRecorded for brain A + SignalSettled for brain B — no cross-talk."""
+        from datetime import UTC, datetime
+
+        from core.contracts.events import EventType, PnLEvent
+
+        stream = tmp_path / "ledger_events.jsonl"
+        _ts = datetime.now(UTC)
+        events = [
+            PnLEvent(
+                event_type=EventType.SIGNAL_RECORDED,
+                source="live",
+                brain_id="brain_with_signals_only",
+                symbol="BTCUSDc",
+                direction="long",
+                entry_price=60000.0,
+                pnl_r=0.0,
+                confidence=0.8,
+                generated_by="test",
+                timestamp=_ts,
+            ),
+            PnLEvent(
+                event_type=EventType.SIGNAL_RECORDED,
+                source="live",
+                brain_id="brain_with_signals_only",
+                symbol="BTCUSDc",
+                direction="short",
+                entry_price=60000.0,
+                pnl_r=0.0,
+                confidence=0.7,
+                generated_by="test",
+                timestamp=_ts,
+            ),
+            PnLEvent(
+                event_type=EventType.SIGNAL_SETTLED,
+                source="live",
+                brain_id="brain_with_trades",
+                symbol="BTCUSDc",
+                direction="long",
+                entry_price=60000.0,
+                exit_price=61000.0,
+                pnl_r=1.67,
+                confidence=0.8,
+                generated_by="test",
+                timestamp=_ts,
+            ),
+        ]
+        with open(stream, "w", encoding="utf-8") as f:
+            for e in events:
+                f.write(e.model_dump_json() + "\n")
+
+        store = BrainPnLStore.load_from_stream(stream)
+
+        # Brain with only SignalRecorded events must have zero settled trades
+        m_sig = store.get_metrics("brain_with_signals_only")
+        assert m_sig.sample_count == 0, (
+            f"DQAF-060: brain with only SignalRecorded should have 0 trades, "
+            f"got {m_sig.sample_count}"
+        )
+
+        # Brain with SignalSettled must have exactly 1
+        m_trade = store.get_metrics("brain_with_trades")
+        assert m_trade.sample_count == 1
+
+
+class TestDQAF060ProfitFactorInf:
+    """DQAF-060: profit_factor must be inf (not 999.0) when gross_loss=0."""
+
+    def test_profit_factor_inf_when_all_wins(self):
+        """Contract 2: all-win brain → PF = inf, not 999.0."""
+        import math
+
+        store = BrainPnLStore()
+        for _ in range(10):
+            sid = store.record_signal("all_winner", "XAUUSDc", "long", 100.0)
+            assert sid is not None
+            store.settle_one(sid, 102.0)
+
+        m = store.get_metrics("all_winner")
+        assert m.win_rate == 1.0
+        assert math.isinf(
+            m.profit_factor
+        ), f"DQAF-060: all-win profit_factor should be inf, got {m.profit_factor}"
+        assert m.profit_factor > 0  # positive infinity
+
+    def test_profit_factor_to_dict_json_safe(self):
+        """to_dict() must use None for inf profit_factor — JSON compatible."""
+        store = BrainPnLStore()
+        for _ in range(10):
+            sid = store.record_signal("all_winner", "XAUUSDc", "long", 100.0)
+            assert sid is not None
+            store.settle_one(sid, 102.0)
+
+        m = store.get_metrics("all_winner")
+        d = m.to_dict()
+        assert (
+            d["profit_factor"] is None
+        ), f"DQAF-060: to_dict() should serialize inf as None, got {d['profit_factor']}"
+
+    def test_profit_factor_finite_when_has_losses(self):
+        """Normal brain with losses → finite PF."""
+        store = BrainPnLStore()
+        # 6 wins, 2 losses → PF = 12/2 = 6.0 (need >=5 for full metrics path)
+        for _ in range(6):
+            sid = store.record_signal("normal", "XAUUSDc", "long", 100.0)
+            assert sid is not None
+            store.settle_one(sid, 102.0)
+        for _ in range(2):
+            sid = store.record_signal("normal", "XAUUSDc", "long", 100.0)
+            assert sid is not None
+            store.settle_one(sid, 99.0)
+
+        m = store.get_metrics("normal")
+        import math
+
+        assert math.isfinite(
+            m.profit_factor
+        ), f"DQAF-060: brain with losses should have finite PF, got {m.profit_factor}"
+        # PF = gross_profit / gross_loss = (6*2) / (2*1) = 12/2 = 6.0
+        assert m.profit_factor == pytest.approx(6.0, abs=0.01)
+
+
 class TestProperties:
     """Property accessors."""
 

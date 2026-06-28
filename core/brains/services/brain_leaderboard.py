@@ -53,13 +53,17 @@ class BrainRanking:
     short_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
+        # DQAF-060: profit_factor may be float('inf') when gross_loss=0.
+        # JSON cannot serialize inf — use None as the JSON-safe sentinel.
+        _pf_raw = self.profit_factor
+        _pf: float | None = _pf_raw if math.isfinite(_pf_raw) else None
         return {
             "rank": self.rank,
             "brain_id": self.brain_id,
             "score": self.score,
             "sharpe": self.sharpe,
             "win_rate": self.win_rate,
-            "profit_factor": self.profit_factor,
+            "profit_factor": _pf,
             "cum_pnl": self.cum_pnl,
             "max_drawdown": self.max_drawdown,
             "trade_count": self.trade_count,
@@ -101,16 +105,18 @@ class BrainLeaderboard:
                 self._engine = BrainQualityEngine.instance()
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass
+
     # ── DQAF-20260621-042: Required fields for schema validation ──
     _REQUIRED_METRIC_FIELDS: tuple[str, ...] = (
-        "sharpe_ratio", "win_rate", "profit_factor",
-        "cumulative_pnl", "max_drawdown",
+        "sharpe_ratio",
+        "win_rate",
+        "profit_factor",
+        "cumulative_pnl",
+        "max_drawdown",
     )
     _REQUIRED_COUNT_FIELDS: tuple[str, ...] = ("sample_count",)
 
-    def _validate_metrics(
-        self, metrics_map: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _validate_metrics(self, metrics_map: dict[str, Any]) -> dict[str, Any]:
         """Schema-validate all brain metrics before ranking.
 
         Raises DataIntegrityError if any brain is missing required fields.
@@ -121,6 +127,7 @@ class BrainLeaderboard:
                 for field in self._REQUIRED_METRIC_FIELDS:
                     if field not in m or m[field] is None:
                         from core.contracts.exceptions import DataIntegrityError
+
                         raise DataIntegrityError(
                             f"Brain '{brain_id}' missing required metric field "
                             f"'{field}' in leaderboard input. "
@@ -131,6 +138,7 @@ class BrainLeaderboard:
                 for field in self._REQUIRED_COUNT_FIELDS:
                     if field not in m or m[field] is None:
                         from core.contracts.exceptions import DataIntegrityError
+
                         raise DataIntegrityError(
                             f"Brain '{brain_id}' missing required count field "
                             f"'{field}' in leaderboard input."
