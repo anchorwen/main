@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-28T10:51:07Z
+> **自动生成**: 2026-06-28T10:55:09Z
 > **扫描模块数**: 690
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -891,7 +891,7 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 6 | 605 | — | |
+| `governance_scheduler.py` | ✅ active | — | 7 | 686 | — | |
 | `label_builder.py` | ✅ active | — | 19 | 1044 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |

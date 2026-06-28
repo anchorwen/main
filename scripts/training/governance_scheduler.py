@@ -23,9 +23,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import math
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from core.feedback.brain_pnl_ledger import BrainPnLMetrics
@@ -59,11 +62,24 @@ PF_HIGH_ALPHA = 1.5  # profit factor threshold for high_alpha
 # high reward:risk ratio (>2:1) are profitable engines blocked by the
 # one-size-fits-all WR threshold.  This channel exempts them.
 # V4 example: WR=39.1%, PF=1.36, SR=1.08, implied RR=2.12:1, +81.21R
-PF_RR_ADJUSTED_MIN = 1.3  # profit factor threshold for RR-adjusted live status
+PF_RR_ADJUSTED_MIN = (
+    1.1  # profit factor threshold for RR-adjusted live status (↓1.3→1.1: DQAF-063 V4 relief)
+)
 SHARPE_RR_ADJUSTED_MIN = 0.8  # Sharpe threshold for RR-adjusted live status
 
 
 from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
+
+
+def _resolve_brains_dir(base_dir: str) -> str:
+    """Map data directory to the authoritative brains config directory.
+
+    DQAF-063: Ghost registration guard needs the config SSOT list
+    to block PnL-ledger-only brain IDs that have no config on disk.
+    """
+    if base_dir in ("data_btc", "data_btc/"):
+        return "configs/brains_btc"
+    return "configs/brains"
 
 
 def _compute_pnl_based_status(
@@ -344,6 +360,23 @@ def run_governance_cycle(
                 if isinstance(_jm, dict):
                     all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _jm)
         if all_metrics:
+            # ── DQAF-063 P0: Ghost registration guard ──
+            # PnL ledger retains archived brain metrics indefinitely (no GC).
+            # Without this guard, every governance cycle re-registers 12+
+            # archived brains as "candidate", bloating governance_state.json
+            # and triggering phantom governance actions.
+            # Only brain IDs that exist as config files on disk are eligible.
+            _brains_dir = _resolve_brains_dir(base_dir)
+            _valid_bids: set[str] = set()
+            for _cfg_path in Path(_brains_dir).glob("*.json"):
+                try:
+                    _cfg = json.loads(_cfg_path.read_text(encoding="utf-8"))
+                    _bid = _cfg.get("brain_id", _cfg_path.stem)
+                    if _bid:
+                        _valid_bids.add(_bid)
+                except (json.JSONDecodeError, OSError, KeyError):
+                    pass
+
             for brain_id, metrics in sorted(all_metrics.items()):
                 # Skip already-retired brains — no further governance actions apply
                 current_state = governance.get_brain_state(brain_id)
@@ -354,7 +387,17 @@ def run_governance_cycle(
                 # Safety valve: always register as "candidate" regardless of
                 # PnL performance — governance lifecycle transitions are gated
                 # by _compute_pnl_based_status() below.
+                #
+                # DQAF-063: Ghost filter — only register if brain exists in
+                # config SSOT. Archived brains with PnL history but no config
+                # are silently skipped.
                 if current_state is None:
+                    if brain_id not in _valid_bids:
+                        logger.warning(
+                            "GHOST REGISTRATION BLOCKED: %s has PnL data but no config on disk — skipping",
+                            brain_id,
+                        )
+                        continue
                     governance.register_brain(brain_id, "candidate")
                     current_state = governance.get_brain_state(brain_id)
                 current_status = current_state["status"] if current_state else "candidate"
@@ -459,6 +502,44 @@ def run_governance_cycle(
                     }
                     flagged.append(entry)
                 else:
+                    # ── DQAF-063 P0: Last-live guard (contract patch) ──
+                    # FIX-20260628-162 added this guard to governance_rule_engine.py
+                    # but the actual demotion path (governance_scheduler.py →
+                    # GovernanceService.transition()) bypasses the rule engine
+                    # entirely.  This is the binding patch — intercepts the
+                    # demotion AT THE CALL SITE before the transition fires.
+                    # Demoting the sole live brain triggers DQAF-059 (0 live →
+                    # fail-closed p_win=0.40 → all trading blocked).
+                    if current_status == "live" and target_status in (
+                        "probation",
+                        "frozen",
+                        "retired",
+                    ):
+                        _live_brains = [
+                            _bid
+                            for _bid, _bs in governance.get_all_states().items()
+                            if _bs.get("status") == "live"
+                        ]
+                        if len(_live_brains) <= 1:
+                            logger.warning(
+                                "LAST-LIVE GUARD TRIGGERED: Refusing to demote %s "
+                                "(last live brain) from %s to %s",
+                                brain_id,
+                                current_status,
+                                target_status,
+                            )
+                            entry["result"] = {
+                                "action": "rejected",
+                                "brain_id": brain_id,
+                                "reason": "last_live_guard",
+                                "detail": (
+                                    f"Refusing to demote sole live brain "
+                                    f"from {current_status} to {target_status}"
+                                ),
+                            }
+                            flagged.append(entry)
+                            continue
+
                     result = governance.transition(brain_id, target_status, reason=f"pnl:{health}")
                     entry["result"] = result
                     if result.get("action") in ("transitioned", "registered"):
