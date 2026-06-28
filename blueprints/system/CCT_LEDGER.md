@@ -42,6 +42,26 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260628-CONFIG_GOVERNANCE_DUAL_TRACK_DRIFT
 
+### CCT-20260628-063
+- **Docket ID**: DQAF-20260628-063
+- **日期**: 2026-06-28
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: BTC circuit_breaker_active (management_only, consecutive_degraded=3) → 0 live brains → 全部 BTC 策略 should_trade=false → DQAF-059 ZERO LIVE brains p_win=0.40 fallback。`governance_state.json` transition_log 显示 V4 在 3 小时内被降级 3 次 (06:51/09:04/09:34)，每次 SSOT reconciliation (08:55/09:29/10:20) 恢复后下一 governance cycle 再次降级。governance state 从 3 膨胀到 16 brains（12 个幽灵重新注册）。
+  - [Layer 2a — 幽灵注册]: `governance_scheduler.py:300` — `pnl_store.get_all_metrics()` 返回 PnL ledger 中全部 13 个 brain（含 12 个已归档 brain: V1/V2/V3/V5/V6/V7/V8/V9/V10/LGB_V1/V11/V12_H1_Survival）。`governance_scheduler.py:357-358` — `current_state is None → governance.register_brain(brain_id, "candidate")` 每次 cycle 将这些幽灵重新注册为 candidate。
+  - [Layer 2b — 评分过严]: Quality Engine V4 评分 27.69→"degraded" tier→probation。Legacy 路径 WR=35.5% < WR_PROBATION_THRESHOLD=45%→probation。RR-adjusted 通道 (FIX-20260627-152) PF=1.15 < PF_RR_ADJUSTED_MIN=1.3→blocked。V4 有 298 trades/+42.4R/PF=1.15 但三条路径全部通向 probation。
+  - [Layer 2c — Last-live guard 绕过]: FIX-20260628-162 在 `governance_rule_engine.py:201-210` 添加 last-live guard — 但实际降级走 `governance_scheduler.py:462` → `GovernanceService.transition()` 直接调用，绕过 rule engine 的 `evaluate()` 路径。Guard 从未被检查。
+  - [Layer 3 — 架构根因]: RC-11 (stale-data) + RC-06 (contract-violation) — PnL ledger 无生命周期 GC 机制，已归档 brain 的历史 PnL 数据永久残留成为幽灵注册数据源。双轨降级路径（quality_engine + legacy threshold）均绕过 rule engine 的 last-live guard → 单一 live brain 无任何防护。
+- **证据引用**:
+  - Source 1: `governance_state.json` transition_log — V4 3 次降级 (06:51/09:04/09:34)，3 次 SSOT 恢复 (08:55/09:29/10:20)，13 次幽灵注册
+  - Source 2: `governance_scheduler.py:300` — `pnl_store.get_all_metrics()` 返回 13 个 brain；`:357-358` — 无条件 `register_brain(bid, "candidate")`
+  - Source 3: `governance_scheduler.py:462` — `governance.transition(brain_id, target_status)` 直接调用，绕过 rule engine
+  - Source 4: `live_trade_journal.jsonl` — ticket=4006314705 V4 trade (09:40 OPEN, 10:04 TP close, +$1.38)
+  - Source 5: `brain_pnl_ledger.json` — settled 表含 13 个 brain（含 12 个已归档）
+  - Source 6: `brain_quality_engine.py:323-357` — V4 score=27.69, tier="degraded"
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260628-PING_PONG_DEMOTE
+
 ### CCT-20260628-061
 - **Docket ID**: DQAF-20260628-061
 - **日期**: 2026-06-28

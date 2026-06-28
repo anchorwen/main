@@ -44,6 +44,18 @@
 
 **Detection**: `drifts_detected > 0` in daily_ops report → config-governance status mismatch. `bootstrap_registered > 0` after initial cycle → previous cycles had registration gaps. Automated check in `cmd_reconcile()`.
 
+### ReB-20260628-PING_PONG_DEMOTE
+- **Pattern Signature**: `PING_PONG_DEMOTE`
+- **Date Cataloged**: 2026-06-28
+- **Source Docket**: DQAF-20260628-063
+- **Related**: FIX-20260628-161 (SSOT reconciliation), FIX-20260628-162 (last-live guard in rule engine), FIX-20260628-163 (config-floor reconcile), FIX-20260628-168 (3-lock fix), ReB-20260628-CONFIG_GOVERNANCE_DUAL_TRACK_DRIFT
+
+**Definition**: Automated governance cycle repeatedly demotes a brain that is the SSOT-designated live brain, while a separate reconciliation process (SSOT reconciliation) repeatedly restores it. The cycle repeats indefinitely because: (a) stale data from a source without lifecycle cleanup (PnL ledger → ghost re-registration), (b) scoring system with rigid thresholds incompatible with the strategy's natural metrics (trend-following WR~35% blocked by 45% floor), (c) a safety guard (last-live) exists but is placed in a code path the actual demotion bypasses (rule engine vs direct transition()). The system oscillates between "0 live brains → trading blocked" and "1 live brain → trading resumes" every governance cycle.
+
+**Prevention**: Three-layer defense: (1) Registration gate validates data sources against config SSOT — no registration without config on disk. (2) Last-live guard at the actual transition call site (not just the rule engine) — the guard must be on the code path that executes the demotion. (3) Scoring thresholds must have escape hatches for profitable strategies that fall outside normal ranges (RR-adjusted channel, manual override).
+
+**Detection**: `GHOST REGISTRATION BLOCKED` log pattern → ghost brain prevented. `LAST-LIVE GUARD TRIGGERED` log pattern → demotion intercepted. `transition_log` shows ping-pong pattern (same brain live↔probation within hours). `governance_state.json` brain count oscillates (3↔16).
+
 ---
 
 ### ReB-20260626-001
