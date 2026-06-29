@@ -1246,6 +1246,8 @@ def execute_management_phase(
         pm=pm,
         state=state,
         mid=mid,
+        bid=bid,
+        ask=ask,
         current_atr=current_atr,
         strategy_name=_sname,
         utc_iso_fn=_utc_iso,

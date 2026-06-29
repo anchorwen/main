@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-29T11:42:54Z
+> **自动生成**: 2026-06-29T13:53:39Z
 > **扫描模块数**: 699
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -520,7 +520,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4269 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 11 | 1947 | — | |
+| `management_phase.py` | ✅ active | — | 11 | 1949 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -551,7 +551,7 @@
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
-| `trail_dispatch.py` | ✅ active | — | 1 | 274 | — | |
+| `trail_dispatch.py` | ✅ active | — | 1 | 311 | — | |
 | `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 205 | — | |
 
 ## core/schemas

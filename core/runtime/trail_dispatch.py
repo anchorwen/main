@@ -24,6 +24,8 @@ def compute_and_dispatch_trail(
     pm: Any,
     state: Any,
     mid: float | None,
+    bid: float | None = None,
+    ask: float | None = None,
     current_atr: float,
     strategy_name: str = "",
     utc_iso_fn: Any = None,
@@ -56,6 +58,7 @@ def compute_and_dispatch_trail(
     _trail_sl: float | None = None
     _be_triggered = False
     _be_dispatched = False
+    _be_skipped_price = False
 
     # ── Layer 1: Chandelier trailing stop ──
     if not getattr(pos, "cold_explore", False):
@@ -76,11 +79,44 @@ def compute_and_dispatch_trail(
         _be_improves = (pos.side == "long" and _be_sl > _final_sl) or (
             pos.side == "short" and _be_sl < _final_sl
         )
+        # ── FIX-20260629-196: Pre-Trade Feasibility Gateway ──
+        # Validate breakeven SL against MT5 order-book microstructural constraints.
+        # MT5 requires: SHORT SL ≥ Ask + StopLevel, LONG SL ≤ Bid − StopLevel.
+        # Using dynamic spread-proportional buffer (×2.0) as a StopLevel proxy,
+        # with exit_min_step as absolute floor.  Degrades gracefully to mid-based
+        # check when bid/ask unavailable (price-degraded cycles).
+        if _be_improves:
+            _spread = (
+                abs(ask - bid)
+                if (bid is not None and ask is not None and bid > 0 and ask > 0)
+                else 0.0
+            )
+            _min_market_distance = max(
+                config.exit_min_step,  # Floor: minimum step
+                round(_spread * 2.0, 8) if _spread > 0 else 0.0,  # Dynamic: 2× spread
+            )
+            if pos.side == "short":
+                _be_feasible = (
+                    _be_sl > ask + _min_market_distance
+                    if ask is not None and ask > 0
+                    else _be_sl > mid + _min_market_distance  # fallback to mid
+                )
+            else:
+                _be_feasible = (
+                    _be_sl < bid - _min_market_distance
+                    if bid is not None and bid > 0
+                    else _be_sl < mid - _min_market_distance  # fallback to mid
+                )
+            if not _be_feasible:
+                _be_improves = False
+                _be_skipped_price = True
         if _be_improves:
             _reasons.append("breakeven")
             _final_sl = _be_sl
             _be_dispatched = True
         pos.breakeven_triggered = True
+    else:
+        _be_skipped_price = False
 
     # ── Dynamic trailing TP ──
     _trail_tp = pm.compute_trail_tp(current_atr, ticket=pos.ticket)
@@ -109,6 +145,7 @@ def compute_and_dispatch_trail(
                 and abs(_trail_sl - pos.current_sl) >= config.exit_min_step,
                 "breakeven_fired": _be_triggered,
                 "breakeven_improves": _be_dispatched,
+                "breakeven_skipped_price": _be_skipped_price,
                 "cycles_held": pos.cycles_held,
                 "breakeven_triggered_flag": pos.breakeven_triggered,
                 "final_sl": round(_final_sl, 3),
