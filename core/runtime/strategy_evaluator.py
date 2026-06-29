@@ -101,6 +101,8 @@ def evaluate_strategy_lines(
     gods_eye_verdict: Any = None,
     # ── FIX-20260615-006/C8: required — no default ──
     base_dir: str = "",
+    # ── FIX-20260629-188 (P1-3): time-based session gating ──
+    blocked_entry_hours: list[int] | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -144,6 +146,48 @@ def evaluate_strategy_lines(
                 for sname in strategy_lines
             ],
         }
+
+    # ── FIX-20260629-188 (P1-3): Time-based session gating ──
+    # Block ALL new entries during statistically identified loss-making
+    # hours (00:00-01:00 UTC -$44.32, 20:00-21:00 UTC -$43.83, n=506 XAU
+    # swing closes).  These two hours account for -$88.15 out of -$89.03
+    # total swing PnL.  Existing positions continue to be managed
+    # (trailing stops, confidence decay exits) — only NEW entries are
+    # blocked.
+    if blocked_entry_hours:
+        _current_utc_hour = datetime.now(UTC).hour
+        if _current_utc_hour in blocked_entry_hours:
+            import json as _json_sg
+
+            _sg_summary: dict[str, Any] = {
+                "event": "gate_chain_blocked",
+                "reason": "session_time_blocked",
+                "time": _utc_iso(),
+                "blocked_hour_utc": _current_utc_hour,
+                "blocked_hours_config": blocked_entry_hours,
+                "message": (
+                    f"UTC hour {_current_utc_hour:02d}:00 is in the "
+                    f"blocked_entry_hours list {blocked_entry_hours}. "
+                    "New entries blocked — existing positions continue "
+                    "to be managed."
+                ),
+                "strategies_blocked": sorted(strategy_lines.keys()),
+            }
+            print(_json_sg.dumps(_sg_summary, ensure_ascii=False), flush=True)
+            return {
+                "decisions_map": {},
+                "trade_decisions": 0,
+                "strategy_results": [
+                    {
+                        "strategy": sname,
+                        "should_trade": False,
+                        "direction": "neutral",
+                        "confidence": 0.0,
+                        "reason": f"session_time_blocked_utc_{_current_utc_hour:02d}",
+                    }
+                    for sname in strategy_lines
+                ],
+            }
 
     decisions: list[Any] = []
     _blocked = sl_streak_blocked_until or {}

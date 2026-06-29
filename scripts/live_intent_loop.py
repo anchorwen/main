@@ -314,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     _yaml_zmq_ack: str = ""
     _yaml_portfolio_max_net: float | None = None  # FIX-20260601-037
     _yaml_portfolio_max_gross: float | None = None
+    _yaml_blocked_hours: list[int] = []  # FIX-20260629-188 (P1-3)
     # ── FIX-20260605-120: reentry thresholds ──
     _reentry_cfg: dict[str, Any] = {}
     if args.config:
@@ -334,6 +335,8 @@ def main(argv: list[str] | None = None) -> int:
                 _yaml_risk_budget = _lt.get("risk_budget_usd")
                 _yaml_equity_risk_pct = _lt.get("equity_risk_pct")
                 _yaml_market_type = str(_lt.get("market_type", "forex_24_5"))
+                # ── FIX-20260629-188 (P1-3): blocked UTC hours from live.yaml ──
+                _yaml_blocked_hours = _lt.get("blocked_entry_hours") or []
             # ── Transport adapter: ZMQ vs file dispatch (FIX-20260613-059) ──
             _adapter_cfg = full_cfg.get("adapter", {})
             if isinstance(_adapter_cfg, dict):
@@ -540,6 +543,8 @@ def main(argv: list[str] | None = None) -> int:
         reentry_sl_penalty=float(_reentry_cfg.get("sl_confidence_penalty", 0.10)),
         reentry_bleed_cooldown=float(_reentry_cfg.get("bleed_cooldown_seconds", 180)),
         reentry_bleed_penalty=float(_reentry_cfg.get("bleed_confidence_penalty", 0.10)),
+        # ── FIX-20260629-188 (P1-3): blocked UTC hours ──
+        blocked_entry_hours=_yaml_blocked_hours,
     )
 
     # ── Initialize MT5Worker (single-threaded engine — all MT5 calls on one thread) ──

@@ -97,6 +97,11 @@ live_trading:
   min_lot: 0.01
   max_lot: 0.1
   lot_step: 0.01
+  # ── FIX-20260629-188 (P1-3): Block new entries during loss-making hours ──
+  # 00:00-01:00 UTC: -$44.32 (20 trades, avg -$2.22) — Asian rollover
+  # 20:00-21:00 UTC: -$43.83 (14 trades, avg -$3.13) — Pre-Asian open
+  # These 2 hours = -$88.15 of -$89.03 total XAU swing PnL (n=506)
+  blocked_entry_hours: [0, 20]
   intraday_drawdown_kill:
     enabled: true
     kill_pct: 0.02

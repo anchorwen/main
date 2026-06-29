@@ -158,6 +158,9 @@ class LiveCycleConfig:
     # ── live.yaml regime_gate.regime_map ──
     regime_map: dict[str, dict[str, str]] | None = None
 
+    # ── FIX-20260629-188 (P1-3): UTC hours where NEW entries are blocked ──
+    blocked_entry_hours: list[int] = field(default_factory=list)
+
     # ── Vol-targeted position sizing ──
     risk_budget_usd: float = 10.0  # fixed USD risk per trade; 0 → use fixed volume
     equity_risk_pct: float = 0.0  # if >0, risk_budget = equity × equity_risk_pct (overrides fixed)
@@ -842,6 +845,8 @@ def _evaluate_strategy_lines(
     degradation_constraints: Any | None = None,  # FIX-20260611-022
     gods_eye_verdict: Any = None,  # FIX-20260625-090: God's Eye cross-instrument consensus
     base_dir: str = "",  # FIX-20260615-006/C8
+    # ── FIX-20260629-188 (P1-3): time-based session gating ──
+    blocked_entry_hours: list[int] | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -896,6 +901,8 @@ def _evaluate_strategy_lines(
         degradation_constraints=degradation_constraints,
         gods_eye_verdict=gods_eye_verdict,  # FIX-20260625-090
         base_dir=base_dir,
+        # ── FIX-20260629-188 (P1-3) ──
+        blocked_entry_hours=blocked_entry_hours,
     )
 
 
@@ -3468,6 +3475,8 @@ def execute_live_cycle(
             degradation_constraints=_degrade_constraints,
             gods_eye_verdict=gods_eye_verdict,  # FIX-20260625-090: God's Eye consensus
             base_dir=config.base_dir,  # FIX-20260615-006/C8
+            # ── FIX-20260629-188 (P1-3): time-based session gating ──
+            blocked_entry_hours=config.blocked_entry_hours,
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──
