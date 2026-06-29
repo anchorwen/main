@@ -179,6 +179,7 @@ def _daily_ops_scheduler(
                     _cmd,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
                     timeout=600,
                     cwd=str(project_root),
                 )
@@ -253,6 +254,7 @@ def _feedback_loop_runner(
                 cmd,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 timeout=30,
                 cwd=str(project_root),
             )
@@ -697,6 +699,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     _cold_cmd,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
                     timeout=300,
                     cwd=str(PROJECT_ROOT),
                     env=subprocess_env,

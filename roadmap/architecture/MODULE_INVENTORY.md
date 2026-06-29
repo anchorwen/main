@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-29T02:11:02Z
+> **自动生成**: 2026-06-29T02:22:05Z
 > **扫描模块数**: 691
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -740,7 +740,7 @@
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
 | `live_intent_loop.py` | ✅ active | — | 6 | 2821 | — | |
-| `live_launcher.py` | ✅ active | — | 15 | 1157 | — | |
+| `live_launcher.py` | ✅ active | — | 15 | 1160 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |
