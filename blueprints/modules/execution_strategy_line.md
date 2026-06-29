@@ -66,8 +66,9 @@ Phase 7:  StrategyDecision assembly
 | runtime/strategy_evaluator | StrategyDecision |
 
 ## Fix History
-See [execution_orders.md](execution_orders.md) for consolidated Fix History.
+See [execution_guards.md](execution_guards.md) for consolidated Fix History.
 
+| FIX-20260630-197 | 2026-06-30 | cursor-agent | — | **L3: Remove √t ATR scaling** (DQAF-20260630-197). `dynamic_sl_tp.py` — removed `current_atr *= sqrt(timeframe_mult)`. SL/TP distances inflated 3.46–16.97× for non-M5 strategies. See FIX_REGISTRY for forensic evidence. | L3 — √t double-counts ATR volatility |
 | FIX-20260622-064d | 2026-06-23 | cursor-agent | — | **DQAF-064d: XAU 3-Brain LIVE Promotion (IC_MANDATE)**. Swing_V10_H1_Directional (30 trades +107.33R PF=81.10 Sharpe=2.66), Swing_V9_M30_V2 (42 trades +62.53R PF=6.48 Sharpe=1.69), Swing_V9_H4_V2 (11 trades +15.87R PF=18.06 Sharpe=1.56) promoted candidate/probation → live. Brain config JSONs + governance_state updated with IC_MANDATE authority. | L2 — governance scheduler failed to promote brains with strong PnL metrics |
 ## Data Flow
 See [StrategyLine.evaluate() — 8-Phase Pipeline](#strategylineevaluate--8-phase-pipeline) above — the 8-phase pipeline from Regime gate to StrategyDecision assembly serves as this module's Data Flow documentation.

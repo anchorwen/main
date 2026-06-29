@@ -112,10 +112,9 @@ def compute_dynamic_sl_tp(
                      Defaults to max(max_sl_mult, base_tp_mult) so the
                      training TP multiplier is never capped at normal vol.
         timeframe_mult: M5-bar equivalent of the strategy timeframe (e.g. H1=12).
-                        ATR is scaled by √(timeframe_mult) to match the
-                        expected volatility over the strategy's horizon.
-                        Under √t (square-root-of-time) rule, variance grows
-                        linearly with time (random walk), so stddev ∝ √time.
+                        DEPRECATED for SL/TP ATR scaling (FIX-20260629-197).
+                        Retained for backward compatibility; the parameter is
+                        accepted but no longer applied to current_atr.
         min_sl_distance: Absolute price-distance floor for SL (e.g. 0.80 for
                          8 pips on XAUUSD).  When ATR collapses the raw SL
                          distance can drop below the spread, leaving no net
@@ -129,15 +128,19 @@ def compute_dynamic_sl_tp(
     Returns:
         DynamicSLTP with absolute distances and effective multipliers.
     """
-    import math
 
     if current_atr <= 0:
         current_atr = ref_atr
 
-    # ── √t scaling: ATR grows with sqrt(time) for random-walk processes ──
+    # ── ATR preserved at native M5 scale (√t scaling removed FIX-20260629-197) ──
+    # √t scaling REMOVED: ATR stays at native M5 resolution.
+    # Training labels use M5 ATR; live SL/TP must match the same scale.
+    # Prior √t inflation (commit 6c081245, 2026-05-21) caused configured
+    # SL=2.0 ATR to become 5.8–13.9 ATR for non-M5 timeframes.
+    # See DQAF-20260629-197 for forensic evidence.
     raw_atr = current_atr
-    if timeframe_mult > 1:
-        current_atr = current_atr * math.sqrt(timeframe_mult)
+    # timeframe_mult is retained for backward compatibility but no longer
+    # applied to ATR.  It remains available for future non-SL/TP uses.
 
     vol_ratio = raw_atr / ref_atr
 

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-29T13:53:39Z
-> **扫描模块数**: 699
+> **自动生成**: 2026-06-29T16:02:17Z
+> **扫描模块数**: 704
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -225,7 +225,7 @@
 | `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 822 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
-| `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
+| `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 247 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 342 | — | |
@@ -646,6 +646,7 @@
 | `analyze_shadow_predictions.py` | ✅ active | — | 11 | 569 | — | |
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
 | `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |
+| `analyze_two_positions.py` | ✅ active | — | 2 | 182 | — | |
 | `analyze_xau_institutional.py` | ✅ active | — | 17 | 1362 | — | |
 | `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 460 | — | |
 | `analyze_xau_since_june12.py` | ✅ active | — | 1 | 526 | — | |
@@ -654,6 +655,7 @@
 | `audit_behavior_compliance.py` | ✅ active | — | 5 | 437 | — | |
 | `audit_brain_fleet.py` | ✅ active | — | 1 | 307 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
+| `audit_btc_governance_pingpong.py` | ✅ active | — | 2 | 249 | — | |
 | `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
@@ -670,6 +672,7 @@
 | `audit_live_brains.py` | ✅ active | — | 1 | 231 | — | |
 | `audit_live_health.py` | ✅ active | — | 3 | 201 | — | |
 | `audit_memory.py` | ✅ active | — | 8 | 399 | — | |
+| `audit_open_positions.py` | ✅ active | — | 3 | 342 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
 | `audit_profitability.py` | ✅ active | — | 7 | 371 | — | |
@@ -823,9 +826,11 @@
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 | `verify_event_stream.py` | ✅ active | — | 3 | 200 | — | |
+| `verify_final.py` | ✅ active | — | 2 | 219 | — | |
 | `verify_health_check_coverage.py` | ✅ active | — | 2 | 143 | — | |
 | `verify_phantom_contracts.py` | ✅ active | Violation, VerificationReport | 7 | 437 | — | |
 | `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 292 | — | |
+| `verify_sqrt_scaling.py` | ✅ active | — | 4 | 447 | — | |
 | `verify_training_serving_parity.py` | ✅ active | — | 7 | 492 | — | |
 | `watchdog_daily_ops.py` | ✅ active | — | 3 | 171 | — | |
 

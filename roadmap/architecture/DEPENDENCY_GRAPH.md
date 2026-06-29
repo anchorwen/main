@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-29T13:53:39Z
+> **自动生成**: 2026-06-29T16:02:17Z
 
 ## Package-Level Dependencies
 
@@ -560,6 +560,7 @@
 - `analyze_shadow_predictions.py` → (无内部依赖)
 - `analyze_swing_pnl.py` → (无内部依赖)
 - `analyze_trail_impact.py` → (无内部依赖)
+- `analyze_two_positions.py` → (无内部依赖)
 - `analyze_xau_institutional.py` → (无内部依赖)
 - `analyze_xau_recent_entries.py` → (无内部依赖)
 - `analyze_xau_since_june12.py` → (无内部依赖)
@@ -568,6 +569,7 @@
 - `audit_behavior_compliance.py` → (无内部依赖)
 - `audit_brain_fleet.py` → (无内部依赖)
 - `audit_btc_cross_validate.py` → (无内部依赖)
+- `audit_btc_governance_pingpong.py` → (无内部依赖)
 - `audit_btc_live_direction.py` → (无内部依赖)
 - `audit_btc_v11_ledger.py` → (无内部依赖)
 - `audit_cross_symbol_consistency.py` → `scripts.alert_dispatcher`
@@ -584,6 +586,7 @@
 - `audit_live_brains.py` → (无内部依赖)
 - `audit_live_health.py` → (无内部依赖)
 - `audit_memory.py` → (无内部依赖)
+- `audit_open_positions.py` → (无内部依赖)
 - `audit_physics_thresholds.py` → (无内部依赖)
 - `audit_pnl_ledger_integrity.py` → (无内部依赖)
 - `audit_profitability.py` → (无内部依赖)
@@ -737,9 +740,11 @@
 - `verify_dqaf044_fix_effect.py` → (无内部依赖)
 - `verify_dqaf_002_fix.py` → `core.execution.position_manager`
 - `verify_event_stream.py` → `core.feedback.brain_pnl_ledger`
+- `verify_final.py` → (无内部依赖)
 - `verify_health_check_coverage.py` → `core.observability.data_health_service`
 - `verify_phantom_contracts.py` → `core.contracts.phantom_contract`, `core.data.write_ahead_log`
 - `verify_pnl_data_integrity.py` → (无内部依赖)
+- `verify_sqrt_scaling.py` → `core.execution.dynamic_sl_tp`
 - `verify_training_serving_parity.py` → `scripts.build_btc_metafilter_v2_dataset`
 - `watchdog_daily_ops.py` → (无内部依赖)
 
