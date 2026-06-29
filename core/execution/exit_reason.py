@@ -46,6 +46,45 @@ class ExitReason(str, Enum):
     OU_REVERT = "ou_revert"
     """Ornstein-Uhlenbeck mean-reversion signal (z-score based)."""
 
+    # ── V6 Exit Priority Queue additions (FIX-20260629-195) ────────────
+    # Phase 0: Canonical exit reasons ported from God's Eye V6.0
+    # These 8 new reasons enable the 7-level exit priority pipeline (P1-P7)
+    # to replace scattered flat-sequential exit checks in management_phase.py.
+
+    BASKET_TP = "basket_tp"
+    """P1: Portfolio-level basket take-profit — dynamic ATR-based target
+    using sqrt(q)/q position-count scaling.  Highest priority exit."""
+
+    ZSCORE_FLIP = "zscore_flip"
+    """P2: OU z-score sign reversal — mean-reversion completed.  Requires
+    2-bar confirmation and respects asymmetric transition shield during
+    KF→OLS estimator handoff."""
+
+    REGIME_COLLAPSE = "regime_collapse"
+    """P3: Higher-timeframe regime no longer supports the position's premise.
+    M15 regime probability dropped below 50% of minimum threshold."""
+
+    CB_EMERGENCY = "cb_emergency"
+    """P4a: Emergency circuit breaker — PnL cratered through 75% of total
+    SL distance.  Bypasses all retry gates, issues market close."""
+
+    CB_SLOW_BURN = "cb_slow_burn"
+    """P4b: Slow-burn circuit breaker — PnL below 50% SL distance AND
+    4+ consecutive declining PnL bars beyond half-life horizon."""
+
+    PREMISE_INVALID = "premise_invalid"
+    """P5: Entry thesis broken — two-tier convergence gate.
+    T1: |z| ≥ |entry_z| and PnL < -3% SL → OU process dead.
+    T2: PnL < -20% SL → critical loss, exit regardless of z dynamics."""
+
+    BREAKEVEN_DEFENSE = "breakeven_defense"
+    """P6a: Ratchet breakeven defense — profit peaked above 1.2×ATR_cost
+    then faded to cost_buffer.  Irreversible once armed."""
+
+    DRAWDOWN_LOCK = "drawdown_lock"
+    """P6b: Ratchet drawdown lock — peak profit exceeded 2×ATR_cost
+    then gave back >35% from peak.  Nonlinear exponential locking."""
+
     # ── Risk / protection exits ─────────────────────────────────────────
     SL_HIT = "sl_hit"
     """Stop-loss triggered (original or trailed)."""
@@ -114,6 +153,8 @@ _MODEL_DRIVEN: set[ExitReason] = {
     ExitReason.KALMAN_FLIP,
     ExitReason.META_EXIT,
     ExitReason.OU_REVERT,
+    ExitReason.ZSCORE_FLIP,
+    ExitReason.PREMISE_INVALID,
 }
 
 _RISK_DRIVEN: set[ExitReason] = {
@@ -121,12 +162,18 @@ _RISK_DRIVEN: set[ExitReason] = {
     ExitReason.BLEED_STOP,
     ExitReason.WATCHDOG,
     ExitReason.EMERGENCY_CLOSE,
+    ExitReason.CB_EMERGENCY,
+    ExitReason.CB_SLOW_BURN,
+    ExitReason.REGIME_COLLAPSE,
+    ExitReason.BREAKEVEN_DEFENSE,
+    ExitReason.DRAWDOWN_LOCK,
 }
 
 _STRUCTURAL: set[ExitReason] = {
     ExitReason.TP_HIT,
     ExitReason.TIME_EXPIRED,
     ExitReason.HESITATION,
+    ExitReason.BASKET_TP,
 }
 
 # ── Cooldown tiers (downstream reentry guard) ────────────────────────────
@@ -137,6 +184,14 @@ _COOLDOWN_TIER: dict[ExitReason, str] = {
     ExitReason.KALMAN_FLIP: "medium",  # leading indicator, may revert
     ExitReason.META_EXIT: "medium",  # multi-factor — moderate signal
     ExitReason.OU_REVERT: "light",  # mean-reversion — expected behavior
+    ExitReason.ZSCORE_FLIP: "light",  # mean-reversion complete — expected
+    ExitReason.PREMISE_INVALID: "medium",  # thesis broken, but not catastrophic
+    ExitReason.BASKET_TP: "light",  # successful exit, no penalty
+    ExitReason.REGIME_COLLAPSE: "heavy",  # market structure changed — strong block
+    ExitReason.CB_EMERGENCY: "block",  # emergency — do not re-enter
+    ExitReason.CB_SLOW_BURN: "heavy",  # slow PnL bleed — strong risk signal
+    ExitReason.BREAKEVEN_DEFENSE: "light",  # profit protection — mild signal
+    ExitReason.DRAWDOWN_LOCK: "medium",  # giveback from peak — moderate
     ExitReason.SL_HIT: "heavy",  # price proved direction wrong
     ExitReason.TP_HIT: "light",  # successful exit, no penalty
     ExitReason.BLEED_STOP: "heavy",  # consecutive losses — risk signal
@@ -210,6 +265,24 @@ def classify(raw_reason: str | None) -> ExitReason:
     # audit dashboards can distinguish them from strategy exits.
     if "auto_orphan" in r:
         return ExitReason.UNKNOWN_CLOSE
+
+    # ── V6 Exit Priority Queue classifications (FIX-20260629-195) ──
+    if "basket_tp" in r:
+        return ExitReason.BASKET_TP
+    if "zscore_flip" in r or "z_flip" in r:
+        return ExitReason.ZSCORE_FLIP
+    if "regime_collapse" in r:
+        return ExitReason.REGIME_COLLAPSE
+    if "cb_emergency" in r:
+        return ExitReason.CB_EMERGENCY
+    if "cb_slow_burn" in r:
+        return ExitReason.CB_SLOW_BURN
+    if "premise_invalid" in r:
+        return ExitReason.PREMISE_INVALID
+    if "breakeven_defense" in r:
+        return ExitReason.BREAKEVEN_DEFENSE
+    if "drawdown_lock" in r:
+        return ExitReason.DRAWDOWN_LOCK
 
     if "brain_flip" in r or "signal_reversal" in r:
         return ExitReason.BRAIN_FLIP

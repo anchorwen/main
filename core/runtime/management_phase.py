@@ -29,6 +29,10 @@ from core.runtime.ou_hurst import compute_tf_ou_hurst as _compute_tf_ou_hurst
 from core.runtime.time_utils import _utc_iso
 from core.runtime.trail_dispatch import compute_and_dispatch_trail
 
+# ── V6 Shared Trading Infrastructure (FIX-20260629-195) ──
+from core.trading.position_lifecycle import ExitPriorityQueue
+from core.trading.ratchet_risk import RatchetConfig, RatchetRisk
+
 if TYPE_CHECKING:
     from core.runtime.live_cycle import LiveCycleConfig, LiveCycleState
 
@@ -1070,6 +1074,31 @@ def execute_management_phase(
     if current_atr <= 0:
         current_atr = 2.31
 
+    # ── V6 Layer B Shadow Evaluation (FIX-20260629-195) ──────────
+    # Runs the 7-level Exit Priority Queue in parallel with existing
+    # exit logic.  When config enabled + not shadow: preempts existing.
+    # When config disabled: returns immediately (Delta-Zero Law).
+    _v6_verdict = _evaluate_v6_exit_queue_shadow(
+        config=config,
+        state=state,
+        pos=pos,
+        pm=pm,
+        mid_price=mid,
+        current_atr=current_atr,
+        strategy_name=_sname,
+        current_bar=state.loop_iteration,
+    )
+    if _v6_verdict is not None and _v6_verdict.is_triggered:
+        if getattr(state, "_v6_exit_shadow_mode", True):
+            _emit(
+                "v6_exit_priority_shadow",
+                ticket=pos.ticket,
+                v6_exit_code=_v6_verdict.exit_code,
+                v6_priority=_v6_verdict.priority_level,
+                v6_details=_v6_verdict.details,
+                existing_stage=pos.lifecycle_stage,
+            )
+
     # ── 1b. Signal health monitor — feed data every cycle; run checks on interval or when position open ──
     if state.signal_health_monitor is None:
         from core.runtime.signal_health import SignalHealthMonitor
@@ -1767,3 +1796,152 @@ def _send_trail_rejection_alert(
             logger.warning("TRAIL_REJECTION_ALERT (no hub): %s", _msg.replace("\n", " | "))
     except Exception:
         logger.exception("Failed to send trail rejection alert for ticket=%d", ticket)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# V6 Shared Trading Infrastructure — Shadow Integration (FIX-20260629-195)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _evaluate_v6_exit_queue_shadow(
+    *,
+    config: Any,
+    state: Any,
+    pos: Any,
+    pm: Any,
+    mid_price: float,
+    current_atr: float,
+    strategy_name: str,
+    current_bar: int,
+) -> Any | None:  # ExitVerdict | None
+    """Shadow-evaluate the V6 7-level Exit Priority Queue.
+
+    Delta-Zero Law: When config is absent or global.enabled=False, returns
+    None immediately — zero runtime overhead beyond the function call.
+
+    Lazy-initializes ExitPriorityQueue + RatchetRisk on state._v6_exit_queue
+    and state._v6_ratchet_risk.  Config is read from configs/trading/exit_priority.yaml
+    if available, otherwise uses inline defaults (all disabled).
+
+    Returns ExitVerdict if the queue fires, None otherwise.
+    """
+    from pathlib import Path
+
+    # ── Delta-Zero guard ──────────────────────────────────────
+    _v6_cfg = getattr(state, "_v6_exit_config", None)
+    if _v6_cfg is None:
+        # Lazy-load config from YAML if available
+        _cfg_path = Path("configs/trading/exit_priority.yaml")
+        if _cfg_path.exists():
+            try:
+                import yaml
+
+                with open(_cfg_path, encoding="utf-8") as f:
+                    _v6_cfg = yaml.safe_load(f)
+            except (OSError, ImportError, ValueError, KeyError, TypeError):
+                _v6_cfg = {"global": {"enabled": False}}
+        else:
+            _v6_cfg = {"global": {"enabled": False}}
+        state._v6_exit_config = _v6_cfg
+
+    if not _v6_cfg.get("global", {}).get("enabled", False):
+        return None
+
+    # ── Lazy-init queue ───────────────────────────────────────
+    if getattr(state, "_v6_exit_queue", None) is None:
+        state._v6_exit_queue = ExitPriorityQueue(_v6_cfg)
+        state._v6_ratchet_risk = RatchetRisk()
+        state._v6_ratchet_config = RatchetConfig(
+            breakeven_enabled=_v6_cfg.get("exit_queue", {})
+            .get("P6_ratchet_risk", {})
+            .get("breakeven_defense", {})
+            .get("enabled", False),
+            drawdown_enabled=_v6_cfg.get("exit_queue", {})
+            .get("P6_ratchet_risk", {})
+            .get("drawdown_lock", {})
+            .get("enabled", False),
+        )
+
+    queue: ExitPriorityQueue = state._v6_exit_queue
+    ratchet: RatchetRisk = state._v6_ratchet_risk
+    ratchet_cfg: RatchetConfig = state._v6_ratchet_config
+
+    state._v6_exit_shadow_mode = _v6_cfg.get("global", {}).get("shadow_mode", True)
+
+    # ── Compute OU params from position context ───────────────
+    ou_params = {
+        "z_score": getattr(pos, "entry_z_score", 0.0),
+        "kf_failed_bars": 0,
+        "kf_freeze_bars": 3,
+        "kf_crossfade_bars": 3,
+    }
+
+    # ── Compute regime info ───────────────────────────────────
+    _regime_info: dict[str, Any] = {}
+    _rg = getattr(state, "regime_gate", None)
+    if _rg is not None:
+        try:
+            _ri = _rg.classify()
+            if isinstance(_ri, dict):
+                _regime_info = _ri
+        except (AttributeError, TypeError, RuntimeError):
+            pass
+
+    # ── Compute bar PnLs for circuit breaker ──────────────────
+    bar_pnls = list(getattr(pos, "bar_pnls", []) or [])
+    # Append current cycle PnL if available
+    _current_pnl = getattr(pos, "current_pnl", None)
+    if _current_pnl is None and mid_price > 0 and pos.entry_price > 0:
+        if pos.side == "long":
+            _current_pnl = (mid_price - pos.entry_price) * pos.volume * 100.0
+        elif pos.side == "short":
+            _current_pnl = (pos.entry_price - mid_price) * pos.volume * 100.0
+    if _current_pnl is not None and (not bar_pnls or bar_pnls[-1] != _current_pnl):
+        bar_pnls.append(_current_pnl)
+    if not bar_pnls:
+        return None
+
+    # Temporarily attach current PnL to pos for the queue
+    if not hasattr(pos, "current_pnl") or getattr(pos, "current_pnl", None) is None:
+        pos.current_pnl = _current_pnl
+
+    # ── Ratchet evaluation ────────────────────────────────────
+    _point_value = 100.0  # XAUUSD default
+    ratchet_verdict = ratchet.evaluate(
+        net_pnl=float(_current_pnl or 0.0),
+        atr=current_atr,
+        point_value=_point_value,
+        base_lot=pos.volume,
+        breakeven_armed=getattr(pos, "ratchet_breakeven_armed", False),
+        drawdown_armed=getattr(pos, "ratchet_drawdown_armed", False),
+        peak_pnl=getattr(pos, "ratchet_peak_pnl", 0.0),
+        config=ratchet_cfg,
+    )
+
+    # ── Exit Priority Queue evaluation ────────────────────────
+    verdict = queue.evaluate(
+        pos=pos,
+        pm=pm,
+        mid={"price": mid_price},
+        current_atr=current_atr,
+        regime_info=_regime_info,
+        current_z_score=float(getattr(pos, "entry_z_score", 0.0)),
+        prev_z_score=None,
+        entry_z_score=float(getattr(pos, "entry_z_score", 0.0)),
+        entry_half_life=float(getattr(pos, "entry_half_life", 0.0)),
+        current_bar=current_bar,
+        point_value=_point_value,
+        ratchet_verdict=ratchet_verdict,
+        ou_params=ou_params,
+    )
+
+    # ── Persist ratchet state updates ─────────────────────────
+    if ratchet_verdict.details:
+        if ratchet_verdict.details.get("_breakeven_armed"):
+            pos.ratchet_breakeven_armed = True
+        if ratchet_verdict.details.get("_drawdown_armed"):
+            pos.ratchet_drawdown_armed = True
+        _peak = ratchet_verdict.details.get("_peak_pnl", 0.0)
+        if _peak > getattr(pos, "ratchet_peak_pnl", 0.0):
+            pos.ratchet_peak_pnl = _peak
+    return verdict

@@ -130,6 +130,23 @@ class ActivePosition:
     # v3 SSOT: consensus hash from persisted intent-state for reconciliation
     _v3_consensus_hash: str = ""
 
+    # ── V6 Layer B1: Position Lifecycle Stage Gate (FIX-20260629-195) ──
+    # 5-stage finite state machine: IDLE → ENTRY_CONFIRMED → MANAGED →
+    # AT_RISK → CLOSING → IDLE.  Each stage mounts different risk gates.
+    lifecycle_stage: str = "IDLE"  # IDLE|ENTRY_CONFIRMED|MANAGED|AT_RISK|CLOSING
+    stage_entered_at_cycle: int = 0  # loop_iteration when entered current stage
+    m15_confirmed: bool = False  # M15 TF confirmed entry direction
+    m30_aligned: bool = False  # M30 TF aligned with entry direction
+    h1_managing: bool = False  # H1 TF used for active basket management
+
+    # ── V6 Layer B3: Ratchet Risk state (FIX-20260629-195) ──
+    ratchet_breakeven_armed: bool = False  # PnL > 1.2×ATR_cost → defense active
+    ratchet_drawdown_armed: bool = False  # peak PnL > 2×ATR_cost → lock active
+    ratchet_peak_pnl: float = 0.0  # highest net PnL achieved this position
+
+    # ── V6 P2/P5 context: anchor values at entry for z-trajectory analysis ──
+    entry_mu: float = 0.0  # OU long-term mean at entry (0 = unknown / not OU)
+
     # Immutability guard — entry_price is the absolute baseline for all risk
     # calculations (breakeven, trail activation, PnL).  Any post-construction
     # mutation corrupts the risk origin and causes phantom breakeven/trail

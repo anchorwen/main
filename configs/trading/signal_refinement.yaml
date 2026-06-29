@@ -1,0 +1,100 @@
+# V6 Layer A: Signal Refinement Gate Configuration
+# FIX-20260629-195 — Phase 0 Foundation
+#
+# Delta-Zero Law: when global.enabled = false, the refinement gate
+# is completely bypassed.  StrategyDecision flows unchanged from
+# StrategyLine.evaluate() → pre_trade_guards → order dispatch.
+#
+# Reference: God's Eye V6.0 ou_brain/signal_quality.py, config.py
+#            v6_integration_blueprint.pdf §2 Layer A
+
+version: "1.0"
+
+global:
+  enabled: false  # ← Master kill-switch.  Set to true to activate Layer A.
+  shadow_mode: false  # When true: evaluate but log only, do not block/modulate.
+
+# ── Regime Suitability Matrix (Layer A1) ──────────────────────────
+# Maps strategy types × market regime states → suitability score [0, 1].
+# 1.0 = ideal regime, 0.0 = completely unsuitable.
+# Regime states are resolved by the existing RegimeGate.classify() output.
+regime_suitability:
+  min_score_for_entry: 0.25  # Block entry when suitability < this
+
+  # Per-strategy-type suitability matrix
+  matrix:
+    statarb_dynamic:
+      mean_reversion: 1.0
+      oscillation: 0.8
+      low_volatility: 0.7
+      mild_trend: 0.3
+      trending: 0.0        # OU strategies are toxic in strong trends
+
+    barrier_12bar:
+      mean_reversion: 0.9
+      oscillation: 0.9
+      mild_trend: 0.6
+      trending: 0.4
+      low_volatility: 0.5
+
+    swing:
+      mean_reversion: 0.6
+      oscillation: 0.7
+      mild_trend: 0.8
+      trending: 0.9
+      low_volatility: 0.4
+
+# ── Signal Quality Scorer (Layer A2) ──────────────────────────────
+# Unified quality score from 5 orthogonal dimensions.
+# Quality = weighted geometric mean of component scores.
+# Each dimension ∈ [0, 1].  Geometric mean veto: any dimension at 0 → score=0.
+signal_quality:
+  min_entry_quality: 0.35  # Block entry when overall quality < this
+  sizing_floor: 0.25       # Minimum size_multiplier (never size to zero on quality alone)
+
+  # Dimension weights (must sum to ~1.0)
+  weights:
+    regime_confidence: 0.30    # RegimeGate ou_regime_prob
+    estimation_quality: 0.25   # KF uncertainty from TrendDetector
+    z_quality: 0.15           # Distance from entry z-score boundaries (sweet spot)
+    consensus_strength: 0.20  # Brain ensemble agreement level
+    multi_tf_alignment: 0.10  # Higher-TF direction agreement
+
+# ── Multi-TF Confirmation (Layer A3) ───────────────────────────────
+# Extends existing God's Eye TF ladder (M5/H1/H4/D1) with M15/M30.
+# Higher-TF alignment score ∈ [0, 1] based on directional agreement.
+multi_tf:
+  min_alignment_score: 0.50  # Block entry when alignment < this
+
+  # TF weight by position time horizon
+  tf_weights:
+    M5: 0.10
+    M15: 0.15
+    M30: 0.20
+    H1: 0.25
+    H4: 0.20
+    D1: 0.10
+
+# ── Per-Strategy Overrides ───────────────────────────────────────
+per_strategy:
+  statarb_dynamic:
+    regime_suitability:
+      min_score_for_entry: 0.15  # Lower bar for pure OU — regime gate already filters
+    signal_quality:
+      min_entry_quality: 0.25
+      weights:
+        regime_confidence: 0.35
+        estimation_quality: 0.30
+        z_quality: 0.20
+        consensus_strength: 0.10
+        multi_tf_alignment: 0.05
+
+  barrier_12bar:
+    signal_quality:
+      min_entry_quality: 0.30
+      weights:
+        regime_confidence: 0.25
+        estimation_quality: 0.15
+        z_quality: 0.10
+        consensus_strength: 0.40   # Barrier relies heavily on brain agreement
+        multi_tf_alignment: 0.10

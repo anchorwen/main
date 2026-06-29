@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-29T10:25:38Z
-> **扫描模块数**: 695
+> **自动生成**: 2026-06-29T11:42:54Z
+> **扫描模块数**: 699
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -228,7 +228,7 @@
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
-| `exit_reason.py` | ✅ active | ExitReason | 6 | 269 | — | |
+| `exit_reason.py` | ✅ active | ExitReason | 6 | 342 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 11 | 597 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
@@ -256,7 +256,7 @@
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2153 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2170 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 512 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -520,7 +520,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4269 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 10 | 1763 | — | |
+| `management_phase.py` | ✅ active | — | 11 | 1947 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -598,6 +598,15 @@
 | `registry.py` | ✅ active | StrategyPluginRegistry, StrategyPluginRunner | 11 | 74 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
 | `structural_swing_v1.py` | ✅ active | SwingSignal, StructuralSwingV1 | 7 | 237 | — | |
+
+## core/trading
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `contracts.py` | ✅ active | LifecycleStage, RefinementResult, ExitVerdict, StageInfo | 5 | 141 | — | |
+| `position_lifecycle.py` | ✅ active | StageGate, ExitPriorityQueue | 25 | 773 | — | |
+| `ratchet_risk.py` | ✅ active | RatchetConfig, RatchetVerdict, RatchetRisk | 4 | 235 | — | |
+| `signal_refinement.py` | ✅ active | RefinementConfig, SignalRefinementGate | 9 | 449 | — | |
 
 ## core/training
 
@@ -684,7 +693,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 705 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 707 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |

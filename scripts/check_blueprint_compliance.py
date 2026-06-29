@@ -125,6 +125,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/mt5_spread_probe.py",
         "scripts/test_meta_pipeline.py",
         "scripts/position_snapshot.py",
+        "core/trading/",
+        "configs/trading/",
     ],
     "execution_reentry": [
         "core/execution/reentry_guard.py",
