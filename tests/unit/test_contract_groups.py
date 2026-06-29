@@ -113,7 +113,15 @@ def test_get_group_for_brain_type_known():
     # returns last-write-wins.  Preferred: contract_group + get_group_for_contract_group().
     g = get_group_for_brain_type("xgboost_v9")
     assert g is not None
-    assert g["name"] in ("barrier_12bar", "btc_swing", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
+    assert g["name"] in (
+        "barrier_12bar",
+        "btc_swing",
+        "daily_swing",
+        "m30_swing",
+        "h1_swing",
+        "h1_directional",
+        "h4_swing",
+    )
     g45 = get_group_for_brain_type("xgboost_v4.5")
     assert g45 is not None
     assert g45["name"] == "micro_3bar"
@@ -152,7 +160,15 @@ def test_get_group_for_proposal_by_source():
     assert g is not None
     # brain_type="xgboost_v9" appears in multiple groups; _TYPE_TO_GROUP
     # returns last-write-wins.  Prefer contract_group for disambiguation.
-    assert g["name"] in ("barrier_12bar", "btc_swing", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
+    assert g["name"] in (
+        "barrier_12bar",
+        "btc_swing",
+        "daily_swing",
+        "m30_swing",
+        "h1_swing",
+        "h1_directional",
+        "h4_swing",
+    )
 
 
 def test_get_group_for_proposal_by_metadata():
