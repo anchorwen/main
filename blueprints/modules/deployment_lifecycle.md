@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260629-177 | 2026-06-29 | cursor-agent | 5c942a65 | Unfreeze V12_H1_15 config status: shadow→probation + vote_weight: 0.0→1.0 to stop SSOT reconciliation ping-pong | config-drift |
 | FIX-20260629-176 | 2026-06-29 | cursor-agent | 2a1ea2df | Sync Swing_V10_H1_Directional artifact_hash with actual model file (model re-saved Jun 15, config hash stale from Jun 11 training) | config-drift |
 | FIX-20260628-170 | 2026-06-28 | cursor-agent | — | **btc_swing_h1 阈值校准:** (1) `min_rr_ratio` 1.0→0.85 — 对称 SL/TP 使 RR 永久 < min_rr_ratio, 100% 周期被封锁; (2) `min_p_win` 0.50→0.45 — probation 新 brain 仅有 1 笔结算交易, 对齐 btc_swing 门槛 | RC-09 |
 | FIX-20260628-166 | 2026-06-28 | cursor-agent | — | **MODULE_SOURCE_MAP: add train_xau_metafilter.py→training**. New XAU MetaFilter training script registered in blueprint compliance map. | RC-14 — new script not mapped |
