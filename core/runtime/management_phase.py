@@ -409,6 +409,17 @@ def _evaluate_brain_ensemble(
     Returns dict with closed, current_consensus, current_supporting,
     meta_consensus, meta_supporting.
     """
+    # Pre-initialize return values at function scope so the fallback
+    # return at the end is always safe, even when the re-evaluation
+    # guard (multi_brain + should_reeval_brains) is False.
+    # DQAF-20260629-194: UnboundLocalError when should_reeval_brains
+    # returns False on early cycles — the if-block was skipped but
+    # the out-of-block return referenced block-local variables.
+    current_consensus: dict[str, Any] = {}
+    current_supporting: list[str] = []
+    meta_consensus: dict[str, Any] = {}
+    meta_supporting: list[str] = []
+
     if config.multi_brain and pm.should_reeval_brains(state.loop_iteration):
         pm.mark_brains_reevaluated(state.loop_iteration)
 
@@ -523,11 +534,6 @@ def _evaluate_brain_ensemble(
                 # BrainSignal always carries brain_id from the adapter.
                 # No stamping needed — frozen objects reject mutation.
                 raw_proposals.append(prop)
-
-        current_consensus: dict[str, Any] = {}
-        current_supporting: list[str] = []
-        meta_consensus: dict[str, Any] = {}
-        meta_supporting: list[str] = []
 
         if raw_proposals:
             try:
