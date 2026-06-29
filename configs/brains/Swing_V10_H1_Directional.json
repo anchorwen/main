@@ -9,7 +9,7 @@
   "model_path": "data/models/xau_directional_h1/xgboost_fold0_s42.json",
   "artifact_path": "data/models/xau_directional_h1/xgboost_fold0_s42.json",
   "model_version": "xau_directional_v1",
-  "artifact_hash": "8013ca10db9822f711730f19d5709686e561fe7db722b786ef0fe0cf3f759d54",
+  "artifact_hash": "aeb41ea5f4f174bb3e3ee48b15caf63ffdffb91e00b2404556679b9882ffd7f5",
   "status": "live",
   "vote_weight": 1.0,
   "_live_promotion": {
