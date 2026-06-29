@@ -222,6 +222,7 @@ class ActivePositionManager:
         brain_reeval_interval: int = 5,
         flip_exit_threshold: float = 0.5,
         confidence_drop_threshold: float = 0.10,
+        confidence_floor: float = 0.45,  # P1-2: absolute confidence floor for p_win trajectory exit
         max_hold_cycles: int = 60,
         require_min_r: float = 0.3,
         min_step: float = 0.15,  # minimum SL change to fire modify (~15 pips XAUUSD)
@@ -256,6 +257,7 @@ class ActivePositionManager:
         self.brain_reeval_interval = brain_reeval_interval
         self.flip_exit_threshold = flip_exit_threshold
         self.confidence_drop_threshold = confidence_drop_threshold
+        self.confidence_floor = confidence_floor  # P1-2: absolute floor for p_win trajectory exit
         self.max_hold_cycles = max_hold_cycles
         self.require_min_r = require_min_r
         self.confidence_decay_enabled = confidence_decay_enabled
@@ -380,12 +382,12 @@ class ActivePositionManager:
             self._entry_consensus_score = 0.0
         # ── FIX-20260615-Contract: Post-condition — atomic removal ──
         if ticket is not None:
-            assert ticket not in self._positions, (
-                f"FATAL: ticket {ticket} still in _positions after clear"
-            )
-            assert ticket not in self._pending_close, (
-                f"FATAL: ticket {ticket} still in _pending_close after clear"
-            )
+            assert (
+                ticket not in self._positions
+            ), f"FATAL: ticket {ticket} still in _positions after clear"
+            assert (
+                ticket not in self._pending_close
+            ), f"FATAL: ticket {ticket} still in _pending_close after clear"
         else:
             assert len(self._positions) == 0, "FATAL: _positions not empty after clear-all"
             assert len(self._pending_close) == 0, "FATAL: _pending_close not empty after clear-all"
@@ -622,7 +624,7 @@ class ActivePositionManager:
                 if p.volume <= 0 and _vol > 0:
                     p.volume = _vol
                 return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         return False
 
@@ -698,9 +700,15 @@ class ActivePositionManager:
         # Unit tests cover the evaluators (51.4%); these asserts defend the
         # orchestration layer (48.6%) at runtime — Fail-Fast, never trade blind.
         assert pos.ticket > 0, f"FATAL: invalid ticket {pos.ticket}"
-        assert pos.entry_price > 0, f"FATAL: zero/negative entry_price {pos.entry_price} on ticket {pos.ticket}"
-        assert pos.current_sl > 0, f"FATAL: zero/negative current_sl {pos.current_sl} on ticket {pos.ticket}"
-        assert pos.entry_atr > 0, f"FATAL: zero/negative entry_atr {pos.entry_atr} on ticket {pos.ticket}"
+        assert (
+            pos.entry_price > 0
+        ), f"FATAL: zero/negative entry_price {pos.entry_price} on ticket {pos.ticket}"
+        assert (
+            pos.current_sl > 0
+        ), f"FATAL: zero/negative current_sl {pos.current_sl} on ticket {pos.ticket}"
+        assert (
+            pos.entry_atr > 0
+        ), f"FATAL: zero/negative entry_atr {pos.entry_atr} on ticket {pos.ticket}"
 
         pos.cycles_held += 1
         if self._recovery_cycle >= 0:
@@ -884,7 +892,12 @@ class ActivePositionManager:
            below entry confidence by more than ``confidence_drop_threshold``.
            EMA low-pass removes white noise while preserving trend sensitivity.
 
-        4. **Kalman velocity flip** (FIX-20260607-007): O(1) per-bar leading
+        4. **Absolute confidence floor** (FIX-20260629-187 / P1-2): EMA-smoothed
+           confidence has fallen below ``confidence_floor`` regardless of drop
+           magnitude.  Catches slow-drift degradation where the ensemble has
+           lost conviction but each individual drop was below threshold.
+
+        5. **Kalman velocity flip** (FIX-20260607-007): O(1) per-bar leading
            indicator — exits BEFORE price hits SL when Kalman velocity sign
            reverses.  Acts as a differential (D) term in the exit PID.
 
@@ -972,6 +985,23 @@ class ActivePositionManager:
 
         if self.confidence_decay_enabled and ema_drop > self.confidence_drop_threshold:
             return True, f"confidence_decay_ema_{ema_drop:.3f}"
+
+        # ── P1-2 (FIX-20260629-187): p_win trajectory — absolute confidence floor ──
+        # Even when the drop from entry hasn't reached confidence_drop_threshold,
+        # if the EMA-smoothed confidence has fallen below the absolute floor, the
+        # brain ensemble no longer has sufficient conviction.  This catches
+        # slow-drift degradation where each individual drop is small but confidence
+        # is now below the critical threshold (e.g. entry at 0.48, now at 0.32 —
+        # a 0.16 drop that should trigger even if threshold is 0.10, but the first
+        # 0.10 drop was absorbed by trend protection).
+        #
+        # confidence_floor=0 means disabled (backward compatible default).
+        if (
+            self.confidence_floor > 0
+            and self.confidence_decay_enabled
+            and pos.confidence_ema < self.confidence_floor
+        ):
+            return True, f"confidence_floor_{pos.confidence_ema:.3f}_lt_{self.confidence_floor:.2f}"
 
         return False, ""
 
@@ -1464,8 +1494,9 @@ class ActivePositionManager:
         # dedicated JSONL file for future model retraining.  This closes
         # the train-serve feature gap: the training script can read this
         # file and use the SAME 20 features the runtime engine uses.
-        self._write_meta_exit_telemetry(snap, evaluation, pos.ticket,
-                                       data_dir=getattr(self, "_data_dir", "data"))
+        self._write_meta_exit_telemetry(
+            snap, evaluation, pos.ticket, data_dir=getattr(self, "_data_dir", "data")
+        )
 
         # Save current R for next cycle's trajectory comparison
         pos.prev_r = round(r_now, 4)
@@ -1541,6 +1572,7 @@ class ActivePositionManager:
                 _f.write(_json.dumps(_record, ensure_ascii=False, default=str) + "\n")
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass  # telemetry failure must never block trading
+
     @staticmethod
     def _is_trend_aligned(regime_info: dict[str, Any], *, position_side: str = "") -> bool:
         """Check if the current regime's trend direction matches position side."""
@@ -2012,13 +2044,10 @@ class ActivePositionManager:
                 # lose strategy identity → fallback_unmanaged never applies →
                 # exit policies degrade to empty-config defaults (IC Mandate 刀 #3).
                 strategy_name=_strategy_from_state,
-                supporting_brain_ids=[
-                    str(x) for x in d.get("supporting_brain_ids", [])
-                ],
+                supporting_brain_ids=[str(x) for x in d.get("supporting_brain_ids", [])],
                 entry_consensus=dict(d.get("entry_consensus", {}) or {}),
                 model_horizons={
-                    str(k): int(v)
-                    for k, v in (d.get("model_horizons", {}) or {}).items()
+                    str(k): int(v) for k, v in (d.get("model_horizons", {}) or {}).items()
                 },
             )
             # Stash v3 fields for downstream reconciliation

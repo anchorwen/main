@@ -61,6 +61,7 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260629-187 | 2026-06-29 | cursor-agent | — | **P1-2: Label bleeding fix + confidence floor exit** (DQAF-175). restart_state.py label fallback priority fix; position_manager.py confidence_floor=0.45 for p_win trajectory exit. | RC-09 + RC-12 |
 | FIX-20260629-186 | 2026-06-29 | cursor-agent | — | **P1-1: XAU SL/TP recalibration — flip swing strategies low-RR→high-RR** (DQAF-175). m15/m30 SL/TP 3.0/1.5→2.0/3.0 (RR 0.50→1.50, breakeven 66.7%→40.0%); h1/h4 SL/TP 3.0/2.0→2.0/3.5 (RR 0.67→1.75, breakeven 60.0%→36.4%). Fixes systemic negative_ev_low_rr rejection where p_win=0.40-0.52 < breakeven=0.60-0.67 blocked all swing trades. | RC-09 — SL/TP miscalibrated for XAU |
 | FIX-20260629-185 | 2026-06-29 | cursor-agent | — | **P0-3b: Promote Swing_M15_V3 candidate→probation**. Shadow PF=999, n=193, WR=100%. | L2 — governance pipeline blockage |
 | FIX-20260629-184 | 2026-06-29 | cursor-agent | — | **P0-3a: Freeze Swing_V10_H1_Directional live→frozen** (DQAF-20260629-P03). 100% SHORT bias, PF=0.75, accuracy=0.519. | L2 — model output degeneracy |

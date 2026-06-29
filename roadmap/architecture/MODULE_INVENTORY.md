@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-29T05:02:49Z
+> **自动生成**: 2026-06-29T05:23:24Z
 > **扫描模块数**: 691
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -256,7 +256,7 @@
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2085 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2114 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 512 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -535,7 +535,7 @@
 | `reconciliation.py` | ✅ active | — | 2 | 414 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
-| `restart_state.py` | ✅ active | — | 1 | 370 | — | |
+| `restart_state.py` | ✅ active | — | 1 | 376 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
 | `session_guards.py` | ✅ active | — | 3 | 184 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |

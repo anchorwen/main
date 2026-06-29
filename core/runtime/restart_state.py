@@ -218,18 +218,24 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
         _close_price = _entry.get("detail", {}).get("close_price") or 0.0
         _ticket = _entry.get("position_ticket", 0)
         # Prefer the software-side close reason from `comment` (set by
-        # managed_close / exit_watchdog).  Falls back to SW-assigned
-        # `label` ("win"/"loss"/"breakeven"/"sl_hit_first"/etc.),
-        # then to the MT5-side `detail.reason` only when neither exists.
+        # managed_close / exit_watchdog).  Falls back to MT5-side
+        # `detail.reason` (structurally informative — sl_hit/tp_hit),
+        # then to SW-assigned `label` ("win"/"loss"/"breakeven" —
+        # PnL-based, least informative).
         #
-        # DQAF-20260616-001: previously `label` was skipped in the fallback
-        # chain → exits with no `comment` (e.g. structural_swing_v1) had
-        # _reason="mt5_deal_reason_3" → classify()→UNKNOWN → permanent
-        # reentry deadlock for rule-based strategies on restart.
+        # DQAF-20260616-001: previously `label` was placed before
+        # `detail.reason` in the fallback chain → exits with no
+        # `comment` had _reason="loss" (PnL-based) instead of the
+        # actual structural reason like "sl_hit".
+        #
+        # FIX-20260629-187 (P1-2): swap `label` and `detail.reason`
+        # priority.  "loss" is a PnL outcome, not an exit reason.
+        # `detail.reason` carries structural information (sl_hit,
+        # tp_hit, etc.) even when the software-side comment is empty.
         _reason = (
             _entry.get("comment", "").strip()
-            or str(_label or "").strip()
             or _entry.get("detail", {}).get("reason", "")
+            or str(_label or "").strip()
             or "unknown_close"
         )
 
