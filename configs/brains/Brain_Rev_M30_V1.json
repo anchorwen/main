@@ -10,7 +10,7 @@
   "artifact_path": "data/models/brains/Brain_Rev_M30_V1_model.json",
   "model_version": "swing_m30_swing_v1",
   "artifact_hash": "",
-  "status": "archived",
+  "status": "candidate",
   "vote_weight": 0.5,
   "magic": 90321,
   "brain_role": "alpha_brain",
