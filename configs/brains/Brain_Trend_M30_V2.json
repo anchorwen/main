@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\swing\\m30\\trend_v2\\Brain_Trend_M30_V2_model.json",
   "model_version": "brain_trend_m30_v2",
   "artifact_hash": "2cee2ac0c35dd56088d903fc7b904911d7c0db5053054f82fff25b2a151afe07",
-  "status": "candidate",
+  "status": "probation",
   "vote_weight": 1.0,
   "magic": 90320,
   "brain_role": "alpha_brain",

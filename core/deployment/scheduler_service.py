@@ -397,7 +397,7 @@ class SchedulerService:
                         # execute.  Log decisions for human review.
                         # FIX-20260614-B0: Metrics injection enabled, auto-transition
                         # stays manual until first cycle metrics are reviewed.
-                        if True:  # was: _GOVERNANCE_MANUAL_MODE
+                        if _GOVERNANCE_MANUAL_MODE:
                             for d in decisions:
                                 if d.action != "hold":
                                     _logger.warning(

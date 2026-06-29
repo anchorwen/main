@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\barrier\\v2\\Barrier_V9_12B_V2_model.json",
   "model_version": "barrier_v9_12b_v2",
   "artifact_hash": "8f70ce439a951d124f3d604d438a06672a82b43900a7e315ea36a678f59c1cc6",
-  "status": "candidate",
+  "status": "probation",
   "vote_weight": 1.0,
   "magic": 90001,
   "brain_role": "alpha_brain",
