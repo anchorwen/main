@@ -182,6 +182,7 @@ def _daily_ops_scheduler(
                     encoding="utf-8",
                     timeout=600,
                     cwd=str(project_root),
+                    env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
                 )
                 if result.returncode == 0:
                     msg = "[daily_ops] Completed successfully"
@@ -257,6 +258,7 @@ def _feedback_loop_runner(
                 encoding="utf-8",
                 timeout=30,
                 cwd=str(project_root),
+                env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
             )
             if result.stdout.strip():
                 output = f"[feedback] {result.stdout.strip()}"
@@ -627,6 +629,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     subprocess_env = {
         **dict(os.environ),
         "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
         "PYTHONUNBUFFERED": "1",
         "GOLDEN_MASTER_RECORD": "1",
     }
