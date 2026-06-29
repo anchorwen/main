@@ -7,8 +7,10 @@ through the live_order_sender outbox pipeline.
 
 from __future__ import annotations
 
-import contextlib
+import logging
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 
 def dispatch_modify_trail(
@@ -27,7 +29,7 @@ def dispatch_modify_trail(
     reason: str = "",
     brain_ids: list[str] | None = None,
     strategy_name: str = "",
-) -> None:
+) -> dict | None:  # DQAF-064 §2: return dispatch result for rejection tracking
     """Issue a modify_sltp through the existing outbox pipeline.
 
     Args:
@@ -71,8 +73,12 @@ def dispatch_modify_trail(
     if open_message_id:
         payload["open_message_id"] = open_message_id
 
-    with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
-        dispatch_live_order(
+    # DQAF-064 §2: Return dispatch result instead of silently suppressing failures.
+    # Previously contextlib.suppress() ate all exceptions, making trail rejection
+    # invisible to the management layer.  Now we log and return the status so the
+    # caller (trail_dispatch.py) can track rejection streaks.
+    try:
+        result = dispatch_live_order(
             base_dir=base_dir,
             broker=None,
             symbol=symbol,
@@ -83,3 +89,12 @@ def dispatch_modify_trail(
             adapter_name=adapter_name,
             extensions={"mt5_terminal_path": mt5_terminal_path},
         )
+        return result
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _exc:
+        _logger.warning(
+            "Trail dispatch failed for ticket=%s strategy=%s: %s",
+            pos_ticket,
+            strategy_name,
+            _exc,
+        )
+        return {"status": "failed", "error": str(_exc), "ticket": pos_ticket}

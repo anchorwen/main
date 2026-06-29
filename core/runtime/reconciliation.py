@@ -101,6 +101,7 @@ def reconcile_closed_positions(
         close_price = None
         close_time = None
         close_reason: int | None = None
+        close_deal_comment: str = ""  # DQAF-064 §1: preserve watchdog label
         close_volume = open_entry.get("volume") or open_entry.get("effective_volume_hint", 0.0)
 
         if deals:
@@ -110,6 +111,8 @@ def reconcile_closed_positions(
                     close_price = getattr(deal, "price", None)
                     close_time = getattr(deal, "time", None)
                     close_reason = deal_reason
+                    close_deal_comment = str(getattr(deal, "comment", "") or "")
+                    break  # SL/TP deal is the definitive close — stop searching
 
             if close_price is None and deals and len(deals) >= 2:
                 exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
@@ -117,6 +120,9 @@ def reconcile_closed_positions(
                     last_exit = max(exit_deals, key=lambda d: getattr(d, "time", 0))
                     close_price = getattr(last_exit, "price", None)
                     close_time = getattr(last_exit, "time", None)
+                    close_deal_comment = close_deal_comment or str(
+                        getattr(last_exit, "comment", "") or ""
+                    )
                 if close_price is None:
                     last_deal = max(deals, key=lambda d: getattr(d, "time", 0))
                     close_price = getattr(last_deal, "price", None)
@@ -182,8 +188,17 @@ def reconcile_closed_positions(
                 if _pos is not None and getattr(_pos, "trail_advances", 0) > 0:
                     trail_active = True
 
-        label = None
-        if close_reason in (4,):
+        # ── DQAF-064 §1: Preserve watchdog exit reason from deal comment ──
+        if close_deal_comment.startswith("exit_watchdog:"):
+            _wd_reason = (
+                close_deal_comment.split(":", 1)[1]
+                if ":" in close_deal_comment
+                else close_deal_comment
+            )
+            _wd_parts = _wd_reason.split("_", 2)
+            _wd_short = "_".join(_wd_parts[:2]) if len(_wd_parts) >= 2 else _wd_reason[:30]
+            label = f"watchdog:{_wd_short}"
+        elif close_reason in (4,):
             label = "sl_hit_trailed" if trail_active else "sl_hit_first"
         elif close_reason in (5,):
             label = "tp_hit_first"

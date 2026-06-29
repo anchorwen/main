@@ -364,6 +364,8 @@ class PositionCloseAdapter:
             _deal_reason = getattr(_deal, "reason", -1)
             _deal_time = getattr(_deal, "time", 0)
             _position_identifier = int(getattr(_deal, "position_id", 0) or 0)
+            # DQAF-064 §1: Extract deal comment for watchdog label preservation
+            _deal_comment = str(getattr(_deal, "comment", "") or "")
 
             if _close_price <= 0:
                 _log.error(
@@ -395,7 +397,15 @@ class PositionCloseAdapter:
             _p_win = float(open_entry.get("p_win", 0.5) or 0.5)
 
             # ── Label from deal reason ──
-            if _deal_reason == DEAL_REASON_SL:
+            # DQAF-064 §1: Preserve watchdog exit reason from deal comment
+            if _deal_comment.startswith("exit_watchdog:"):
+                _watchdog_reason = (
+                    _deal_comment.split(":", 1)[1] if ":" in _deal_comment else _deal_comment
+                )
+                _parts = _watchdog_reason.split("_", 2)
+                _short = "_".join(_parts[:2]) if len(_parts) >= 2 else _watchdog_reason[:30]
+                _label = f"watchdog:{_short}"
+            elif _deal_reason == DEAL_REASON_SL:
                 _label = "sl_hit_first"
             elif _deal_reason == DEAL_REASON_TP:
                 _label = "tp_hit_first"

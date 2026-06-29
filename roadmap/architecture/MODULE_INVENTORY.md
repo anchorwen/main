@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-29T08:45:27Z
+> **自动生成**: 2026-06-29T09:30:43Z
 > **扫描模块数**: 694
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -520,19 +520,19 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4269 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 8 | 1647 | — | |
+| `management_phase.py` | ✅ active | — | 10 | 1763 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
-| `modify_trail_dispatch.py` | ✅ active | — | 1 | 85 | — | |
+| `modify_trail_dispatch.py` | ✅ active | — | 1 | 100 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 584 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 594 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 314 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
-| `reconciliation.py` | ✅ active | — | 2 | 414 | — | |
+| `reconciliation.py` | ✅ active | — | 2 | 429 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
 | `restart_state.py` | ✅ active | — | 1 | 376 | — | |
@@ -551,7 +551,7 @@
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
-| `trail_dispatch.py` | ✅ active | — | 1 | 250 | — | |
+| `trail_dispatch.py` | ✅ active | — | 1 | 274 | — | |
 | `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 205 | — | |
 
 ## core/schemas
@@ -630,15 +630,15 @@
 | `analyze_feature_shift.py` | ✅ active | — | 5 | 323 | — | |
 | `analyze_live_brain_performance.py` | ✅ active | — | 6 | 672 | — | |
 | `analyze_live_journal.py` | ✅ active | — | 6 | 797 | — | |
-| `analyze_m30_trailing_sltp.py` | ✅ active | — | 5 | 491 | — | |
+| `analyze_m30_trailing_sltp.py` | ✅ active | — | 5 | 550 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
 | `analyze_shadow_predictions.py` | ✅ active | — | 11 | 569 | — | |
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
 | `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |
-| `analyze_xau_institutional.py` | ✅ active | — | 17 | 1244 | — | |
+| `analyze_xau_institutional.py` | ✅ active | — | 17 | 1362 | — | |
 | `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 460 | — | |
-| `analyze_xau_since_june12.py` | ✅ active | — | 1 | 491 | — | |
+| `analyze_xau_since_june12.py` | ✅ active | — | 1 | 526 | — | |
 | `assess_system_health.py` | 📄 config | — | 0 | 229 | — | |
 | `audit_2day.py` | ✅ active | — | 1 | 207 | — | |
 | `audit_behavior_compliance.py` | ✅ active | — | 5 | 437 | — | |
@@ -686,7 +686,7 @@
 | `check_blueprint_compliance.py` | ✅ active | — | 10 | 705 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
-| `check_live_status.py` | ✅ active | — | 3 | 320 | — | |
+| `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
 | `check_omega_pre_push.py` | ✅ active | — | 2 | 86 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
@@ -755,7 +755,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 34 | 2060 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 35 | 2105 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |

@@ -1224,6 +1224,41 @@ def execute_management_phase(
     _sl_changed = _trail_result["sl_changed"]
     _tp_changed = _trail_result["tp_changed"]
 
+    # ── DQAF-064 §2: Check previous cycle's trail dispatch for rejection ──
+    if _reasons and _sl_changed:
+        _prev_rejection = _check_trail_rejection(pos.ticket, config)
+        if _prev_rejection:
+            pos.trail_rejection_streak += 1
+            pos.trail_last_rejection_code = _prev_rejection.get("retcode", 0)
+            logger.warning(
+                "Trail rejection streak=%d ticket=%d retcode=%d",
+                pos.trail_rejection_streak,
+                pos.ticket,
+                pos.trail_last_rejection_code,
+            )
+        else:
+            # Dispatch succeeded — reset streak
+            if pos.trail_rejection_streak > 0:
+                logger.info(
+                    "Trail rejection resolved: ticket=%d after %d rejections",
+                    pos.ticket,
+                    pos.trail_rejection_streak,
+                )
+            pos.trail_rejection_streak = 0
+            pos.trail_last_rejection_code = 0
+
+        # ── Alert on 3+ consecutive rejections ──
+        if pos.trail_rejection_streak >= 3:
+            _send_trail_rejection_alert(
+                config=config,
+                ticket=pos.ticket,
+                streak=pos.trail_rejection_streak,
+                last_retcode=pos.trail_last_rejection_code,
+                strategy_name=_sname,
+            )
+            # Reset after alert so the next cycle can retry
+            pos.trail_rejection_streak = 0
+
     # ── 5.5 Partial take-profit ──
     if not pos.partial_tp_triggered and pos.partial_tp_r > 0:
         should_ptp, ptp_close_vol, ptp_remain_vol = pm.should_partial_tp(mid, ticket=pos.ticket)
@@ -1645,3 +1680,84 @@ def execute_management_phase(
             return True
 
     return False
+
+
+# ── DQAF-064 §2: Trail rejection detection helpers ──────────────────────
+
+
+def _check_trail_rejection(ticket: int, config: Any) -> dict | None:
+    """Check if the most recent trail modify_sltp for ``ticket`` was rejected.
+
+    Reads the journal tail (last ~16KB) and looks for the most recent
+    modify_sltp entry for this position.  Returns a dict with ``retcode``
+    if the last entry was rejected, or None if accepted / not found.
+    """
+    _journal_path = Path(getattr(config, "data_dir", "data")) / "live_trade_journal.jsonl"
+    if not _journal_path.exists():
+        return None
+
+    try:
+        # Read journal tail efficiently
+        with open(_journal_path, "rb") as _fh:
+            _fh.seek(0, 2)
+            _size = _fh.tell()
+            _read_size = min(_size, 16384)
+            _fh.seek(max(0, _size - _read_size))
+            _tail = _fh.read().decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        return None
+
+    _most_recent: dict | None = None
+    for _line in reversed(_tail.strip().split("\n")):
+        _line = _line.strip()
+        if not _line:
+            continue
+        try:
+            _entry = json.loads(_line)
+        except json.JSONDecodeError:
+            continue
+        if _entry.get("position_ticket") == ticket and _entry.get("action") == "modify_sltp":
+            _most_recent = _entry
+            break
+
+    if _most_recent is None:
+        return None
+
+    _ack = _most_recent.get("ack_status", "")
+    if _ack == "rejected":
+        _detail = _most_recent.get("detail", {})
+        _retcode = _detail.get("retcode", 0) if isinstance(_detail, dict) else 0
+        return {"retcode": _retcode, "ack_status": "rejected"}
+    return None
+
+
+def _send_trail_rejection_alert(
+    *,
+    config: Any,
+    ticket: int,
+    streak: int,
+    last_retcode: int,
+    strategy_name: str = "",
+) -> None:
+    """Send DingTalk alert when trail modifications are repeatedly rejected."""
+    _msg = (
+        f"TRAIL_MODIFICATION_FAILED\n"
+        f"Position: {ticket}\n"
+        f"Strategy: {strategy_name}\n"
+        f"Consecutive rejections: {streak}\n"
+        f"Last MT5 retcode: {last_retcode}\n"
+        f"Action: Trail suspended for this position, will retry next cycle."
+    )
+    try:
+        _hub = getattr(config, "alert_hub", None)
+        if _hub is not None and hasattr(_hub, "send_alert"):
+            _hub.send_alert(
+                severity="warning",
+                title="Trail Modification Failed",
+                message=_msg,
+                tags=["trail", "mt5_rejection", f"rc{last_retcode}"],
+            )
+        else:
+            logger.warning("TRAIL_REJECTION_ALERT (no hub): %s", _msg.replace("\n", " | "))
+    except Exception:
+        logger.exception("Failed to send trail rejection alert for ticket=%d", ticket)

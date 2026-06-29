@@ -198,9 +198,33 @@ def compute_and_dispatch_trail(
             strategy_name=strategy_name,
             state=state,
         )
-        # Update local state and log AFTER dispatch
-        if _sl_changed:
-            pos.current_sl = _final_sl
+        # ── DQAF-064 §2: Defer optimistic SL/TP update if rejection streak active ──
+        _rejection_active = getattr(pos, "trail_rejection_streak", 0) > 0
+        if _rejection_active:
+            print(
+                json.dumps(
+                    {
+                        "event": "trail_update_suppressed",
+                        "time": _utc_iso(),
+                        "ticket": pos.ticket,
+                        "rejection_streak": pos.trail_rejection_streak,
+                        "would_be_sl": round(_final_sl, 3) if _sl_changed else None,
+                        "would_be_tp": round(_final_tp, 3) if _tp_changed else None,
+                        "reason": "pending_rejection_resolution",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        else:
+            # Update local state and log AFTER dispatch (only when no rejection streak)
+            if _sl_changed:
+                pos.current_sl = _final_sl
+            if _tp_changed:
+                pos.current_tp = _final_tp
+
+        # Log trail movement regardless of suppression
+        if _sl_changed and not _rejection_active:
             print(
                 json.dumps(
                     {
@@ -218,7 +242,7 @@ def compute_and_dispatch_trail(
                 ),
                 flush=True,
             )
-        if _tp_changed:
+        if _tp_changed and not _rejection_active:
             pos.current_tp = _final_tp
             print(
                 json.dumps(

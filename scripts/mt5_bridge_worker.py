@@ -416,8 +416,9 @@ _DEDUP_CACHE: dict[tuple, float] = {}
 # MT5 retcodes that are transient (deserve a retry)
 _TRANSIENT_RETCODES: set[int] = {
     10004,  # TRADE_RETCODE_REQUOTE
+    10006,  # TRADE_RETCODE_INVALID_REQUEST — DQAF-064 §2: retry with backoff
     10015,  # TRADE_RETCODE_INVALID_PRICE
-    10016,  # TRADE_RETCODE_PRICE_CHANGED
+    10016,  # TRADE_RETCODE_PRICE_CHANGED — handled with adaptive widening
     10018,  # TRADE_RETCODE_OFF_QUOTES
     10019,  # TRADE_RETCODE_CONNECTION
     10028,  # TRADE_RETCODE_TIMEOUT
@@ -445,6 +446,19 @@ def _should_retry(retcode: int, reason: str) -> bool:
     if retcode == 10010 and not reason:
         return True
     return False
+
+
+def _symbol_digits(mt5: Any, symbol: str) -> int:
+    """Return the number of decimal digits for a symbol (DQAF-064 §2)."""
+    if not mt5 or not symbol:
+        return 2
+    try:
+        info = mt5.symbol_info(symbol)
+        if info is not None:
+            return int(getattr(info, "digits", 2))
+    except Exception:
+        pass
+    return 2
 
 
 def _verify_position_exists(mt5: Any, ticket: int) -> bool:
@@ -865,6 +879,18 @@ def _derive_label(action: str, msg_payload: dict[str, Any], detail: dict[str, An
     if action == "modify_sltp":
         return "trail" if msg_payload.get("sl") else None
     if action == "close":
+        # ── DQAF-064 §1: Preserve watchdog exit reason in label ──────────
+        # Watchdog-triggered closes MUST carry a "watchdog:<subtype>" label
+        # so that audit scripts can distinguish intentional system exits from
+        # genuine unknown-loss events.  The full reason stays in `comment`.
+        _comment = str(msg_payload.get("comment", ""))
+        if _comment.startswith("exit_watchdog:"):
+            # Extract: "exit_watchdog:hesitation_18c_no_breakeven" → "watchdog:hesitation"
+            _watchdog_reason = _comment.split(":", 1)[1] if ":" in _comment else _comment
+            _parts = _watchdog_reason.split("_", 3)
+            _short = "_".join(_parts[:3]) if len(_parts) >= 2 else _watchdog_reason[:30]
+            return f"watchdog:{_short}"
+
         # Label by PnL outcome (win/loss), NOT by close reason.
         # The close reason stays in the `comment` field for audit + restart
         # bootstrap classification.  Previously the comment was used as the
@@ -949,6 +975,25 @@ def process_one(
         and retry_count < _MAX_RETRIES
     ):
         msg_payload["_retry_count"] = retry_count + 1
+
+        # ── DQAF-064 §2: Adaptive widening for 10016 (Invalid Stops) ──────
+        # When MT5 rejects the SL as too close to market (violating StopLevel),
+        # widen the trail by 0.5 ATR before retry.  Round to symbol precision
+        # so the retry doesn't fail again with 10015 (Invalid Price).
+        if retcode == 10016:
+            _atr = float(msg_payload.get("_entry_atr", 0) or detail.get("atr", 0) or 0)
+            _side = str(msg_payload.get("side", "long")).lower()
+            _symbol = str(msg_payload.get("symbol", ""))
+            if _atr > 0 and msg_payload.get("sl"):
+                _adjust = _atr * 0.5
+                _old_sl = float(msg_payload["sl"])
+                _digits = _symbol_digits(mt5, _symbol) if mt5 else 2
+                if _side == "long":
+                    msg_payload["sl"] = round(_old_sl - _adjust, _digits)
+                else:
+                    msg_payload["sl"] = round(_old_sl + _adjust, _digits)
+                msg_payload["_sl_widened_for_10016"] = True
+
         retry_msg_path = outbox_dir / f"{message_id}.mt5.json"
         retry_msg_path.parent.mkdir(parents=True, exist_ok=True)
         retry_msg_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

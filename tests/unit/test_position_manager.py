@@ -149,7 +149,7 @@ def test_trail_stop_never_moves_backward_long(long_position, manager):
     manager.graduated_lock_enabled = False
     pos = manager._position = long_position
     pos.highest_high = 2510.0  # +10 pts = +2.0R (entry_price=2500, entry_atr=5)
-    pos.current_sl = 2500.0    # already trailed up
+    pos.current_sl = 2500.0  # already trailed up
     # R_max = (2510-2500)/5 = 2.0 → fully decayed to min_trail_mult=1.2
     # candidate = 2510 - 1.2*5 = 2504 > 2500 → trail advances
     new_sl = manager.compute_trail_stop(current_atr=5.0)
@@ -188,7 +188,7 @@ def test_trail_stop_after_breakeven_long(long_position, manager):
     pos = manager._position = long_position
     pos.breakeven_triggered = True
     pos.highest_high = 2508.0  # +8 pts = +1.6R
-    pos.current_sl = 2500.0    # at breakeven
+    pos.current_sl = 2500.0  # at breakeven
     new_sl = manager.compute_trail_stop(current_atr=5.0)
     # R_max = 1.6 → decayed_mult = 2.0 - (1.1/1.5)*0.8 ≈ 1.413
     # candidate = max(entry, 2508 - 1.413*5) = max(2500, 2500.93) = 2500.93
@@ -610,6 +610,7 @@ def test_build_close_payload(long_position, manager):
 def test_update_prices_tracks_extremes_long(long_position, manager):
     """update_prices should track highest_high and lowest_low."""
     pos = manager._position = long_position
+    manager._loop_interval_seconds = 300.0  # C3: normalize to 1 M5 bar per call
     result = manager.update_prices(
         mid=2510.0, bid=2509.5, ask=2510.5, current_atr=5.0, cycle_count=1
     )

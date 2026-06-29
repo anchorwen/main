@@ -9,14 +9,10 @@ Three institutional invariants:
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
-
 import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from hypothesis.extra import numpy as hnp
 
 from core.execution.position_manager import (
     ActivePosition,
@@ -57,9 +53,14 @@ def test_register_position_creates_tracked_position(
     """register_position() must store the position and make it retrievable."""
     pm = _make_pm()
     pos = pm.register_position(
-        ticket=ticket, side=side, entry_price=entry_price, volume=volume,
-        initial_sl=initial_sl, initial_tp=initial_tp,
-        entry_atr=entry_atr, entry_cycle=entry_cycle,
+        ticket=ticket,
+        side=side,
+        entry_price=entry_price,
+        volume=volume,
+        initial_sl=initial_sl,
+        initial_tp=initial_tp,
+        entry_atr=entry_atr,
+        entry_cycle=entry_cycle,
     )
     assert isinstance(pos, ActivePosition)
     assert pm.has_position(ticket)
@@ -80,15 +81,25 @@ def test_register_position_idempotent(ticket, entry_price, volume) -> None:
     pm = _make_pm()
 
     pm.register_position(
-        ticket=ticket, side="long", entry_price=entry_price, volume=volume,
-        initial_sl=entry_price * 0.95, initial_tp=entry_price * 1.05,
-        entry_atr=5.0, entry_cycle=0,
+        ticket=ticket,
+        side="long",
+        entry_price=entry_price,
+        volume=volume,
+        initial_sl=entry_price * 0.95,
+        initial_tp=entry_price * 1.05,
+        entry_atr=5.0,
+        entry_cycle=0,
     )
     # Second registration — same ticket
     pm.register_position(
-        ticket=ticket, side="long", entry_price=entry_price + 10.0, volume=volume,
-        initial_sl=entry_price * 0.94, initial_tp=entry_price * 1.06,
-        entry_atr=6.0, entry_cycle=1,
+        ticket=ticket,
+        side="long",
+        entry_price=entry_price + 10.0,
+        volume=volume,
+        initial_sl=entry_price * 0.94,
+        initial_tp=entry_price * 1.06,
+        entry_atr=6.0,
+        entry_cycle=1,
     )
 
     positions = pm.get_all_positions()
@@ -112,9 +123,14 @@ def test_orphan_unknown_magic_handled(ticket, magic) -> None:
     pm = _make_pm()
     # Register with any magic — manager should accept it
     pos = pm.register_position(
-        ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-        initial_sl=1900.0, initial_tp=2100.0,
-        entry_atr=5.0, entry_cycle=0,
+        ticket=ticket,
+        side="long",
+        entry_price=2000.0,
+        volume=0.01,
+        initial_sl=1900.0,
+        initial_tp=2100.0,
+        entry_atr=5.0,
+        entry_cycle=0,
     )
     assert pos is not None
     assert pm.has_position(ticket)
@@ -130,9 +146,7 @@ def test_orphan_unknown_magic_handled(ticket, magic) -> None:
     trend_strength=st.floats(0.1, 5.0, allow_nan=False),
 )
 @settings(max_examples=100)
-def test_trail_monotonic_never_widens(
-    initial_price, atr, n_steps, trend_strength
-) -> None:
+def test_trail_monotonic_never_widens(initial_price, atr, n_steps, trend_strength) -> None:
     """For a LONG position in uptrend, current_sl must never decrease.
 
     Trail can stay flat (not enough movement) or move up — but NEVER down.
@@ -143,8 +157,14 @@ def test_trail_monotonic_never_widens(
     tp = initial_price + atr * 1.5
 
     pm.register_position(
-        ticket=ticket, side="long", entry_price=initial_price, volume=0.01,
-        initial_sl=sl, initial_tp=tp, entry_atr=atr, entry_cycle=0,
+        ticket=ticket,
+        side="long",
+        entry_price=initial_price,
+        volume=0.01,
+        initial_sl=sl,
+        initial_tp=tp,
+        entry_atr=atr,
+        entry_cycle=0,
     )
 
     prev_sl = sl
@@ -157,9 +177,15 @@ def test_trail_monotonic_never_widens(
         current_atr_val = float(atr + rng.normal(0, atr * 0.05))
 
         pm.update_prices(
-            mid=price, bid=price - 0.5, ask=price + 0.5,
-            current_atr=current_atr_val, cycle_count=i + 1, ticket=ticket,
-            m5_high=high, m5_low=low, m5_spread_points=30,
+            mid=price,
+            bid=price - 0.5,
+            ask=price + 0.5,
+            current_atr=current_atr_val,
+            cycle_count=i + 1,
+            ticket=ticket,
+            m5_high=high,
+            m5_low=low,
+            m5_spread_points=30,
         )
         pos = pm.get_position(ticket)
         if pos:
@@ -177,9 +203,14 @@ def test_nan_atr_does_not_move_trail() -> None:
     ticket = 1_000_002
     entry = 2000.0
     pm.register_position(
-        ticket=ticket, side="long", entry_price=entry, volume=0.01,
-        initial_sl=entry - 20.0, initial_tp=entry + 30.0,
-        entry_atr=10.0, entry_cycle=0,
+        ticket=ticket,
+        side="long",
+        entry_price=entry,
+        volume=0.01,
+        initial_sl=entry - 20.0,
+        initial_tp=entry + 30.0,
+        entry_atr=10.0,
+        entry_cycle=0,
     )
     pos = pm.get_position(ticket)
     assert pos is not None
@@ -187,17 +218,21 @@ def test_nan_atr_does_not_move_trail() -> None:
 
     # Inject NaN ATR
     pm.update_prices(
-        mid=2005.0, bid=2005.0, ask=2005.5,
-        current_atr=float("nan"), cycle_count=1, ticket=ticket,
+        mid=2005.0,
+        bid=2005.0,
+        ask=2005.5,
+        current_atr=float("nan"),
+        cycle_count=1,
+        ticket=ticket,
         m5_spread_points=30,
     )
 
     # Trail should NOT have moved
     pos = pm.get_position(ticket)
     assert pos is not None
-    assert pos.current_sl == original_sl, (
-        f"NaN ATR should not move SL: {original_sl} → {pos.current_sl}"
-    )
+    assert (
+        pos.current_sl == original_sl
+    ), f"NaN ATR should not move SL: {original_sl} → {pos.current_sl}"
 
 
 def test_zero_price_does_not_crash_trail() -> None:
@@ -206,16 +241,27 @@ def test_zero_price_does_not_crash_trail() -> None:
     ticket = 1_000_003
     entry = 2000.0
     pm.register_position(
-        ticket=ticket, side="long", entry_price=entry, volume=0.01,
-        initial_sl=entry - 30.0, initial_tp=entry + 30.0,
-        entry_atr=10.0, entry_cycle=0,
+        ticket=ticket,
+        side="long",
+        entry_price=entry,
+        volume=0.01,
+        initial_sl=entry - 30.0,
+        initial_tp=entry + 30.0,
+        entry_atr=10.0,
+        entry_cycle=0,
     )
 
     # Simulate flash crash: price → 0.05
     pm.update_prices(
-        mid=0.05, bid=0.04, ask=0.06,
-        current_atr=500.0, cycle_count=1, ticket=ticket,
-        m5_high=0.06, m5_low=0.01, m5_spread_points=30,
+        mid=0.05,
+        bid=0.04,
+        ask=0.06,
+        current_atr=500.0,
+        cycle_count=1,
+        ticket=ticket,
+        m5_high=0.06,
+        m5_low=0.01,
+        m5_spread_points=30,
     )
 
     # Should not crash — position still exists
@@ -237,10 +283,14 @@ def test_clear_position_is_atomic(n_positions, ticket_base) -> None:
 
     for i, t in enumerate(tickets):
         pm.register_position(
-            ticket=t, side="long" if i % 2 == 0 else "short",
-            entry_price=2000.0 + i * 10, volume=0.01,
-            initial_sl=1900.0 + i * 10, initial_tp=2100.0 + i * 10,
-            entry_atr=5.0, entry_cycle=0,
+            ticket=t,
+            side="long" if i % 2 == 0 else "short",
+            entry_price=2000.0 + i * 10,
+            volume=0.01,
+            initial_sl=1900.0 + i * 10,
+            initial_tp=2100.0 + i * 10,
+            entry_atr=5.0,
+            entry_cycle=0,
         )
         pm.mark_pending_close(t, 100)
 
@@ -268,8 +318,14 @@ def test_clear_all_positions_atomic(n_positions) -> None:
 
     for i in range(n_positions):
         pm.register_position(
-            ticket=1_000_000 + i, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1900.0, initial_tp=2100.0, entry_atr=5.0, entry_cycle=0,
+            ticket=1_000_000 + i,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1900.0,
+            initial_tp=2100.0,
+            entry_atr=5.0,
+            entry_cycle=0,
         )
 
     pm.clear_position()  # clear all
@@ -285,8 +341,14 @@ def test_pending_close_flood_guard() -> None:
     pm = _make_pm()
     ticket = 1_000_004
     pm.register_position(
-        ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-        initial_sl=1900.0, initial_tp=2100.0, entry_atr=5.0, entry_cycle=0,
+        ticket=ticket,
+        side="long",
+        entry_price=2000.0,
+        volume=0.01,
+        initial_sl=1900.0,
+        initial_tp=2100.0,
+        entry_atr=5.0,
+        entry_cycle=0,
     )
 
     # Mark close 3 times (hits threshold)
@@ -327,9 +389,14 @@ def test_register_zero_atr_position(ticket, volume, atr) -> None:
     """Position with very low ATR must still register successfully."""
     pm = _make_pm()
     pos = pm.register_position(
-        ticket=ticket, side="long", entry_price=2000.0, volume=volume,
-        initial_sl=1999.0, initial_tp=2001.0,
-        entry_atr=atr, entry_cycle=0,
+        ticket=ticket,
+        side="long",
+        entry_price=2000.0,
+        volume=volume,
+        initial_sl=1999.0,
+        initial_tp=2001.0,
+        entry_atr=atr,
+        entry_cycle=0,
     )
     assert pos is not None
     assert pos.entry_atr == atr
@@ -353,11 +420,18 @@ class TestTrailProgression:
         policy = TrailPolicy(trail_atr_mult=2.0, trail_activation_atr=1.0)
         engine = TrailStopEngine(default_policy=policy)
         pos = ActivePosition(
-            ticket=1, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0,
-            current_sl=1980.0, current_tp=2030.0,
-            highest_high=2005.0, lowest_low=1995.0,
-            entry_atr=10.0, entry_cycle=0,
+            ticket=1,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            current_sl=1980.0,
+            current_tp=2030.0,
+            highest_high=2005.0,
+            lowest_low=1995.0,
+            entry_atr=10.0,
+            entry_cycle=0,
         )
         # Price moved up +5 but unrealized_r = 5/10 = 0.5 < activation 1.0
         result = engine.compute_trail_stop(pos, current_atr=10.0)
@@ -370,11 +444,18 @@ class TestTrailProgression:
         policy = TrailPolicy(trail_atr_mult=2.0, trail_activation_atr=1.0, min_step=0.1)
         engine = TrailStopEngine(default_policy=policy)
         pos = ActivePosition(
-            ticket=2, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0,
-            current_sl=1980.0, current_tp=2030.0,
-            highest_high=2020.0, lowest_low=1995.0,  # +20 = 2R → activated
-            entry_atr=10.0, entry_cycle=0,
+            ticket=2,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            current_sl=1980.0,
+            current_tp=2030.0,
+            highest_high=2020.0,
+            lowest_low=1995.0,  # +20 = 2R → activated
+            entry_atr=10.0,
+            entry_cycle=0,
         )
         # effective_mult=2.0, candidate = 2020 - 2*10 = 2000
         # candidate > current_sl (1980) + min_step (0.1) → returns 2000.0
@@ -390,11 +471,18 @@ class TestTrailProgression:
         policy = TrailPolicy(trail_atr_mult=2.0, trail_activation_atr=1.0, min_step=0.1)
         engine = TrailStopEngine(default_policy=policy)
         pos = ActivePosition(
-            ticket=3, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0,
-            current_sl=2000.0, current_tp=2030.0,  # trail already advanced
-            highest_high=2020.0, lowest_low=1995.0,
-            entry_atr=10.0, entry_cycle=0,
+            ticket=3,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            current_sl=2000.0,
+            current_tp=2030.0,  # trail already advanced
+            highest_high=2020.0,
+            lowest_low=1995.0,
+            entry_atr=10.0,
+            entry_cycle=0,
         )
         # At 2R, decay reduces effective_mult → trail tightens to lock profit
         result = engine.compute_trail_stop(pos, current_atr=10.0)
@@ -413,14 +501,23 @@ class TestBrainExit:
         pm = ActivePositionManager(trail_atr_mult=2.0, min_hold_cycles=0, trail_activation_atr=0.3)
         ticket = 100
         pm.register_position(
-            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            ticket=ticket,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            entry_atr=10.0,
+            entry_cycle=10,
             supporting_brain_ids=["b1", "b2"],
         )
         # Consensus now says "short" while position is long
         consensus = {"aggregated_bias": "short", "consensus_score": 0.6}
         should_exit, reason = pm.evaluate_brain_exit(
-            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+            consensus,
+            current_supporting=["b1"],
+            mid=2005.0,
+            ticket=ticket,
         )
         assert should_exit, f"Consensus reversal should trigger exit, got: {reason}"
         assert "signal_reversal" in reason
@@ -430,31 +527,51 @@ class TestBrainExit:
         pm = ActivePositionManager(trail_atr_mult=2.0, min_hold_cycles=0, trail_activation_atr=0.3)
         ticket = 101
         pm.register_position(
-            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            ticket=ticket,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            entry_atr=10.0,
+            entry_cycle=10,
             supporting_brain_ids=["b1", "b2"],
         )
         consensus = {"aggregated_bias": "long", "consensus_score": 0.7}
         should_exit, reason = pm.evaluate_brain_exit(
-            consensus, current_supporting=["b1", "b2"], mid=2005.0, ticket=ticket,
+            consensus,
+            current_supporting=["b1", "b2"],
+            mid=2005.0,
+            ticket=ticket,
         )
         assert not should_exit, f"Same-direction consensus should NOT exit: {reason}"
 
     def test_min_hold_protection_blocks_exit(self) -> None:
         """During min_hold_cycles, exit is suppressed unless toxicity veto fires."""
         pm = ActivePositionManager(
-            trail_atr_mult=2.0, min_hold_cycles=3, trail_activation_atr=0.3,
+            trail_atr_mult=2.0,
+            min_hold_cycles=3,
+            trail_activation_atr=0.3,
         )
         ticket = 102
         pm.register_position(
-            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=0,
+            ticket=ticket,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            entry_atr=10.0,
+            entry_cycle=0,
             supporting_brain_ids=["b1"],
         )
         # Consensus flipped but we're still in min_hold (cycle 0)
         consensus = {"aggregated_bias": "short", "consensus_score": 0.3}
         should_exit, reason = pm.evaluate_brain_exit(
-            consensus, current_supporting=[], mid=2005.0, ticket=ticket,
+            consensus,
+            current_supporting=[],
+            mid=2005.0,
+            ticket=ticket,
         )
         assert not should_exit, f"Min-hold should block exit: {reason}"
         assert "protected_min_hold" in reason
@@ -464,13 +581,22 @@ class TestBrainExit:
         pm = ActivePositionManager(trail_atr_mult=2.0, min_hold_cycles=0, trail_activation_atr=0.3)
         ticket = 103
         pm.register_position(
-            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            ticket=ticket,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            entry_atr=10.0,
+            entry_cycle=10,
             supporting_brain_ids=["b1"],
         )
         consensus = {"aggregated_bias": "long", "consensus_score": 0.7}
         should_exit, reason = pm.evaluate_brain_exit(
-            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+            consensus,
+            current_supporting=["b1"],
+            mid=2005.0,
+            ticket=ticket,
             kalman_velocity_bps=-15.0,  # strong downward momentum
         )
         assert should_exit, f"Kalman flip should exit LONG: {reason}"
@@ -479,23 +605,38 @@ class TestBrainExit:
     def test_brain_flip_with_support_withdrawal(self) -> None:
         """Supporting brains withdraw → after confirm_count, exit fires."""
         pm = ActivePositionManager(
-            trail_atr_mult=2.0, flip_confirm_count=2, flip_exit_threshold=0.5,
-            trail_activation_atr=0.3, min_hold_cycles=0,
+            trail_atr_mult=2.0,
+            flip_confirm_count=2,
+            flip_exit_threshold=0.5,
+            trail_activation_atr=0.3,
+            min_hold_cycles=0,
         )
         ticket = 104
         pm.register_position(
-            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            ticket=ticket,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            entry_atr=10.0,
+            entry_cycle=10,
             supporting_brain_ids=["b1", "b2", "b3"],
         )
         # First detection: 2 of 3 flipped (67% > 50% threshold)
         consensus = {"aggregated_bias": "long", "consensus_score": 0.5}
         s1, r1 = pm.evaluate_brain_exit(
-            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+            consensus,
+            current_supporting=["b1"],
+            mid=2005.0,
+            ticket=ticket,
         )
         # Second consecutive detection
         s2, r2 = pm.evaluate_brain_exit(
-            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+            consensus,
+            current_supporting=["b1"],
+            mid=2005.0,
+            ticket=ticket,
         )
         # After confirm_count=2 consecutive flips, should exit
         assert s2, f"After 2 consecutive flips, should exit: {r2}"
@@ -513,8 +654,14 @@ class TestMIALifecycle:
         pm = _make_pm()
         ticket = 200
         pm.register_position(
-            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=0,
+            ticket=ticket,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            entry_atr=10.0,
+            entry_cycle=0,
         )
         pm.mark_pending_close(ticket, 50)
 
@@ -529,12 +676,24 @@ class TestMIALifecycle:
         """When primary ticket is cleared, next position becomes primary."""
         pm = _make_pm()
         pm.register_position(
-            ticket=300, side="long", entry_price=2000.0, volume=0.01,
-            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=0,
+            ticket=300,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1980.0,
+            initial_tp=2030.0,
+            entry_atr=10.0,
+            entry_cycle=0,
         )
         pm.register_position(
-            ticket=301, side="short", entry_price=2000.0, volume=0.01,
-            initial_sl=2020.0, initial_tp=1970.0, entry_atr=10.0, entry_cycle=0,
+            ticket=301,
+            side="short",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=2020.0,
+            initial_tp=1970.0,
+            entry_atr=10.0,
+            entry_cycle=0,
         )
         # First registered becomes primary
         pm.clear_position(300)
@@ -555,19 +714,30 @@ class TestMIALifecycle:
 class TestRMilestones:
     """check_r_milestones: pure R-multiple state tracker."""
 
-    @pytest.mark.parametrize("r,expected", [
-        (0.5, None),
-        (1.2, "1R"),
-        (2.1, "2R"),
-        (3.5, "3R"),
-    ])
+    @pytest.mark.parametrize(
+        "r,expected",
+        [
+            (0.5, None),
+            (1.2, "1R"),
+            (2.1, "2R"),
+            (3.5, "3R"),
+        ],
+    )
     def test_r_milestone_triggers(self, r, expected) -> None:
         """At R >= threshold, milestone must fire exactly once. Below → None."""
         pm = _make_pm()
         entry = 2000.0
         sl = 1900.0  # risk = 100
-        pm.register_position(ticket=1, side="long", entry_price=entry, volume=0.01,
-                             initial_sl=sl, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0)
+        pm.register_position(
+            ticket=1,
+            side="long",
+            entry_price=entry,
+            volume=0.01,
+            initial_sl=sl,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+        )
         mid = entry + r * abs(entry - sl)
         result = pm.check_r_milestones(mid, ticket=1)
         assert result == expected, f"R={r}: expected {expected}, got {result}"
@@ -575,8 +745,16 @@ class TestRMilestones:
     def test_milestone_fires_only_once(self) -> None:
         """1R milestone fires first call, then None on second call."""
         pm = _make_pm()
-        pm.register_position(ticket=2, side="long", entry_price=2000.0, volume=0.01,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0)
+        pm.register_position(
+            ticket=2,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+        )
         mid = 2000.0 + 1.5 * 100.0  # 1.5R
         assert pm.check_r_milestones(mid, ticket=2) == "1R"
         assert pm.check_r_milestones(mid, ticket=2) is None  # already hit
@@ -584,8 +762,16 @@ class TestRMilestones:
     def test_higher_milestone_still_fires(self) -> None:
         """After 1R, 2R still fires when reached."""
         pm = _make_pm()
-        pm.register_position(ticket=3, side="long", entry_price=2000.0, volume=0.01,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0)
+        pm.register_position(
+            ticket=3,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+        )
         assert pm.check_r_milestones(2000.0 + 1.5 * 100.0, ticket=3) == "1R"
         assert pm.check_r_milestones(2000.0 + 2.5 * 100.0, ticket=3) == "2R"
 
@@ -599,20 +785,38 @@ class TestPartialTP:
     def test_below_threshold_no_trigger(self) -> None:
         """R < partial_tp_r → no trigger."""
         pm = _make_pm()
-        pm.register_position(ticket=10, side="long", entry_price=2000.0, volume=0.10,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
-                             partial_tp_r=2.0, partial_tp_ratio=0.3)
+        pm.register_position(
+            ticket=10,
+            side="long",
+            entry_price=2000.0,
+            volume=0.10,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+            partial_tp_r=2.0,
+            partial_tp_ratio=0.3,
+        )
         trigger, close_vol, remain_vol = pm.should_partial_tp(mid=2100.0, ticket=10)
-        assert not trigger, f"R=1.0 < partial_tp_r=2.0 should not trigger"
+        assert not trigger, "R=1.0 < partial_tp_r=2.0 should not trigger"
 
     def test_at_threshold_triggers_scale_out(self) -> None:
         """R >= partial_tp_r → trigger partial close."""
         pm = _make_pm()
-        pm.register_position(ticket=11, side="long", entry_price=2000.0, volume=0.10,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
-                             partial_tp_r=2.0, partial_tp_ratio=0.3)
+        pm.register_position(
+            ticket=11,
+            side="long",
+            entry_price=2000.0,
+            volume=0.10,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+            partial_tp_r=2.0,
+            partial_tp_ratio=0.3,
+        )
         trigger, close_vol, remain_vol = pm.should_partial_tp(mid=2200.0, ticket=11)
-        assert trigger, f"R=2.0 >= 2.0 should trigger"
+        assert trigger, "R=2.0 >= 2.0 should trigger"
         assert close_vol == 0.03  # 0.10 * 0.3 = 0.03
         assert remain_vol == 0.07
 
@@ -623,9 +827,18 @@ class TestPartialTP:
         We simulate this by manually setting the flag after first trigger.
         """
         pm = _make_pm()
-        pm.register_position(ticket=12, side="long", entry_price=2000.0, volume=0.10,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
-                             partial_tp_r=2.0, partial_tp_ratio=0.3)
+        pm.register_position(
+            ticket=12,
+            side="long",
+            entry_price=2000.0,
+            volume=0.10,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+            partial_tp_r=2.0,
+            partial_tp_ratio=0.3,
+        )
         # First: triggers correctly
         trigger1, cv1, rv1 = pm.should_partial_tp(mid=2200.0, ticket=12)
         assert trigger1
@@ -646,22 +859,44 @@ class TestMicroPartialTP:
     def test_ofi_below_threshold_no_trigger(self) -> None:
         """OFI not extreme enough → no micro TP."""
         pm = _make_pm()
-        pm.register_position(ticket=20, side="long", entry_price=2000.0, volume=0.10,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
-                             partial_tp_r=3.0, partial_tp_ratio=0.5,
-                             ofi_partial_tp_threshold=2.5, ofi_partial_tp_r_mult=0.5)
+        pm.register_position(
+            ticket=20,
+            side="long",
+            entry_price=2000.0,
+            volume=0.10,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+            partial_tp_r=3.0,
+            partial_tp_ratio=0.5,
+            ofi_partial_tp_threshold=2.5,
+            ofi_partial_tp_r_mult=0.5,
+        )
         trigger, _, _ = pm.should_micro_partial_tp(mid=2150.0, ofi_z=1.0, ticket=20)
         assert not trigger, "OFI=1.0 < threshold=2.5"
 
     def test_ofi_extreme_triggers_at_reduced_r(self) -> None:
         """Extreme OFI + reduced R threshold → micro TP fires."""
         pm = _make_pm()
-        pm.register_position(ticket=21, side="long", entry_price=2000.0, volume=0.10,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
-                             partial_tp_r=3.0, partial_tp_ratio=0.5,
-                             ofi_partial_tp_threshold=2.5, ofi_partial_tp_r_mult=0.5)
+        pm.register_position(
+            ticket=21,
+            side="long",
+            entry_price=2000.0,
+            volume=0.10,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+            partial_tp_r=3.0,
+            partial_tp_ratio=0.5,
+            ofi_partial_tp_threshold=2.5,
+            ofi_partial_tp_r_mult=0.5,
+        )
         # reduced_r = 3.0 * 0.5 = 1.5R. mid=2150 → R=1.5 >= 1.5, OFI=3.0 > 2.5
-        trigger, close_vol, remain_vol = pm.should_micro_partial_tp(mid=2150.0, ofi_z=3.0, ticket=21)
+        trigger, close_vol, remain_vol = pm.should_micro_partial_tp(
+            mid=2150.0, ofi_z=3.0, ticket=21
+        )
         assert trigger
         assert close_vol == 0.05  # 0.10 * 0.5
 
@@ -672,23 +907,36 @@ class TestMicroPartialTP:
 class TestOUExit:
     """should_exit_ou_based: pure mean-reversion exit logic."""
 
-    @pytest.mark.parametrize("entry_z,current_z,z_exit,expected,reason_contains", [
-        (0.5, 0.1, 0.3, False, "low_entry_z"),       # entry too weak
-        (2.0, 2.0, 0.3, False, "waiting_for_reversion"), # still extreme
-        (2.0, 0.1, 0.3, True, "revert_target"),       # reverted to mean
-        (1.5, 0.2, 0.3, True, "revert_target"),       # at threshold
-        (1.49, 0.2, 0.3, False, "low_entry_z"),       # just below threshold
-        (2.0, 0.29, 0.3, True, "revert_target"),      # below z_exit
-        (2.0, 0.31, 0.3, False, "waiting_for_reversion"), # still above z_exit
-    ])
+    @pytest.mark.parametrize(
+        "entry_z,current_z,z_exit,expected,reason_contains",
+        [
+            (0.5, 0.1, 0.3, False, "low_entry_z"),  # entry too weak
+            (2.0, 2.0, 0.3, False, "waiting_for_reversion"),  # still extreme
+            (2.0, 0.1, 0.3, True, "revert_target"),  # reverted to mean
+            (1.5, 0.2, 0.3, True, "revert_target"),  # at threshold
+            (1.49, 0.2, 0.3, False, "low_entry_z"),  # just below threshold
+            (2.0, 0.29, 0.3, True, "revert_target"),  # below z_exit
+            (2.0, 0.31, 0.3, False, "waiting_for_reversion"),  # still above z_exit
+        ],
+    )
     def test_ou_exit_scenarios(self, entry_z, current_z, z_exit, expected, reason_contains) -> None:
         """Table-driven OU exit logic: Gate 1 (entry_z >= 1.5) + Gate 2 (current_z < z_exit)."""
         pm = _make_pm()
-        pm.register_position(ticket=30, side="long", entry_price=2000.0, volume=0.01,
-                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
-                             entry_z_score=entry_z)
+        pm.register_position(
+            ticket=30,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+            entry_z_score=entry_z,
+        )
         should_exit, reason = pm.should_exit_ou_based(current_z, z_exit=z_exit, ticket=30)
-        assert should_exit == expected, f"entry_z={entry_z}, current_z={current_z}: expected {expected}, got {reason}"
+        assert (
+            should_exit == expected
+        ), f"entry_z={entry_z}, current_z={current_z}: expected {expected}, got {reason}"
         assert reason_contains in reason, f"Reason '{reason}' should contain '{reason_contains}'"
 
 
@@ -698,17 +946,21 @@ class TestOUExit:
 class TestInflectionGate:
     """should_enter_inflection: Z-score inflection entry gate."""
 
-    @pytest.mark.parametrize("current_z,prev_z,z_entry,expected", [
-        (-2.0, -3.0, 1.3, True),    # short: inflecting up toward zero
-        (-2.0, -1.0, 1.3, False),   # short: still moving away (more negative)
-        (2.0, 3.0, 1.3, True),      # long: inflecting down toward zero
-        (2.0, 1.0, 1.3, False),     # long: still moving away (more positive)
-        (1.0, None, 1.3, True),     # first bar: always allow
-        (0.5, 1.5, 1.3, False),     # below threshold
-    ])
+    @pytest.mark.parametrize(
+        "current_z,prev_z,z_entry,expected",
+        [
+            (-2.0, -3.0, 1.3, True),  # short: inflecting up toward zero
+            (-2.0, -1.0, 1.3, False),  # short: still moving away (more negative)
+            (2.0, 3.0, 1.3, True),  # long: inflecting down toward zero
+            (2.0, 1.0, 1.3, False),  # long: still moving away (more positive)
+            (1.0, None, 1.3, True),  # first bar: always allow
+            (0.5, 1.5, 1.3, False),  # below threshold
+        ],
+    )
     def test_inflection_scenarios(self, current_z, prev_z, z_entry, expected) -> None:
         """Z-score must be moving back toward zero after crossing threshold."""
         from core.execution.position_manager import ActivePositionManager
+
         ok, reason = ActivePositionManager.should_enter_inflection(current_z, prev_z, z_entry)
         assert ok == expected, f"z={current_z}, prev={prev_z}: expected {expected}, got {reason}"
 
@@ -722,25 +974,47 @@ class TestBleedStop:
     def test_no_bleed_with_positive_pnl(self) -> None:
         """Positive bar PnLs → no bleed."""
         from core.execution.position_manager import ActivePositionManager as APM
-        pos = ActivePosition(ticket=1, side="long", entry_price=2000.0, volume=0.01,
-                             initial_sl=1900.0, initial_tp=2200.0,
-                             current_sl=1900.0, current_tp=2200.0,
-                             highest_high=2000.0, lowest_low=2000.0,
-                             entry_atr=10.0, entry_cycle=0)
+
+        pos = ActivePosition(
+            ticket=1,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            current_sl=1900.0,
+            current_tp=2200.0,
+            highest_high=2000.0,
+            lowest_low=2000.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+        )
         ok, _ = APM.should_exit_bleed(pos, current_pnl_r=0.1)  # single positive → no bleed
         assert not ok
 
     def test_bleed_detected_with_consecutive_losses(self) -> None:
         """3 consecutive negative bars → bleed."""
         from core.execution.position_manager import ActivePositionManager as APM
-        pos = ActivePosition(ticket=2, side="long", entry_price=2000.0, volume=0.01,
-                             initial_sl=1900.0, initial_tp=2200.0,
-                             current_sl=1900.0, current_tp=2200.0,
-                             highest_high=2000.0, lowest_low=2000.0,
-                             entry_atr=10.0, entry_cycle=0)
-        # Feed 3 consecutive negative PnLs
-        APM.should_exit_bleed(pos, current_pnl_r=-0.5)
-        APM.should_exit_bleed(pos, current_pnl_r=-0.6)
+
+        pos = ActivePosition(
+            ticket=2,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            current_sl=1900.0,
+            current_tp=2200.0,
+            highest_high=2000.0,
+            lowest_low=2000.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+        )
+        # C3: Pre-populate bar_pnls and set cycle boundary state to simulate
+        # 2 prior M5-bar boundary crossings with negative PnL.
+        pos.bar_pnls = [-0.5, -0.6]
+        pos.cycles_held = 3
+        pos._last_bar_cycle = 2
         ok, reason = APM.should_exit_bleed(pos, current_pnl_r=-0.7)
         assert ok, f"3 consecutive negatives should trigger bleed, got: {reason}"
         assert "bleed_stop" in reason
@@ -748,11 +1022,21 @@ class TestBleedStop:
     def test_short_history_no_bleed(self) -> None:
         """Less than bleed_bars of history → no bleed."""
         from core.execution.position_manager import ActivePositionManager as APM
-        pos = ActivePosition(ticket=3, side="long", entry_price=2000.0, volume=0.01,
-                             initial_sl=1900.0, initial_tp=2200.0,
-                             current_sl=1900.0, current_tp=2200.0,
-                             highest_high=2000.0, lowest_low=2000.0,
-                             entry_atr=10.0, entry_cycle=0)
+
+        pos = ActivePosition(
+            ticket=3,
+            side="long",
+            entry_price=2000.0,
+            volume=0.01,
+            initial_sl=1900.0,
+            initial_tp=2200.0,
+            current_sl=1900.0,
+            current_tp=2200.0,
+            highest_high=2000.0,
+            lowest_low=2000.0,
+            entry_atr=10.0,
+            entry_cycle=0,
+        )
         APM.should_exit_bleed(pos, current_pnl_r=-0.6)
         ok, _ = APM.should_exit_bleed(pos, current_pnl_r=-0.7)  # only 2 bars → no
         assert not ok
