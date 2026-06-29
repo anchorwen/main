@@ -63,7 +63,11 @@ def load_dataset(data_dir: Path) -> dict[str, Any]:
 
 
 def compute_metrics(
-    y_true: np.ndarray, y_pred: np.ndarray, pnl: np.ndarray | None = None, *, meta: dict[str, Any] | None = None
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    pnl: np.ndarray | None = None,
+    *,
+    meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute comprehensive metrics for multi-class swing predictions."""
     correct = y_pred == y_true
@@ -231,8 +235,12 @@ def train_xgboost_swing(
     dtest = xgb.DMatrix(dataset["X_test"], label=dataset["y_test"], feature_names=feature_names)
     y_test_pred = np.asarray(booster.predict(dtest)).argmax(axis=1)
 
-    val_metrics = compute_metrics(dataset["y_val"], y_val_pred, dataset["pnl_r_val"], meta=dataset.get("meta"))
-    test_metrics = compute_metrics(dataset["y_test"], y_test_pred, dataset["pnl_r_test"], meta=dataset.get("meta"))
+    val_metrics = compute_metrics(
+        dataset["y_val"], y_val_pred, dataset["pnl_r_val"], meta=dataset.get("meta")
+    )
+    test_metrics = compute_metrics(
+        dataset["y_test"], y_test_pred, dataset["pnl_r_test"], meta=dataset.get("meta")
+    )
 
     return booster, {
         "best_iteration": int(best_iter),
@@ -249,7 +257,15 @@ def main() -> None:
     parser.add_argument(
         "--strategy",
         required=True,
-        choices=["barrier_12bar", "btc_swing", "m15_swing", "m30_swing", "h1_swing", "h4_swing", "daily_swing"],
+        choices=[
+            "barrier_12bar",
+            "btc_swing",
+            "m15_swing",
+            "m30_swing",
+            "h1_swing",
+            "h4_swing",
+            "daily_swing",
+        ],
         help="Strategy name for brain registration",
     )
     parser.add_argument(
@@ -259,8 +275,14 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=0.05)
     parser.add_argument("--max-depth", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--brain-id", default=None, help="Override brain_id (default: auto-derived from strategy + version)")
-    parser.add_argument("--no-register", action="store_true", help="Skip auto-registration after training")
+    parser.add_argument(
+        "--brain-id",
+        default=None,
+        help="Override brain_id (default: auto-derived from strategy + version)",
+    )
+    parser.add_argument(
+        "--no-register", action="store_true", help="Skip auto-registration after training"
+    )
     args = parser.parse_args()
 
     data_dir = Path(args.dataset)
@@ -307,7 +329,7 @@ def main() -> None:
     if args.brain_id:
         brain_id = args.brain_id
     elif args.strategy == "barrier_12bar":
-        brain_id = "Barrier_V9_12B_V1"
+        brain_id = "Barrier_V9_12B_V2"
     elif args.strategy == "btc_swing":
         # Auto-version: scan existing configs for latest V number
         _btc_brains = sorted((project_root / "configs" / "brains_btc").glob("BTC_Swing_V*.json"))
@@ -345,7 +367,9 @@ def main() -> None:
     print("\n  Top 10 features by gain:")
     for i, (fname, gain) in enumerate(top_features[:10]):
         try:
-            feat_name = feature_names[int(fname.replace("f", ""))] if fname.startswith("f") else fname
+            feat_name = (
+                feature_names[int(fname.replace("f", ""))] if fname.startswith("f") else fname
+            )
         except (ValueError, IndexError):
             feat_name = str(fname)
         print(f"    {i+1}. {feat_name}: {gain:.2f}")
@@ -395,7 +419,9 @@ def main() -> None:
         "brain_role": "alpha_brain",
         "training_horizon": horizon,
         "strategy": args.strategy,
-        "timeframe": "M5" if args.strategy == "barrier_12bar" else args.strategy.split("_")[0].upper(),
+        "timeframe": "M5"
+        if args.strategy == "barrier_12bar"
+        else args.strategy.split("_")[0].upper(),
         "training_params": {
             "sl_atr_mult": float(dataset["meta"].get("sl_atr_mult", 1.5)),
             "tp_atr_mult": float(dataset["meta"].get("tp_atr_mult", 1.5)),
@@ -441,9 +467,17 @@ def main() -> None:
         _reg_status = "shadow"
         print(f"\n  Auto-registering {brain_id} as {_reg_status}...")
         _reg_result = _sp.run(
-            [sys.executable, str(project_root / "scripts" / "brain.py"), "register",
-             str(config_path), "--status", _reg_status],
-            capture_output=True, text=True, timeout=30,
+            [
+                sys.executable,
+                str(project_root / "scripts" / "brain.py"),
+                "register",
+                str(config_path),
+                "--status",
+                _reg_status,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
             cwd=str(project_root),
         )
         if _reg_result.returncode == 0:

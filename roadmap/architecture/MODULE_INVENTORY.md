@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-29T01:20:56Z
+> **自动生成**: 2026-06-29T01:34:12Z
 > **扫描模块数**: 691
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -919,7 +919,7 @@
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |
-| `train_swing_v9.py` | ✅ active | — | 4 | 457 | — | |
+| `train_swing_v9.py` | ✅ active | — | 4 | 491 | — | |
 | `train_xau_directional_v1.py` | ✅ active | — | 6 | 293 | — | |
 | `train_xau_directional_v2.py` | ✅ active | — | 18 | 757 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |

@@ -79,8 +79,7 @@
 | Brain_Trend_V10_M30 | M30 | swing_enhanced_35 | 35 | 备选 |
 | Brain_Rev_M30_V1 | M30 | swing_enhanced_35 | 35 | archived (均值回归) |
 | Brain_Rev_M30_V2 | M30 | swing_enhanced_35 | 35 | archived (均值回归) |
-| Barrier_V9_12B_V1 | M5 | swing_enhanced_35 | 35 | barrier 策略 disabled |
-| Barrier_V9_12B_V2 | M5 | swing_enhanced_35 | 35 | barrier 策略 disabled |
+| Barrier_V9_12B_V2 | M5 | swing_enhanced_35 | 35 | barrier 策略 disabled (V1 retired 2026-06-29) |
 | Meta_Stage1_Huber_V1 | M5 | v9_institutional_40 | 40 | archived |
 | Meta_Stage1_Binary_Cls_V1 | M5 | v9_institutional_40 | 40 | archived |
 | Meta_Stage1_MetaLabel_Binary_V1 | M5 | v9_institutional_40 | 40 | archived |

@@ -11,7 +11,7 @@ Architectural Directive (FIX-20260601-039):
         ``assemble_swing_features()``.
       - ``barrier_strategy.py`` had NO schema detection — always passed the
         40-dim V9 institutional vector, breaking any brain trained on
-        ``swing_enhanced_35`` (Barrier_V9_12B_V1).
+        ``swing_enhanced_35`` (Barrier_V9_12B_V2).
 
     Now all strategies call ONE function.  Adding a new schema (e.g.
     ``btc_micro_v1``) only requires a new branch in this factory — zero

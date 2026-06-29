@@ -153,7 +153,7 @@ grep -rn "相同模式" core/ scripts/ --include="*.py"
 ## 成功案例：FIX-039 Feature Assembly Factory
 
 ```
-Step 1 STOP:  Barrier_V9_12B_V1 每 cycle 报 feature_dimension_mismatch
+Step 1 STOP:  Barrier_V9_12B_V2 每 cycle 报 feature_dimension_mismatch
 Step 2 LOOKUP: 读 FIX_REGISTRY → FIX-022 同类 bug 在 swing_strategy.py
               读 blueprints → 架构师早有计划用工厂模式
               搜横向 → barrier_strategy.py 也是硬编码

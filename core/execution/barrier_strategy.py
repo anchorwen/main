@@ -7,7 +7,7 @@ Magic: 90001
 FIX-20260601-039: Feature assembly is now delegated to the central factory
 (``core.features.feature_assembler.assemble_features_by_schema()``).
 BarrierStrategy no longer assumes all brains use V9 40-dim — brains with
-``swing_enhanced_35`` schema (Barrier_V9_12B_V1) receive correctly
+``swing_enhanced_35`` schema (Barrier_V9_12B_V2) receive correctly
 assembled 35-dim vectors.
 """
 
@@ -115,7 +115,7 @@ class BarrierStrategy(StrategyLine):
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                     pass
                 proposals.append(prop)
-            except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
+            except Exception as _exc:  # noqa: BLE001 — FOG (logged, Phase 3b)
                 print(
                     json.dumps(
                         {
