@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-29T09:30:43Z
+> **自动生成**: 2026-06-29T10:25:38Z
 
 ## Package-Level Dependencies
 
@@ -538,6 +538,7 @@
 
 ### `scripts/`
 
+- `_commit_helper.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)

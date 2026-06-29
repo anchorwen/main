@@ -949,21 +949,28 @@ class BrainLifecycleManager:
             except (json.JSONDecodeError, OSError):
                 pass
 
-        # ── SSOT status reconciliation: config (law) → governance (vassal) ──
-        # FIX-20260628-161: Expanded from retired-only to full status drift
-        # detection.  Previously only reconciled "retired" → "candidate",
-        # which left live→probation, live→shadow, probation→candidate, and
-        # all other config↔governance mismatches permanently unrepaired
-        # (DQAF-059: BTC 0 live brains after governance rebuild — config V4
-        #  declared "live" but governance held stale "probation").
+        # ── SSOT status reconciliation: conditional config→governance sync ──
+        # FIX-20260628-161 + FIX-20260629-193: Config is the SSOT for brain
+        # *parameters*, but governance owns the *lifecycle* (FIX-20260613-076).
         #
-        # Rule: For every brain present in BOTH governance and on disk, the
-        # config status (SSOT) wins unconditionally.  "shadow" maps to
-        # "candidate" for governance lifecycle consistency.
+        # Reconciliation policy:
+        #   - Brain NOT in governance → bootstrap register (handled earlier)
+        #   - Brain in governance, NO autonomous decisions (only SSOT entries
+        #     in transition_log, e.g. after governance rebuild) → config seeds
+        #     the initial state.  This is the DQAF-059 recovery path.
+        #   - Brain in governance, HAS autonomous decisions (rule promotions,
+        #     PnL-based demotions, etc.) → governance owns the lifecycle;
+        #     config is advisory only.  Log drift, DO NOT override.
+        #
+        # This prevents the infinite oscillation where FIX-161's unconditional
+        # "config always wins" overwrites rule-based promotions (e.g. Rule 85
+        # shadow→probation), which then get re-overwritten next cycle.
+        # DQAF-20260629-193 refers.
         _GOV_STATUSES = {"live", "candidate", "probation", "frozen", "retired"}
         if gov_data and auto_repair and disk_brains:
             gov2 = self._load_governance_service()
             reconciled = []
+            drift_skipped = []
             for bid, bs in list(gov2._brain_states.items()):
                 if bid not in disk_brains:
                     continue
@@ -978,6 +985,31 @@ class BrainLifecycleManager:
                 current = bs.get("status")
                 if current == target:
                     continue
+
+                # ── Autonomous decision gate (FIX-20260629-193) ──
+                # If governance has made rule-based or PnL-based decisions for
+                # this brain (any non-SSOT transition entry exists), those
+                # decisions take precedence over config status.  Only reconcile
+                # when governance has never made an autonomous decision for
+                # this brain (e.g. after a governance rebuild where all entries
+                # are SSOT reconciliations).
+                brain_transitions = [t for t in gov2._transition_log if t.get("brain_id") == bid]
+                ssot_count = sum(
+                    1 for t in brain_transitions if "SSOT reconciliation" in t.get("reason", "")
+                )
+                has_autonomous = len(brain_transitions) > ssot_count
+                if has_autonomous:
+                    drift_skipped.append(f"{bid}:config={cfg_status}≠gov={current}")
+                    logging.info(
+                        "BrainLifecycleManager: drift detected (not reconciled) — "
+                        "'%s' config='%s' governance='%s'. "
+                        "Governance owns lifecycle.",
+                        bid,
+                        cfg_status,
+                        current,
+                    )
+                    continue
+
                 old_status = current
                 gov2._brain_states[bid]["status"] = target
                 gov2._brain_states[bid]["last_transition_at"] = _utc_now_iso()
@@ -1015,6 +1047,10 @@ class BrainLifecycleManager:
                     gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError):
                     pass
+            if drift_skipped:
+                report.hardcoded_path_mismatches.append(
+                    f"SSOT drift skipped (governance owns lifecycle): {drift_skipped}"
+                )
 
         # ── transition_log coverage ──
         if gov_data:
