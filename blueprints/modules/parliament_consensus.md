@@ -65,6 +65,7 @@ BrainDecisionProposal[] → DynamicBrainWeighter.apply_weights()
 ## Fix History
 | Fix ID | Date | Summary | Root Cause |
 |--------|------|---------|------------|
+| FIX-20260629-179 | 2026-06-29 | cursor-agent | 87d82919 | Register h1_directional contract group: add H1_DIRECTIONAL_GROUP to contract_groups.py + ALL_GROUPS. Wire into strategy_builder.py with SwingStrategy construction. Fixes Swing_V10_H1_Directional (PF=81.10) being silently skipped every cycle due to unknown_contract_group_at_build. This was the root cause of XAU not trading since 2026-06-26. | config-drift |
 | FIX-20260629-174 | 2026-06-29 | **DQAF-174 L2: Unified weighting contract — capacity allocation alignment**: group_consensus.py capacity allocation path switched from bare weighter.get_weights() (PnL-only dynamic_scale) to base_weight × dynamic_scale. vote_weight=0 brains now receive 0 capacity allocation, ending the shadow-brain budget theft anomaly. Same contract as contract_groups.py voting path. | RC-06 |
 | FIX-20260607-011 | 2026-06-07 | Vote weight decoupling: base_weight × dynamic_scale with fail-fast gate | RC-09 |
 | FIX-20260602-052 | 2026-06-02 | Single-brain consensus self-normalization bug (conf 0.34→1.0) | RC-06 |

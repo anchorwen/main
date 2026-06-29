@@ -24,6 +24,7 @@ from core.parliament.contract_groups import (
     BARRIER_GROUP,
     BTC_SWING_GROUP,
     DAILY_SWING_GROUP,
+    H1_DIRECTIONAL_GROUP,
     H1_SWING_GROUP,
     H4_SWING_GROUP,
     M15_SWING_GROUP,
@@ -102,6 +103,7 @@ def build_strategy_lines(
         "m15_swing": "m15_swing",
         "m30_swing": "m30_swing",
         "h1_swing": "h1_swing",
+        "h1_directional": "h1_directional_regression",
         "h4_swing": "h4_swing",
         "structural_swing_v1": "rule_based",
     }
@@ -166,6 +168,7 @@ def build_strategy_lines(
     h4_swing_brains = _known_groups["h4_swing"]
     btc_swing_brains = _known_groups["btc_swing"]
     btc_swing_h1_brains = _known_groups.get("btc_swing_h1", [])
+    h1_directional_brains = _known_groups.get("h1_directional", [])
 
     # ── FIX-20260628-169: Per-asset reference ATR for dynamic SL/TP scaling ──
     # Default 5.0 is calibrated for XAUUSD M5 ATR (~$3–5).
@@ -778,6 +781,50 @@ def build_strategy_lines(
                     "max_consecutive_losses", 4
                 ),
                 cooldown_minutes=_cfg("btc_swing_h1", "budget", {}).get("cooldown_minutes", 0),
+            ),
+        )
+
+    if h1_directional_brains:
+        strategies["h1_directional"] = SwingStrategy(
+            StrategyLineConfig(
+                symbol=config.symbol,
+                base_dir=config.base_dir,
+                contract_size=get_asset(config.symbol).contract_size,
+                name="h1_directional",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("h1_directional", "trend_following"),
+                magic=90303,
+                brain_types=H1_DIRECTIONAL_GROUP["brain_types"],
+                base_volume=_vol_cfg("h1_directional"),
+                max_volume=_cfg("h1_directional", "max_volume", 0.02),
+                base_sl_atr_mult=_cfg("h1_directional", "sl", {}).get("base_atr_mult", 2.0),
+                base_tp_atr_mult=_cfg("h1_directional", "tp", {}).get("base_atr_mult", 3.5),
+                hard_sl_ratio=_cfg("h1_directional", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("h1_directional", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("h1_directional", "sl", {}).get("min_rr_ratio", 0.5),
+                confidence_threshold=_cfg("h1_directional", "confidence_threshold", 0.45),
+                min_p_win=_cfg("h1_directional", "min_p_win", 0.30),
+                spread_points=_cfg("h1_directional", "spread_points", 0.0),
+                max_spread_points=_cfg("h1_directional", "max_spread_points", 0.0),
+                long_bias_discount=_cfg("h1_directional", "direction_balance", {}).get(
+                    "long_bias_discount", 0.0
+                ),
+                exit_flip_enabled=_exit_cfg("h1_directional", "flip_exit_enabled", True),
+                exit_time_cycles=_exit_cfg("h1_directional", "time_exit_cycles", 288),
+                exit_zscore_enabled=_exit_cfg("h1_directional", "zscore_exit_enabled", False),
+                exit_min_r=_exit_cfg("h1_directional", "min_r_for_hold", 0.0),
+                min_valid_brains=_cfg("h1_directional", "min_valid_brains", 1),
+                timeframe=_cfg("h1_directional", "timeframe", "H1"),
+                exit_hesitation_cycles=_exit_cfg("h1_directional", "hesitation_cycles", 3),
+            ),
+            h1_directional_brains,
+            budget=StrategyBudget(
+                "h1_directional",
+                daily_loss_limit_pct=_cfg("h1_directional", "budget", {}).get(
+                    "daily_loss_limit_pct", -0.015
+                ),
+                max_consecutive_losses=_cfg("h1_directional", "budget", {}).get(
+                    "max_consecutive_losses", 3
+                ),
             ),
         )
 

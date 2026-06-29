@@ -202,6 +202,18 @@ BTC_SWING_GROUP: dict[str, Any] = {
     "description": "BTC M30 swing — 12-bar barrier, SL=2.0xATR, TP=2.5xATR",
 }
 
+# Group 5g: H1 directional XAU (24-bar H1, 2.0×ATR SL, 3.5×ATR TP, ~1d)
+# Bidirectional XGBoost regression — predicts direction + magnitude on H1 bars.
+# Swing_V10_H1_Directional (PF=81.10, +107.33R) — XAU's highest-performing brain.
+H1_DIRECTIONAL_GROUP: dict[str, Any] = {
+    "name": "h1_directional",
+    "horizon_cycles": 288,  # 24 H1 bars × 12 M5 cycles/H1
+    "brain_types": {"xgboost_v9"},
+    "contract": "h1_directional_regression",
+    "voting_mode": "weighted",
+    "description": "H1 directional XGBoost — bidirectional regression, SL=2.0xATR, TP=3.5xATR, 24-bar horizon",
+}
+
 ALL_GROUPS: tuple[dict[str, Any], ...] = (
     BARRIER_GROUP,
     BARRIER_12BAR_META_GROUP,
@@ -218,6 +230,7 @@ ALL_GROUPS: tuple[dict[str, Any], ...] = (
     H4_SWING_GROUP,
     BTC_SWING_GROUP,
     BTC_SWING_H1_GROUP,
+    H1_DIRECTIONAL_GROUP,
 )
 
 # Primary lookup: contract_group name → group definition
@@ -421,10 +434,7 @@ class ContractGroupConsensus:
         # confidence.  This happens for single-brain AND for unanimous
         # multi-brain (e.g. 2 brains both voting SHORT).
         # Use weighted-average confidence instead.
-        _all_agree = (
-            (long_count > 0 and short_count == 0)
-            or (short_count > 0 and long_count == 0)
-        )
+        _all_agree = (long_count > 0 and short_count == 0) or (short_count > 0 and long_count == 0)
         if _all_agree and (long_count + short_count) > 0:
             direction: Direction = "neutral"  # narrowed per branch below
             if long_count > 0:
