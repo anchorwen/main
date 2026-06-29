@@ -73,8 +73,16 @@ class ActivePosition:
     breakeven_triggered: bool = False
     trail_multiplier: float = 2.0
     trail_advances: int = 0  # FIX-20260610-006: count of trail SL tightenings
+    # DQAF-064 §2: Track consecutive MT5 rejections of trail modify_sltp requests
+    trail_rejection_streak: int = 0
+    trail_last_rejection_code: int = 0
     r_milestones_hit: list[str] = field(default_factory=list)
     cycles_held: int = 0
+    # DQAF-064 §3: Fractional accumulator for M5-bar normalized cycle counting.
+    # Main loop runs at ~30s; one M5 bar = 300s.  We accumulate fractions
+    # and only increment cycles_held when a full M5-equivalent has elapsed.
+    _cycles_held_fractional: float = 0.0
+    _last_bar_cycle: int = 0  # last cycles_held value at which bar_pnls was appended
     highest_r: float = 0.0  # peak R-multiple achieved
     prev_r: float = 0.0  # previous cycle's R (for trajectory scoring)
     partial_tp_triggered: bool = False  # partial take-profit already executed
@@ -241,6 +249,7 @@ class ActivePositionManager:
         pnl_store: Any = None,  # BrainPnLStore for brain-specific trail tuning
         meta_exit_engine: Any = None,  # MetaExitEngine for multi-factor exit scoring
         trail_policy: TrailPolicy | None = None,  # Phase C: default TrailPolicy for all positions
+        loop_interval_seconds: float = 30.0,  # DQAF-064 §3: main loop tick interval for cycle normalization
     ):
         # Backward-compat: store individual trail params for direct access
         self.trail_atr_mult = trail_atr_mult
@@ -268,6 +277,8 @@ class ActivePositionManager:
 
         self.pnl_store = pnl_store
         self.meta_exit_engine = meta_exit_engine
+        # DQAF-064 §3: stored for fractional cycle accumulator in _update_single_position
+        self._loop_interval_seconds = loop_interval_seconds
 
         # Phase C: Risk Exit is a physically isolated subsystem
         if trail_policy is None:
@@ -710,7 +721,24 @@ class ActivePositionManager:
             pos.entry_atr > 0
         ), f"FATAL: zero/negative entry_atr {pos.entry_atr} on ticket {pos.ticket}"
 
-        pos.cycles_held += 1
+        # ── DQAF-064 §3: Fractional cycle accumulator ─────────────────
+        # The main loop runs at ~30s intervals; one M5 bar = 300s.
+        # Previously cycles_held counted main-loop iterations (~10 per M5 bar),
+        # causing watchdog hesitation/bleed_stop/time_exit to trigger ~10x too fast.
+        # Now we accumulate wall-clock fractions and only increment cycles_held
+        # when a full M5-bar-equivalent has elapsed.
+        _M5_BAR_SECONDS = 300.0
+        _loop_interval = float(getattr(self, "_loop_interval_seconds", 30.0) or 30.0)
+        _tick = _loop_interval / _M5_BAR_SECONDS  # e.g. 30/300 = 0.1
+
+        if not hasattr(pos, "_cycles_held_fractional"):
+            pos._cycles_held_fractional = 0.0
+        pos._cycles_held_fractional += _tick
+
+        _new_cycles = int(pos._cycles_held_fractional)
+        if _new_cycles > pos.cycles_held:
+            pos.cycles_held = _new_cycles
+
         if self._recovery_cycle >= 0:
             self._recovery_cycle += 1
 
@@ -996,9 +1024,15 @@ class ActivePositionManager:
         # 0.10 drop was absorbed by trend protection).
         #
         # confidence_floor=0 means disabled (backward compatible default).
+        # Guard: only enforce the floor if entry confidence was above it.
+        # Without this guard, a cold EMA (seeded at 0.0 when entry_consensus
+        # is empty) would trigger an exit on the first evaluation cycle even
+        # when current confidence is healthy.  See test_same_direction_
+        # consensus_no_exit for the exact failure mode.
         if (
             self.confidence_floor > 0
             and self.confidence_decay_enabled
+            and self._entry_consensus_score >= self.confidence_floor
             and pos.confidence_ema < self.confidence_floor
         ):
             return True, f"confidence_floor_{pos.confidence_ema:.3f}_lt_{self.confidence_floor:.2f}"
@@ -1075,7 +1109,12 @@ class ActivePositionManager:
 
         Saves ~1.55R per trade vs waiting for hard_stop at -2.0R.
         """
-        pos.bar_pnls.append(current_pnl_r)
+        # DQAF-064 §3: Only append bar_pnls on integer cycle boundaries.
+        # Previously this appended every main-loop tick (~30s), causing
+        # bleed_stop to accumulate negative bars ~10x too fast.
+        if pos.cycles_held > pos._last_bar_cycle:
+            pos.bar_pnls.append(current_pnl_r)
+            pos._last_bar_cycle = pos.cycles_held
         if len(pos.bar_pnls) > bleed_bars:
             pos.bar_pnls = pos.bar_pnls[-bleed_bars:]
         if len(pos.bar_pnls) >= bleed_bars and all(p < 0 for p in pos.bar_pnls):

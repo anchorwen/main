@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-29T06:01:28Z
+> **自动生成**: 2026-06-29T08:19:00Z
 
 ## Package-Level Dependencies
 
@@ -546,12 +546,15 @@
 - `analyze_feature_shift.py` → (无内部依赖)
 - `analyze_live_brain_performance.py` → (无内部依赖)
 - `analyze_live_journal.py` → (无内部依赖)
+- `analyze_m30_trailing_sltp.py` → (无内部依赖)
 - `analyze_ou_pnl.py` → (无内部依赖)
 - `analyze_recent_losses.py` → (无内部依赖)
 - `analyze_shadow_predictions.py` → (无内部依赖)
 - `analyze_swing_pnl.py` → (无内部依赖)
 - `analyze_trail_impact.py` → (无内部依赖)
+- `analyze_xau_institutional.py` → (无内部依赖)
 - `analyze_xau_recent_entries.py` → (无内部依赖)
+- `analyze_xau_since_june12.py` → (无内部依赖)
 - `assess_system_health.py` → (无内部依赖)
 - `audit_2day.py` → (无内部依赖)
 - `audit_behavior_compliance.py` → (无内部依赖)
