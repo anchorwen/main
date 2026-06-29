@@ -61,6 +61,7 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260629-186 | 2026-06-29 | cursor-agent | — | **P1-1: XAU SL/TP recalibration — flip swing strategies low-RR→high-RR** (DQAF-175). m15/m30 SL/TP 3.0/1.5→2.0/3.0 (RR 0.50→1.50, breakeven 66.7%→40.0%); h1/h4 SL/TP 3.0/2.0→2.0/3.5 (RR 0.67→1.75, breakeven 60.0%→36.4%). Fixes systemic negative_ev_low_rr rejection where p_win=0.40-0.52 < breakeven=0.60-0.67 blocked all swing trades. | RC-09 — SL/TP miscalibrated for XAU |
 | FIX-20260629-185 | 2026-06-29 | cursor-agent | — | **P0-3b: Promote Swing_M15_V3 candidate→probation**. Shadow PF=999, n=193, WR=100%. | L2 — governance pipeline blockage |
 | FIX-20260629-184 | 2026-06-29 | cursor-agent | — | **P0-3a: Freeze Swing_V10_H1_Directional live→frozen** (DQAF-20260629-P03). 100% SHORT bias, PF=0.75, accuracy=0.519. | L2 — model output degeneracy |
 | FIX-20260629-183 | 2026-06-29 | cursor-agent | — | **Fix governance auto-promotion guard**: `scheduler_service.py:400` hardcoded `if True:` → `if _GOVERNANCE_MANUAL_MODE:`. `_GOVERNANCE_MANUAL_MODE=False` was set but overridden since FIX-20260614-B0. BrainPromotionEvaluator auto-transitions were permanently dead code. | L2 — hardcoded safety guard never removed after metrics review period expired |
