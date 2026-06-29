@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\swing\\m15\\v3\\Swing_M15_V3_model.json",
   "model_version": "swing_m15_v3",
   "artifact_hash": "21b806238867fcef0e1eb4d09a98ad905eeca2f5fe0a61d3d78fdca4e925c26e",
-  "status": "candidate",
+  "status": "probation",
   "vote_weight": 1.0,
   "magic": 90310,
   "brain_role": "alpha_brain",

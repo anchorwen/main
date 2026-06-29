@@ -61,6 +61,8 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260629-185 | 2026-06-29 | cursor-agent | — | **P0-3b: Promote Swing_M15_V3 candidate→probation**. Shadow PF=999, n=193, WR=100%. | L2 — governance pipeline blockage |
+| FIX-20260629-184 | 2026-06-29 | cursor-agent | — | **P0-3a: Freeze Swing_V10_H1_Directional live→frozen** (DQAF-20260629-P03). 100% SHORT bias, PF=0.75, accuracy=0.519. | L2 — model output degeneracy |
 | FIX-20260629-183 | 2026-06-29 | cursor-agent | — | **Fix governance auto-promotion guard**: `scheduler_service.py:400` hardcoded `if True:` → `if _GOVERNANCE_MANUAL_MODE:`. `_GOVERNANCE_MANUAL_MODE=False` was set but overridden since FIX-20260614-B0. BrainPromotionEvaluator auto-transitions were permanently dead code. | L2 — hardcoded safety guard never removed after metrics review period expired |
 | FIX-20260629-181 | 2026-06-29 | cursor-agent | — | **Demote Swing_V9_H4_V2 live→frozen** (DQAF-175). Shadow PF=0.41, PnL=-5,825R. Promoted on 11 trades (FIX-064d); degraded in 6 days. | L2 — min_trades=10 insufficient |
 | FIX-20260628-160 | 2026-06-28 | cursor-agent | — | **Magic 冲突误报消除 (L1)**: BrainConfigValidator._check_magic_unique() 增加 contract_group 感知 — _build_magic_index() 存储 (brain_id, contract_group) 元组, _check_magic_unique() 仅跨合约组冲突报警。同组共享 magic 是架构设计意图 (所有 M30 大脑均属 m30_swing 合约组)。BrainFactory 启动 WARNING 从 ~20 降至 0。附带: V3 brain configs 补充 label_contract 块, 消除 4 项 config consistency 错误。 | RC-07 — validator 过于宽泛: 未区分同组共享 vs 跨组冲突 |
