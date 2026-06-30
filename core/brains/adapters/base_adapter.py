@@ -193,11 +193,15 @@ class BaseBrainAdapter(ABC):
 
     @staticmethod
     def _score_to_direction(
-        raw_score: float, objective: str = "regression"
+        raw_score: float,
+        objective: str = "regression",
+        threshold: float = 0.1,
     ) -> tuple[Direction, float, float]:
         """Map model output to (direction_bias, up_prob, down_prob).
 
         FIX-20260526-030 — Two distinct paths based on model objective:
+        FIX-20260630-202 — threshold decoupled from hardcoded ±0.1; now read
+        from brain config ``activation_threshold`` (SSOT), fallback 0.1.
 
         **Binary classifiers** (binary_logloss/binary):
         - raw_score = P(TP-hit | features) ∈ [0, 1]
@@ -209,7 +213,9 @@ class BaseBrainAdapter(ABC):
 
         **Regression** (Huber, squared_error, etc.):
         - raw_score = signed regression output (e.g., BPS, z-score delta)
-        - > 0.1 → LONG, < -0.1 → SHORT, else NEUTRAL
+        - > +threshold → LONG, < -threshold → SHORT, else NEUTRAL
+        - Threshold is per-brain configurable (default 0.1) because higher-TF
+          models produce narrower raw_score distributions due to noise filtering.
         - Uses 0.5 ± confidence/2 anchoring so the predicted direction
           always wins the up/down comparison in consensus.
         """
@@ -224,11 +230,11 @@ class BaseBrainAdapter(ABC):
         # Regression path (Huber, etc.): signed score → directional vote
         confidence = float(np.tanh(abs(raw_score)))
 
-        if raw_score > 0.1:
+        if raw_score > threshold:
             up = 0.5 + confidence / 2.0
             down = 1.0 - up
             return "long", up, down
-        elif raw_score < -0.1:
+        elif raw_score < -threshold:
             down = 0.5 + confidence / 2.0
             up = 1.0 - down
             return "short", up, down

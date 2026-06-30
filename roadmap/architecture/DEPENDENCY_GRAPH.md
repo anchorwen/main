@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-30T04:24:42Z
+> **自动生成**: 2026-06-30T10:07:48Z
 
 ## Package-Level Dependencies
 
@@ -300,7 +300,7 @@
 
 ### `core/governance/`
 
-- `governance_rule_engine.py` → (无内部依赖)
+- `governance_rule_engine.py` → `core.brains.brain_registry`
 - `governance_service.py` → `core.contracts.exceptions`, `core.infrastructure.distributed_lock`, `core.state.catalog`, `core.state.writer`
 - `shadow_tracker.py` → (无内部依赖)
 

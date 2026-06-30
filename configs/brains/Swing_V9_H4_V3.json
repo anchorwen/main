@@ -10,7 +10,8 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_H4_V3_model.json",
   "model_version": "swing_v9_h4_v3",
   "artifact_hash": "d691b5f1fa967a0d40c0d290ea45c15044455580b24eb5ed05e0ffc568fd571c",
-  "status": "shadow",
+  "status": "candidate",
+  "_note": "DQAF-20260630-201 P1: aligned with M30_V3/H1_V3",
   "vote_weight": 1.0,
   "magic": 90340,
   "brain_role": "alpha_brain",
@@ -73,13 +74,16 @@
   "n_features": 35,
   "n_train_samples": 5261,
   "trained_at": "2026-06-28T07:37:50.536658Z",
+  "activation_threshold": 0.05,
+  "_activation_threshold_note": "DQAF-20260630-202: H4 raw_scores oscillate at -0.07 to -0.12 — global ±0.1 dead-zones this brain. Reduced to 0.05 per institutional mandate.",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
   "label_contract": {
-    "sl_atr_mult": 3.0,
-    "tp_atr_mult": 2.0,
-    "contract_type": "h4_swing"
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5,
+    "contract_type": "h4_swing",
+    "_note": "DQAF-20260630-200: aligned to strategy h4_swing live.yaml (was SL=3.0/TP=2.0 from training_params; training-serving skew to investigate)"
   }
 }

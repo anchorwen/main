@@ -256,6 +256,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
         direction_bias, up_prob, down_prob = self._score_to_direction(
             raw_score,
             objective=self._brain_entry.get("training_params", {}).get("objective", "regression"),
+            threshold=float(self._brain_entry.get("activation_threshold", 0.1)),
         )
 
         return BrainSignal(

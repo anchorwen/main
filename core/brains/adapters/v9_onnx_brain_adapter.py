@@ -189,6 +189,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 objective=self._brain_entry.get("training_params", {}).get(
                     "objective", "regression"
                 ),
+                threshold=float(self._brain_entry.get("activation_threshold", 0.1)),
             )
             confidence = max(up_probability, down_probability)
             _raw_score = raw_score

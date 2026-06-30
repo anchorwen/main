@@ -308,13 +308,43 @@ class GovernanceRuleEngine:
             shadow_count = ctx.get("shadow_signal_count", 0)
             if shadow_count < 50:
                 return False
-            # Require minimum diversity (not all long or all short)
+            # Average confidence must be above noise floor
+            if ctx.get("shadow_avg_confidence", 0.0) < 0.50:
+                return False
+
+            # ── DQAF-20260630-202: Macro-Regime Diversity Exemption ──
+            # H4/D1 timeframes produce directionally-monopolistic signals by
+            # design — a genuine H4 trend follower in a multi-week downtrend
+            # SHOULD output 100% SHORT.  Requiring long≥5 AND short≥5 would
+            # structurally exclude the best macro-trend brains.
+            #
+            # Detection: probe BrainRegistry for contract_group / timeframe.
+            # Falls open to legacy diversity check on lookup failure.
+            brain_id = ctx.get("brain_id", "")
+            is_macro = False
+            if brain_id:
+                try:
+                    from core.brains.brain_registry import BrainRegistry
+
+                    registry = BrainRegistry.instance()
+                    entry = registry.get(brain_id)
+                    if entry is not None:
+                        cg = (entry.contract_group or "").lower()
+                        tf = (entry.timeframe or "").upper()
+                        is_macro = "h4" in cg or "d1" in cg or tf in ("H4", "D1")
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                    pass  # fail-open: fall through to legacy diversity check
+
+            if is_macro:
+                # Macro timeframes: exempt from directional diversity.
+                # 50+ signals + confidence ≥0.50 is sufficient proof of
+                # responsive-to-market behaviour.
+                return True
+
+            # Non-macro: legacy diversity check (require both directions)
             long_ct = ctx.get("shadow_long_count", 0)
             short_ct = ctx.get("shadow_short_count", 0)
             if long_ct < 5 or short_ct < 5:
-                return False
-            # Average confidence must be above noise floor
-            if ctx.get("shadow_avg_confidence", 0.0) < 0.50:
                 return False
             return True
 
@@ -324,8 +354,13 @@ class GovernanceRuleEngine:
                 condition_fn=_shadow_to_probation_condition,
                 action_fn=lambda ctx: {
                     "transition_to": "probation",
-                    "reason": "auto_promote_shadow_to_probation: 50+ shadow signals, "
-                    "min 5 long/5 short, avg confidence >= 0.50",
+                    "reason": (
+                        "auto_promote_shadow_to_probation: "
+                        f"{ctx.get('shadow_signal_count', 0)} signals, "
+                        f"long/short={ctx.get('shadow_long_count', 0)}/"
+                        f"{ctx.get('shadow_short_count', 0)}, "
+                        f"avg_conf={ctx.get('shadow_avg_confidence', 0):.3f}"
+                    ),
                 },
                 priority=85,
             )
