@@ -6,13 +6,10 @@ Zero I/O, deterministic — ideal for parameterized testing.
 
 from __future__ import annotations
 
-import pytest
-
 from core.execution.trend_volume_guard import (
     check_minimum_rr,
     compute_counter_trend_volume_mult,
 )
-
 
 # ── compute_counter_trend_volume_mult ─────────────────────────────────────
 
@@ -24,7 +21,7 @@ def test_ct_no_regime_info():
 def test_ct_neutral_direction():
     assert (
         compute_counter_trend_volume_mult(
-            "statarb_dynamic", "neutral", {"regime_gate": {"h1_adx": 0.5, "primary_trend": "long"}}
+            "statarb_dynamic", "neutral", {"regime_gate": {"h1_adx": 30.0, "primary_trend": "long"}}
         )
         == 1.0
     )
@@ -34,7 +31,7 @@ def test_ct_with_trend_no_penalty():
     """With-trend trade — no penalty."""
     assert (
         compute_counter_trend_volume_mult(
-            "statarb_dynamic", "long", {"regime_gate": {"h1_adx": 0.5, "primary_trend": "long"}}
+            "statarb_dynamic", "long", {"regime_gate": {"h1_adx": 30.0, "primary_trend": "long"}}
         )
         == 1.0
     )
@@ -46,7 +43,7 @@ def test_ct_counter_trend_penalty_applied():
         compute_counter_trend_volume_mult(
             "statarb_dynamic",
             "short",
-            {"regime_gate": {"h1_adx": 0.35, "primary_trend": "long"}},
+            {"regime_gate": {"h1_adx": 30.0, "primary_trend": "long"}},
         )
         == 0.70
     )
@@ -58,7 +55,7 @@ def test_ct_counter_trend_below_threshold():
         compute_counter_trend_volume_mult(
             "statarb_dynamic",
             "short",
-            {"regime_gate": {"h1_adx": 0.20, "primary_trend": "long"}},
+            {"regime_gate": {"h1_adx": 15.0, "primary_trend": "long"}},
         )
         == 1.0
     )
@@ -67,7 +64,7 @@ def test_ct_counter_trend_below_threshold():
 def test_ct_statarb_m15_penalised():
     assert (
         compute_counter_trend_volume_mult(
-            "statarb_m15", "long", {"regime_gate": {"h1_adx": 0.40, "primary_trend": "short"}}
+            "statarb_m15", "long", {"regime_gate": {"h1_adx": 30.0, "primary_trend": "short"}}
         )
         == 0.70
     )
@@ -77,7 +74,7 @@ def test_ct_non_ou_strategy_no_penalty():
     """Non-statarb strategies are not in CT_PENALISE — no penalty."""
     assert (
         compute_counter_trend_volume_mult(
-            "barrier_12bar", "short", {"regime_gate": {"h1_adx": 0.5, "primary_trend": "long"}}
+            "barrier_12bar", "short", {"regime_gate": {"h1_adx": 30.0, "primary_trend": "long"}}
         )
         == 1.0
     )
@@ -96,7 +93,9 @@ def test_ct_primary_neutral():
     """If primary trend is neutral, no penalty regardless of direction."""
     assert (
         compute_counter_trend_volume_mult(
-            "statarb_dynamic", "short", {"regime_gate": {"h1_adx": 0.5, "primary_trend": "neutral"}}
+            "statarb_dynamic",
+            "short",
+            {"regime_gate": {"h1_adx": 30.0, "primary_trend": "neutral"}},
         )
         == 1.0
     )
