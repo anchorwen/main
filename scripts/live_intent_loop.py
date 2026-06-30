@@ -2350,7 +2350,7 @@ def main(argv: list[str] | None = None) -> int:
                         f"Force-exiting to break silent-degrade loop."
                     )
                     try:  # BLE001:FOG (was: FOG/LAC)
-                        from core.feedback.live_alert_hub import LiveAlertHub
+                        from core.observability.live_alert_hub import LiveAlertHub
 
                         _ah = getattr(state, "_alert_hub", None)
                         if _ah is None:

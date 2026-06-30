@@ -3524,9 +3524,9 @@ def execute_live_cycle(
                 {
                     "event": "multi_strategy_eval",
                     "time": _utc_iso(),
-                    "strategies": eval_summary["strategy_results"],
-                    "trade_decisions": eval_summary["trade_decisions"],
-                    "queued": eval_summary["queued"],
+                    "strategies": eval_summary.get("strategy_results", []),
+                    "trade_decisions": eval_summary.get("trade_decisions", 0),
+                    "queued": eval_summary.get("queued", 0),
                 },
                 ensure_ascii=False,
             ),

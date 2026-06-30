@@ -135,6 +135,8 @@ def evaluate_strategy_lines(
         return {
             "decisions_map": {},
             "trade_decisions": 0,
+            "queued": 0,  # FIX-20260630-198: ensure key parity with normal return
+            "active_strategies": list(strategy_lines.keys()),
             "strategy_results": [
                 {
                     "strategy": sname,
@@ -177,6 +179,8 @@ def evaluate_strategy_lines(
             return {
                 "decisions_map": {},
                 "trade_decisions": 0,
+                "queued": 0,  # FIX-20260630-198: ensure key parity with normal return
+                "active_strategies": list(strategy_lines.keys()),
                 "strategy_results": [
                     {
                         "strategy": sname,
