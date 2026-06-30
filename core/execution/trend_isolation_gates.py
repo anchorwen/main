@@ -83,9 +83,21 @@ def apply_trend_isolation_gates(
         _rg_4b = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
         _h4_trend = str(_rg_4b.get("h4_trend_direction") or "neutral")
         _h1_trend = str(_rg_4b.get("h1_trend_direction") or "neutral")
-        _is_swing = name in ("m15_swing", "m30_swing", "m5_swing", "daily_swing",
-                            "h1_swing", "h4_swing", "btc_swing")
-        if _is_swing and _h4_trend != "neutral" and _h1_trend != "neutral" and _h4_trend != _h1_trend:
+        _is_swing = name in (
+            "m15_swing",
+            "m30_swing",
+            "m5_swing",
+            "daily_swing",
+            "h1_swing",
+            "h4_swing",
+            "btc_swing",
+        )
+        if (
+            _is_swing
+            and _h4_trend != "neutral"
+            and _h1_trend != "neutral"
+            and _h4_trend != _h1_trend
+        ):
             return StrategyDecision(
                 strategy_name=name,
                 magic=config.magic,
@@ -110,21 +122,32 @@ def apply_trend_isolation_gates(
         _h1_dir_4c = str(_rg_4c.get("h1_trend_direction") or "neutral")
         _primary_dir_4c = str(_rg_4c.get("primary_trend") or "neutral")
 
-        # Strategy-specific counter-trend thresholds
+        # Strategy-specific counter-trend thresholds.
+        # DQAF-20260630-198: thresholds are raw ADX (0-100 scale), NOT normalized
+        # (0-1).  The regime_gate stores raw ADX values — see section 4aa (line 48)
+        # where the same h1_adx field is compared against 25.0.
+        #   block >= 25.0: strong trend → block counter-trend entries
+        #   penalise >= 20.0: emerging trend → volume penalty
+        #   h4_block >= 25.0: H4 strong trend → block (higher TF takes priority)
         _COUNTER_TREND_THRESHOLDS: dict[str, dict[str, float]] = {
-            "statarb_dynamic": {"block": 0.55, "penalise": 0.30, "h4_block": 0.35, "h4_penalise": 0.20},
-            "statarb_m15": {"block": 0.55, "penalise": 0.30, "h4_block": 0.35, "h4_penalise": 0.20},
-            "m15_swing": {"block": 0.55, "penalise": 0.30},
-            "m30_swing": {"block": 0.55, "penalise": 0.30},
-            "h1_swing": {"block": 0.55, "penalise": 0.30},
-            "h4_swing": {"block": 0.55, "penalise": 0.30},
+            "statarb_dynamic": {
+                "block": 25.0,
+                "penalise": 20.0,
+                "h4_block": 25.0,
+                "h4_penalise": 20.0,
+            },
+            "statarb_m15": {"block": 25.0, "penalise": 20.0, "h4_block": 25.0, "h4_penalise": 20.0},
+            "m15_swing": {"block": 25.0, "penalise": 20.0},
+            "m30_swing": {"block": 25.0, "penalise": 20.0},
+            "h1_swing": {"block": 25.0, "penalise": 20.0},
+            "h4_swing": {"block": 25.0, "penalise": 20.0},
         }
         _thresholds = _COUNTER_TREND_THRESHOLDS.get(name)
 
         if _thresholds and _h1_adx > 0 and direction != "neutral" and _primary_dir_4c != "neutral":
             if direction != _primary_dir_4c:
-                _block = _thresholds.get("block", 0.55)
-                _h4_block = _thresholds.get("h4_block", 0.55)
+                _block = _thresholds.get("block", 25.0)
+                _h4_block = _thresholds.get("h4_block", 25.0)
                 _h4_trend_dir = str(_rg_4c.get("h4_trend_direction") or "neutral")
                 _h4_adx = float(_rg_4c.get("h4_adx") or 0.0)
 
@@ -145,7 +168,12 @@ def apply_trend_isolation_gates(
                         regime_mode=regime_gate_mode,
                         reason=f"counter_trend_blocked_h1_adx_{_h1_adx:.1f}_gte_{_block}",
                     )
-                if _h4_block > 0 and _h4_trend_dir != "neutral" and direction != _h4_trend_dir and _h4_adx >= _h4_block:
+                if (
+                    _h4_block > 0
+                    and _h4_trend_dir != "neutral"
+                    and direction != _h4_trend_dir
+                    and _h4_adx >= _h4_block
+                ):
                     return StrategyDecision(
                         strategy_name=name,
                         magic=config.magic,

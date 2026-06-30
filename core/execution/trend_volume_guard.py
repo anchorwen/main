@@ -14,9 +14,13 @@ from typing import Any
 
 
 # Per-strategy counter-trend penalise thresholds.
+# DQAF-20260630-198: thresholds are raw ADX (0-100 scale), NOT normalized (0-1).
+# The regime_gate stores raw ADX values — same root cause as trend_isolation_gates.py.
+#   penalise >= 20.0: emerging trend → apply volume penalty
+#   h4_penalise >= 20.0: H4 emerging trend → apply volume penalty
 CT_PENALISE: dict[str, dict[str, float]] = {
-    "statarb_dynamic": {"penalise": 0.30, "h4_penalise": 0.20},
-    "statarb_m15": {"penalise": 0.30, "h4_penalise": 0.20},
+    "statarb_dynamic": {"penalise": 20.0, "h4_penalise": 20.0},
+    "statarb_m15": {"penalise": 20.0, "h4_penalise": 20.0},
 }
 
 
@@ -66,7 +70,7 @@ def compute_counter_trend_volume_mult(
     if direction == primary_dir:
         return default_mult  # with-trend — no penalty
 
-    penalise_threshold = ct_cfg.get("penalise", 0.30)
+    penalise_threshold = ct_cfg.get("penalise", 20.0)
     if h1_adx >= penalise_threshold:
         return penalised_mult
 
@@ -138,55 +142,127 @@ def _counter_trend_action(
     """
     thresholds: dict[str, dict[str, Any]] = {
         "barrier_12bar": {
-            "block": 0.30, "penalise": 0.15, "conf_mult": 0.60, "vol_mult": 0.65,
-            "h4_block": 0.25, "h4_penalise": 0.15, "h4_conf_mult": 0.50, "h4_vol_mult": 0.50,
+            "block": 0.30,
+            "penalise": 0.15,
+            "conf_mult": 0.60,
+            "vol_mult": 0.65,
+            "h4_block": 0.25,
+            "h4_penalise": 0.15,
+            "h4_conf_mult": 0.50,
+            "h4_vol_mult": 0.50,
         },
         "micro_3bar": {
-            "block": 0.50, "penalise": 0.25, "conf_mult": 0.65, "vol_mult": 0.70,
-            "h4_block": 0.99, "h4_penalise": 0.99, "h4_conf_mult": 1.0, "h4_vol_mult": 1.0,
+            "block": 0.50,
+            "penalise": 0.25,
+            "conf_mult": 0.65,
+            "vol_mult": 0.70,
+            "h4_block": 0.99,
+            "h4_penalise": 0.99,
+            "h4_conf_mult": 1.0,
+            "h4_vol_mult": 1.0,
         },
         "micro_m15": {
-            "block": 0.50, "penalise": 0.25, "conf_mult": 0.65, "vol_mult": 0.70,
-            "h4_block": 0.99, "h4_penalise": 0.99, "h4_conf_mult": 1.0, "h4_vol_mult": 1.0,
+            "block": 0.50,
+            "penalise": 0.25,
+            "conf_mult": 0.65,
+            "vol_mult": 0.70,
+            "h4_block": 0.99,
+            "h4_penalise": 0.99,
+            "h4_conf_mult": 1.0,
+            "h4_vol_mult": 1.0,
         },
         "micro_h1": {
-            "block": 0.45, "penalise": 0.22, "conf_mult": 0.60, "vol_mult": 0.65,
-            "h4_block": 0.99, "h4_penalise": 0.99, "h4_conf_mult": 1.0, "h4_vol_mult": 1.0,
+            "block": 0.45,
+            "penalise": 0.22,
+            "conf_mult": 0.60,
+            "vol_mult": 0.65,
+            "h4_block": 0.99,
+            "h4_penalise": 0.99,
+            "h4_conf_mult": 1.0,
+            "h4_vol_mult": 1.0,
         },
         "statarb_dynamic": {
-            "block": 0.55, "penalise": 0.30, "conf_mult": 0.70, "vol_mult": 0.75,
-            "h4_block": 0.35, "h4_penalise": 0.20, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.55,
+            "penalise": 0.30,
+            "conf_mult": 0.70,
+            "vol_mult": 0.75,
+            "h4_block": 0.35,
+            "h4_penalise": 0.20,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
         "statarb_m15": {
-            "block": 0.55, "penalise": 0.30, "conf_mult": 0.70, "vol_mult": 0.75,
-            "h4_block": 0.35, "h4_penalise": 0.20, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.55,
+            "penalise": 0.30,
+            "conf_mult": 0.70,
+            "vol_mult": 0.75,
+            "h4_block": 0.35,
+            "h4_penalise": 0.20,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
         "m15_swing": {
-            "block": 0.70, "penalise": 0.25, "conf_mult": 0.65, "vol_mult": 0.75,
-            "h4_block": 0.60, "h4_penalise": 0.30, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.70,
+            "penalise": 0.25,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.60,
+            "h4_penalise": 0.30,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
         "m30_swing": {
-            "block": 0.70, "penalise": 0.25, "conf_mult": 0.65, "vol_mult": 0.75,
-            "h4_block": 0.60, "h4_penalise": 0.30, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.70,
+            "penalise": 0.25,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.60,
+            "h4_penalise": 0.30,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
         "h1_swing": {
-            "block": 0.75, "penalise": 0.55, "conf_mult": 0.65, "vol_mult": 0.75,
-            "h4_block": 0.70, "h4_penalise": 0.50, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.75,
+            "penalise": 0.55,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.70,
+            "h4_penalise": 0.50,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
         "h4_swing": {
-            "block": 0.80, "penalise": 0.60, "conf_mult": 0.65, "vol_mult": 0.75,
-            "h4_block": 0.75, "h4_penalise": 0.55, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.80,
+            "penalise": 0.60,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.75,
+            "h4_penalise": 0.55,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
         "btc_swing": {
-            "block": 0.85, "penalise": 0.55, "conf_mult": 0.65, "vol_mult": 0.75,
-            "h4_block": 0.80, "h4_penalise": 0.55, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.85,
+            "penalise": 0.55,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.80,
+            "h4_penalise": 0.55,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
     }
     t = thresholds.get(
         strategy_name,
         {
-            "block": 0.60, "penalise": 0.35, "conf_mult": 0.65, "vol_mult": 0.70,
-            "h4_block": 0.70, "h4_penalise": 0.40, "h4_conf_mult": 0.65, "h4_vol_mult": 0.70,
+            "block": 0.60,
+            "penalise": 0.35,
+            "conf_mult": 0.65,
+            "vol_mult": 0.70,
+            "h4_block": 0.70,
+            "h4_penalise": 0.40,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
     )
 

@@ -9,14 +9,11 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
-
 from core.execution.exit_reason import (
     ExitReason,
     _classify_exit_reason,
     classify,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ExitReason enum
@@ -26,8 +23,9 @@ from core.execution.exit_reason import (
 class TestExitReasonEnum:
     """Enum definition and properties."""
 
-    def test_has_15_members(self) -> None:
-        assert len(ExitReason) == 15
+    def test_has_23_members(self) -> None:
+        """23 canonical exit reasons (15 original + 8 V6 from FIX-20260629-195)."""
+        assert len(ExitReason) == 23
 
     def test_is_str_subclass(self) -> None:
         """Inherits from str for backward compatibility."""
@@ -62,9 +60,12 @@ class TestCooldownTiers:
     def test_all_members_have_cooldown_tier(self) -> None:
         """Every enum member must have a defined cooldown tier."""
         for member in ExitReason:
-            assert member.cooldown_tier in ("light", "medium", "heavy", "block"), (
-                f"{member} has invalid cooldown_tier: {member.cooldown_tier}"
-            )
+            assert member.cooldown_tier in (
+                "light",
+                "medium",
+                "heavy",
+                "block",
+            ), f"{member} has invalid cooldown_tier: {member.cooldown_tier}"
 
 
 class TestCategoryProperties:
@@ -97,19 +98,17 @@ class TestCategoryProperties:
         """
         no_category = {ExitReason.NET_OUT, ExitReason.UNKNOWN_CLOSE, ExitReason.UNKNOWN}
         for member in ExitReason:
-            categories = sum([
-                member.is_model_driven,
-                member.is_risk_driven,
-                member.is_structural,
-            ])
+            categories = sum(
+                [
+                    member.is_model_driven,
+                    member.is_risk_driven,
+                    member.is_structural,
+                ]
+            )
             if member in no_category:
-                assert categories == 0, (
-                    f"{member} has {categories} categories (expected 0)"
-                )
+                assert categories == 0, f"{member} has {categories} categories (expected 0)"
             else:
-                assert categories == 1, (
-                    f"{member} belongs to {categories} categories (expected 1)"
-                )
+                assert categories == 1, f"{member} belongs to {categories} categories (expected 1)"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -129,7 +128,7 @@ class TestClassify:
         assert classify("") == ExitReason.UNKNOWN
 
     def test_non_string_returns_unknown(self) -> None:
-        assert classify(42) == ExitReason.UNKNOWN  # type: ignore[arg-type]
+        assert classify(42) == ExitReason.UNKNOWN
 
     # ── P0: Exact-match canonical labels ──
 

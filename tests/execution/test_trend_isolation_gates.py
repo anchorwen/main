@@ -11,15 +11,7 @@ Covers:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-from core.execution.strategy_decision import StrategyDecision
 from core.execution.trend_isolation_gates import apply_trend_isolation_gates
-
 
 # ── Mock config ───────────────────────────────────────────────────────────
 
@@ -349,7 +341,7 @@ class TestGate4cCounterTrendADX:
             entry_z_score=0.0,
             regime_info={
                 "regime_gate": {
-                    "h1_adx": 0.60,  # >= 0.55 block threshold
+                    "h1_adx": 30.0,  # raw ADX > 25.0 — 4aa fires before 4c
                     "h1_trend_direction": "long",
                     "primary_trend": "long",
                 }
@@ -361,7 +353,9 @@ class TestGate4cCounterTrendADX:
             regime_gate_mode="active",
         )
         assert result is not None
-        assert "counter_trend_blocked_h1_adx" in result.reason
+        # h1_adx=30.0 → 4aa fires (_trend_strength=30.0 > 25.0)
+        assert "counter_trend_blocked" in result.reason
+        assert "ts=30.0" in result.reason  # 4aa format
 
     def test_passes_when_h1_adx_below_block(self) -> None:
         config = MockConfig()
@@ -372,7 +366,7 @@ class TestGate4cCounterTrendADX:
             entry_z_score=0.0,
             regime_info={
                 "regime_gate": {
-                    "h1_adx": 0.40,  # < 0.55 block threshold
+                    "h1_adx": 20.0,  # raw ADX < 25.0 block threshold
                     "h1_trend_direction": "long",
                     "primary_trend": "long",
                 }
@@ -383,8 +377,8 @@ class TestGate4cCounterTrendADX:
             total_count=1,
             regime_gate_mode="active",
         )
-        # Falls through 4aa (trend_strength=0 → no block) → 4b (not swing) → 4c
-        # h1_adx=0.40 < 0.55 → not blocked by h1. No h4 in dict → h4_adx=0 → not blocked
+        # Falls through 4aa (trend_strength=20.0 → no block) → 4b (not swing) → 4c
+        # h1_adx=20.0 < 25.0 → not blocked by h1. No h4 in dict → h4_adx=0 → not blocked
         assert result is None
 
     def test_blocks_m15_swing_with_h1_adx_threshold(self) -> None:
@@ -396,7 +390,7 @@ class TestGate4cCounterTrendADX:
             entry_z_score=0.0,
             regime_info={
                 "regime_gate": {
-                    "h1_adx": 0.60,
+                    "h1_adx": 30.0,  # raw ADX >= 25.0
                     "h1_trend_direction": "long",
                     "primary_trend": "long",
                 }
@@ -409,7 +403,7 @@ class TestGate4cCounterTrendADX:
         )
         # m15_swing → swing list for 4b, but if h4_trend_direction not in dict → "" or "neutral"
         # 4b: needs both non-neutral and divergent → "neutral" blocks this
-        # Then 4c: h1_adx >= 0.55 blocks
+        # Then 4c: h1_adx >= 25.0 blocks
         assert result is not None
 
 

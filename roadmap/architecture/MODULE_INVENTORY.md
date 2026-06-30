@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-30T02:18:18Z
+> **自动生成**: 2026-06-30T03:50:16Z
 > **扫描模块数**: 705
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -275,8 +275,8 @@
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
-| `trend_isolation_gates.py` | ✅ active | — | 1 | 196 | — | |
-| `trend_volume_guard.py` | ✅ active | — | 3 | 212 | — | |
+| `trend_isolation_gates.py` | ✅ active | — | 1 | 224 | — | |
+| `trend_volume_guard.py` | ✅ active | — | 3 | 288 | — | |
 
 ## core/features
 
@@ -697,7 +697,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 707 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 708 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
