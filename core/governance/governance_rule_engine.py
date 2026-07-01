@@ -330,9 +330,9 @@ class GovernanceRuleEngine:
                     entry = registry.get(brain_id)
                     if entry is not None:
                         cg = (entry.contract_group or "").lower()
-                        tf = (entry.timeframe or "").upper()
+                        tf = (entry.raw.get("timeframe", "") or "").upper()
                         is_macro = "h4" in cg or "d1" in cg or tf in ("H4", "D1")
-                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError, AttributeError):
                     pass  # fail-open: fall through to legacy diversity check
 
             if is_macro:
