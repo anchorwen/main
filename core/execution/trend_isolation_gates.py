@@ -116,38 +116,40 @@ def apply_trend_isolation_gates(
             )
 
     # ── 4c. Counter-trend gate ──
-    if regime_info is not None:
+    # FIX-20260701-206: thresholds are NOW read from strategy config
+    # (adx_trending_threshold / adx_mild_trend_threshold), default 999 = thermal
+    # fuse per FIX-20260622-064 P0-3.  Previously hardcoded at 25.0/20.0 (raw
+    # ADX scale), which re-enabled the gate after the 999 fuse had intentionally
+    # disabled it (DQAF-20260630-198/FIX-199 regression).
+    #
+    # Strategy eligibility: only the strategies listed below participate in
+    # counter-trend ADX gating.  Each strategy can override thresholds via
+    # live.yaml → StrategyLineConfig.adx_trending_threshold / adx_mild_trend_threshold.
+    _CT_ELIGIBLE: frozenset[str] = frozenset(
+        {
+            "statarb_dynamic",
+            "statarb_m15",
+            "m15_swing",
+            "m30_swing",
+            "h1_swing",
+            "h4_swing",
+        }
+    )
+
+    if regime_info is not None and name in _CT_ELIGIBLE:
         _rg_4c = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
         _h1_adx = float(_rg_4c.get("h1_adx") or 0.0)
         _h1_dir_4c = str(_rg_4c.get("h1_trend_direction") or "neutral")
         _primary_dir_4c = str(_rg_4c.get("primary_trend") or "neutral")
 
-        # Strategy-specific counter-trend thresholds.
-        # DQAF-20260630-198: thresholds are raw ADX (0-100 scale), NOT normalized
-        # (0-1).  The regime_gate stores raw ADX values — see section 4aa (line 48)
-        # where the same h1_adx field is compared against 25.0.
-        #   block >= 25.0: strong trend → block counter-trend entries
-        #   penalise >= 20.0: emerging trend → volume penalty
-        #   h4_block >= 25.0: H4 strong trend → block (higher TF takes priority)
-        _COUNTER_TREND_THRESHOLDS: dict[str, dict[str, float]] = {
-            "statarb_dynamic": {
-                "block": 25.0,
-                "penalise": 20.0,
-                "h4_block": 25.0,
-                "h4_penalise": 20.0,
-            },
-            "statarb_m15": {"block": 25.0, "penalise": 20.0, "h4_block": 25.0, "h4_penalise": 20.0},
-            "m15_swing": {"block": 25.0, "penalise": 20.0},
-            "m30_swing": {"block": 25.0, "penalise": 20.0},
-            "h1_swing": {"block": 25.0, "penalise": 20.0},
-            "h4_swing": {"block": 25.0, "penalise": 20.0},
-        }
-        _thresholds = _COUNTER_TREND_THRESHOLDS.get(name)
+        # Read thresholds from strategy config — honors live.yaml 999 thermal fuse
+        _block = float(getattr(config, "adx_trending_threshold", 999.0))
+        _penalise = float(getattr(config, "adx_mild_trend_threshold", 999.0))
+        _h4_block = _block  # H4 uses same global threshold
+        _h4_penalise = _penalise
 
-        if _thresholds and _h1_adx > 0 and direction != "neutral" and _primary_dir_4c != "neutral":
+        if _h1_adx > 0 and direction != "neutral" and _primary_dir_4c != "neutral":
             if direction != _primary_dir_4c:
-                _block = _thresholds.get("block", 25.0)
-                _h4_block = _thresholds.get("h4_block", 25.0)
                 _h4_trend_dir = str(_rg_4c.get("h4_trend_direction") or "neutral")
                 _h4_adx = float(_rg_4c.get("h4_adx") or 0.0)
 

@@ -44,6 +44,7 @@ def test_ct_counter_trend_penalty_applied():
             "statarb_dynamic",
             "short",
             {"regime_gate": {"h1_adx": 30.0, "primary_trend": "long"}},
+            penalise_threshold=20.0,
         )
         == 0.70
     )
@@ -56,6 +57,7 @@ def test_ct_counter_trend_below_threshold():
             "statarb_dynamic",
             "short",
             {"regime_gate": {"h1_adx": 15.0, "primary_trend": "long"}},
+            penalise_threshold=20.0,
         )
         == 1.0
     )
@@ -64,14 +66,17 @@ def test_ct_counter_trend_below_threshold():
 def test_ct_statarb_m15_penalised():
     assert (
         compute_counter_trend_volume_mult(
-            "statarb_m15", "long", {"regime_gate": {"h1_adx": 30.0, "primary_trend": "short"}}
+            "statarb_m15",
+            "long",
+            {"regime_gate": {"h1_adx": 30.0, "primary_trend": "short"}},
+            penalise_threshold=20.0,
         )
         == 0.70
     )
 
 
 def test_ct_non_ou_strategy_no_penalty():
-    """Non-statarb strategies are not in CT_PENALISE — no penalty."""
+    """Non-statarb strategies are not in _CT_VOLUME_ELIGIBLE — no penalty."""
     assert (
         compute_counter_trend_volume_mult(
             "barrier_12bar", "short", {"regime_gate": {"h1_adx": 30.0, "primary_trend": "long"}}

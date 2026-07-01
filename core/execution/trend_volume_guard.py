@@ -11,17 +11,13 @@ from __future__ import annotations
 from typing import Any
 
 # ── Counter-trend volume penalty ─────────────────────────────────────────
-
-
-# Per-strategy counter-trend penalise thresholds.
-# DQAF-20260630-198: thresholds are raw ADX (0-100 scale), NOT normalized (0-1).
-# The regime_gate stores raw ADX values — same root cause as trend_isolation_gates.py.
-#   penalise >= 20.0: emerging trend → apply volume penalty
-#   h4_penalise >= 20.0: H4 emerging trend → apply volume penalty
-CT_PENALISE: dict[str, dict[str, float]] = {
-    "statarb_dynamic": {"penalise": 20.0, "h4_penalise": 20.0},
-    "statarb_m15": {"penalise": 20.0, "h4_penalise": 20.0},
-}
+# FIX-20260701-206: hardcoded CT_PENALISE dict removed.  Thresholds are now
+# passed by the caller via ``penalise_threshold`` / ``h4_penalise_threshold``
+# (sourced from StrategyLineConfig.adx_mild_trend_threshold, default 999 =
+# thermal fuse per FIX-20260622-064 P0-3).
+#
+# Only statarb strategies are eligible for counter-trend volume penalties.
+_CT_VOLUME_ELIGIBLE: frozenset[str] = frozenset({"statarb_dynamic", "statarb_m15"})
 
 
 def compute_counter_trend_volume_mult(
@@ -31,6 +27,8 @@ def compute_counter_trend_volume_mult(
     *,
     default_mult: float = 1.0,
     penalised_mult: float = 0.70,
+    penalise_threshold: float = 999.0,
+    h4_penalise_threshold: float = 999.0,
 ) -> float:
     """Apply counter-trend volume penalty for OU/statarb strategies.
 
@@ -44,6 +42,10 @@ def compute_counter_trend_volume_mult(
         regime_info: Regime gate output dict.
         default_mult: Volume multiplier when no penalty applies.
         penalised_mult: Volume multiplier when penalty IS applied.
+        penalise_threshold: H1 ADX threshold for volume penalty (default 999 =
+            thermal fuse disabled per FIX-20260622-064).  Read from
+            StrategyLineConfig.adx_mild_trend_threshold.
+        h4_penalise_threshold: H4 ADX threshold for volume penalty (default 999).
 
     Returns:
         Volume multiplier — 0.70 when penalised, otherwise default_mult.
@@ -54,8 +56,7 @@ def compute_counter_trend_volume_mult(
     if direction == "neutral":
         return default_mult
 
-    ct_cfg = CT_PENALISE.get(strategy_name)
-    if ct_cfg is None:
+    if strategy_name not in _CT_VOLUME_ELIGIBLE:
         return default_mult
 
     rg = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
@@ -70,7 +71,6 @@ def compute_counter_trend_volume_mult(
     if direction == primary_dir:
         return default_mult  # with-trend — no penalty
 
-    penalise_threshold = ct_cfg.get("penalise", 20.0)
     if h1_adx >= penalise_threshold:
         return penalised_mult
 

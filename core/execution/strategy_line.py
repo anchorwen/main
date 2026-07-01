@@ -272,6 +272,15 @@ class StrategyLineConfig:
     # auto-discovered from brain JSON ``"roles": ["meta_probe"]``.
     meta_probe_specs: list[Any] = field(default_factory=list)
 
+    # ── ADX Counter-Trend Gate thresholds (FIX-20260701-206) ──
+    # Read from live.yaml regime_gate.adx section.  Default 999 = thermal fuse
+    # (physically disabled) per FIX-20260622-064 P0-3 architectural decision:
+    # ADX gating is deprecated in favor of physics-based detection (Theta+Hurst).
+    # Strategy lines read the trending_threshold as "block" and mild_trend_threshold
+    # as "penalise" — with 999 both are permanently non-blocking.
+    adx_trending_threshold: float = 999.0
+    adx_mild_trend_threshold: float = 999.0
+
     # Budget
     daily_loss_limit_pct: float = -0.03
     max_consecutive_losses: int = 5
@@ -1159,6 +1168,8 @@ class StrategyLine:
             regime_info=regime_info,
             default_mult=1.0,
             penalised_mult=0.70,
+            penalise_threshold=self.config.adx_mild_trend_threshold,
+            h4_penalise_threshold=self.config.adx_mild_trend_threshold,
         )
 
         # ── 5. Dynamic SL/TP ──
