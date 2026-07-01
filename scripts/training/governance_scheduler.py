@@ -328,7 +328,26 @@ def _promote_shadow_brains(
         # Rule 85 thresholds
         if m.shadow_signal_count < 50:
             continue
-        if m.long_count < 5 or m.short_count < 5:
+        # ── DQAF-20260630-202 / FIX-20260701-204: Macro-Regime Diversity Exemption ──
+        # H4/D1 timeframes produce directionally-monopolistic signals by design.
+        # A genuine H4 trend follower in a multi-week downtrend SHOULD output
+        # 100% SHORT.  Requiring long≥5 AND short≥5 would structurally exclude
+        # the best macro-trend brains.  This mirrors the exemption in
+        # GovernanceRuleEngine._shadow_to_probation_condition() (governance_rule_engine.py).
+        is_macro = False
+        try:
+            from core.brains.brain_registry import BrainRegistry
+
+            registry = BrainRegistry.instance()
+            brain_entry = registry.get(bid)
+            if brain_entry is not None:
+                cg = (brain_entry.contract_group or "").lower()
+                tf = (brain_entry.raw.get("timeframe", "") or "").upper()
+                is_macro = "h4" in cg or "d1" in cg or tf in ("H4", "D1")
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError, AttributeError):
+            pass  # fail-open: fall through to legacy diversity check
+
+        if not is_macro and (m.long_count < 5 or m.short_count < 5):
             continue
         if m.avg_confidence < 0.50:
             continue
@@ -338,6 +357,7 @@ def _promote_shadow_brains(
             f"{m.shadow_signal_count} signals, "
             f"long/short={m.long_count}/{m.short_count}, "
             f"avg_conf={m.avg_confidence:.3f}"
+            f"{', macro_exempt=True' if is_macro else ''}"
         )
 
         entry: dict[str, Any] = {

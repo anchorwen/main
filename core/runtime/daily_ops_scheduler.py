@@ -198,7 +198,11 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                 if _pnl_store is not None:
                     _tracker = BrainPerformanceTracker(window_size=100)
                     _gov_report = run_governance_cycle(
-                        _tracker, _governance, dry_run=False, pnl_store=_pnl_store
+                        _tracker,
+                        _governance,
+                        dry_run=False,
+                        pnl_store=_pnl_store,
+                        base_dir=config.base_dir,
                     )
                     _governance.save(_gov_path, lock_timeout=1.0)
 

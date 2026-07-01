@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-01T02:31:18Z
+> **自动生成**: 2026-07-01T03:32:41Z
 > **扫描模块数**: 705
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -500,7 +500,7 @@
 | `circuit_breaker_reset.py` | ✅ active | — | 2 | 103 | — | |
 | `cooldown.py` | ✅ active | — | 1 | 21 | — | |
 | `cycle_replay.py` | ✅ active | RuntimeReplayReport, RuntimeCycleReplay | 4 | 124 | — | |
-| `daily_ops_scheduler.py` | ✅ active | — | 2 | 251 | — | |
+| `daily_ops_scheduler.py` | ✅ active | — | 2 | 255 | — | |
 | `data_health_monitor.py` | ✅ active | — | 1 | 68 | — | |
 | `dispatch_post.py` | ✅ active | — | 2 | 92 | — | |
 | `evidence_contracts.py` | ✅ active | RuntimeEvidenceRecord | 2 | 61 | — | |
@@ -911,7 +911,7 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 8 | 802 | — | |
+| `governance_scheduler.py` | ✅ active | — | 8 | 822 | — | |
 | `label_builder.py` | ✅ active | — | 19 | 1044 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |
