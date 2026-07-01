@@ -10,8 +10,8 @@
 version: "1.0"
 
 global:
-  enabled: false  # ← Master kill-switch.  Set to true to activate Layer B.
-  shadow_mode: false  # When true: evaluate but log only, do not execute exits.
+  enabled: true  # ← Master kill-switch.  FIX-20260701-205: enabled for CP1 shadow verification.
+  shadow_mode: true   # When true: evaluate but log only, do not execute exits.
 
 # ── 5-Stage Gate (Layer B1) ──────────────────────────────────────
 stage_gate:
@@ -63,11 +63,11 @@ exit_queue:
 
   P6_ratchet_risk:
     breakeven_defense:
-      enabled: false
+      enabled: true  # FIX-20260701-205: shadow-only evaluation (shadow_mode=true)
       atr_mult: 1.2           # Arm when PnL > N × ATR_cost
       cost_buffer: 5.0        # Close when PnL ≤ $N after armed (covers spread+comm)
     drawdown_lock:
-      enabled: false
+      enabled: true  # FIX-20260701-205: shadow-only evaluation (shadow_mode=true)
       activation_atr: 2.0     # Arm when peak PnL > N × ATR_cost
       giveback_pct: 35.0      # Close when PnL < peak × (1 - N/100)
 
