@@ -862,4 +862,35 @@
 |--------|------|--------|----------|
 | DQAF-20260625-125 | 2026-06-25 | runtime, scripts | Sev 2 |
 
+---
+
+### ReB-20260701-TOXIC_DIVERSITY_GATE
+- **Pattern Signature**: `TOXIC_DIVERSITY_GATE`
+- **Date Cataloged**: 2026-06-30
+- **Source Docket**: DQAF-20260630-202
+- **Related**: DUPLICATE_RULE_UNSYNC, FIX-20260630-202, FIX-20260701-203, FIX-20260701-204
+
+**Definition**: A mandatory directional diversity requirement (long≥N AND short≥N) that structurally excludes macro-trend-following models. Genuine H4/D1 trend followers in a sustained regime produce directionally-monopolistic signals by design — a correct model SHOULD output 100% SHORT in a multi-week downtrend. Historical backtests establish this is normal behavior, not signal degradation. The diversity gate conflates "model failure" (all NEUTRAL) with "regime alignment" (all SHORT).
+
+**Prevention**: (1) Macro timeframes (H4+, D1+) exempted from bidirectional diversity via BrainRegistry contract_group/timeframe probe. (2) `is_macro` flag logged in promotion reason for audit. (3) Fail-open: on BrainRegistry probe failure, falls through to legacy diversity check (conservative).
+
+**Detection**: Governance audit script: for each candidate brain with ≥50 directional signals and 0 count in one direction, check BrainRegistry for macro timeframe — flag as false negative if macro + not promoted.
+
+### ReB-20260701-DUPLICATE_RULE_UNSYNC
+- **Pattern Signature**: `DUPLICATE_RULE_UNSYNC`
+- **Date Cataloged**: 2026-07-01
+- **Source Docket**: DQAF-20260630-202
+- **Related**: TOXIC_DIVERSITY_GATE, FIX-20260701-204
+
+**Definition**: The same business rule (Rule 85: shadow-to-probation auto-promotion) is implemented in two separate files serving different execution paths (cloud `scheduler_service.py` → `GovernanceRuleEngine`, local `daily_ops_scheduler.py` → `_promote_shadow_brains()`). A fix applied to one path is invisible to the other — the second path continues executing the old logic, producing divergent behavior for the same input. This is a silent architectural defect: no error, no warning, just different outcomes depending on which code path processes the brain.
+
+**Prevention**: (1) Deferred: unify both paths under a single `GovernanceRuleEngine.evaluate()` callable from both scheduler_service and daily_ops. (2) Until unified: cross-reference comments (`# MIRROR: governance_rule_engine.py::_shadow_to_probation_condition`) in both files to signal co-modification requirement. (3) Pre-commit lint rule: detect semantically-identical threshold values duplicated across files, flag for review.
+
+**Detection**: Compare promotion decisions between cloud scheduler_service path and local daily_ops path for same brain_id — divergent decisions = unsynced logic.
+
+**Known Instances**:
+| Docket | Date | Module | Severity |
+|--------|------|--------|----------|
+| DQAF-20260630-202 | 2026-06-30 | governance | Sev 2 |
+
 **Cross-References**: FIX-20260625-125, CCT-20260625-125

@@ -992,3 +992,24 @@
 - **关联 ReB Pattern**: `ORPHAN_WATCHDOG_MIGRATION_SWEEP_INCOMPLETE`
 - **关联 FIX**: FIX-20260625-125 (路径修正 + 字段名修正 + never-run auto_run)
 - **状态**: **CLOSED** — FIX-20260625-125 deployed. Leaderboard 手动恢复: XAU 69 brains 1192 decisions
+
+---
+
+### CCT-20260630-202
+- **Docket ID**: DQAF-20260630-202
+- **日期**: 2026-06-30
+- **置信度**: confirmed (code audit × ShadowTracker evidence × governance_state.json verification)
+- **因果链**:
+  - [Layer 1 — 症状]: H4_V3 (456 directional signals, 100% SHORT, avg_conf=0.551) stuck at `candidate` status despite meeting all Rule 85 auto-promotion criteria. No promotion event in governance transition_log.
+  - [Layer 2 — 中间异常]: (Contract 1) `v9_onnx_brain_adapter.py::get_signal()` used global hardcoded `activation_threshold=0.1` — H4_V3 raw_scores [-0.07, -0.12] fell entirely within dead-zone → 0% directional signals before 6/29 config fix. (Contract 2) `_promote_shadow_brains()` in `governance_scheduler.py:332` hard-coded `if m.long_count < 5 or m.short_count < 5: continue` — 0L/456S rejected. The same Rule 85 logic in `governance_rule_engine.py:338-349` had already been fixed with macro exemption (FIX-20260701-203), but the duplicate in `governance_scheduler.py` was not updated.
+  - [Layer 3 — 根因]: **L3 Architectural — Rule 85 duplicated across two governance paths without synchronization mechanism.** The BTC path (`scheduler_service.py` → `GovernanceRuleEngine.evaluate()`) and XAU path (`daily_ops_scheduler.py` → `run_governance_cycle()` → `_promote_shadow_brains()`) independently implement the same rule. The architecture has no unified rule evaluation entry point — each path must be maintained separately. Additionally, `daily_ops_scheduler.py:200` failed to pass `base_dir=config.base_dir`, causing XAU ShadowTracker to default to `data_btc/brain_votes/` (empty for XAU).
+- **证据引用**:
+  - Source 1: `data/brain_votes/2026-06-28.jsonl` through `2026-07-01.jsonl` — 456 H4_V3 directional signals, 0 long, 456 short
+  - Source 2: `scripts/training/governance_scheduler.py:327-334` (pre-fix) — hard-coded diversity check without macro exemption
+  - Source 3: `core/governance/governance_rule_engine.py:338-349` — macro exemption already present (FIX-20260701-203) but only on BTC path
+  - Source 4: `data/governance_state.json` — H4_V3 status=candidate, no promotion transition
+  - Source 5: `core/runtime/daily_ops_scheduler.py:200-201` (pre-fix) — missing `base_dir=config.base_dir` pass-through
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: `TOXIC_DIVERSITY_GATE`, `DUPLICATE_RULE_UNSYNC`
+- **关联 FIX**: FIX-20260630-202, FIX-20260701-203, FIX-20260701-204
+- **状态**: **CLOSED** — FIX-20260701-204 deployed. H4_V3 macro exemption active on both governance paths. Restart required for promotion evaluation.
