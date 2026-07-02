@@ -31,7 +31,7 @@ brains:
   - path: configs/brains/Swing_V9_M30_V2.json
     enabled: true  # DQAF-20260630-201 P0: re-enabled — only live XAU brain
   - path: configs/brains/Swing_V9_M30_V3.json
-    enabled: true
+    enabled: false
   - path: configs/brains/Swing_V9_M15_V2.json
     enabled: false
   - path: configs/brains/Brain_Trend_M30_V1.json

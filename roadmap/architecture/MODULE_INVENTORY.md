@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-02T06:23:58Z
-> **扫描模块数**: 706
+> **自动生成**: 2026-07-02T10:41:41Z
+> **扫描模块数**: 707
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -634,6 +634,7 @@
 | `_analyze_live_status.py` | ✅ active | — | 5 | 329 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 104 | — | |
 | `_commit_helper.py` | 📄 config | — | 0 | 15 | — | |
+| `_institutional_reconcile.py` | ✅ active | — | 7 | 279 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
@@ -698,7 +699,7 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 708 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 709 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |

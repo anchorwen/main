@@ -251,6 +251,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/generate_micro_scaler.py",  # DQAF-058 multi-asset scaler
         "conftest.py",  # DQAF-075 pytest slow/fast marker config
         "scripts/brain.py",
+        "scripts/_institutional_reconcile.py",  # DQAF-20260702-FP005: IC_MANDATE governance reconciliation
         "scripts/training/register_brain.py",
         "scripts/validate_magic_sync.py",
         "scripts/system_trust_report.py",

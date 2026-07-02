@@ -18,6 +18,8 @@ from core.execution.trend_isolation_gates import apply_trend_isolation_gates
 
 class MockConfig:
     magic: int = 90410
+    adx_trending_threshold: float = 25.0
+    adx_mild_trend_threshold: float = 20.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════

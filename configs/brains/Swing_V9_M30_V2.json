@@ -83,9 +83,10 @@
   "n_train_samples": 38315,
   "trained_at": "2026-06-28T09:35:51.217034Z",
   "label_contract": {
-    "sl_atr_mult": 3.0,
-    "tp_atr_mult": 1.5,
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.0,
     "contract_type": "m30_swing",
+    "_note": "DQAF-20260630-200: aligned to strategy m30_swing live.yaml (was SL=3.0/TP=1.5 from training_params; training-serving skew to investigate)",
     "aligned_with": "configs/live.yaml"
   },
   "governance": {
