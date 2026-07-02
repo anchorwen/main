@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-01T14:35:47Z
+> **自动生成**: 2026-07-02T06:23:58Z
 
 ## Package-Level Dependencies
 
@@ -545,6 +545,7 @@
 
 ### `scripts/`
 
+- `_analyze_live_status.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)
 - `_commit_helper.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)

@@ -10,8 +10,16 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_H4_V3_model.json",
   "model_version": "swing_v9_h4_v3",
   "artifact_hash": "d691b5f1fa967a0d40c0d290ea45c15044455580b24eb5ed05e0ffc568fd571c",
-  "status": "candidate",
+  "status": "live",
   "_note": "DQAF-20260630-201 P1: aligned with M30_V3/H1_V3",
+  "_ic_mandate": {
+    "authority": "ARCHITECTURE_COMMITTEE",
+    "date": "2026-07-02",
+    "docket": "DQAF-20260702-FP002",
+    "action": "FIELD_PROMOTION_candidate_to_live",
+    "reason": "Changeover Vacuum Bootstrap — bypass Rule 85+75 (6/100 settled, PF=2.16, 738 shadow signals). H4_V2 frozen (PF=0.74 toxic). H4_V3 100% short bias is assessed as legitimate macro regime alignment, not model failure.",
+    "watchlist": "7-DAY CRITICAL: 738 signals all short (0 long). Monitor for macro regime reversal — manual freeze if H4 trend flips and brain fails to adapt."
+  },
   "vote_weight": 1.0,
   "magic": 90340,
   "brain_role": "alpha_brain",

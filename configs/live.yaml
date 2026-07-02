@@ -29,7 +29,7 @@ brains:
   - path: configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json
     enabled: false
   - path: configs/brains/Swing_V9_M30_V2.json
-    enabled: false
+    enabled: true  # DQAF-20260630-201 P0: re-enabled — only live XAU brain
   - path: configs/brains/Swing_V9_M30_V3.json
     enabled: true
   - path: configs/brains/Swing_V9_M15_V2.json

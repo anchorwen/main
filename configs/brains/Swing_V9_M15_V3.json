@@ -10,7 +10,16 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_M15_V3_model.json",
   "model_version": "swing_v9_m15_v3",
   "artifact_hash": "499c26a794fbeac58a7ee57b0f65185576faaceec33d33a5bb44caaf0b06182d",
-  "status": "shadow",
+  "status": "probation",
+  "_note": "DQAF-20260630-201 P1: aligned with M30_V3/H1_V3",
+  "_ic_mandate": {
+    "authority": "ARCHITECTURE_COMMITTEE",
+    "date": "2026-07-02",
+    "docket": "DQAF-20260702-FP003",
+    "action": "FIELD_PROMOTION_candidate_to_probation",
+    "reason": "Bootstrap Paradox override — bypass Rule 85 (21/50 signals, 4/5 short). M15_V3 training PF=1.86/WR=55.4% is combat-ready. Deadlocked: 0 live brain → 1.4% trade rate → cannot accumulate signals. Promote to probation to grant voting rights and break the cycle.",
+    "watchlist": "Accelerated probation: monitor signal accumulation rate. Target: 100 settled trades for Rule 75 live eligibility. Estimate 2-4 weeks at normal trade rate post-bootstrap."
+  },
   "vote_weight": 1.0,
   "magic": 90310,
   "brain_role": "alpha_brain",

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-01T14:35:47Z
-> **扫描模块数**: 705
+> **自动生成**: 2026-07-02T06:23:58Z
+> **扫描模块数**: 706
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -631,6 +631,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
+| `_analyze_live_status.py` | ✅ active | — | 5 | 329 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 104 | — | |
 | `_commit_helper.py` | 📄 config | — | 0 | 15 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |

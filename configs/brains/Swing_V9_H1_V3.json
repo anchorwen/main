@@ -10,7 +10,16 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_H1_V3_model.json",
   "model_version": "swing_v9_h1_v3",
   "artifact_hash": "05272ed48f47b037f019f5d5aac6a3e8ad7cb3600ad5b511db746bb9957e5ba3",
-  "status": "candidate",
+  "status": "live",
+  "_note": "DQAF-20260630-201 P1: Rule 85 auto-promoted from candidate",
+  "_ic_mandate": {
+    "authority": "ARCHITECTURE_COMMITTEE",
+    "date": "2026-07-02",
+    "docket": "DQAF-20260702-FP001",
+    "action": "FIELD_PROMOTION_probation_to_live",
+    "reason": "Changeover Vacuum Bootstrap — bypass Rule 75 (4/100 settled, PF=1.97, 701 shadow signals). H1_V3 is the H1 vanguard replacing degraded H1_V2 (PF=1.11).",
+    "watchlist": "7-day direction bias monitor (684L/17S=97.6% long)"
+  },
   "vote_weight": 1.0,
   "magic": 90330,
   "brain_role": "alpha_brain",
