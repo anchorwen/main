@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-03T04:19:43Z
-> **扫描模块数**: 709
+> **自动生成**: 2026-07-03T05:41:42Z
+> **扫描模块数**: 711
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -258,7 +258,7 @@
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
 | `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2170 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
-| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 512 | — | |
+| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 514 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 571 | — | |
@@ -270,7 +270,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1879 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1884 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
@@ -635,7 +635,9 @@
 | `_check_status.py` | 📄 config | — | 0 | 104 | — | |
 | `_commit_helper.py` | 📄 config | — | 0 | 15 | — | |
 | `_commit_now.py` | 📄 config | — | 0 | 23 | — | |
+| `_diagnose_btc_pwin_chain.py` | ✅ active | — | 2 | 163 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
+| `_stage_commit_060.py` | 📄 config | — | 0 | 33 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |

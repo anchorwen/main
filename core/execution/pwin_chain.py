@@ -56,12 +56,14 @@ def resolve_p_win_from_brains(
     Falls back to 0.40 (Fail-Closed — FIX-20260526-031) only when BOTH
     the PnL store AND governance have insufficient data.
 
-    DQAF-20260622-059 (P0-1): **Governance-aligned brain filtering**.
+    DQAF-20260622-059 (P0-1) + DQAF-20260703-060: **Governance-aligned brain filtering**.
     When *live_brain_ids* is provided, only brains whose ``brain_id`` is
-    in that set participate in the median calculation.  Retired / frozen /
-    archived brains are physically excluded — their historical PnL data
-    must not contaminate the active strategy's p_win estimate.
-    If no LIVE brains pass the filter, returns fail-closed 0.40 with a
+    in that set participate in the median calculation.  The set includes
+    both ``live`` and ``probation`` brains (DQAF-20260703-060: probation
+    brains are actively trading — their PnL data is statistically valid).
+    Retired / frozen / archived brains remain physically excluded — their
+    historical PnL data must not contaminate the active strategy's p_win estimate.
+    If no active brains pass the filter, returns fail-closed 0.40 with a
     clear diagnostic log (governance-gated fallback).
 
     Trap 3 fix: Static historical win rate is a fixed multiplier in disguise.
@@ -196,8 +198,8 @@ def resolve_p_win_from_brains(
         )
     elif live_brain_ids is not None and _live_count == 0:
         logger.warning(
-            "[pwin_chain:FALLBACK_PATH_3c — DQAF-059] All %d brain(s) filtered out "
-            "by governance gate (none are LIVE). Returning fail-closed 0.40. "
+            "[pwin_chain:FALLBACK_PATH_3c — DQAF-059+060] All %d brain(s) filtered out "
+            "by governance gate (none are active: live+probation). Returning fail-closed 0.40. "
             "p_win_degraded=True.",
             _brain_count,
         )

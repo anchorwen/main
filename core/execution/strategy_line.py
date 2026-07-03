@@ -552,11 +552,15 @@ class StrategyLine:
         name = self.config.name
         _meta_p_win: float | None = None  # P(TP|signal) — resolved by MetaFilter or downstream
 
-        # ── DQAF-20260622-059 (P0-1): Build LIVE-brain filter from governance state ──
-        # Only brains with status=="live" in governance_state are allowed to
-        # contribute to the p_win calculation.  Retired/frozen/archived brains
+        # ── DQAF-20260622-059 (P0-1) + DQAF-20260703-060: Build ACTIVE-brain filter ──
+        # DQAF-20260703-060: Include probation brains alongside live brains.
+        # Probation brains are actively trading — their PnL data is statistically
+        # valid.  Excluding them (old behavior: status=="live" only) creates a
+        # self-inflicted deadlock: probation brain → 0 active brains → p_win=0.40
+        # → brain_confidence override → never accumulates enough live-label data
+        # to promote.  Retired/frozen/archived brains remain excluded — those
         # carry stale or negative-alpha PnL data that contaminates the estimate.
-        _live_brain_ids: set[str] | None = None
+        _active_brain_ids: set[str] | None = None
         if governance_state is not None:
             # ── DQAF-20260623-069: Iterate brain_states, NOT top-level ──
             # governance_state = {"brain_states": {bid: {status, ...}}, ...}
@@ -569,22 +573,23 @@ class StrategyLine:
                 if isinstance(governance_state, dict)
                 else {}
             )
-            _live_brain_ids = {
+            _active_brain_ids = {
                 str(bid)
                 for bid, b_info in _gov_brains.items()
-                if isinstance(b_info, dict) and b_info.get("status") == "live"
+                if isinstance(b_info, dict) and b_info.get("status") in ("live", "probation")
             }
-            if _live_brain_ids:
+            if _active_brain_ids:
                 logger.debug(
-                    "[DQAF-059] %s: %d LIVE brain(s) from governance: %s",
+                    "[DQAF-059+060] %s: %d active brain(s) (live+probation) from governance: %s",
                     name,
-                    len(_live_brain_ids),
-                    sorted(_live_brain_ids),
+                    len(_active_brain_ids),
+                    sorted(_active_brain_ids),
                 )
             else:
                 logger.warning(
-                    "[DQAF-059] %s: governance_state loaded but ZERO LIVE brains found. "
-                    "All p_win resolution will fall back to fail-closed 0.40.",
+                    "[DQAF-059+060] %s: governance_state loaded but ZERO active brains "
+                    "(live+probation) found. All p_win resolution will fall back to "
+                    "fail-closed 0.40.",
                     name,
                 )
 
@@ -1008,9 +1013,9 @@ class StrategyLine:
         # "is this brain known to have edge?" signal that the cold PnL store cannot.
         if _is_cold_explore:
             _gov_qualified = 0
-            if governance_state is not None and _live_brain_ids:
+            if governance_state is not None and _active_brain_ids:
                 _gov_brain_states = governance_state.get("brain_states", {})
-                for _g_bid in _live_brain_ids:
+                for _g_bid in _active_brain_ids:
                     _bs = _gov_brain_states.get(str(_g_bid), {})
                     if isinstance(_bs, dict):
                         _pm = _bs.get("performance_metrics", {})
@@ -1055,7 +1060,7 @@ class StrategyLine:
                     self.brains,
                     pnl_store,
                     direction,
-                    live_brain_ids=_live_brain_ids,
+                    live_brain_ids=_active_brain_ids,
                     governance_state=governance_state,
                 )
                 # DQAF-063: Cold-start Pathfinder Exemption.
@@ -1080,8 +1085,8 @@ class StrategyLine:
                         )
                         if not _bid:
                             continue
-                        # DQAF-059: skip non-LIVE brains in amnesty assessment
-                        if _live_brain_ids is not None and _bid not in _live_brain_ids:
+                        # DQAF-059+060: skip non-ACTIVE brains in amnesty assessment
+                        if _active_brain_ids is not None and _bid not in _active_brain_ids:
                             continue
                         if pnl_store is not None:
                             try:
@@ -1098,25 +1103,25 @@ class StrategyLine:
                                 if _sc >= 10 and _wr > 0:
                                     _all_need_amnesty = False
                                     break
-                    _live_count = sum(
+                    _active_count = sum(
                         1
                         for _b in self.brains
-                        if _live_brain_ids is None
+                        if _active_brain_ids is None
                         or (
                             _b.get("brain_id")
                             if isinstance(_b, dict)
                             else getattr(_b, "brain_id", None)
                         )
-                        in _live_brain_ids
+                        in _active_brain_ids
                     )
                     if _all_need_amnesty:
                         _rolling = 0.51
                         _amnesty_applied = True
                         logger.info(
                             "[DQAF-063] Cold-start amnesty granted for %s: "
-                            "%d LIVE brain(s), rolling WR fallback overridden → 0.51",
+                            "%d active brain(s), rolling WR fallback overridden → 0.51",
                             name,
-                            _live_count,
+                            _active_count,
                         )
                 # Soft-bypass: if rolling WR >= 0.50, allow with p_win=0.55
                 # and let the V9 brains decide.  Below 0.50 → reject.
@@ -1254,7 +1259,7 @@ class StrategyLine:
             min_p_win=self.config.min_p_win,
             regime_info=regime_info,
             entry_z_score=entry_z_score,
-            live_brain_ids=_live_brain_ids,
+            live_brain_ids=_active_brain_ids,
             governance_state=governance_state,
         )
         _p_win = _p_res.p_win
