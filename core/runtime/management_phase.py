@@ -1870,15 +1870,16 @@ def _evaluate_v6_exit_queue_shadow(
     if getattr(state, "_v6_exit_queue", None) is None:
         state._v6_exit_queue = ExitPriorityQueue(_v6_cfg)
         state._v6_ratchet_risk = RatchetRisk()
+        _p6_cfg = _v6_cfg.get("exit_queue", {}).get("P6_ratchet_risk", {})
+        _be_cfg = _p6_cfg.get("breakeven_defense", {})
+        _dd_cfg = _p6_cfg.get("drawdown_lock", {})
         state._v6_ratchet_config = RatchetConfig(
-            breakeven_enabled=_v6_cfg.get("exit_queue", {})
-            .get("P6_ratchet_risk", {})
-            .get("breakeven_defense", {})
-            .get("enabled", False),
-            drawdown_enabled=_v6_cfg.get("exit_queue", {})
-            .get("P6_ratchet_risk", {})
-            .get("drawdown_lock", {})
-            .get("enabled", False),
+            breakeven_enabled=_be_cfg.get("enabled", False),
+            breakeven_atr_mult=float(_be_cfg.get("atr_mult", 1.2)),
+            cost_buffer=float(_be_cfg.get("cost_buffer", 5.0)),
+            drawdown_enabled=_dd_cfg.get("enabled", False),
+            drawdown_activation_atr=float(_dd_cfg.get("activation_atr", 2.0)),
+            drawdown_giveback_pct=float(_dd_cfg.get("giveback_pct", 35.0)),
         )
 
     queue: ExitPriorityQueue = state._v6_exit_queue
