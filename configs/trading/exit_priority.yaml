@@ -64,15 +64,15 @@ exit_queue:
   P6_ratchet_risk:
     breakeven_defense:
       enabled: true  # FIX-20260701-205: shadow-only evaluation (shadow_mode=true)
-      atr_mult: 1.2           # Arm when PnL > N × ATR_cost
-      cost_buffer: 5.0        # Close when PnL ≤ $N after armed (covers spread+comm)
+      atr_mult: 0.3           # FIX-20260703-T1924: Arm when PnL > N × ATR_cost (0.01lot: 0.3×5.9×0.01×100≈$1.77)
+      cost_buffer: 0.05       # FIX-20260703-T1924: Close when PnL ≤ $N after armed (0.01lot micro)
     drawdown_lock:
       enabled: true  # FIX-20260701-205: shadow-only evaluation (shadow_mode=true)
-      activation_atr: 2.0     # Arm when peak PnL > N × ATR_cost
+      activation_atr: 0.5     # FIX-20260703-T1924: Arm when peak PnL > N × ATR_cost (0.01lot: 0.5×5.9×0.01×100≈$2.95)
       giveback_pct: 35.0      # Close when PnL < peak × (1 - N/100)
 
   P7_time_stop:
-    enabled: false
+    enabled: true  # FIX-20260703-T1924: shadow-mode enabled for T19/T24 event generation
     hold_mult: 3.0            # × effective half-life
     max_bars: 60              # Hard cap (M5 bars)
     min_bars: 15              # Floor — never exit before this

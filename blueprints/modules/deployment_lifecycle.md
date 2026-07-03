@@ -205,3 +205,4 @@ python -m pytest tests/ -k "lifecycle or health" -q
 | FIX-20260626-144 | 2026-06-26 | Add journal_contract.py + journal_sla.py to MODULE_SOURCE_MAP (contracts_resilience). Previously unmapped. | L1 — config-drift |
 | FIX-20260627-148 | 2026-06-27 | Add normalize_journal_pnl.py + backfill_journal_pnl.py to MODULE_SOURCE_MAP (runtime_live). Previously unmapped. | L1 — config-drift |
 | FIX-20260628-058b | 2026-06-28 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/audit_btc_live_direction.py` + `scripts/forensic_feature_analysis.py` to `monitor_dashboard` module (DQAF-058 diagnostic tools). | RC-09 |
+| FIX-20260703-002 | 2026-07-03 | Add `scripts/analyze_shadow_exit.py` to MODULE_SOURCE_MAP (runtime_live). T24 V6 shadow analysis script. | RC-09 |

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-02T10:41:41Z
+> **自动生成**: 2026-07-03T03:07:21Z
 
 ## Package-Level Dependencies
 
@@ -560,6 +560,7 @@
 - `analyze_m30_trailing_sltp.py` → (无内部依赖)
 - `analyze_ou_pnl.py` → (无内部依赖)
 - `analyze_recent_losses.py` → (无内部依赖)
+- `analyze_shadow_exit.py` → (无内部依赖)
 - `analyze_shadow_predictions.py` → (无内部依赖)
 - `analyze_swing_pnl.py` → (无内部依赖)
 - `analyze_trail_impact.py` → (无内部依赖)

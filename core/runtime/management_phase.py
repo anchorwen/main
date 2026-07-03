@@ -1099,6 +1099,23 @@ def execute_management_phase(
                 existing_stage=pos.lifecycle_stage,
             )
 
+    # ── V6 Shadow Telemetry: persist evaluation results to JSONL ──
+    # Every management phase cycle writes one line regardless of whether
+    # any exit priority fired.  This gives the T24 analysis script a
+    # complete record of: (a) what was evaluated, (b) why nothing fired,
+    # (c) PnL/ATR/bar trajectory for threshold calibration.
+    _v6_shadow_log_v6_telemetry(
+        config=config,
+        state=state,
+        pos=pos,
+        mid_price=mid,
+        current_atr=current_atr,
+        strategy_name=_sname,
+        current_bar=state.loop_iteration,
+        v6_verdict=_v6_verdict,
+        ratchet_verdict=getattr(state, "_v6_last_ratchet_verdict", None),
+    )
+
     # ── 1b. Signal health monitor — feed data every cycle; run checks on interval or when position open ──
     if state.signal_health_monitor is None:
         from core.runtime.signal_health import SignalHealthMonitor
@@ -1946,4 +1963,79 @@ def _evaluate_v6_exit_queue_shadow(
         _peak = ratchet_verdict.details.get("_peak_pnl", 0.0)
         if _peak > getattr(pos, "ratchet_peak_pnl", 0.0):
             pos.ratchet_peak_pnl = _peak
+    # Store ratchet verdict for telemetry logging in caller
+    state._v6_last_ratchet_verdict = ratchet_verdict
     return verdict
+
+
+def _v6_shadow_log_v6_telemetry(
+    *,
+    config: Any,
+    state: Any,
+    pos: Any,
+    mid_price: float,
+    current_atr: float,
+    strategy_name: str,
+    current_bar: int,
+    v6_verdict: Any | None,
+    ratchet_verdict: Any | None,
+) -> None:
+    """Persist one V6 shadow evaluation record to a JSONL file.
+
+    Writes every management-phase cycle regardless of whether any exit
+    priority fired.  The T24 analysis script reads this file for
+    calibration and verification.
+    """
+    import os as _os
+
+    _base_dir = getattr(config, "base_dir", "data")
+    _reports_dir = _os.path.join(_base_dir, "reports")
+    _os.makedirs(_reports_dir, exist_ok=True)
+    _path = _os.path.join(_reports_dir, "v6_shadow_exits.jsonl")
+
+    _pnl = getattr(pos, "current_pnl", None)
+    if _pnl is None and mid_price > 0 and getattr(pos, "entry_price", 0) > 0:
+        if pos.side == "long":
+            _pnl = (mid_price - pos.entry_price) * getattr(pos, "volume", 0.01) * 100.0
+        elif pos.side == "short":
+            _pnl = (pos.entry_price - mid_price) * getattr(pos, "volume", 0.01) * 100.0
+
+    _triggered = v6_verdict is not None and getattr(v6_verdict, "is_triggered", False)
+    _record: dict[str, Any] = {
+        "event": "v6_shadow_telemetry",
+        "time": _utc_iso(),
+        "ticket": getattr(pos, "ticket", 0),
+        "strategy": strategy_name,
+        "side": getattr(pos, "side", ""),
+        "entry_price": getattr(pos, "entry_price", 0.0),
+        "volume": getattr(pos, "volume", 0.01),
+        "mid_price": mid_price,
+        "current_pnl": round(float(_pnl or 0.0), 4),
+        "current_atr": round(current_atr, 4),
+        "bar": current_bar,
+        "cycles_held": getattr(pos, "cycles_held", 0),
+        "lifecycle_stage": getattr(pos, "lifecycle_stage", "MANAGED"),
+        "v6_triggered": _triggered,
+    }
+
+    if _triggered and v6_verdict is not None:
+        _record["v6_exit_code"] = getattr(v6_verdict, "exit_code", "")
+        _record["v6_priority"] = getattr(v6_verdict, "priority_level", "")
+        _record["v6_details"] = getattr(v6_verdict, "details", {})
+        _record["v6_reason"] = getattr(v6_verdict, "reason", "")
+
+    if ratchet_verdict is not None:
+        _record["ratchet_breakeven_armed"] = getattr(pos, "ratchet_breakeven_armed", False)
+        _record["ratchet_drawdown_armed"] = getattr(pos, "ratchet_drawdown_armed", False)
+        _record["ratchet_peak_pnl"] = getattr(pos, "ratchet_peak_pnl", 0.0)
+        _rd = getattr(ratchet_verdict, "details", {}) or {}
+        if _rd.get("_breakeven_fired"):
+            _record["ratchet_breakeven_fired"] = True
+        if _rd.get("_drawdown_fired"):
+            _record["ratchet_drawdown_fired"] = True
+
+    try:
+        with open(_path, "a", encoding="utf-8") as _fh:
+            _fh.write(json.dumps(_record, ensure_ascii=False) + "\n")
+    except (OSError, ValueError, KeyError, TypeError):
+        pass  # fail-safe: never crash management phase for telemetry

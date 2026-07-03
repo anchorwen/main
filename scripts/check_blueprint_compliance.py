@@ -366,6 +366,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/ble001_phase3b_migrate_hotpath.py",
         "scripts/normalize_journal_pnl.py",  # FIX-20260627-148: MT5 terminal path auto-resolve
         "scripts/backfill_journal_pnl.py",
+        "scripts/analyze_shadow_exit.py",  # FIX-20260703-002: T24 V6 shadow analysis
     ],
     "runtime_state": [
         "core/state/",
