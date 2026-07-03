@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-03T10:33:06Z
-> **扫描模块数**: 709
+> **自动生成**: 2026-07-03T17:37:08Z
+> **扫描模块数**: 712
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -635,6 +635,9 @@
 | `_analyze_live_status.py` | ✅ active | — | 5 | 333 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 220 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 104 | — | |
+| `_deep_dive_btc_source.py` | ✅ active | — | 1 | 138 | — | |
+| `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 226 | — | |
+| `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 236 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
@@ -933,7 +936,7 @@
 | `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2075 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
-| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1423 | — | |
+| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1526 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |

@@ -431,8 +431,13 @@ def compute_labels(
     spread_points: float,
     slippage_points: float,
     tick_value: float,
+    side: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute forward barrier labels with real friction.
+
+    Args:
+        side: 'long' = only simulate LONG entry; 'short' = only simulate SHORT;
+              None (default) = merged both-directions check (backward compatible).
 
     Returns:
         labels: -1 (SL), 0 (timeout), +1 (TP)
@@ -444,11 +449,20 @@ def compute_labels(
       - Short entry = open[i+1] - slippage  (sell at bid, below mid)
       - SL distance widened by spread (stop fills suffer adverse slippage)
       - TP distance tightened by spread (exit fills at bid/ask, not mid)
+
+    DQAF-20260703-062 (L3 fix): When side='long' or side='short', only the
+    specified direction's barriers are checked.  This enables independent
+    directional outcome tracking for proper 3-class label construction where
+    the label encodes "which direction was profitable" rather than "which
+    barrier was hit first."
     """
     n = len(o)
     labels = np.zeros(n, dtype=np.int8)
     pnl_r = np.full(n, np.nan, dtype=np.float32)
     hold_bars = np.zeros(n, dtype=np.int16)
+
+    check_long = side is None or side == "long"
+    check_short = side is None or side == "short"
 
     for i in range(n - horizon - 1):
         ref_price = o[i + 1]
@@ -477,28 +491,30 @@ def compute_labels(
             cur_h, cur_l = h[j], l[j]
 
             # Long: check SL first (risk management), then TP
-            if cur_l <= sl_long:
-                labels[i] = -1
-                pnl_r[i] = -sl_dist / tp_dist if tp_dist > 0 else -1.0
-                hold_bars[i] = j - (i + 1)
-                break
-            if cur_h >= tp_long:
-                labels[i] = 1
-                pnl_r[i] = tp_dist / sl_dist if sl_dist > 0 else 1.0
-                hold_bars[i] = j - (i + 1)
-                break
+            if check_long:
+                if cur_l <= sl_long:
+                    labels[i] = -1
+                    pnl_r[i] = -sl_dist / tp_dist if tp_dist > 0 else -1.0
+                    hold_bars[i] = j - (i + 1)
+                    break
+                if cur_h >= tp_long:
+                    labels[i] = 1
+                    pnl_r[i] = tp_dist / sl_dist if sl_dist > 0 else 1.0
+                    hold_bars[i] = j - (i + 1)
+                    break
 
             # Short
-            if cur_h >= sl_short:
-                labels[i] = -1
-                pnl_r[i] = -sl_dist / tp_dist if tp_dist > 0 else -1.0
-                hold_bars[i] = j - (i + 1)
-                break
-            if cur_l <= tp_short:
-                labels[i] = 1
-                pnl_r[i] = tp_dist / sl_dist if sl_dist > 0 else 1.0
-                hold_bars[i] = j - (i + 1)
-                break
+            if check_short:
+                if cur_h >= sl_short:
+                    labels[i] = -1
+                    pnl_r[i] = -sl_dist / tp_dist if tp_dist > 0 else -1.0
+                    hold_bars[i] = j - (i + 1)
+                    break
+                if cur_l <= tp_short:
+                    labels[i] = 1
+                    pnl_r[i] = tp_dist / sl_dist if sl_dist > 0 else 1.0
+                    hold_bars[i] = j - (i + 1)
+                    break
         # If loop completes without break → timeout (label stays 0)
 
     return labels, pnl_r, hold_bars
@@ -676,38 +692,65 @@ def build_dataset(
         }
         day_features[d_idx] = feat
 
-    # ── Compute labels (both long and short) ──
+    # ── Compute labels ──
+    # DQAF-20260703-062 (L3 fix): When multi_class, compute LONG and SHORT
+    # outcomes INDEPENDENTLY then merge into proper directional labels.
+    # Old behavior merged both directions in one pass (LONG-first priority)
+    # → label encoded "barrier hit" not "profitable direction."
+    # New behavior: label = which direction (if any) would have hit TP.
     print(
         f"[B2] Computing forward-barrier labels (SL={sl_atr_mult} ATR, TP={tp_atr_mult} ATR, spread={spread_points}, slippage={slippage_points})..."
     )
-    labels_long, pnl_r_long, hold_long = compute_labels(
-        o,
-        h,
-        l,
-        c,
-        horizon,
-        sl_atr_mult,
-        tp_atr_mult,
-        spread_points,
-        slippage_points,
-        tick_value,
-    )
-    labels_short, pnl_r_short, hold_short = compute_labels(
-        o,
-        h,
-        l,
-        c,
-        horizon,
-        sl_atr_mult,
-        tp_atr_mult,
-        spread_points,
-        slippage_points,
-        tick_value,
-    )
+    if multi_class:
+        # Independent directional outcome tracking
+        labels_long, pnl_r_long, hold_long = compute_labels(
+            o,
+            h,
+            l,
+            c,
+            horizon,
+            sl_atr_mult,
+            tp_atr_mult,
+            spread_points,
+            slippage_points,
+            tick_value,
+            side="long",
+        )
+        labels_short, pnl_r_short, hold_short = compute_labels(
+            o,
+            h,
+            l,
+            c,
+            horizon,
+            sl_atr_mult,
+            tp_atr_mult,
+            spread_points,
+            slippage_points,
+            tick_value,
+            side="short",
+        )
+    else:
+        # Backward-compatible merged path (binary training)
+        labels_long, pnl_r_long, hold_long = compute_labels(
+            o,
+            h,
+            l,
+            c,
+            horizon,
+            sl_atr_mult,
+            tp_atr_mult,
+            spread_points,
+            slippage_points,
+            tick_value,
+            side=None,
+        )
+        labels_short, pnl_r_short, hold_short = (
+            labels_long.copy(),
+            pnl_r_long.copy(),
+            hold_long.copy(),
+        )
 
-    # Combine: use long label if long triggered, short label if short triggered,
-    # or the one with earlier barrier hit
-    # Simplify: use long direction only (swing strategy is directional)
+    # Legacy: use labels_long as the base; multiclass path overrides below
     labels = labels_long.copy()
     pnl_r = pnl_r_long.copy()
     hold_bars = hold_long.copy()
@@ -755,19 +798,79 @@ def build_dataset(
 
     # ── Multi-class vs Binary path ──
     if multi_class:
-        # Keep all 3 classes → SHORT(-1)/NEUTRAL(0)/LONG(+1)
+        # ── DQAF-20260703-062 (L3): Directional profitability labels ──
+        # Build labels from independent LONG/SHORT outcomes:
+        #   Class 2 (LONG):  LONG TP hit AND SHORT did NOT hit TP,
+        #                    or both hit TP but LONG hit first
+        #   Class 0 (SHORT): SHORT TP hit AND LONG did NOT hit TP,
+        #                    or both hit TP but SHORT hit first
+        #   Class 1 (NEUTRAL): neither hit TP (timeout both directions)
+        n = len(labels)
+        labels_directional = np.zeros(n, dtype=np.int8)
+        pnl_r_directional = np.zeros(n, dtype=np.float32)
+        hold_directional = np.zeros(n, dtype=np.int16)
+
+        for i in range(n):
+            long_win = labels_long[i] == 1
+            short_win = labels_short[i] == 1
+            long_lost = labels_long[i] == -1
+            short_lost = labels_short[i] == -1
+
+            if long_win and not short_win:
+                # Only LONG was profitable
+                labels_directional[i] = 1
+                pnl_r_directional[i] = pnl_r_long[i]
+                hold_directional[i] = hold_long[i]
+            elif short_win and not long_win:
+                # Only SHORT was profitable
+                labels_directional[i] = -1
+                pnl_r_directional[i] = pnl_r_short[i]
+                hold_directional[i] = hold_short[i]
+            elif long_win and short_win:
+                # Both profitable — pick the faster one
+                if hold_long[i] <= hold_short[i]:
+                    labels_directional[i] = 1
+                    pnl_r_directional[i] = pnl_r_long[i]
+                    hold_directional[i] = hold_long[i]
+                else:
+                    labels_directional[i] = -1
+                    pnl_r_directional[i] = pnl_r_short[i]
+                    hold_directional[i] = hold_short[i]
+            else:
+                # Neither profitable → NEUTRAL (label stays 0)
+                pnl_r_directional[i] = 0.0
+
+        labels = labels_directional
+        pnl_r = np.where(labels_directional != 0, pnl_r_directional, np.nan)
+        hold_bars = hold_directional
+
         labels_out = labels + 1  # [-1,0,1] → [0,1,2] for multi:softprob
         pnl_r_out = np.nan_to_num(pnl_r, nan=0.0)
         ts_out = ts_valid
         features_out = features
 
+        # ── Directional diagnostics (DQAF-20260703-062) ──
         n_short = int(np.sum(labels == -1))
         n_neutral = int(np.sum(labels == 0))
         n_long = int(np.sum(labels == 1))
         n_total = len(labels_out)
+        n_non_neutral = n_short + n_long
+        long_short_ratio = n_long / max(n_short, 1)
         print(
-            f"[B2] 3-class samples: {n_total:,} "
-            f"(SHORT={n_short}, NEUTRAL={n_neutral}, LONG={n_long})"
+            f"[B2] 3-class directional labels: {n_total:,} samples "
+            f"(LONG={n_long}, NEUTRAL={n_neutral}, SHORT={n_short})"
+        )
+        print(
+            f"[B2] LONG:SHORT ratio = {long_short_ratio:.2f} "
+            f"({'BALANCED' if 0.85 <= long_short_ratio <= 1.15 else 'IMBALANCED'})"
+        )
+        # Also show old-style distribution for comparison
+        old_short = int(np.sum(labels_long == -1) + np.sum(labels_short == -1))
+        old_long = int(np.sum(labels_long == 1) + np.sum(labels_short == 1))
+        print(
+            f"[B2] Reference (old merged): LONG signals={int(np.sum(labels_long == 1))}, "
+            f"SHORT signals={int(np.sum(labels_long == -1))}, "
+            f"NEUTRAL={int(np.sum(labels_long == 0))}"
         )
         ev = float(np.mean(pnl_r_out))
 

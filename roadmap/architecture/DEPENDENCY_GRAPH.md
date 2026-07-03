@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-03T10:33:06Z
+> **自动生成**: 2026-07-03T17:37:08Z
 
 ## Package-Level Dependencies
 
@@ -549,6 +549,9 @@
 - `_analyze_live_status.py` → (无内部依赖)
 - `_analyze_today_btc_entries.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)
+- `_deep_dive_btc_source.py` → (无内部依赖)
+- `_diagnose_model_raw_output.py` → (无内部依赖)
+- `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
 - `_institutional_reconcile.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
