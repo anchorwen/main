@@ -336,10 +336,45 @@ def analyze(data_dir: str, since: str = "", summary_only: bool = False, top_n: i
             be = "BE" if r.get("ratchet_breakeven_armed") else ""
             dd = "DD" if r.get("ratchet_drawdown_armed") else ""
             flags = f"{be}{'/' if be and dd else ''}{dd}" or "-"
+            # T23: M15/M30 regime data
+            m15 = f"m15={r['m15_regime_prob']:.2f}" if r.get("m15_regime_prob") is not None else ""
+            m30 = f"m30={r['m30_regime']:.2f}" if r.get("m30_regime") is not None else ""
+            regime_str = f"{m15} {m30}".strip() or "-"
             print(
                 f"  t={t} {s:<15} bar={bar:<5} PnL=${float(pnl):.4f}  "
-                f"[{trig}] {code}  ratchet=[{flags}]"
+                f"[{trig}] {code}  ratchet=[{flags}]  regime=[{regime_str}]"
             )
+
+    # ── 6b. M15/M30 Regime Telemetry ──
+    _subsection("6b. M15/M30 REGIME TELEMETRY (T23)")
+    _m15_probs = [r["m15_regime_prob"] for r in records if r.get("m15_regime_prob") is not None]
+    _m30_regimes = [r["m30_regime"] for r in records if r.get("m30_regime") is not None]
+    if _m15_probs:
+        import statistics as _st
+
+        print(
+            f"  M15 regime prob:  n={len(_m15_probs)}  "
+            f"mean={_st.mean(_m15_probs):.3f}  "
+            f"min={min(_m15_probs):.3f}  max={max(_m15_probs):.3f}"
+        )
+        _m15_low = sum(1 for p in _m15_probs if p < 0.30)
+        _m15_high = sum(1 for p in _m15_probs if p > 0.60)
+        print(
+            f"    low (<0.30): {_m15_low} ({_fmt_pct(_m15_low, len(_m15_probs))})  "
+            f"high (>0.60): {_m15_high} ({_fmt_pct(_m15_high, len(_m15_probs))})"
+        )
+    if _m30_regimes:
+        import statistics as _st2
+
+        print(
+            f"  M30 regime:       n={len(_m30_regimes)}  "
+            f"mean={_st2.mean(_m30_regimes):.3f}  "
+            f"min={min(_m30_regimes):.3f}  max={max(_m30_regimes):.3f}"
+        )
+    if not _m15_probs and not _m30_regimes:
+        print("  No M15/M30 regime data yet. Requires T23 code + process restart.")
+    else:
+        print("  T23 data feed: ACTIVE — StageGate + P3 RegimeCollapse have regime inputs")
 
     # ── 7. Readiness Assessment ──
     _subsection("7. T19/T24 READINESS ASSESSMENT")

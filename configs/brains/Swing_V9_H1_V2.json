@@ -10,8 +10,16 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_H1_V2_model.json",
   "model_version": "swing_v9_h1_v2",
   "artifact_hash": "d9d1ca5e296db5ee1f832dded36bbb96d77831686ebca30491bdc18a719a58c0",
-  "status": "probation",
-  "vote_weight": 1.0,
+  "status": "frozen",
+  "_ic_mandate": {
+    "authority": "ARCHITECTURE_COMMITTEE",
+    "date": "2026-07-03",
+    "docket": "DQAF-20260703-059",
+    "action": "FREEZE_live_to_frozen",
+    "reason": "IC_MANDATE DQAF-20260702-FP005 demotion to probation was overridden by governance auto-promotion within 6h. H1_V2 PF=1.11 marginal, transition_count=32 live↔probation oscillation. H1_V3 (PF=1.97) is the designated h1_swing vanguard. Frozen is terminal — governance evaluator has no promotion path. Precedent: H4_V2 freeze (FIX-20260629-181).",
+    "watchlist": "If h1_swing strategy ever drops to 0 live brains, consider retraining H1_V2 with different architecture/seed before unfreezing."
+  },
+  "vote_weight": 0.0,
   "magic": 90330,
   "brain_role": "alpha_brain",
   "training_horizon": 24,

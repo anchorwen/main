@@ -136,12 +136,15 @@ def reconcile(apply_changes: bool = False) -> dict:
     ic_demotions = [
         {
             "brain_id": "Swing_V9_H1_V2",
-            "target": "probation",
+            "target": "frozen",
             "reason": (
-                "IC_MANDATE:DQAF-20260702-FP005 — H1_V2 PF=1.11 marginal, "
-                "H1_V3 (PF=1.97) is now the h1_swing vanguard. "
-                "Demote to probation per institutional clean-up mandate. "
-                "Previous: auto-promoted to live by governance Rule 75."
+                "IC_MANDATE:DQAF-20260703-059 — H1_V2 PF=1.11 marginal, "
+                "transition_count=32 live↔probation oscillation. "
+                "Previous IC_MANDATE (DQAF-20260702-FP005, target=probation) "
+                "was overridden by governance auto-promotion within 6h. "
+                "Freeze is terminal — governance evaluator cannot promote "
+                "out of frozen. H1_V3 (PF=1.97) is the h1_swing vanguard. "
+                "Precedent: H4_V2 freeze (FIX-20260629-181)."
             ),
         },
         {

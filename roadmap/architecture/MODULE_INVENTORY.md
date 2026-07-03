@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-03T03:07:21Z
-> **扫描模块数**: 708
+> **自动生成**: 2026-07-03T04:19:43Z
+> **扫描模块数**: 709
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -520,8 +520,8 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4269 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 12 | 2041 | — | |
-| `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
+| `management_phase.py` | ✅ active | — | 14 | 2179 | — | |
+| `market_ingress.py` | ✅ active | — | 5 | 226 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
 | `modify_trail_dispatch.py` | ✅ active | — | 1 | 100 | — | |
@@ -634,7 +634,8 @@
 | `_analyze_live_status.py` | ✅ active | — | 5 | 333 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 104 | — | |
 | `_commit_helper.py` | 📄 config | — | 0 | 15 | — | |
-| `_institutional_reconcile.py` | ✅ active | — | 7 | 279 | — | |
+| `_commit_now.py` | 📄 config | — | 0 | 23 | — | |
+| `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
@@ -646,7 +647,7 @@
 | `analyze_m30_trailing_sltp.py` | ✅ active | — | 5 | 550 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
-| `analyze_shadow_exit.py` | ✅ active | — | 7 | 379 | — | |
+| `analyze_shadow_exit.py` | ✅ active | — | 7 | 414 | — | |
 | `analyze_shadow_predictions.py` | ✅ active | — | 11 | 569 | — | |
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
 | `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |

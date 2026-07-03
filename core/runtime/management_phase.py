@@ -22,7 +22,12 @@ from core.runtime.fault_handler import (
     FaultLevel,
     FaultTolerantContext,
 )
-from core.runtime.market_ingress import _get_current_atr, _mid_and_prices
+from core.runtime.market_ingress import (
+    MT5_TIMEFRAME_M15,
+    MT5_TIMEFRAME_M30,
+    _get_current_atr,
+    _mid_and_prices,
+)
 from core.runtime.mia_close import build_mia_close_entry as _build_mia_close_entry
 from core.runtime.mia_close import enrich_mia_from_deals as _enrich_mia_from_deals
 from core.runtime.ou_hurst import compute_tf_ou_hurst as _compute_tf_ou_hurst
@@ -1087,6 +1092,8 @@ def execute_management_phase(
         current_atr=current_atr,
         strategy_name=_sname,
         current_bar=state.loop_iteration,
+        mt5_worker=mt5_worker,
+        symbol=config.symbol,
     )
     if _v6_verdict is not None and _v6_verdict.is_triggered:
         if getattr(state, "_v6_exit_shadow_mode", True):
@@ -1822,6 +1829,122 @@ def _send_trail_rejection_alert(
 # ═══════════════════════════════════════════════════════════════════════
 
 
+def _compute_shadow_regime_info(
+    mt5_worker: Any,
+    symbol: str,
+    pos: Any,
+    mid_price: float,
+    exit_cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compute M15/M30 regime proxies for V6 shadow StageGate + P3 RegimeCollapse.
+
+    Fetches M15 and M30 OHLC bars from MT5, computes lightweight directional
+    regime indicators.  All MT5 IPC is fault-tolerant — failures degrade to
+    an empty dict (neutral regime, no P3/P4/P5 triggers).
+
+    Returns dict with keys consumed by ExitPriorityQueue.evaluate():
+      - m15_regime_prob:   float 0-1  — M15 directional alignment with position
+      - m15_atr:           float      — M15 ATR(14) for at-risk checks
+      - m30_regime:        float 0-1  — M30 directional alignment with position
+      - m30_atr:           float      — M30 ATR(14) for exposure reduction
+      - m15_confirm_regime_min: float — from stage_gate config (fallback 0.60)
+
+    Design (v6_integration_blueprint §3 — StageGate):
+      - Regime score = sigmoid(normalized EMA deviation × position sign)
+        · 0.50 = neutral (price at M15/M30 EMA)
+        · >0.60 = aligned  (M15/M30 trend supports position)
+        · <0.30 = opposed  (M15/M30 trend contradicts — P3 may fire)
+      - All computation is local (numpy) — no RegimeGate dependency.
+      - Delta-Zero: when mt5_worker is None or MT5 calls fail, returns {} —
+        P3 skips, StageGate stays neutral.
+    """
+    import numpy as np
+
+    _regime: dict[str, Any] = {}
+    if mt5_worker is None or not symbol:
+        return _regime
+
+    _stage_cfg = (exit_cfg or {}).get("stage_gate", {})
+    _m15_min = float(_stage_cfg.get("m15_confirm_regime_min", 0.60))
+    _regime["m15_confirm_regime_min"] = _m15_min
+
+    _pos_side = getattr(pos, "side", "long")
+    _pos_sign = 1.0 if _pos_side == "long" else -1.0
+
+    # ── Helper: fetch TF bars + compute ATR + EMA ──────────────
+    def _tf_regime(tf: int, label: str, count: int = 20) -> dict[str, float]:
+        """Fetch *count* bars at *tf*, return {atr, ema_dev, close}."""
+        result: dict[str, float] = {}
+        try:
+            rates = mt5_worker.copy_rates_from_pos(symbol, tf, 0, count, timeout=8.0)
+        except (OSError, ValueError, RuntimeError, TypeError):
+            return result
+        if rates is None or len(rates) < 15:
+            return result
+        try:
+            closes = np.array([r["close"] for r in rates], dtype=np.float64)
+            highs = np.array([r["high"] for r in rates], dtype=np.float64)
+            lows = np.array([r["low"] for r in rates], dtype=np.float64)
+        except (KeyError, IndexError, TypeError):
+            return result
+
+        # ATR(14)
+        period = 14
+        prev_c = closes[-(period + 1) : -1]
+        cur_h = highs[-period:]
+        cur_l = lows[-period:]
+        tr = np.maximum(
+            cur_h - cur_l,
+            np.maximum(np.abs(cur_h - prev_c), np.abs(cur_l - prev_c)),
+        )
+        atr_val = float(np.mean(tr))
+        result[f"{label}_atr"] = round(atr_val, 6) if atr_val > 0 else 0.0
+
+        # EMA(8) slope — simple trend direction
+        ema_span = 8
+        alpha = 2.0 / (ema_span + 1)
+        ema = closes[0]
+        for c in closes[1:]:
+            ema = alpha * c + (1 - alpha) * ema
+        # Normalized deviation of current close from EMA
+        if atr_val > 0:
+            ema_dev = (closes[-1] - ema) / max(atr_val, 0.0001)
+        else:
+            ema_dev = 0.0
+        result[f"{label}_ema_dev"] = round(float(ema_dev), 6)
+        result[f"{label}_close"] = round(float(closes[-1]), 6)
+        return result
+
+    # ── Fetch M15 + M30 ────────────────────────────────────────
+    with FaultTolerantContext(
+        level=FaultLevel.DEGRADE,
+        component="V6_Shadow:M15_regime_fetch",
+    ):
+        _m15 = _tf_regime(MT5_TIMEFRAME_M15, "m15")
+        if _m15:
+            _regime["m15_atr"] = _m15.get("m15_atr", 0.0)
+            _ema_dev = _m15.get("m15_ema_dev", 0.0)
+            # Sigmoid: map [-inf, +inf] → [0, 1]
+            # gain=6 gives ~0.27 at -0.2 ATR, ~0.73 at +0.2 ATR
+            _regime["m15_regime_prob"] = round(
+                float(1.0 / (1.0 + np.exp(-6.0 * _ema_dev * _pos_sign))), 4
+            )
+
+    with FaultTolerantContext(
+        level=FaultLevel.DEGRADE,
+        component="V6_Shadow:M30_regime_fetch",
+    ):
+        _m30 = _tf_regime(MT5_TIMEFRAME_M30, "m30")
+        if _m30:
+            _regime["m30_atr"] = _m30.get("m30_atr", 0.0)
+            _ema_dev = _m30.get("m30_ema_dev", 0.0)
+            _regime["m30_regime"] = round(
+                float(1.0 / (1.0 + np.exp(-6.0 * _ema_dev * _pos_sign))), 4
+            )
+
+    return _regime
+
+
 def _evaluate_v6_exit_queue_shadow(
     *,
     config: Any,
@@ -1832,6 +1955,8 @@ def _evaluate_v6_exit_queue_shadow(
     current_atr: float,
     strategy_name: str,
     current_bar: int,
+    mt5_worker: Any = None,
+    symbol: str = "",
 ) -> Any | None:  # ExitVerdict | None
     """Shadow-evaluate the V6 7-level Exit Priority Queue.
 
@@ -1896,16 +2021,19 @@ def _evaluate_v6_exit_queue_shadow(
         "kf_crossfade_bars": 3,
     }
 
-    # ── Compute regime info ───────────────────────────────────
-    _regime_info: dict[str, Any] = {}
-    _rg = getattr(state, "regime_gate", None)
-    if _rg is not None:
-        try:
-            _ri = _rg.classify()
-            if isinstance(_ri, dict):
-                _regime_info = _ri
-        except (AttributeError, TypeError, RuntimeError):
-            pass
+    # ── Compute regime info (T23: M15/M30 data feed) ──────────
+    # FIX-20260703-002-B: Replace broken regime_gate.classify() call
+    # (zero-arg call raised TypeError, silently caught — _regime_info
+    # was always {}).  Use lightweight MT5-based M15/M30 regime proxy
+    # that computes directional alignment from EMA deviation × ATR.
+    _regime_info = _compute_shadow_regime_info(
+        mt5_worker=mt5_worker,
+        symbol=symbol,
+        pos=pos,
+        mid_price=mid_price,
+        exit_cfg=_v6_cfg,
+    )
+    state._v6_last_regime_info = _regime_info  # T23: for telemetry + analysis
 
     # ── Compute bar PnLs for circuit breaker ──────────────────
     bar_pnls = list(getattr(pos, "bar_pnls", []) or [])
@@ -2034,6 +2162,15 @@ def _v6_shadow_log_v6_telemetry(
             _record["ratchet_breakeven_fired"] = True
         if _rd.get("_drawdown_fired"):
             _record["ratchet_drawdown_fired"] = True
+
+    # ── T23: M15/M30 regime telemetry ─────────────────────────
+    _ri = getattr(state, "_v6_last_regime_info", None) or {}
+    if _ri.get("m15_regime_prob") is not None:
+        _record["m15_regime_prob"] = _ri["m15_regime_prob"]
+        _record["m15_atr"] = _ri.get("m15_atr", 0.0)
+    if _ri.get("m30_regime") is not None:
+        _record["m30_regime"] = _ri["m30_regime"]
+        _record["m30_atr"] = _ri.get("m30_atr", 0.0)
 
     try:
         with open(_path, "a", encoding="utf-8") as _fh:

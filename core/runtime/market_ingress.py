@@ -34,6 +34,8 @@ _DEFAULT_MAX_SPREAD = 0.50
 
 # MT5 timeframe constants — pure integers, no thread-affinity requirement.
 MT5_TIMEFRAME_M5 = 5
+MT5_TIMEFRAME_M15 = 15  # 15-minute bars
+MT5_TIMEFRAME_M30 = 30  # 30-minute bars (MT5 build 1320+ native support)
 MT5_TIMEFRAME_H1 = 16385  # 60-minute bars
 MT5_TIMEFRAME_H4 = 16388  # 240-minute bars
 MT5_TIMEFRAME_D1 = 16408  # daily bars
