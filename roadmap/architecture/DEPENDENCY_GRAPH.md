@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-03T05:41:42Z
+> **自动生成**: 2026-07-03T10:33:06Z
 
 ## Package-Level Dependencies
 
@@ -545,13 +545,11 @@
 
 ### `scripts/`
 
+- `_analyze_btc_long_losses.py` → (无内部依赖)
 - `_analyze_live_status.py` → (无内部依赖)
+- `_analyze_today_btc_entries.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)
-- `_commit_helper.py` → (无内部依赖)
-- `_commit_now.py` → (无内部依赖)
-- `_diagnose_btc_pwin_chain.py` → (无内部依赖)
 - `_institutional_reconcile.py` → (无内部依赖)
-- `_stage_commit_060.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)

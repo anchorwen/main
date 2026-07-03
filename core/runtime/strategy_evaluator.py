@@ -577,11 +577,23 @@ def evaluate_strategy_lines(
                 )
 
         # ── Cut 4: Governance degradation gate (FIX-20260609-011) ──────────
-        # When NO brain in this strategy has achieved "live" status, the
-        # strategy is trading with unproven (candidate) or degraded
-        # (probation/frozen) models.  Degrade to minimum exploration volume
-        # and require higher confidence to prevent "cadet brains driving
-        # heavy mechs" (observed: 4 candidate brains, 0.1 lot, -$30/day).
+        # When NO brain in this strategy has achieved "live" OR "probation"
+        # status, the strategy is trading with unproven (candidate/shadow) or
+        # permanently-degraded (frozen/retired) models.  Degrade to minimum
+        # exploration volume and require higher confidence to prevent "cadet
+        # brains driving heavy mechs".
+        #
+        # FIX-20260703-061 (DQAF-20260703-061): Expanded active-brain filter
+        # from status == "live" to status in ("live", "probation").  Probation
+        # brains are actively trading with statistically-valid PnL data (per
+        # FIX-060 rationale); vote_weight penalty at signal level already
+        # handles governance trust discount.  Excluding them creates a
+        # self-inflicted deadlock when a strategy's ONLY brain is probation
+        # (e.g. btc_swing_h1 → V12_H1_15) → _live_count=0 every cycle →
+        # permanent [degraded: no_live_brains] tag.
+        #
+        # Historical: FIX-20260629-174 also missed strategy_evaluator.py
+        # (L307 + L548) — this file has systemic incomplete-fix risk.
         if decision.should_trade and governance_state is not None:
             # ── DQAF-20260612-002 / FIX-20260612-006: SSOT fix ──
             # Bypass legacy strategy.brains nested-dict lookup (fragile: depends
@@ -593,7 +605,8 @@ def evaluate_strategy_lines(
             _live_count = sum(
                 1
                 for bid in _voted_brain_ids
-                if governance_state.get("brain_states", {}).get(bid, {}).get("status") == "live"
+                if governance_state.get("brain_states", {}).get(bid, {}).get("status")
+                in ("live", "probation")
             )
             _total_voters = len(_voted_brain_ids)
             if _live_count == 0:
@@ -636,17 +649,22 @@ def evaluate_strategy_lines(
                         ),
                         flush=True,
                     )
-            # ── Cut 4-bis: Non-live brain dominance gate ──────────────────
-            # FIX-20260623-083: When live brains exist but are a MINORITY of
-            # voters (e.g. 1 live + 2 probation = 33% live), non-live brains
-            # can collectively dominate the consensus.  This caused BTC_Swing_V4
-            # (probation, 62% of opens) to outvote BTC_Swing_V12_H1_Survival
-            # (live, 16% of opens) — V4 generated ~$57 profit then bled to
-            # -$20 while governance correctly kept it on probation.
+            # ── Cut 4-bis: Non-active brain dominance gate ──────────────────
+            # FIX-20260623-083 + FIX-20260703-061: When active brains
+            # (live+probation) exist but are a MINORITY of voters, lower-status
+            # brains (candidate/shadow/frozen) can collectively dominate the
+            # consensus.  This caused BTC_Swing_V12_H1_Survival (live, 16% of
+            # opens) to be outvoted by lower-status brains generating 62% of
+            # opens — $57 profit bled to -$20 while governance correctly kept
+            # them on probation.
             #
-            # Gate: if live brains < 50% of voters → require higher confidence
-            # and cap volume.  This prevents "probation fleet" from driving
-            # heavy exposure while a lone live brain provides regulatory cover.
+            # Gate: if active brains < 50% of voters → require higher confidence
+            # and cap volume.  This prevents "cadet fleet" from driving
+            # heavy exposure while active brains are the minority voice.
+            #
+            # Note: probation brains count as "active" (FIX-20260703-061) —
+            # they are actively trading with valid PnL data and the vote_weight
+            # penalty already handles the governance trust discount.
             elif _total_voters > 0:
                 _live_ratio = _live_count / _total_voters
                 if _live_ratio < 0.5:

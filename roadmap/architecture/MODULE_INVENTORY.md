@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-03T05:41:42Z
-> **扫描模块数**: 711
+> **自动生成**: 2026-07-03T10:33:06Z
+> **扫描模块数**: 709
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -545,7 +545,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 986 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 1021 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 1039 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -631,13 +631,11 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
+| `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 154 | — | |
 | `_analyze_live_status.py` | ✅ active | — | 5 | 333 | — | |
+| `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 220 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 104 | — | |
-| `_commit_helper.py` | 📄 config | — | 0 | 15 | — | |
-| `_commit_now.py` | 📄 config | — | 0 | 23 | — | |
-| `_diagnose_btc_pwin_chain.py` | ✅ active | — | 2 | 163 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
-| `_stage_commit_060.py` | 📄 config | — | 0 | 33 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
