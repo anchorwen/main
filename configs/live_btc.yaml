@@ -315,7 +315,7 @@ strategy_lines:
       flip_threshold: 0.5
       hesitation_cycles: 12           # H1 × 12 = 12h patience
       time_exit_cycles: 72            # H1 × 72 = 3 days max hold
-      trail_activation_atr: 0.5
+      trail_activation_atr: 1.2       # FIX-20260704-003: 0.5→1.2 — defer breakeven trigger to 80% of TP target, let graduated_lock_levels (3R→+1.5R, 5R→+3.5R) take over profit protection
       trail_atr_mult: 2.0             # matches symmetric SL=1.5
       trail_enabled: true
     magic: 90411

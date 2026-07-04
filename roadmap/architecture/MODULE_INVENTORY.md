@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-04T01:22:45Z
-> **扫描模块数**: 712
+> **自动生成**: 2026-07-04T05:09:39Z
+> **扫描模块数**: 714
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -665,6 +665,7 @@
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
 | `audit_btc_governance_pingpong.py` | ✅ active | — | 2 | 249 | — | |
 | `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
+| `audit_btc_retraining_gate.py` | ✅ active | — | 7 | 653 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
@@ -732,6 +733,7 @@
 | `deep_audit_live_data.py` | ✅ active | — | 15 | 875 | — | |
 | `deep_audit_probes.py` | ✅ active | — | 7 | 363 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
+| `diagnose_breakeven_exits.py` | ✅ active | — | 7 | 414 | — | |
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |

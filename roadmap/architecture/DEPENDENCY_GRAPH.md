@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-04T01:22:45Z
+> **自动生成**: 2026-07-04T05:09:39Z
 
 ## Package-Level Dependencies
 
@@ -579,6 +579,7 @@
 - `audit_btc_cross_validate.py` → (无内部依赖)
 - `audit_btc_governance_pingpong.py` → (无内部依赖)
 - `audit_btc_live_direction.py` → (无内部依赖)
+- `audit_btc_retraining_gate.py` → (无内部依赖)
 - `audit_btc_v11_ledger.py` → (无内部依赖)
 - `audit_cross_symbol_consistency.py` → `scripts.alert_dispatcher`
 - `audit_data_exhaustive.py` → `core.data.ticket_resolver`
@@ -646,6 +647,7 @@
 - `deep_audit_live_data.py` → (无内部依赖)
 - `deep_audit_probes.py` → (无内部依赖)
 - `deploy_blue_green.py` → `core.deployment.blue_green`
+- `diagnose_breakeven_exits.py` → (无内部依赖)
 - `diagnose_data_health_failures.py` → (无内部依赖)
 - `diagnose_feature_drift.py` → (无内部依赖)
 - `diagnose_journal_mt5_sev2.py` → (无内部依赖)
