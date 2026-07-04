@@ -263,6 +263,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             raw_score,
             objective=self._brain_entry.get("training_params", {}).get("objective", "regression"),
             threshold=float(self._brain_entry.get("activation_threshold", 0.1)),
+            calibration_offset=float(self._brain_entry.get("calibration_offset", 0.0)),
         )
 
         return BrainSignal(

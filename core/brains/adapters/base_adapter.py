@@ -196,12 +196,17 @@ class BaseBrainAdapter(ABC):
         raw_score: float,
         objective: str = "regression",
         threshold: float = 0.1,
+        calibration_offset: float = 0.0,
     ) -> tuple[Direction, float, float]:
         """Map model output to (direction_bias, up_prob, down_prob).
 
         FIX-20260526-030 — Two distinct paths based on model objective:
         FIX-20260630-202 — threshold decoupled from hardcoded ±0.1; now read
         from brain config ``activation_threshold`` (SSOT), fallback 0.1.
+        FIX-20260704-002 — calibration_offset for multiclass prior correction.
+        When non-zero, shifts raw_score before threshold comparison to correct
+        for class-prior miscalibration (e.g. model SHORT bias on zero input).
+        Computed as: offset = -(P(LONG|zero) - P(SHORT|zero)).
 
         **Binary classifiers** (binary_logloss/binary):
         - raw_score = P(TP-hit | features) ∈ [0, 1]
@@ -211,8 +216,9 @@ class BaseBrainAdapter(ABC):
         - NEVER vote SHORT — the model was trained on LONG-only trades and
           has zero signal about SHORT trade outcomes.
 
-        **Regression** (Huber, squared_error, etc.):
-        - raw_score = signed regression output (e.g., BPS, z-score delta)
+        **Regression / Multiclass** (Huber, squared_error, multiclass, etc.):
+        - raw_score = signed score (e.g. BPS, or P(LONG)-P(SHORT) for multiclass)
+        - calibration_offset applied first: calibrated = raw_score + offset
         - > +threshold → LONG, < -threshold → SHORT, else NEUTRAL
         - Threshold is per-brain configurable (default 0.1) because higher-TF
           models produce narrower raw_score distributions due to noise filtering.
@@ -227,14 +233,15 @@ class BaseBrainAdapter(ABC):
                 return "long", up, down
             return "neutral", 0.5, 0.5
 
-        # Regression path (Huber, etc.): signed score → directional vote
-        confidence = float(np.tanh(abs(raw_score)))
+        # Regression / Multiclass path: signed score → directional vote
+        calibrated = raw_score + calibration_offset
+        confidence = float(np.tanh(abs(calibrated)))
 
-        if raw_score > threshold:
+        if calibrated > threshold:
             up = 0.5 + confidence / 2.0
             down = 1.0 - up
             return "long", up, down
-        elif raw_score < -threshold:
+        elif calibrated < -threshold:
             down = 0.5 + confidence / 2.0
             up = 1.0 - down
             return "short", up, down

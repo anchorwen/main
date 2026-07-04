@@ -102,5 +102,7 @@
         "graduation_path": "add lightgbm_v1 to btc_swing strategy line brain_types after shadow validation"
     },
     "governance": {"min_confidence": 0.5, "cooldown_cycles": 3},
+    "calibration_offset": 0.0,
+    "_calibration_note": "FIX-20260704-002: zero-input P(SHORT)=0.418 P(LONG)=0.317 → raw_score=-0.101. Computed offset=+0.101 to neutralize SHORT prior. Set to 0.0 pending 24h+ live shadow validation. Activate if direction bias persists.",
     "last_retrained": "2026-07-03T17:49:28Z"
 }

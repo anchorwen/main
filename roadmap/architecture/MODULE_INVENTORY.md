@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-03T17:54:33Z
+> **自动生成**: 2026-07-04T01:22:45Z
 > **扫描模块数**: 712
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -71,14 +71,14 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `base_adapter.py` | ✅ active | BaseBrainAdapter | 13 | 257 | — | |
-| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 210 | — | |
+| `base_adapter.py` | ✅ active | BaseBrainAdapter | 13 | 264 | — | |
+| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 211 | — | |
 | `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
 | `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 596 | — | |
 | `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 270 | — | |
 | `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 286 | — | |
 | `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 314 | — | |
-| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 292 | — | |
+| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 293 | — | |
 
 ## core/brains/services
 
