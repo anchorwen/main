@@ -48,6 +48,16 @@ Market data → detect_session() → check_var() → compute_position_size()
 **预估**: COLD→WARM 1-2 周, WARM→HOT 额外 2-3 周。
 
 ## Fix History
+
+### FIX-20260704-007 — RR Guard Floating-Point Boundary (2026-07-04)
+
+**Root Cause**: L2 — FIX-005 spread pre-compensation produces mathematically exact RR == min_rr_ratio (e.g. 0.85), but IEEE 754 floating-point rounding makes `tp_dist/sl_dist ≈ min_rr_ratio - 2.8e-14`, failing the `>=` check. This caused ~100% of low-volatility BTC cycles to be blocked by `rr_below_minimum` despite the math being correct.
+
+**Fix**: (1) `compute_dynamic_sl_tp()`: add `+1e-9` guard band to `required_tp` so the pre-compensated TP clears the boundary. (2) `check_minimum_rr()`: use `>= min_rr_ratio - 1e-9` tolerance for the comparison. 1e-9 << any meaningful price ratio (< 0.0001%), no real risk slips through.
+
+**Files**: `core/execution/dynamic_sl_tp.py`, `core/execution/trend_volume_guard.py`
+
+### FIX-20260704-005/006 — See runtime_live.md
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260704-005 | 2026-07-04 | cursor-agent | — | **L2: RR guard spread pre-compensation.** `dynamic_sl_tp.py`: `compute_dynamic_sl_tp()` gains `spread_cost` param, RR guard formula updated to `required_tp = min_rr_ratio × sl + spread_cost × (min_rr_ratio + 1)`. `meta_pipeline.py`: passes `spread_cost=spread_points×tick_size` to `compute_dynamic_sl_tp()`. Pre-compensates for spread penalty applied downstream by `compute_sl_tp_levels()` so post-spread effective RR meets `min_rr_ratio`. Closes deadlock: 95/200 (47.5%) btc_swing_h1 signals were blocked by `rr_below_minimum` when ATR<76 triggered `min_sl_distance` floor combined with spread double-penalty. Backward-compatible (spread_cost defaults to 0.0). | L2 — pre/post-spread distance basis mismatch in RR guard formula |
 | FIX-20260703-060 | 2026-07-03 | cursor-agent | — | **L2: DQAF-059 gate overstrict — expand active brain filter to include probation** (DQAF-20260703-060). `pwin_chain.py`: `resolve_p_win_from_brains()` docstring updated — `live_brain_ids` now includes probation brains (actively trading, statistically valid PnL data). FALLBACK_PATH_3c diagnostic log updated to "active (live+probation)". `strategy_line.py:572-576`: `_live_brain_ids` renamed to `_active_brain_ids`, status filter expanded from `== "live"` to `in ("live", "probation")`. All 7 downstream references updated. Probation brains (status=probation, actively trading) were previously excluded from p_win computation by DQAF-059, causing self-inflicted deadlock: 0 active brains → p_win=0.40 → brain_confidence override → degraded trading with `[degraded: no_live_brains]`. BTC btc_swing_h1 affected every cycle (V12_H1_15 sole brain, probation, PF=0.86). Retired/frozen/archived brains remain excluded. | L2 — DQAF-059 gate conflated "data validity" (probation=valid) with "governance trust" (probation=discounted); vote_weight penalty at signal level already handles probation discount |

@@ -192,7 +192,12 @@ def compute_dynamic_sl_tp(
     # when spread_cost > 0.  The + spread_cost×(R+1) term restores the
     # invariant after the downstream spread penalty is applied.
     if min_rr_ratio > 0:
-        required_tp = min_rr_ratio * sl_distance + spread_cost * (min_rr_ratio + 1)
+        # FIX-20260704-007: +1e-9 floating-point guard band.
+        # FIX-005 pre-compensation is mathematically exact (RR == min_rr_ratio
+        # identically), but IEEE 754 rounding can make tp_dist/sl_dist ≈ 0.849…
+        # and fail the >= check downstream.  1e-9 = insubstantial price
+        # perturbation (<< 0.0001% of BTC price) that guarantees the boundary.
+        required_tp = min_rr_ratio * sl_distance + spread_cost * (min_rr_ratio + 1) + 1e-9
         if tp_distance < required_tp:
             tp_distance = required_tp
 

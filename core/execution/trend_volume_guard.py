@@ -102,7 +102,12 @@ def check_minimum_rr(
     sl_dist = abs(sl - entry_price)
     if sl_dist <= 0:
         return False
-    return (tp_dist / sl_dist) >= min_rr_ratio
+    # FIX-20260704-007: 1e-9 tolerance for IEEE 754 floating-point boundary.
+    # When RR guard pre-compensation produces exactly min_rr_ratio mathematically,
+    # floating-point rounding can make tp_dist/sl_dist ≈ min_rr_ratio - 2.8e-14,
+    # failing the >= check.  1e-9 << any meaningful price ratio (< 0.0001%),
+    # so no real risk slips through.
+    return (tp_dist / sl_dist) >= (min_rr_ratio - 1e-9)
 
 
 # ── Counter-trend action classifier ────────────────────────────────────────

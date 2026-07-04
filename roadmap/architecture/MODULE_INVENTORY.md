@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-04T08:53:29Z
-> **扫描模块数**: 714
+> **自动生成**: 2026-07-04T09:23:52Z
+> **扫描模块数**: 715
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -225,7 +225,7 @@
 | `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 822 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
-| `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 269 | — | |
+| `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 274 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 342 | — | |
@@ -276,7 +276,7 @@
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 226 | — | |
-| `trend_volume_guard.py` | ✅ active | — | 3 | 288 | — | |
+| `trend_volume_guard.py` | ✅ active | — | 3 | 293 | — | |
 
 ## core/features
 
@@ -666,6 +666,7 @@
 | `audit_btc_governance_pingpong.py` | ✅ active | — | 2 | 249 | — | |
 | `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
 | `audit_btc_retraining_gate.py` | ✅ active | — | 7 | 653 | — | |
+| `audit_btc_sltp_alignment.py` | ✅ active | — | 5 | 437 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
