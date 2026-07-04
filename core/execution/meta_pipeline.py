@@ -305,6 +305,9 @@ class MetaPipeline:
         )
 
         # 4. SL/TP
+        _spread_cost = float(getattr(config, "spread_points", 0.0)) * float(
+            getattr(config, "tick_size", 0.01)
+        )
         dsl = compute_dynamic_sl_tp(
             base_sl_mult=float(getattr(config, "base_sl_atr_mult", 2.0)),
             base_tp_mult=float(getattr(config, "base_tp_atr_mult", 3.5)),
@@ -314,6 +317,7 @@ class MetaPipeline:
             timeframe_mult=int(getattr(config, "timeframe_mult", 1)),
             min_sl_distance=float(getattr(config, "min_sl_distance", 0.0)),
             min_rr_ratio=float(getattr(config, "min_rr_ratio", 0.0)),
+            spread_cost=_spread_cost,
         )
         entry_price = mid_price or 0.0
         if entry_price <= 0:

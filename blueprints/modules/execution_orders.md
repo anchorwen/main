@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260704-005 | 2026-07-04 | cursor-agent | — | **L2: RR guard spread pre-compensation — fix logical deadlock blocking 47.5% of btc_swing_h1 signals.** `compute_dynamic_sl_tp()` RR guard formula pre-compensates for spread cost with `required_tp = min_rr_ratio × sl + spread_cost × (min_rr_ratio + 1)` so post-spread effective RR meets `min_rr_ratio` in `check_minimum_rr()`. Old formula `tp ≥ sl × min_rr_ratio` produced pre-spread TP that was always insufficient after `compute_sl_tp_levels()` widens SL and narrows TP by `spread_cost`. Strategy_line.py and meta_pipeline.py pass `spread_cost=spread_points×tick_size`. Backward-compatible: `spread_cost=0.0` preserves old behavior. | L2 — pre/post-spread distance basis mismatch: RR guard computed on pre-spread distances but `check_minimum_rr()` uses post-spread levels |
 | FIX-20260704-003 | 2026-07-04 | cursor-agent | — | **P1: btc_swing_h1 trail_activation_atr 0.5→1.2 — defer breakeven arming to 80% of TP target**. Diagnosis by diagnostic script: 36% of H1 closes exit at breakeven with mean peak +1.317R unrealized (90% went into profit, 46% >1.0R), but SL moved to breakeven at mean +0.853R before trend could confirm. `graduated_lock_levels` (3R→+1.5R, 5R→+3.5R) + nonlinear trail decay already exist in code but were bypassed by premature breakeven arming. One-line config hotfix. Expected breakeven rate 36%→20-25%. | RC-09 — config drift: trail_activation_atr empirically mismatched with strategy's observed profit pattern |
 | FIX-20260703-060 | 2026-07-03 | cursor-agent | — | **L2: DQAF-059 gate overstrict — expand active brain filter to include probation** (DQAF-20260703-060). `strategy_line.py:555-589`: `_live_brain_ids` → `_active_brain_ids`, status filter `== "live"` → `in ("live", "probation")`. All 7 downstream references updated (cold explore gate, PnL amnesty, p_win resolution). BTC btc_swing_h1: V12_H1_15 (sole brain, probation, PF=0.86 103 trades) → previously 0 active brains → FALLBACK_PATH_3c every cycle → degraded trading. Now included → PnL store 67 trades + governance 103 trades contribute to p_win. | L2 — DQAF-059 gate conflated "data validity" with "governance trust" |
 | FIX-20260629-196 | 2026-06-29 | cursor-agent | 2b3f4bed | Pre-Trade Feasibility Gateway: breakeven SL validated against MT5 ask/bid constraints before dispatch. Dynamic spread-proportional buffer (2x spread + exit_min_step floor) prevents invalid SL sends when price crosses entry between trigger and dispatch. | missing-validation |
@@ -224,7 +225,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 | `OrderStateMachine.transition(current, event)` → `OrderState` | ExecutionManager | Stable |
 | `dispatch_live_order(envelope)` → `bool` | ExecutionQueue | Stable |
 | `ActivePositionManager.evaluate_exits(market_data)` → `list[ExitEvaluation]` | live_cycle | Stable |
-| `compute_dynamic_sl_tp(atr, regime)` → `DynamicSLTP` | strategy_line | Stable |
+| `compute_dynamic_sl_tp(atr, regime, *, spread_cost)` → `DynamicSLTP` | strategy_line, meta_pipeline | Stable (spread_cost added FIX-20260704-005) |
 
 ## Evolution Roadmap (开单/止损/止盈 机构化路线图)
 

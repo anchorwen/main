@@ -856,6 +856,10 @@ def evaluate_strategy_lines(
                 "reason": decision.reason,
                 "supporting": decision.supporting_count,
                 "total": decision.total_count,
+                # FIX-20260704-006: SL/TP for golden_master observability
+                "sl": decision.sl,
+                "tp": decision.tp,
+                "hard_sl": decision.hard_sl,
             }
         )
 

@@ -165,8 +165,10 @@ def record_cycle_outputs(
             "should_trade": bool(result.get("should_trade", False)),
             "reason": str(result.get("reason", "")),
             "volume": round(float(result.get("volume", 0)), 4),
-            "sl": round(float(result.get("sl", 0)), 2) if result.get("sl") else 0.0,
-            "tp": round(float(result.get("tp", 0)), 2) if result.get("tp") else 0.0,
+            # FIX-20260704-006: direct .get() with 0.0 default — old
+            # "if result.get('sl') else 0.0" silently swallowed missing keys
+            "sl": round(float(result.get("sl", 0.0)), 2),
+            "tp": round(float(result.get("tp", 0.0)), 2),
         }
 
     capture["outputs"] = outputs

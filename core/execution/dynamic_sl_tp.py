@@ -96,6 +96,7 @@ def compute_dynamic_sl_tp(
     timeframe_mult: int = 1,
     min_sl_distance: float = 0.0,
     min_rr_ratio: float = 0.0,
+    spread_cost: float = 0.0,  # FIX-20260704-005: pre-compensate spread in RR guard
     strategy_family: str = "",  # Phase 4: asymmetric regime response per archetype
 ) -> DynamicSLTP:
     """Compute volatility-normalized SL/TP distances.
@@ -124,6 +125,15 @@ def compute_dynamic_sl_tp(
                       to maintain at least this reward:risk ratio.  Prevents
                       negative asymmetry from the absolute floor.
                       0.0 = disabled.
+        spread_cost: Spread penalty in price units (= spread_points × tick_size).
+                     When > 0, the RR guard pre-compensates so the post-spread
+                     effective RR (after compute_sl_tp_levels widens SL and
+                     narrows TP) still meets min_rr_ratio.
+                     FIX-20260704-005: added to close pre/post-spread distance
+                     mismatch that caused a logical deadlock (old formula:
+                     tp ≥ sl × R, but final check uses post-spread distances).
+                     0.0 = disabled (backward compatible fail_open_guard — old
+                     behavior without pre-compensation, same vulnerability).
 
     Returns:
         DynamicSLTP with absolute distances and effective multipliers.
@@ -171,8 +181,20 @@ def compute_dynamic_sl_tp(
         sl_distance = min_sl_distance
 
     # ── RR guard: when SL is floored up, stretch TP to maintain min RR ──
-    if min_rr_ratio > 0 and tp_distance < sl_distance * min_rr_ratio:
-        tp_distance = sl_distance * min_rr_ratio
+    # FIX-20260704-005 (L2): Pre-compensate for spread cost so the POST-SPREAD
+    # effective RR meets min_rr_ratio at check_minimum_rr() downstream.
+    # Derivation:
+    #   Post-spread: (tp - spread_cost) / (sl + spread_cost) >= min_rr_ratio
+    #   => tp >= min_rr_ratio × sl + spread_cost × (min_rr_ratio + 1)
+    # The old formula (tp >= sl × min_rr_ratio) was correct for pre-spread
+    # distances but compute_sl_tp_levels() widens SL by spread_cost and
+    # narrows TP by spread_cost, making the final RR always below min_rr_ratio
+    # when spread_cost > 0.  The + spread_cost×(R+1) term restores the
+    # invariant after the downstream spread penalty is applied.
+    if min_rr_ratio > 0:
+        required_tp = min_rr_ratio * sl_distance + spread_cost * (min_rr_ratio + 1)
+        if tp_distance < required_tp:
+            tp_distance = required_tp
 
     hard_sl_distance = sl_distance * hard_sl_ratio
 

@@ -1184,6 +1184,9 @@ class StrategyLine:
         if regime_info and regime_info.get("atr_mean", 0) > 0:
             _dynamic_ref_atr = regime_info["atr_mean"]
 
+        _spread_cost = self.config.spread_points * self.config.tick_size
+        # FIX-20260704-005: _spread_cost=0.0 when spread_points=0 is the
+        # fail_open_guard default — no pre-compensation, old RR guard behavior.
         dsl = compute_dynamic_sl_tp(
             base_sl_mult=self.config.base_sl_atr_mult,
             base_tp_mult=self.config.base_tp_atr_mult,
@@ -1193,6 +1196,7 @@ class StrategyLine:
             timeframe_mult=self.config.timeframe_mult,
             min_sl_distance=self.config.min_sl_distance,
             min_rr_ratio=self.config.min_rr_ratio,
+            spread_cost=_spread_cost,
             strategy_family=self.config.strategy_family,
         )
 
