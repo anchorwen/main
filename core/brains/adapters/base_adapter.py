@@ -97,7 +97,13 @@ class BaseBrainAdapter(ABC):
         direction: Direction = (
             "long" if raw_score > 0.1 else ("short" if raw_score < -0.1 else "neutral")
         )
-        confidence = float(np.tanh(abs(raw_score))) if "raw_score" in raw_output else 0.5
+        confidence = (
+            BaseBrainAdapter._compute_confidence(
+                raw_score, self._brain_entry.get("confidence_params")
+            )
+            if "raw_score" in raw_output
+            else 0.5
+        )
 
         # Preserve adapter-specific diagnostics for brain_votes recording.
         _extra = {
@@ -189,6 +195,41 @@ class BaseBrainAdapter(ABC):
     # Optional overrides
     # ------------------------------------------------------------------
 
+    # ── Confidence calibration ────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_confidence(
+        score: float,
+        confidence_params: dict | None = None,
+    ) -> float:
+        """Compute confidence from a calibrated score using the configured method.
+
+        **Quantile-aware Gaussian decay** (``method == "quantile_gaussian"``):
+        Below P95 → linear ramp (model is interpolating inside known distribution).
+        Above P95 → Gaussian decay (model is extrapolating — penalise certainty).
+
+        Falls back to ``tanh(abs(score))`` when ``confidence_params`` is None or
+        the method is unrecognised (cold-start / backward-compat).
+
+        DQAF-20260704-004 — replaces the classic ``tanh(abs(score))`` anti-pattern
+        that assigned *higher* confidence to extreme feature-space extrapolations.
+        """
+        if confidence_params and confidence_params.get("method") == "quantile_gaussian":
+            p95 = float(confidence_params.get("p95", 0.75))
+            peak_conf = float(confidence_params.get("peak_conf", 0.64))
+            lambda_decay = float(confidence_params.get("lambda_decay", 80.0))
+
+            abs_score = abs(score)
+            if abs_score <= p95:
+                # Linear ramp: 0 → Peak_Conf  within the known distribution
+                return (abs_score / p95) * peak_conf
+            else:
+                # Gaussian decay: penalise extrapolation
+                return peak_conf * float(np.exp(-lambda_decay * (abs_score - p95) ** 2))
+
+        # Fallback: classic tanh (cold-start, backward-compat, non-configured brains)
+        return float(np.tanh(abs(score)))
+
     # ── Shared score-to-direction mapping (avoids duplication across adapters) ──
 
     @staticmethod
@@ -197,6 +238,7 @@ class BaseBrainAdapter(ABC):
         objective: str = "regression",
         threshold: float = 0.1,
         calibration_offset: float = 0.0,
+        confidence_params: dict | None = None,
     ) -> tuple[Direction, float, float]:
         """Map model output to (direction_bias, up_prob, down_prob).
 
@@ -235,7 +277,7 @@ class BaseBrainAdapter(ABC):
 
         # Regression / Multiclass path: signed score → directional vote
         calibrated = raw_score + calibration_offset
-        confidence = float(np.tanh(abs(calibrated)))
+        confidence = BaseBrainAdapter._compute_confidence(calibrated, confidence_params)
 
         if calibrated > threshold:
             up = 0.5 + confidence / 2.0

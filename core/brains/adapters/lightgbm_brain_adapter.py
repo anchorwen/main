@@ -186,6 +186,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
             objective=self._brain_entry.get("training_params", {}).get("objective", "regression"),
             threshold=float(self._brain_entry.get("activation_threshold", 0.1)),
             calibration_offset=float(self._brain_entry.get("calibration_offset", 0.0)),
+            confidence_params=self._brain_entry.get("confidence_params"),
         )
 
         return BrainSignal(

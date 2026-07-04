@@ -257,6 +257,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
             raw_score,
             objective=self._brain_entry.get("training_params", {}).get("objective", "regression"),
             threshold=float(self._brain_entry.get("activation_threshold", 0.1)),
+            confidence_params=self._brain_entry.get("confidence_params"),
         )
 
         return BrainSignal(

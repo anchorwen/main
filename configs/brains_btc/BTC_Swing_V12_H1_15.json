@@ -104,5 +104,12 @@
     "governance": {"min_confidence": 0.5, "cooldown_cycles": 3},
     "calibration_offset": 0.0,
     "_calibration_note": "FIX-20260704-002: zero-input P(SHORT)=0.418 P(LONG)=0.317 → raw_score=-0.101. Computed offset=+0.101 to neutralize SHORT prior. Set to 0.0 pending 24h+ live shadow validation. Activate if direction bias persists.",
+    "confidence_params": {
+        "method": "quantile_gaussian",
+        "p95": 0.755,
+        "peak_conf": 0.638,
+        "lambda_decay": 80.0,
+        "_note": "DQAF-20260704-004: P95/Peak_Conf/λ calibrated from 812 V12_H1_15 brain_votes raw_score samples (2026-07-01→2026-07-04). P95=0.755 from empirical quantile. Peak_Conf=tanh(P95)=0.638 for C0 continuity. λ=80 → conf→0.13 at max|s|=0.896. Recalibrate after model retrain (Iron Law #9, Contract 2 — training pipeline alignment)."
+    },
     "last_retrained": "2026-07-03T17:49:28Z"
 }
