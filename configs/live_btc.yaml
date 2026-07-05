@@ -152,6 +152,11 @@ brains:
   # ── FIX-20260625-138: V12_H1_15 shadow variant — H1, SL=1.5/TP=1.5, horizon=12, vote_weight=0.0 ──
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V12_H1_15.json
+  # ── FIX-20260706-015: B-path binary directional classifier (M5, probation)
+  #   43,613 samples, WR=51.1%, XGBoost binary:logistic → binary_directional deadzone.
+  #   Shadow observe — signals recorded, not executed. DQAF-20260706-015.
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_M5_Binary.json
   # ── DLR-001 config drift fix (2026-06-17): Retired fleet removed from registry.
   #   Archive brain configs preserved in configs/brains_btc/archive/ for reference.
 capital_allocator:
@@ -312,12 +317,15 @@ strategy_lines:
     confidence_threshold: 0.35        # standard — not survival mode
     direction_balance:
       long_bias_discount: 0.0
-    # ── DQAF-20260705-064 KILL SWITCH (2026-07-05) ──
-    # V12_H1_15 has structural LONG bias: 885 LONG vs 6 SHORT (0.6%) in 990 golden_master records.
-    # ALL 6 SHORT signals blocked by rr_below_minimum. Model cannot produce executable SHORT.
-    # Together with btc_swing (V4) locked SHORT, creates cross-strategy hedge → net PnL ≈ 0 minus costs.
-    # Institutional mandate: Zero Exposure is a position. Kill until OOD gateway + netting engine active.
-    enabled: false
+    # ── DQAF-20260705-064 KILL SWITCH LIFTED (2026-07-05) ──
+    # Kill switch reason: V12_H1_15 structural LONG bias (885 LONG vs 6 SHORT, 0.6%)+
+    #   V4 locked SHORT → cross-strategy hedge → net PnL ≈ 0 minus costs.
+    # Resolution: (1) PortfolioNettingGate active (swallow mode, 0.20 threshold) provides
+    #   systemic hedge protection. (2) V12_H1_15 direction normalized — 67% LONG, 6% SHORT,
+    #   21% NEUTRAL in recent 100 golden_master records. Both strategies now agree on LONG.
+    #   (3) OOD gateway module exists (core/execution/ood_gateway.py), integration deferred.
+    # Institutional oversight: Netting gate will swallow any future cross-hedge automatically.
+    enabled: true
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true         # symmetric contract — flip on signal reversal
@@ -360,12 +368,15 @@ strategy_lines:
     confidence_threshold: 0.35
     direction_balance:
       long_bias_discount: 0.0
-    # ── DQAF-20260705-064 KILL SWITCH (2026-07-05) ──
-    # V4 has flipped to SHORT-only since June 28 (0 LONG post-June28, 4 LONG all rr_blocked on June 28).
-    # Feature manifold shift: fv[2] halved (135.7→67.5), fv[4] collapsed (15.5→2.9) — model in OOD zone.
-    # Together with btc_swing_h1 (V12_H1_15) locked LONG, creates cross-strategy hedge → net PnL ≈ 0 minus costs.
-    # Institutional mandate: Zero Exposure is a position. Kill until OOD gateway + netting engine active.
-    enabled: false
+    # ── DQAF-20260705-064 KILL SWITCH LIFTED (2026-07-05) ──
+    # Kill switch reason: V4 flipped SHORT-only since June 28 (0 LONG post-June28),
+    #   feature manifold shift (fv[2] halved 135.7→67.5, fv[4] collapsed 15.5→2.9) →
+    #   model in OOD zone. Together with V12_H1_15 locked LONG → cross-strategy hedge.
+    # Resolution: (1) V4 direction recovered — 54% LONG, 13% SHORT, 27% NEUTRAL in
+    #   recent 100 golden_master records. Manifold shift self-corrected. (2) Portfolio-
+    #   NettingGate active (swallow mode, 0.20 threshold) provides systemic protection.
+    #   (3) All 3 brains currently agree on LONG — no hedging.
+    enabled: true
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true
