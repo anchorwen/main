@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-05T08:45:30Z
+> **自动生成**: 2026-07-05T14:16:15Z
 
 ## Package-Level Dependencies
 
@@ -221,6 +221,7 @@
 - `mt5_worker.py` → `core.protocol.services.resilience`
 - `net_out_close_handler.py` → `core.execution.live_order_sender`
 - `ofi_gate.py` → (无内部依赖)
+- `ood_gateway.py` → (无内部依赖)
 - `order_state_machine.py` → `core.execution.gateway_contracts`
 - `paper_gateway.py` → `core.execution.fill_simulator`, `core.execution.gateway_contracts`, `core.execution.order_state_machine`, `core.observability.metric_names`
 - `portfolio_netting.py` → (无内部依赖)
@@ -661,6 +662,7 @@
 - `diagnose_sl_performance.py` → (无内部依赖)
 - `dqaf053_phase1_sanitize.py` → `core.alpha.performance_store`, `core.alpha.registry`, `core.execution.conformal_calibrator`
 - `dqaf_collect.py` → (无内部依赖)
+- `export_ood_params.py` → `core.execution.ood_gateway`
 - `extract_health_checks.py` → (无内部依赖)
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`
 - `feedback_loop.py` → `core.feedback.brain_performance_tracker`
@@ -749,6 +751,7 @@
 - `validate_commit_msg.py` → `scripts.omega_constants`
 - `validate_journal_health_fix.py` → (无内部依赖)
 - `validate_magic_sync.py` → `core.contracts.strategy_magic`
+- `validate_rr_gate_math.py` → (无内部依赖)
 - `verify.py` → `core.runtime.golden_master`
 - `verify_all_brains.py` → `core.brains.services.brain_factory`
 - `verify_capresult_ast.py` → (无内部依赖)
@@ -841,6 +844,7 @@
 - `run_train_batch.py` → (无内部依赖)
 - `scan_profitability_surface.py` → `core.training.profitability_calibrator`
 - `train.py` → `core.contracts.training.training_contract`, `core.deployment.brain_registration_gate`, `core.training.brain_config`, `core.training.cpcv`, `core.training.custom_objectives`, `core.training.dataset`, `core.training.model_hashing`, `core.training.profitability_calibrator`, `core.training.training_registry`, `scripts.training.trainers.deep_res_mlp_trainer`, `scripts.training.trainers.lgb_trainer`, `scripts.training.trainers.online_mlp_trainer`, `scripts.training.trainers.transformer_trainer`, `scripts.training.trainers.xgb_trainer`
+- `train_btc_binary_directional.py` → (无内部依赖)
 - `train_btc_directional_v1.py` → `core.features.computers.v9_live_computer`
 - `train_btc_directional_v10.py` → (无内部依赖)
 - `train_btc_swing_v9.py` → `core.features.computers.v9_live_computer`

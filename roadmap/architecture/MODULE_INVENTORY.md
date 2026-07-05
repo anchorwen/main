@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-05T08:45:30Z
-> **扫描模块数**: 719
+> **自动生成**: 2026-07-05T14:16:15Z
+> **扫描模块数**: 723
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -71,7 +71,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `base_adapter.py` | ✅ active | BaseBrainAdapter | 14 | 306 | — | |
+| `base_adapter.py` | ✅ active | BaseBrainAdapter | 14 | 325 | — | |
 | `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 212 | — | |
 | `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
 | `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 596 | — | |
@@ -253,6 +253,7 @@
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 406 | — | |
 | `net_out_close_handler.py` | ✅ active | — | 1 | 177 | — | |
 | `ofi_gate.py` | ✅ active | — | 1 | 90 | — | |
+| `ood_gateway.py` | ✅ active | OODVerdict, OODConfig, OODGateway | 10 | 388 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
@@ -632,18 +633,18 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 154 | — | |
-| `_analyze_live_status.py` | ✅ active | — | 5 | 333 | — | |
-| `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 220 | — | |
-| `_check_status.py` | 📄 config | — | 0 | 104 | — | |
-| `_deep_dive_btc_source.py` | ✅ active | — | 1 | 138 | — | |
-| `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 226 | — | |
-| `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 236 | — | |
+| `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 159 | — | |
+| `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
+| `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
+| `_check_status.py` | 📄 config | — | 0 | 106 | — | |
+| `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
+| `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
+| `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
-| `analyze_btc_deep_diagnosis.py` | ✅ active | — | 5 | 750 | — | |
-| `analyze_btc_post_fix_trading.py` | ✅ active | — | 6 | 396 | — | |
+| `analyze_btc_deep_diagnosis.py` | ✅ active | — | 5 | 830 | — | |
+| `analyze_btc_post_fix_trading.py` | ✅ active | — | 6 | 422 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `analyze_dual_symbol_trades.py` | ✅ active | — | 4 | 275 | — | |
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
@@ -657,7 +658,7 @@
 | `analyze_shadow_predictions.py` | ✅ active | — | 11 | 569 | — | |
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
 | `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |
-| `analyze_two_positions.py` | ✅ active | — | 2 | 182 | — | |
+| `analyze_two_positions.py` | ✅ active | — | 2 | 203 | — | |
 | `analyze_xau_institutional.py` | ✅ active | — | 17 | 1362 | — | |
 | `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 460 | — | |
 | `analyze_xau_since_june12.py` | ✅ active | — | 1 | 526 | — | |
@@ -666,10 +667,10 @@
 | `audit_behavior_compliance.py` | ✅ active | — | 5 | 437 | — | |
 | `audit_brain_fleet.py` | ✅ active | — | 1 | 307 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
-| `audit_btc_governance_pingpong.py` | ✅ active | — | 2 | 249 | — | |
+| `audit_btc_governance_pingpong.py` | ✅ active | — | 2 | 269 | — | |
 | `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
-| `audit_btc_retraining_gate.py` | ✅ active | — | 7 | 653 | — | |
-| `audit_btc_sltp_alignment.py` | ✅ active | — | 5 | 437 | — | |
+| `audit_btc_retraining_gate.py` | ✅ active | — | 7 | 703 | — | |
+| `audit_btc_sltp_alignment.py` | ✅ active | — | 5 | 503 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
@@ -685,7 +686,7 @@
 | `audit_live_brains.py` | ✅ active | — | 1 | 231 | — | |
 | `audit_live_health.py` | ✅ active | — | 3 | 201 | — | |
 | `audit_memory.py` | ✅ active | — | 8 | 399 | — | |
-| `audit_open_positions.py` | ✅ active | — | 3 | 342 | — | |
+| `audit_open_positions.py` | ✅ active | — | 3 | 370 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
 | `audit_profitability.py` | ✅ active | — | 7 | 371 | — | |
@@ -737,9 +738,9 @@
 | `deep_audit_live_data.py` | ✅ active | — | 15 | 875 | — | |
 | `deep_audit_probes.py` | ✅ active | — | 7 | 363 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
-| `diagnose_breakeven_exits.py` | ✅ active | — | 7 | 414 | — | |
+| `diagnose_breakeven_exits.py` | ✅ active | — | 7 | 431 | — | |
 | `diagnose_data_health_failures.py` | ✅ active | — | 4 | 270 | — | |
-| `diagnose_direction_lock.py` | ✅ active | — | 2 | 359 | — | |
+| `diagnose_direction_lock.py` | ✅ active | — | 2 | 398 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `diagnose_journal_mt5_sev2.py` | ✅ active | — | 3 | 407 | — | |
 | `diagnose_mypy_baseline.py` | ✅ active | — | 6 | 210 | — | |
@@ -747,6 +748,7 @@
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 564 | — | |
+| `export_ood_params.py` | ✅ active | — | 1 | 213 | — | |
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
@@ -835,17 +837,18 @@
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 409 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
+| `validate_rr_gate_math.py` | ✅ active | — | 2 | 233 | — | |
 | `verify.py` | ✅ active | — | 15 | 1011 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 90 | — | |
 | `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector, CapResultOkPlacementDetector, RawAccessDetector, FailOpenGuardDetector, ProofLeakDetector | 31 | 650 | ✅ | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 | `verify_event_stream.py` | ✅ active | — | 3 | 200 | — | |
-| `verify_final.py` | ✅ active | — | 2 | 219 | — | |
+| `verify_final.py` | ✅ active | — | 2 | 247 | — | |
 | `verify_health_check_coverage.py` | ✅ active | — | 2 | 143 | — | |
 | `verify_phantom_contracts.py` | ✅ active | Violation, VerificationReport | 7 | 437 | — | |
 | `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 292 | — | |
-| `verify_sqrt_scaling.py` | ✅ active | — | 4 | 447 | — | |
+| `verify_sqrt_scaling.py` | ✅ active | — | 4 | 526 | — | |
 | `verify_training_serving_parity.py` | ✅ active | — | 7 | 492 | — | |
 | `watchdog_daily_ops.py` | ✅ active | — | 3 | 171 | — | |
 
@@ -941,6 +944,7 @@
 | `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
 | `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2075 | — | |
+| `train_btc_binary_directional.py` | ✅ active | — | 5 | 367 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1526 | — | |

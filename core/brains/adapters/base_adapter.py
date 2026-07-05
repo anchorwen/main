@@ -242,40 +242,59 @@ class BaseBrainAdapter(ABC):
     ) -> tuple[Direction, float, float]:
         """Map model output to (direction_bias, up_prob, down_prob).
 
-        FIX-20260526-030 — Two distinct paths based on model objective:
-        FIX-20260630-202 — threshold decoupled from hardcoded ±0.1; now read
-        from brain config ``activation_threshold`` (SSOT), fallback 0.1.
+        FIX-20260526-030 — Two distinct paths based on model objective.
+        FIX-20260630-202 — threshold decoupled from hardcoded ±0.1.
         FIX-20260704-002 — calibration_offset for multiclass prior correction.
-        When non-zero, shifts raw_score before threshold comparison to correct
-        for class-prior miscalibration (e.g. model SHORT bias on zero input).
-        Computed as: offset = -(P(LONG|zero) - P(SHORT|zero)).
+        FIX-20260706-015 — binary_directional path with probability deadzone
+        for B-path directional classifiers trained without NEUTRAL samples.
 
-        **Binary classifiers** (binary_logloss/binary):
+        **Path 1 — Trade-quality binary** (binary_logloss / binary):
         - raw_score = P(TP-hit | features) ∈ [0, 1]
-        - These are trade-QUALITY classifiers, NOT directional classifiers.
-        - P > 0.55 → "LONG trade likely to succeed" → vote LONG
-        - P ≤ 0.55 → "uncertain / likely to fail" → ABSTAIN (NEUTRAL)
-        - NEVER vote SHORT — the model was trained on LONG-only trades and
-          has zero signal about SHORT trade outcomes.
+        - LONG-ONLY quality classifier.  NEVER votes SHORT.
+        - P > 0.55 → LONG,  else ABSTAIN (NEUTRAL).
 
-        **Regression / Multiclass** (Huber, squared_error, multiclass, etc.):
-        - raw_score = signed score (e.g. BPS, or P(LONG)-P(SHORT) for multiclass)
+        **Path 2 — Directional binary** (binary_directional):
+        - raw_score = P(LONG | features) ∈ [0, 1]
+        - Deadzone [0.5−θ, 0.5+θ] restores the NEUTRAL state that was
+          stripped during training (binary_mask = y_all != 1).
+        - P > 0.5+θ → LONG,  P < 0.5−θ → SHORT,  else NEUTRAL.
+        - up/down are direct probabilities — NO confidence scaling.
+          Confidence is the caller's responsibility (get_signal).
+
+        **Path 3 — Regression / Multiclass** (multi:softprob, multiclass, etc.):
+        - raw_score = signed score (e.g. BPS, or P(LONG)−P(SHORT))
         - calibration_offset applied first: calibrated = raw_score + offset
-        - > +threshold → LONG, < -threshold → SHORT, else NEUTRAL
-        - Threshold is per-brain configurable (default 0.1) because higher-TF
-          models produce narrower raw_score distributions due to noise filtering.
+        - > +θ → LONG,  < −θ → SHORT,  else NEUTRAL.
         - Uses 0.5 ± confidence/2 anchoring so the predicted direction
           always wins the up/down comparison in consensus.
         """
+
+        # ── Path 1: Trade-Quality Classifier (Legacy Binary) ──
         if objective in ("binary_logloss", "binary"):
-            # Trade-quality classifier: P(TP-hit). Vote LONG or ABSTAIN.
+            # P(TP-hit) for LONG-ONLY strategy. Never votes SHORT.
             if raw_score > 0.55:
                 up = float(raw_score)
                 down = 1.0 - float(raw_score)
                 return "long", up, down
             return "neutral", 0.5, 0.5
 
-        # Regression / Multiclass path: signed score → directional vote
+        # ── Path 2: Directional Binary Classifier (B-Path / FIX-20260706-015) ──
+        if objective == "binary_directional":
+            lower = 0.5 - threshold
+            upper = 0.5 + threshold
+
+            if raw_score > upper:
+                up = float(raw_score)
+                down = 1.0 - up
+                return "long", up, down
+            elif raw_score < lower:
+                down = 1.0 - float(raw_score)
+                up = 1.0 - down
+                return "short", up, down
+            else:
+                return "neutral", 0.5, 0.5
+
+        # ── Path 3: Regression / Multiclass ──
         calibrated = raw_score + calibration_offset
         confidence = BaseBrainAdapter._compute_confidence(calibrated, confidence_params)
 
