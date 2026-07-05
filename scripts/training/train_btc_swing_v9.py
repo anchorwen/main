@@ -255,6 +255,8 @@ def compute_feature_row(
     tf_minutes: float = 5.0,
     prev_ou: float | None = None,
     prev_hurst: float | None = None,
+    aligned_cross_m5: dict[str, np.ndarray] | None = None,
+    m5_day_map: np.ndarray | None = None,
 ) -> tuple[list[float], float, float]:
     """Compute 41-dim BTC feature vector at bar *idx*.
 
@@ -265,12 +267,15 @@ def compute_feature_row(
     price_slice = c[:end]
     o_slice, h_slice, l_slice, c_slice = o[:end], h[:end], l[:end], c[:end]
 
-    # ── D1 features ──
+    # ── D1 features (FIX-20260705-022: use m5_day_map for correct day alignment) ──
     bar_ts = daily_ts[idx] if idx < len(daily_ts) else 0
     bar_date = (
         datetime.fromtimestamp(float(bar_ts), tz=UTC).strftime("%Y-%m-%d") if bar_ts > 0 else ""
     )
-    day_idx = len(day_features) - 1
+    if m5_day_map is not None and idx < len(m5_day_map):
+        day_idx = int(m5_day_map[idx])
+    else:
+        day_idx = len(day_features) - 1
     d_feat = day_features.get(day_idx, {}) if day_features else {}
 
     d1_ret = float(d_feat.get("D1_Ret_1", 0.0))
@@ -335,18 +340,51 @@ def compute_feature_row(
         float(v[idx]) / (float(np.mean(v[max(0, idx - 20) : end])) + 1e-8) if idx > 20 else 1.0
     )
 
-    # Cross-market micro returns (use synthetic when unavailable)
-    audjpy_ret = 0.0  # placeholder
-    eur_ret = 0.0  # placeholder
-    usdjpy_ret = 0.0  # placeholder
+    # Cross-market micro returns (FIX-20260705-022: from aligned M5 data)
+    audjpy_ret = 0.0
+    eur_ret = 0.0
+    usdjpy_ret = 0.0
+    if aligned_cross_m5 is not None:
+        _ac = aligned_cross_m5
+        if idx > 0:
+            _prev_i = idx - 1
+            if "AUDJPYc" in _ac and _prev_i < len(_ac["AUDJPYc"]) and _ac["AUDJPYc"][_prev_i] > 0:
+                audjpy_ret = (_ac["AUDJPYc"][idx] - _ac["AUDJPYc"][_prev_i]) / _ac["AUDJPYc"][
+                    _prev_i
+                ]
+            if "EURUSDc" in _ac and _prev_i < len(_ac["EURUSDc"]) and _ac["EURUSDc"][_prev_i] > 0:
+                eur_ret = (_ac["EURUSDc"][idx] - _ac["EURUSDc"][_prev_i]) / _ac["EURUSDc"][_prev_i]
+            if "USDJPYc" in _ac and _prev_i < len(_ac["USDJPYc"]) and _ac["USDJPYc"][_prev_i] > 0:
+                usdjpy_ret = (_ac["USDJPYc"][idx] - _ac["USDJPYc"][_prev_i]) / _ac["USDJPYc"][
+                    _prev_i
+                ]
 
-    # ── BTC-specific cross features ──
+    # ── BTC-specific cross features (FIX-20260705-022: real XAU M5 for ratio) ──
     btc_gold_ratio = 0.0
     btc_gold_ratio_roc = 0.0
-    if len(btc_price_hist) > 0 and btc_price_hist[idx] > 0 and d_feat.get("XAUUSDc_close", 0) > 0:
-        btc_gold_ratio = btc_price_hist[idx] / d_feat["XAUUSDc_close"]
+    # Use real XAU M5 close if available, fall back to D1 XAU close
+    _xau_close = 0.0
+    if aligned_cross_m5 is not None and "XAUUSDc" in aligned_cross_m5:
+        _xau_close = (
+            float(aligned_cross_m5["XAUUSDc"][idx])
+            if idx < len(aligned_cross_m5["XAUUSDc"])
+            else 0.0
+        )
+    if _xau_close <= 0:
+        _xau_close = float(d_feat.get("XAUUSDc_close", 0.0))
+    if len(btc_price_hist) > 0 and btc_price_hist[idx] > 0 and _xau_close > 0:
+        btc_gold_ratio = btc_price_hist[idx] / _xau_close
         if idx >= 288:
-            prev_ratio = btc_price_hist[idx - 288] / max(d_feat.get("XAUUSDc_close", 1.0), 1.0)
+            _prev_xau = 0.0
+            if aligned_cross_m5 is not None and "XAUUSDc" in aligned_cross_m5:
+                _prev_xau = (
+                    float(aligned_cross_m5["XAUUSDc"][idx - 288])
+                    if (idx - 288) < len(aligned_cross_m5["XAUUSDc"])
+                    else 0.0
+                )
+            if _prev_xau <= 0:
+                _prev_xau = float(d_feat.get("XAUUSDc_close", 0.0))
+            prev_ratio = btc_price_hist[idx - 288] / max(_prev_xau, 1.0)
             btc_gold_ratio_roc = (
                 (btc_gold_ratio - prev_ratio) / prev_ratio if prev_ratio > 0 else 0.0
             )
@@ -432,12 +470,17 @@ def compute_labels(
     slippage_points: float,
     tick_value: float,
     side: str | None = None,
+    spreads: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute forward barrier labels with real friction.
 
     Args:
         side: 'long' = only simulate LONG entry; 'short' = only simulate SHORT;
               None (default) = merged both-directions check (backward compatible).
+        spreads: Per-bar spread in PRICE UNITS (e.g. dollars for BTC).
+              When provided, replaces the constant `spread_points` with real
+              per-bar spread — captures volatility-driven spread widening.
+              When None (default), uses `spread_points` constant (legacy).
 
     Returns:
         labels: -1 (SL), 0 (timeout), +1 (TP)
@@ -455,6 +498,11 @@ def compute_labels(
     directional outcome tracking for proper 3-class label construction where
     the label encodes "which direction was profitable" rather than "which
     barrier was hit first."
+
+    FIX-20260706-024 (L2 fix): `spreads` parameter replaces constant spread
+    with per-bar real spread from CSV data. Old constant `spread_points=10`
+    underestimated actual BTC spread by ~44% ($10 vs $18 median, $160 at P99).
+    Per-bar spread captures volatility-regime-dependent friction.
     """
     n = len(o)
     labels = np.zeros(n, dtype=np.int8)
@@ -473,8 +521,9 @@ def compute_labels(
         if atr_val <= 0:
             continue
 
-        sl_dist = sl_atr_mult * atr_val + spread_points
-        tp_dist = tp_atr_mult * atr_val - spread_points
+        _spread = float(spreads[i]) if spreads is not None and i < len(spreads) else spread_points
+        sl_dist = sl_atr_mult * atr_val + _spread
+        tp_dist = tp_atr_mult * atr_val - _spread
         tp_dist = max(tp_dist, sl_dist * 0.3)  # minimum TP = 0.3 × SL
 
         # Direction-specific entry prices
@@ -611,10 +660,20 @@ def build_dataset(
     purge_bars: int = 24,
     timeframe_minutes: float = 60.0,
     multi_class: bool = False,
+    min_adx: float = 0.0,
+    exclude_weekends: bool = False,
+    atr_pctile_low: float = 0.0,
+    atr_pctile_high: float = 0.0,
 ) -> dict[str, Any]:
     """Full B2 pipeline: CSV → features + labels → weights → CV splits → NPZ.
 
     When multi_class=True: trains 3-class (SHORT/NEUTRAL/LONG) instead of binary.
+
+    Curation filters (FIX-20260705-021):
+        min_adx: Exclude bars where D1_ADX < min_adx (0=disabled, recommended: 20)
+        exclude_weekends: Exclude Fri 22:00 – Sun 22:00 UTC bars
+        atr_pctile_low: Exclude bars below this ATR percentile (0=disabled, recommended: 5)
+        atr_pctile_high: Exclude bars above this ATR percentile (0=disabled, recommended: 95)
     """
     print(f"[B2] Loading BTC M5 data from {csv_path}...")
     df = pd.read_csv(csv_path)
@@ -627,8 +686,71 @@ def build_dataset(
     c = df["close"].values.astype(np.float64)
     v = df["tick_volume"].values.astype(np.float64)
     spreads = df.get("spread", pd.Series([10] * n_bars)).values.astype(np.float64)
+    # FIX-20260706-024: Convert MT5 raw spread (points) to price units (dollars).
+    # BTCUSD has Digits=2, so 1 MT5 point = 0.01; divide by 100 for $.
+    # Typical: 1800 points → $18.00.  Range: 1008–16000 → $10.08–$160.00.
+    spreads_real = spreads / 100.0  # MT5 points → dollars for barrier labels
     timestamps = pd.to_datetime(df["time"]).astype(np.int64).values // 10**9
     timestamps_f = timestamps.astype(np.float64)
+
+    # ── Load cross-asset data for feature alignment (FIX-20260705-022) ─────────
+    _raw_dir = Path("data/raw")
+    _cross_ts_map: dict[str, tuple[np.ndarray, np.ndarray]] = {}  # symbol → (closes, timestamps)
+    _xau_d1_closes: np.ndarray | None = None
+    _xau_d1_ts: np.ndarray | None = None
+    _eur_d1_closes: np.ndarray | None = None
+    _eur_d1_ts: np.ndarray | None = None
+    _h4_closes: np.ndarray | None = None
+    _h4_ts: np.ndarray | None = None
+
+    # M5 cross-asset for micro returns (AUDJPY, EURUSD, USDJPY)
+    for _sym, _csv in [
+        ("AUDJPYc", "audjpyc_m5_merged.csv"),
+        ("EURUSDc", "eurusdc_m5_merged.csv"),
+        ("USDJPYc", "usdjpyc_m5_merged.csv"),
+        ("XAUUSDc", "xauusdc_m5_merged.csv"),
+    ]:
+        _p = _raw_dir / _csv
+        if _p.exists():
+            _cdf = pd.read_csv(_p)
+            _cross_ts_map[_sym] = (
+                _cdf["close"].values.astype(np.float64),
+                pd.to_datetime(_cdf["time"], format="mixed").astype(np.int64).values // 10**9,
+            )
+            print(f"  Cross M5 {_sym}: {len(_cdf):,} bars loaded")
+        else:
+            print(f"  [WARN] Cross M5 {_sym} ({_csv}) not found")
+
+    # D1 cross-asset for daily features
+    _xau_d1_path = _raw_dir / "xauusdc_d1_merged.csv"
+    if _xau_d1_path.exists():
+        _xdf = pd.read_csv(_xau_d1_path)
+        _xau_d1_closes = _xdf["close"].values.astype(np.float64)
+        _xau_d1_ts = pd.to_datetime(_xdf["time"], format="mixed").astype(np.int64).values // 10**9
+        print(f"  XAU D1: {len(_xdf):,} bars loaded")
+
+    _eur_d1_path = _raw_dir / "eurusdc_d1_merged.csv"
+    if _eur_d1_path.exists():
+        _edf = pd.read_csv(_eur_d1_path)
+        _eur_d1_closes = _edf["close"].values.astype(np.float64)
+        _eur_d1_ts = pd.to_datetime(_edf["time"], format="mixed").astype(np.int64).values // 10**9
+        print(f"  EUR D1: {len(_edf):,} bars loaded")
+
+    # H4 BTC for intermediate-term macro features
+    _h4_path = _raw_dir / "btcusdc_h4_merged.csv"
+    if _h4_path.exists():
+        _h4df = pd.read_csv(_h4_path)
+        _h4_closes = _h4df["close"].values.astype(np.float64)
+        _h4_ts = pd.to_datetime(_h4df["time"], format="mixed").astype(np.int64).values // 10**9
+        print(f"  H4 BTC: {len(_h4df):,} bars loaded")
+
+    # Pre-align M5 cross-asset closes to BTC M5 timestamps
+    _aligned_cross: dict[str, np.ndarray] = {}
+    for _sym, (_closes, _ts) in _cross_ts_map.items():
+        _idx = np.searchsorted(_ts, timestamps, side="right") - 1
+        _idx = np.clip(_idx, 0, len(_closes) - 1)
+        _aligned_cross[_sym] = _closes[_idx]
+        print(f"  Aligned {_sym} M5 closes to {n_bars:,} BTC bars")
 
     # ── Build day-level features (simplified: use rolling M5 → D1 resample) ──
     print("[B2] Computing day-level context features...")
@@ -659,6 +781,44 @@ def build_dataset(
     m5_day_map = np.searchsorted(daily_ts, timestamps, side="right") - 1
     m5_day_map = np.clip(m5_day_map, 0, len(daily_ts) - 1)
 
+    # ── Pre-compute daily H4 and cross-asset features (FIX-20260705-022) ─────
+    # H4 alignment: map each D1 day to its most recent H4 bar
+    _h4_day_map: np.ndarray | None = None
+    _h4_atr_arr: list[float] = []
+    _h4_rsi_arr: list[float] = []
+    _h4_mom_24: list[float] = []
+    if _h4_closes is not None and _h4_ts is not None:
+        _h4_day_map = np.asarray(np.searchsorted(_h4_ts, daily_ts, side="right") - 1, dtype=np.intp)
+        _h4_day_map = np.clip(_h4_day_map, 0, len(_h4_closes) - 1)
+        # Pre-compute H4 ATR, RSI, 24-bar momentum
+        _h4_atr_period = 14
+        for _i in range(len(_h4_closes)):
+            _end = _i + 1
+            _h4_atr_arr.append(
+                _atr(_h4_closes[:_end], _h4_closes[:_end], _h4_closes[:_end])
+                if _i >= _h4_atr_period
+                else 0.0
+            )
+            _h4_rsi_arr.append(_rsi(_h4_closes[:_end]) if _i >= 14 else 50.0)
+            _h4_mom_24.append(
+                (_h4_closes[_i] - _h4_closes[_i - 24]) / _h4_closes[_i - 24] * 100
+                if _i >= 24 and _h4_closes[_i - 24] > 0
+                else 0.0
+            )
+        print(f"  H4 features pre-computed: {len(_h4_atr_arr)} bars")
+
+    # XAU D1 alignment
+    _xau_d1_day_map: np.ndarray | None = None
+    if _xau_d1_closes is not None and _xau_d1_ts is not None:
+        _xau_d1_day_map = np.searchsorted(_xau_d1_ts, daily_ts, side="right") - 1  # type: ignore[assignment]
+        _xau_d1_day_map = np.clip(_xau_d1_day_map, 0, len(_xau_d1_closes) - 1)
+
+    # EUR D1 alignment
+    _eur_d1_day_map: np.ndarray | None = None
+    if _eur_d1_closes is not None and _eur_d1_ts is not None:
+        _eur_d1_day_map = np.searchsorted(_eur_d1_ts, daily_ts, side="right") - 1  # type: ignore[assignment]
+        _eur_d1_day_map = np.clip(_eur_d1_day_map, 0, len(_eur_d1_closes) - 1)
+
     # Compute daily features for each day
     day_features: dict[int, dict[str, float]] = {}
     for d_idx in range(len(daily_c)):
@@ -680,16 +840,67 @@ def build_dataset(
             "D1_Vol_ZScore": _vol_zscore(d_c_s),
             "D1_Bollinger_Width": _bollinger_width(d_c_s),
             "D1_ADX_14": _adx(d_h, d_l, d_c_s),
-            "H4_Trend_Strength": 0.0,
-            "H4_ATR_Ratio": 0.0,
-            "H4_RSI_Divergence": 0.0,
-            "H4_vs_D1_Alignment": 0.0,
-            "XAUUSDc_return": 0.0,
-            "XAUUSDc_close": 0.0,
-            "Cross_DXY_Return": 0.0,
-            "Cross_EURUSD_Return": 0.0,
-            "Cross_Risk_On_Off": 0.0,
         }
+        # ── H4 features (FIX-20260705-022) ──────────────────────────────────
+        if _h4_day_map is not None and d_idx < len(_h4_day_map):
+            _h4i = int(_h4_day_map[d_idx])
+            if _h4i >= 20:
+                _h4_trend = _h4_mom_24[_h4i] if _h4i < len(_h4_mom_24) else 0.0
+                _h4_atr_v = _h4_atr_arr[_h4i] if _h4i < len(_h4_atr_arr) else 0.0
+                _d1_atr_v = feat.get("D1_ATR_14", 0.0)
+                _h4_atr_ratio = _h4_atr_v / _d1_atr_v if _d1_atr_v > 0 else 0.0
+                _h4_rsi_v = _h4_rsi_arr[_h4i] if _h4i < len(_h4_rsi_arr) else 50.0
+                _h4_rsi_div = feat.get("D1_RSI_14", 50.0) - _h4_rsi_v
+                # H4 vs D1 alignment
+                if _h4i >= 6 and d_idx >= 1 and _h4_closes is not None and _h4_closes[_h4i - 6] > 0:
+                    _h4_ret = (_h4_closes[_h4i] - _h4_closes[_h4i - 6]) / _h4_closes[_h4i - 6]
+                    _d1_ret_v = feat.get("D1_Ret_1", 0.0)  # already in return units
+                    _h4_align = (
+                        1.0
+                        if _h4_ret * _d1_ret_v > 0
+                        else (-1.0 if _h4_ret * _d1_ret_v < 0 else 0.0)
+                    )
+                else:
+                    _h4_align = 0.0
+                feat["H4_Trend_Strength"] = round(_h4_trend, 6)
+                feat["H4_ATR_Ratio"] = round(_h4_atr_ratio, 6)
+                feat["H4_RSI_Divergence"] = round(_h4_rsi_div, 6)
+                feat["H4_vs_D1_Alignment"] = round(_h4_align, 6)
+        # ── Cross-asset D1 features (FIX-20260705-022) ──────────────────────
+        # XAUUSDc return
+        if _xau_d1_day_map is not None and d_idx < len(_xau_d1_day_map):
+            _xau_i = int(_xau_d1_day_map[d_idx])
+            if _xau_i >= 1 and _xau_d1_closes is not None and _xau_d1_closes[_xau_i - 1] > 0:
+                _xau_ret = (
+                    (_xau_d1_closes[_xau_i] - _xau_d1_closes[_xau_i - 1])
+                    / _xau_d1_closes[_xau_i - 1]
+                    * 100
+                )
+                feat["XAUUSDc_return"] = round(_xau_ret, 6)
+                feat["XAUUSDc_close"] = round(float(_xau_d1_closes[_xau_i]), 4)
+        # Cross DXY / EURUSD
+        if _eur_d1_day_map is not None and d_idx < len(_eur_d1_day_map):
+            _eur_i = int(_eur_d1_day_map[d_idx])
+            if _eur_i >= 1 and _eur_d1_closes is not None and _eur_d1_closes[_eur_i - 1] > 0:
+                _eur_ret = (
+                    (_eur_d1_closes[_eur_i] - _eur_d1_closes[_eur_i - 1])
+                    / _eur_d1_closes[_eur_i - 1]
+                    * 100
+                )
+                feat["Cross_DXY_Return"] = round(-_eur_ret, 6)  # DXY ≈ -EURUSD
+                feat["Cross_EURUSD_Return"] = round(_eur_ret, 6)
+        # Cross Risk-On/Off: using XAU 5d momentum as risk proxy
+        if _xau_d1_day_map is not None and d_idx < len(_xau_d1_day_map):
+            _xau_i2 = int(_xau_d1_day_map[d_idx])
+            if _xau_i2 >= 5 and _xau_d1_closes is not None and _xau_d1_closes[_xau_i2 - 5] > 0:
+                _xau_5d_mom = (
+                    (_xau_d1_closes[_xau_i2] - _xau_d1_closes[_xau_i2 - 5])
+                    / _xau_d1_closes[_xau_i2 - 5]
+                    * 100
+                )
+                # Normalize: gold 5d momentum vs BTC 5d momentum (risk appetite spread)
+                _btc_5d_mom = feat.get("Derived_Momentum_5D", 0.0)
+                feat["Cross_Risk_On_Off"] = round(_xau_5d_mom - _btc_5d_mom, 6)
         day_features[d_idx] = feat
 
     # ── Compute labels ──
@@ -699,7 +910,7 @@ def build_dataset(
     # → label encoded "barrier hit" not "profitable direction."
     # New behavior: label = which direction (if any) would have hit TP.
     print(
-        f"[B2] Computing forward-barrier labels (SL={sl_atr_mult} ATR, TP={tp_atr_mult} ATR, spread={spread_points}, slippage={slippage_points})..."
+        f"[B2] Computing forward-barrier labels (SL={sl_atr_mult} ATR, TP={tp_atr_mult} ATR, spread=per-bar (median={np.median(spreads_real):.1f}), slippage={slippage_points})..."
     )
     if multi_class:
         # Independent directional outcome tracking
@@ -715,6 +926,7 @@ def build_dataset(
             slippage_points,
             tick_value,
             side="long",
+            spreads=spreads_real,
         )
         labels_short, pnl_r_short, hold_short = compute_labels(
             o,
@@ -728,6 +940,7 @@ def build_dataset(
             slippage_points,
             tick_value,
             side="short",
+            spreads=spreads_real,
         )
     else:
         # Backward-compatible merged path (binary training)
@@ -743,6 +956,7 @@ def build_dataset(
             slippage_points,
             tick_value,
             side=None,
+            spreads=spreads_real,
         )
         labels_short, pnl_r_short, hold_short = (
             labels_long.copy(),
@@ -783,13 +997,94 @@ def build_dataset(
             tf_minutes=timeframe_minutes,
             prev_ou=prev_ou,
             prev_hurst=prev_hurst,
+            aligned_cross_m5=_aligned_cross if _aligned_cross else None,
+            m5_day_map=m5_day_map,
         )
         features[i] = np.asarray(row, dtype=np.float32)
         prev_ou = tf_ou
         prev_hurst = tf_hurst
 
+    # ── Sample Curation (FIX-20260705-021) ──────────────────────────────────
+    curation_mask = np.ones(n_bars, dtype=bool)
+    curation_reasons: list[str] = []
+
+    # ADX filter: exclude bars where D1 ADX is below threshold
+    if min_adx > 0:
+        d1_adx_per_bar = np.array(
+            [day_features[d_idx].get("D1_ADX_14", 0.0) for d_idx in m5_day_map]
+        )
+        adx_mask = d1_adx_per_bar >= min_adx
+        n_excluded_adx = int((~adx_mask).sum())
+        curation_mask &= adx_mask
+        curation_reasons.append(f"ADX<{min_adx}: -{n_excluded_adx:,}")
+        print(
+            f"[B2] Curation ADX filter (min={min_adx}): "
+            f"excluded {n_excluded_adx:,}/{n_bars:,} bars "
+            f"({100*n_excluded_adx/n_bars:.1f}%)"
+        )
+
+    # Weekend filter: exclude Fri 22:00 – Sun 22:00 UTC
+    if exclude_weekends:
+        # Convert unix timestamps to UTC weekday/hour
+        utc_dt = pd.to_datetime(timestamps, unit="s", utc=True)
+        weekday = utc_dt.dayofweek  # Mon=0, Sun=6
+        hour = utc_dt.hour
+        # Weekend window: Fri 22:00+ (day=4, h>=22), Sat all day (day=5), Sun before 22:00 (day=6, h<22)
+        is_weekend = (
+            ((weekday == 4) & (hour >= 22)) | (weekday == 5) | ((weekday == 6) & (hour < 22))
+        )
+        n_excluded_weekend = int(is_weekend.sum())
+        curation_mask &= ~is_weekend
+        curation_reasons.append(f"weekend: -{n_excluded_weekend:,}")
+        print(
+            f"[B2] Curation weekend filter: "
+            f"excluded {n_excluded_weekend:,}/{n_bars:,} bars "
+            f"({100*n_excluded_weekend/n_bars:.1f}%)"
+        )
+
+    # ATR percentile filter: exclude extreme ATR bars
+    if atr_pctile_low > 0 or atr_pctile_high > 0:
+        d1_atr_per_bar = np.array(
+            [day_features[d_idx].get("D1_ATR_14", 0.0) for d_idx in m5_day_map]
+        )
+        atr_mask = np.ones(n_bars, dtype=bool)
+        if atr_pctile_low > 0:
+            atr_lo = np.percentile(d1_atr_per_bar, atr_pctile_low)
+            atr_mask &= d1_atr_per_bar >= atr_lo
+            n_excluded_lo = int((d1_atr_per_bar < atr_lo).sum())
+            curation_reasons.append(f"ATR<p{atr_pctile_low:.0f}: -{n_excluded_lo:,}")
+            print(
+                f"[B2] Curation ATR low filter (p{atr_pctile_low:.0f}={atr_lo:.1f}): "
+                f"excluded {n_excluded_lo:,} bars"
+            )
+        if atr_pctile_high > 0:
+            atr_hi = np.percentile(d1_atr_per_bar, atr_pctile_high)
+            atr_mask &= d1_atr_per_bar <= atr_hi
+            n_excluded_hi = int((d1_atr_per_bar > atr_hi).sum())
+            curation_reasons.append(f"ATR>p{atr_pctile_high:.0f}: -{n_excluded_hi:,}")
+            print(
+                f"[B2] Curation ATR high filter (p{atr_pctile_high:.0f}={atr_hi:.1f}): "
+                f"excluded {n_excluded_hi:,} bars"
+            )
+        curation_mask &= atr_mask
+
+    n_curated = int(curation_mask.sum())
+    n_excluded_total = n_bars - n_curated
+    if curation_reasons:
+        print(
+            f"[B2] Curation summary: {n_curated:,}/{n_bars:,} bars kept "
+            f"(-{n_excluded_total:,}, -{100*n_excluded_total/max(n_bars,1):.1f}%) "
+            f"[{', '.join(curation_reasons)}]"
+        )
+
     # ── Filter to labeled bars with valid features ──
     valid_idx = np.arange(start_bar, n_bars - horizon - 1)
+    # Intersect valid_idx with curation_mask
+    valid_idx = valid_idx[curation_mask[valid_idx]]
+    print(
+        f"[B2] After curation: {len(valid_idx):,} labeled bars "
+        f"(from {n_bars - start_bar - horizon - 1:,} pre-curation)"
+    )
     features = features[valid_idx]
     labels = labels[valid_idx]
     pnl_r = pnl_r[valid_idx]
@@ -1484,6 +1779,30 @@ def main():
         action="store_true",
         help="Train 3-class model (SHORT/NEUTRAL/LONG) instead of binary (TP/SL only)",
     )
+    # ── Sample Curation (FIX-20260705-021) ──────────────────────────────────
+    parser.add_argument(
+        "--min-adx",
+        type=float,
+        default=0.0,
+        help="Minimum D1 ADX for bar curation (0=disabled). Recommended: 20 for trend filter.",
+    )
+    parser.add_argument(
+        "--exclude-weekends",
+        action="store_true",
+        help="Exclude weekend bars (Fri 22:00 – Sun 22:00 UTC) from training",
+    )
+    parser.add_argument(
+        "--atr-pctile-low",
+        type=float,
+        default=0.0,
+        help="Exclude bars below this ATR percentile (0=disabled). Recommended: 5 for dead-zone removal.",
+    )
+    parser.add_argument(
+        "--atr-pctile-high",
+        type=float,
+        default=0.0,
+        help="Exclude bars above this ATR percentile (0=disabled). Recommended: 95 for crash-spike removal.",
+    )
     args = parser.parse_args()
 
     do_build = args.full or args.build_only
@@ -1508,6 +1827,10 @@ def main():
             purge_bars=args.purge_bars,
             timeframe_minutes=args.timeframe_minutes,
             multi_class=args.multi_class,
+            min_adx=args.min_adx,
+            exclude_weekends=args.exclude_weekends,
+            atr_pctile_low=args.atr_pctile_low,
+            atr_pctile_high=args.atr_pctile_high,
         )
 
     if do_train:

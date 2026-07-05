@@ -6,10 +6,10 @@
   "training_contract": "btc_swing",
   "feature_schema": "btc_macro_enhanced_41",
   "feature_schema_id": "btc_macro_enhanced_41",
-  "model_path": "data_btc/models/btc_swing_m5_binary/xgboost_fold3_s42.json",
-  "artifact_path": "data_btc/models/btc_swing_m5_binary/xgboost_fold3_s42.json",
-  "model_version": "btc_swing_m5_binary",
-  "artifact_hash": "772ad2cdb53a7a4fb1fcd298da9fc2bdad59edb1b37bb42726997a880ee5f0fb",
+  "model_path": "data_btc/models/btc_swing_m5_symmetric/xgboost_fold0_s42.json",
+  "artifact_path": "data_btc/models/btc_swing_m5_symmetric/xgboost_fold0_s42.json",
+  "model_version": "btc_swing_m5_symmetric",
+  "artifact_hash": "b2bd145a10430f81fcdc0f3a6e8029589039e63e66a4952515001a19ad59d9da",
   "status": "probation",
   "vote_weight": 1.0,
   "magic": 90413,
@@ -25,19 +25,27 @@
     "n_estimators": 500,
     "learning_rate": 0.02,
     "max_depth": 5,
-    "objective": "binary_directional"
+    "objective": "binary_directional",
+    "spread_source": "per-bar real spread (median $18, range $10-$160) — FIX-20260706-024",
+    "curation": "ADX≥20 + exclude weekends + ATR p5-p95",
+    "feature_source": "41 real features (no zero-fill) — FIX-20260706-015 cross-asset alignment"
   },
   "training_metrics": {
-    "cv_mean_val_wr": 0.5112,
-    "cv_std_val_wr": 0.0120,
-    "cv_mean_val_acc": 0.5196,
-    "cv_std_val_acc": 0.0158,
+    "cv_mean_val_wr": 0.5425,
+    "cv_std_val_wr": 0.0148,
+    "cv_mean_val_acc": 0.5588,
+    "cv_std_val_acc": 0.0271,
     "cv_folds": 5,
+    "n_train_samples": 43880,
+    "n_short": 18391,
+    "n_long": 25489,
+    "label_long_ratio": 0.581,
     "direction_diversity": {
-      "n_long_pred": 18156,
-      "n_short_pred": 25457,
-      "long_ratio": 0.4163,
-      "note": "FIX-20260706-015: binary_directional classifier. 41.6% LONG — direction-balanced. Deadzone (threshold=0.05) restores NEUTRAL for P(LONG)∈[0.45,0.55]."
+      "n_long_pred": 34082,
+      "n_short_pred": 9798,
+      "long_ratio": 0.777,
+      "long_ratio_pooled_cv": 0.646,
+      "note": "FIX-20260706-025: Native 77.7% LONG (64.6% pooled CV). Institutional mandate: ACCEPT AS-IS — model is honest about structural bull regime. No threshold shifting (rejected 0.53→WR-0.7pp cost). Deadzone θ=0.05 creates [0.45,0.55] NEUTRAL zone via base_adapter. Per-fold: Fold0=90.9%, Fold4=37.8% — regime-driven, not structural."
     }
   },
   "features": [
@@ -84,18 +92,19 @@
     "Cross_BTC_Gold_Ratio_ROC"
   ],
   "n_features": 41,
-  "n_train_samples": 43613,
-  "trained_at": "2026-07-05T11:08:30Z",
+  "trained_at": "2026-07-05T16:47:52Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
-  "last_retrained": "2026-07-05T11:08:30Z",
+  "last_retrained": "2026-07-05T16:47:52Z",
   "label_contract": {
     "sl_atr_mult": 1.5,
     "tp_atr_mult": 1.5,
     "contract_type": "btc_swing",
-    "aligned_with": "configs/live_btc.yaml"
+    "aligned_with": "configs/live_btc.yaml",
+    "spread_per_bar": true,
+    "slippage_points": 0.0
   },
-  "_note": "FIX-20260706-015 (DQAF-20260706-015): B-path binary directional classifier. Trained on NEUTRAL-purged dataset (43,613 samples, SHORT=22,420/LONG=21,193). XGBoost binary:logistic → _score_to_direction Path 2 (binary_directional). Deadzone θ=0.05. Shadow/probation only — signals recorded, not executed."
+  "_note": "FIX-20260706-025 (upgrade from FIX-20260706-015 baseline): B-path binary directional classifier v2 — SYMMETRIC labels + REAL per-bar spread + REAL 41-dim features + curation. XGBoost binary:logistic WR=54.2% ±1.5% (+3.1pp over zero-fill baseline 51.1%). Per-fold: 56.4%/53.7%/54.1%/51.9%/55.2%. Label WR=58.1%, EV=-0.005R (near-zero — symmetric friction). Institutional mandate: NO threshold shifting — accept native 64.6% LONG (regime-honest). Deadzone θ=0.05 → [0.45,0.55] NEUTRAL. Shadow/probation only — signals recorded, not executed. Previous model (WR=51.1%) superseded."
 }

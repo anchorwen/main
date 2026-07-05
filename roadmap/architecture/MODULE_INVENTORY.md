@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-05T14:51:08Z
-> **扫描模块数**: 723
+> **自动生成**: 2026-07-05T17:14:11Z
+> **扫描模块数**: 724
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -710,7 +710,8 @@
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 713 | — | |
+| `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 714 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
@@ -944,10 +945,10 @@
 | `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
 | `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2075 | — | |
-| `train_btc_binary_directional.py` | ✅ active | — | 5 | 367 | — | |
+| `train_btc_binary_directional.py` | ✅ active | — | 5 | 385 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
-| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1526 | — | |
+| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1849 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |

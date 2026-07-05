@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-05T14:51:08Z
+> **自动生成**: 2026-07-05T17:14:11Z
 
 ## Package-Level Dependencies
 
@@ -624,6 +624,7 @@
 - `build_btc_metafilter_v2_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_metafilter_dataset.py` → `core.features.feature_router`
 - `build_regime_snapshots.py` → (无内部依赖)
+- `calibrate_binary_threshold.py` → (无内部依赖)
 - `check_blueprint_compliance.py` → (无内部依赖)
 - `check_data_health_contract.py` → (无内部依赖)
 - `check_import_boundaries.py` → (无内部依赖)

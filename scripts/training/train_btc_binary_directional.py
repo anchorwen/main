@@ -38,19 +38,37 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def build_binary_dataset(npz_path: str) -> dict[str, Any]:
-    """Load multi-class NPZ, filter NEUTRAL, return binary X/y."""
+    """Load NPZ, auto-detect encoding, return binary X/y (SHORT=0, LONG=1)."""
     data = np.load(npz_path)
     X_all = data["X"]
     y_all = data["y"]
 
-    # Multi-class encoding: 0=SHORT, 1=NEUTRAL, 2=LONG
-    # Keep only non-NEUTRAL samples
-    binary_mask = y_all != 1  # exclude NEUTRAL
-    X = X_all[binary_mask]
-    y_raw = y_all[binary_mask]
+    unique_vals = set(np.unique(y_all))
 
-    # Remap: SHORT(0)→0, LONG(2)→1
-    y = np.where(y_raw == 0, 0, 1)  # SHORT=0, LONG=1
+    if unique_vals == {-1, 1}:
+        # Binary barrier encoding: -1=SL, 1=TP
+        # Remap: SL(-1)→0 (SHORT), TP(1)→1 (LONG)
+        y = np.where(y_all == -1, 0, 1)
+        X = X_all
+        print("  Detected binary barrier encoding {-1, 1} — direct remap")
+    elif 1 in unique_vals and 2 in unique_vals:
+        # Multi-class encoding: 0=SHORT, 1=NEUTRAL, 2=LONG
+        # Keep only non-NEUTRAL samples
+        binary_mask = y_all != 1
+        X = X_all[binary_mask]
+        y_raw = y_all[binary_mask]
+        y = np.where(y_raw == 0, 0, 1)  # SHORT(0)→0, LONG(2)→1
+        print("  Detected multi-class encoding {0,1,2} — NEUTRAL filtered")
+    elif unique_vals == {0, 1}:
+        # Already binary (0=SHORT/SL, 1=LONG/TP)
+        y = y_all.copy()
+        X = X_all
+        print("  Detected binary encoding {0,1} — direct use")
+    else:
+        raise ValueError(
+            f"Unknown label encoding: unique values={unique_vals}. "
+            f"Expected {{-1,1}} (binary barriers), {{0,1,2}} (multi-class), or {{0,1}} (binary)."
+        )
 
     n_short = int((y == 0).sum())
     n_long = int((y == 1).sum())
@@ -293,12 +311,12 @@ def main():
     lgb_accs = [r["metrics"]["val_acc"] for r in lgb_results]
 
     print(
-        f"  XGBoost: WR={np.mean(xgb_wrs)*100:.1f}% ± {np.std(xgb_wrs)*100:.1f}%, "
-        f"Acc={np.mean(xgb_accs)*100:.1f}% ± {np.std(xgb_accs)*100:.1f}%"
+        f"  XGBoost: WR={np.mean(xgb_wrs)*100:.1f}% +/- {np.std(xgb_wrs)*100:.1f}%, "
+        f"Acc={np.mean(xgb_accs)*100:.1f}% +/- {np.std(xgb_accs)*100:.1f}%"
     )
     print(
-        f"  LightGBM: WR={np.mean(lgb_wrs)*100:.1f}% ± {np.std(lgb_wrs)*100:.1f}%, "
-        f"Acc={np.mean(lgb_accs)*100:.1f}% ± {np.std(lgb_accs)*100:.1f}%"
+        f"  LightGBM: WR={np.mean(lgb_wrs)*100:.1f}% +/- {np.std(lgb_wrs)*100:.1f}%, "
+        f"Acc={np.mean(lgb_accs)*100:.1f}% +/- {np.std(lgb_accs)*100:.1f}%"
     )
 
     # Direction diversity check
@@ -320,9 +338,9 @@ def main():
     print(f"  Predictions: LONG={n_long_pred}, SHORT={n_short_pred}")
     print(f"  LONG ratio: {n_long_pred/len(y_pred)*100:.1f}%")
     if 30 <= n_long_pred / len(y_pred) * 100 <= 70:
-        print("  VERDICT: Direction-balanced ✅")
+        print("  VERDICT: Direction-balanced [PASS]")
     else:
-        print("  VERDICT: Direction-biased ⚠️")
+        print("  VERDICT: Direction-biased [WARN]")
 
     # Save summary
     summary = {

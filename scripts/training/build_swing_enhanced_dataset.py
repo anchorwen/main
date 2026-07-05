@@ -891,7 +891,7 @@ def main() -> None:
             print("[btc_contract] TP defaulted to 2.5x ATR (live_btc.yaml)")
         if _sl_mult != 2.0 or _tp_mult != 2.5:
             print(
-                f"[btc_contract] ⚠️  WARNING: SL={_sl_mult}, TP={_tp_mult} "
+                f"[btc_contract] WARNING: SL={_sl_mult}, TP={_tp_mult} "
                 f"does NOT match live config (SL=2.0, TP=2.5).  "
                 f"Labels will have train-serve skew!"
             )
