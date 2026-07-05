@@ -266,6 +266,10 @@ pipeline:
 portfolio_max_gross: 0.5
 portfolio_max_net: 0.3
 reentry:
+  # ── FIX-20260705-008: bleed_confidence_penalty is DEPRECATED ──
+  # Replaced by _BLEED_ABSOLUTE_CONFIDENCE=0.50 in reentry_guard.py.
+  # The old "confidence must improve from exit" logic caused adverse selection.
+  # This field is retained for config schema backward compatibility only.
   bleed_confidence_penalty: 0.15
   bleed_cooldown_seconds: 600
   sl_confidence_penalty: 0.15
@@ -308,7 +312,12 @@ strategy_lines:
     confidence_threshold: 0.35        # standard — not survival mode
     direction_balance:
       long_bias_discount: 0.0
-    enabled: true
+    # ── DQAF-20260705-064 KILL SWITCH (2026-07-05) ──
+    # V12_H1_15 has structural LONG bias: 885 LONG vs 6 SHORT (0.6%) in 990 golden_master records.
+    # ALL 6 SHORT signals blocked by rr_below_minimum. Model cannot produce executable SHORT.
+    # Together with btc_swing (V4) locked SHORT, creates cross-strategy hedge → net PnL ≈ 0 minus costs.
+    # Institutional mandate: Zero Exposure is a position. Kill until OOD gateway + netting engine active.
+    enabled: false
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true         # symmetric contract — flip on signal reversal
@@ -351,7 +360,12 @@ strategy_lines:
     confidence_threshold: 0.35
     direction_balance:
       long_bias_discount: 0.0
-    enabled: true
+    # ── DQAF-20260705-064 KILL SWITCH (2026-07-05) ──
+    # V4 has flipped to SHORT-only since June 28 (0 LONG post-June28, 4 LONG all rr_blocked on June 28).
+    # Feature manifold shift: fv[2] halved (135.7→67.5), fv[4] collapsed (15.5→2.9) — model in OOD zone.
+    # Together with btc_swing_h1 (V12_H1_15) locked LONG, creates cross-strategy hedge → net PnL ≈ 0 minus costs.
+    # Institutional mandate: Zero Exposure is a position. Kill until OOD gateway + netting engine active.
+    enabled: false
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true

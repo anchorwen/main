@@ -42,7 +42,8 @@ def check_reentry_quality(
     sl_cooldown_override: float | None = None,
     sl_penalty_override: float | None = None,
     bleed_cooldown_override: float | None = None,
-    bleed_penalty_override: float | None = None,
+    bleed_penalty_override: float
+    | None = None,  # DEPRECATED by FIX-20260705-008 — no longer used internally
     # ── DQAF-20260616-001/P2: L3 architecture — rule-based strategy gate ──
     is_rule_based: bool = False,
 ) -> tuple[bool, str]:
@@ -113,6 +114,13 @@ def check_reentry_quality(
     # a mathematical deadlock — the model physically cannot reach the threshold.
     # This ceiling prevents that class of permanent lock-out.
     _MAX_THRESHOLD = 0.82
+
+    # ── FIX-20260705-008: Absolute confidence floor for bleed_stop ──────
+    # Replaces the old "must improve from exit_confidence" requirement.
+    # Stable high confidence is a structural Alpha signal, not a bug —
+    # penalizing it caused adverse selection (blocked 75% correct vs
+    # approved 56% correct in BTC post-restart analysis).
+    _BLEED_ABSOLUTE_CONFIDENCE = 0.50
 
     if category == "brain_flip":
         # Brain flipped against us — this is the most dangerous exit category
@@ -331,24 +339,34 @@ def check_reentry_quality(
         # blocking would miss new-regime trading opportunities.
         _bleed_ttl_s = max(7200, entry_half_life * timeframe_minutes * 2.0 * 60)
         if elapsed > _bleed_ttl_s:
-            if new_confidence < 0.50:
+            if new_confidence < _BLEED_ABSOLUTE_CONFIDENCE:
                 return (
                     False,
-                    f"bleed_stop_ttl_expired_low_conf_{new_confidence:.3f}",
+                    f"bleed_stop_ttl_expired_low_conf_{new_confidence:.3f}_need_{_BLEED_ABSOLUTE_CONFIDENCE:.2f}",
                 )
             return True, f"bleed_stop_ttl_expired_{elapsed:.0f}s"
 
-        # FIX-20260605-120: per-asset thresholds via config override.
-        # XAU defaults: cooldown=180s, confidence_penalty=0.10
-        # BTC: cooldown=600s, confidence_penalty=0.15
+        # FIX-20260605-120: per-asset cooldown via config override.
+        # XAU default: 180s, BTC: 600s (from live_btc.yaml).
+        # bleed_penalty_override is DEPRECATED (FIX-20260705-008) —
+        # replaced by _BLEED_ABSOLUTE_CONFIDENCE absolute threshold.
         _cooldown = bleed_cooldown_override if bleed_cooldown_override is not None else 180
-        _penalty = bleed_penalty_override if bleed_penalty_override is not None else 0.10
         if elapsed < _cooldown:
             return False, f"bleed_stop_too_soon_{elapsed:.0f}s_lt_{_cooldown}s"
-        if new_confidence < exit_confidence + _penalty:
+        # FIX-20260705-008: Replace confidence momentum with absolute threshold.
+        # The old requirement (new_confidence >= exit_confidence + 0.15 for BTC)
+        # caused adverse selection: it systematically blocked stable high-confidence
+        # signals while allowing volatile confidence spikes through — the opposite
+        # of what a quality gate should do.  In ML models (XGBoost/LightGBM),
+        # stable confidence is a structural Alpha marker; confidence spikes are
+        # often overfitting reactions to feature-space noise.
+        # Data: bleed_stop-blocked BTC trades 75% forward-correct at +60min vs
+        # approved trades 56%.  The gate was selecting for noise, not signal.
+        # New logic: absolute threshold ≥ 0.50 (matching TTL unlock floor at L341).
+        if new_confidence < _BLEED_ABSOLUTE_CONFIDENCE:
             return (
                 False,
-                f"bleed_stop_confidence_not_improved_{new_confidence:.3f}",
+                f"bleed_stop_low_confidence_{new_confidence:.3f}_need_{_BLEED_ABSOLUTE_CONFIDENCE:.2f}",
             )
         if exit_direction == "long" and mid_price <= exit_price + 1.0:
             return False, "bleed_stop_price_not_confirming_long"

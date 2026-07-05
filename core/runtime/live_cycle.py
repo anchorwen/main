@@ -150,7 +150,9 @@ class LiveCycleConfig:
     reentry_sl_cooldown: float = 180.0
     reentry_sl_penalty: float = 0.10
     reentry_bleed_cooldown: float = 180.0
-    reentry_bleed_penalty: float = 0.10
+    reentry_bleed_penalty: float = (
+        0.10  # DEPRECATED by FIX-20260705-008 — replaced by _BLEED_ABSOLUTE_CONFIDENCE=0.50
+    )
 
     # ── live.yaml strategy_lines overrides ──
     strategy_configs: dict[str, Any] = field(default_factory=dict)
@@ -3614,6 +3616,57 @@ def execute_live_cycle(
         from core.runtime.reentry_alert import check_reentry_block_streaks
 
         check_reentry_block_streaks(eval_summary=eval_summary, state=state)
+
+        # ── DQAF-20260705-064 P1: Portfolio Netting Gate ──────────────────
+        # Institutional mandate: The portfolio is ONE.  Before dispatching
+        # to MT5, compute Net_Exposure across all same-symbol strategy
+        # decisions.  If opposing directions exist and |net|/gross falls
+        # below the netting threshold, ALL orders are physically SWALLOWED —
+        # the broker never sees internal disagreements.
+        #
+        # Zero Exposure is a position.
+        if exec_queue.queue_size > 0 and not config.no_mt5:
+            from core.execution.portfolio_netting import (
+                PortfolioNettingConfig,
+                PortfolioNettingGate,
+            )
+
+            _netting_config = PortfolioNettingConfig(
+                enabled=True,
+                netting_threshold=0.20,
+                mode="swallow",
+            )
+            _netting_gate = PortfolioNettingGate(_netting_config)
+            _queued_pairs: list[tuple[str, Any]] = [
+                (qd.strategy_name, qd.decision) for qd in exec_queue._queue
+            ]
+            _, _netted = _netting_gate.net(_queued_pairs, symbol=config.symbol)
+
+            if _netted.action in ("swallow", "reduce"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "portfolio_netting",
+                            "time": _utc_iso(),
+                            "symbol": config.symbol,
+                            "action": _netted.action,
+                            "direction": _netted.direction,
+                            "net_exposure_power": round(_netted.net_exposure_power, 6),
+                            "gross_exposure_power": round(_netted.gross_exposure_power, 6),
+                            "net_ratio": round(_netted.net_ratio, 4),
+                            "swallowed": _netted.swallowed,
+                            "survivors": _netted.survivors,
+                            "original_decisions": _netted.original_decisions,
+                            "reason": _netted.reason,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                # If ALL decisions were swallowed, update eval_summary for golden_master
+                if _netted.action == "swallow" and not _netted.survivors:
+                    eval_summary["trade_decisions"] = 0
+                    eval_summary["queued"] = 0
 
         # Flush execution queue → dispatch to MT5
         if exec_queue.queue_size > 0 and not config.no_mt5:

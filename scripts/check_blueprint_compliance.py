@@ -133,6 +133,9 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/reentry_guard.py",
         "core/execution/exit_reason.py",
     ],
+    "execution_netting": [
+        "core/execution/portfolio_netting.py",
+    ],
     "risk_policies": ["core/risk/risk_policies.py", "core/risk/risk_evaluation_service.py"],
     "risk_regime": [
         "core/risk/regime_detector.py",
