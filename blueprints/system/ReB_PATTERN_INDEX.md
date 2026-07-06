@@ -892,5 +892,26 @@
 | Docket | Date | Module | Severity |
 |--------|------|--------|----------|
 | DQAF-20260630-202 | 2026-06-30 | governance | Sev 2 |
+| DQAF-20260706-003 | 2026-07-06 | runtime | Sev 1 |
+
+---
+
+### ReB-20260706-CROSS_FILE_DUPLICATE_GATE_LOGIC
+- **Pattern Signature**: `CROSS_FILE_DUPLICATE_GATE_LOGIC`
+- **Date Cataloged**: 2026-07-06
+- **Source Docket**: DQAF-20260706-003
+- **Related**: `GOVERNANCE_DEGRADATION_VOTE_WEIGHT_BLIND`, FIX-20260706-003, FIX-20260629-174, FIX-20260703-061, FIX-20260625-139
+
+**Definition**: A governance/safety gate (e.g., minimum live brain count, vote_weight enforcement, governance state access) is implemented in TWO independent code paths — typically one in the signal pipeline (`strategy_line.py`) and one in the strategy evaluator (`strategy_evaluator.py`). When a fix is applied to only ONE of the two paths, the unfixed path silently continues executing the old (broken) logic. This is a silent architectural defect: no error, no warning, no code sharing — just two independent implementations of the same rule that drift apart over successive fixes.
+
+**Known instances in strategy_evaluator.py (chronological)**:
+1. FIX-20260629-174: governance_state access path (`get(bid)` → `get("brain_states",{}).get(bid)`) — fixed in strategy_line.py, missed in strategy_evaluator.py L307+L548
+2. FIX-20260703-061: status dimension (`status=="live"` → `status in ("live","probation")`) — fixed in strategy_line.py, missed in strategy_evaluator.py Cut 4
+3. FIX-20260625-139: vote_weight dimension (BrainSignal vote_weight contract) — fixed in strategy_line.py signal pipeline, missed in strategy_evaluator.py Cut 4/Cut 4-bis
+4. FIX-20260706-003: this fix — closes the vote_weight blind spot in Cut 4/Cut 4-bis, completing the three-dimensional coverage (governance access, status filter, vote_weight)
+
+**Prevention**: (1) Consolidate governance gate logic into a single shared module (`governance_gates.py`) imported by both strategy_line and strategy_evaluator — eliminate the duplicate code path entirely. (2) Until consolidation: pre-commit lint rule that flags semantically-identical threshold values / filter conditions replicated across files. (3) When fixing a gate bug, grep for ALL occurrences of the key identifier (e.g., `_live_count`, `vote_weight`, `brain_states`) across the entire codebase — don't assume the bug is single-site.
+
+**Detection**: For each governance gate dimension (status, vote_weight, access path), grep both strategy_line.py and strategy_evaluator.py for the gate condition — flag if they differ.
 
 **Cross-References**: FIX-20260625-125, CCT-20260625-125

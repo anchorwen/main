@@ -1012,4 +1012,24 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: `TOXIC_DIVERSITY_GATE`, `DUPLICATE_RULE_UNSYNC`
 - **关联 FIX**: FIX-20260630-202, FIX-20260701-203, FIX-20260701-204
+
+---
+
+### CCT-20260706-003
+- **Docket ID**: DQAF-20260706-003
+- **日期**: 2026-07-06
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 重启后 3 笔 XAU 实盘交易由 vote_weight=0.0 的影子大脑决策 — H4 SHORT (05:08Z), M15 LONG (05:15Z), M30 LONG (06:14Z). 证据: `data/golden_master.jsonl` cycle=1 H4 SHORT `[degraded: no_live_brains]`, cycle=3 M15 LONG `[degraded: non_live_dominance]`, cycle=15 M30 LONG `[degraded: no_live_brains]` + `data/live_trade_journal.jsonl` 对应的 3 笔 open 事件
+  - [Layer 2 — 中间异常]: `strategy_evaluator.py:605-611`: `_live_count` 计算仅使用 `status in ("live","probation")` 过滤，未考虑 `vote_weight`。governance_state 中 8 个 Tracer 大脑注册为 status=candidate + vote_weight=0.0 — 重启后 live 大脑尚未产出信号时，仅 candidate/shadow 大脑投票 → `_live_count=0` → 触发降级路径 (`confidence ≥ 0.50 + volume ≤ 0.01`)
+  - [Layer 3 — 根因]: L3 架构缺陷: Cut 4/Cut 4-bis 降级门缺少 vote_weight 门禁。FIX-20260625-139 在信号管线层面修复了 vote_weight 传透 (BrainSignal → `_compute_weighted`)，但 `strategy_evaluator.py` 的并行治理门从未被更新。这是 strategy_evaluator.py 中「跨文件重复门逻辑」的第 4 个实例 — 前三次: FIX-20260629-174 (governance 访问路径), FIX-20260703-061 (status 维度), FIX-20260625-139 (信号管线 vote_weight — 仅修了 strategy_line.py 漏了 strategy_evaluator.py)
+- **证据引用**:
+  - Source 1: `core/runtime/strategy_evaluator.py:605-611` (pre-fix) — `_live_count` 仅按 status 过滤
+  - Source 2: `core/runtime/strategy_evaluator.py:612-651` (pre-fix) — `_live_count==0` 降级路径无 vote_weight 检查
+  - Source 3: `data/governance_state.json` — 8 个 Tracer 大脑: status=candidate, vote_weight=0.0
+  - Source 4: `configs/brains/XAU_Swing_*_A.json` — IC Mandate: "Shadow, vote_weight=0.0, 7-day observation"
+  - Source 5: `core/runtime/strategy_line.py` — FIX-20260625-139 已修复 signal 管线 vote_weight (证明 parallel gate 遗漏)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: `CROSS_FILE_DUPLICATE_GATE_LOGIC`
+- **关联 FIX**: FIX-20260706-003
 - **状态**: **CLOSED** — FIX-20260701-204 deployed. H4_V3 macro exemption active on both governance paths. Restart required for promotion evaluation.
