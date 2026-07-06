@@ -30,6 +30,8 @@ brains:
     enabled: false
   - path: configs/brains/Swing_V9_M30_V2.json
     enabled: true  # DQAF-20260630-201 P0: re-enabled — only live XAU brain
+  - path: configs/brains/XAU_Swing_M30_Sym_A.json
+    enabled: true  # DQAF-20260706-TB001: Tracer Bullet Candidate A (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
   - path: configs/brains/Swing_V9_M30_V3.json
     enabled: false
   - path: configs/brains/Swing_V9_M15_V2.json

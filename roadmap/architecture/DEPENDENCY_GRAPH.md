@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-05T17:14:11Z
+> **自动生成**: 2026-07-06T04:16:08Z
 
 ## Package-Level Dependencies
 
@@ -710,6 +710,7 @@
 - `online_feedback_hook.py` → `core.brains.adapters.online_learner_adapter`, `core.feedback.online_feedback_hook`
 - `optimize_sl_tp.py` → `scripts.paper_trade_simulator`
 - `optimize_sltp_params.py` → `scripts.training.train_btc_swing_v9`
+- `optimize_xau_sltp_institutional.py` → (无内部依赖)
 - `paper_trade_simulator.py` → `core.simulation.spread_model`
 - `phase4_final_audit.py` → (无内部依赖)
 - `phase4_shadow_review.py` → (无内部依赖)

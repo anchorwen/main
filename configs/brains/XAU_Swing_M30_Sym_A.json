@@ -1,0 +1,135 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "XAU_Swing_M30_Sym_A",
+  "brain_type": "xgboost_v9",
+  "contract_group": "m30_swing",
+  "training_contract": "m30_swing",
+  "feature_schema": "swing_enhanced_35",
+  "feature_schema_id": "swing_enhanced_35",
+  "model_path": "data/models/swing_tracer_a/Swing_V9_M30_V2_model.json",
+  "artifact_path": "data/models/swing_tracer_a/Swing_V9_M30_V2_model.json",
+  "model_version": "swing_v9_m30_sym_a",
+  "artifact_hash": "2ef0e9c9d15822bcfaa25dd83dcaa37571fad1045bd8217ccb645251dff7e688",
+  "status": "shadow",
+  "_ic_mandate": {
+    "authority": "INVESTMENT_COMMITTEE",
+    "date": "2026-07-06",
+    "docket": "DQAF-20260706-TB001",
+    "action": "SHADOW_DEPLOY",
+    "reason": "TRACER_BULLET_PROTOCOL: Candidate A (SL=2.5/TP=2.5, RR=1.0) wins cross-candidate evaluation — WR=18.1%, PF=0.642, EV/R=-0.101. Raw metrics negative (no filtering), but dominates B (+42% EV) and C (+29% EV). Deployed as shadow with vote_weight=0.0 for 7-day golden_master observation. IC mandates: Fire Rate, Post-Gate WR (>53%), Cross-Veto vs live model.",
+    "candidates_evaluated": {
+      "A_SL2.5_TP2.5_RR1.00": {"WR": 0.181, "PF": 0.642, "EV_R": -0.101, "label_SL_pct": 29.6, "label_TP_pct": 25.2, "label_TO_pct": 45.2},
+      "B_SL2.0_TP3.0_RR1.50": {"WR": 0.128, "PF": 0.524, "EV_R": -0.174, "label_SL_pct": 38.4, "label_TP_pct": 18.3, "label_TO_pct": 43.2},
+      "C_SL2.0_TP2.5_RR1.25": {"WR": 0.177, "PF": 0.609, "EV_R": -0.142, "label_SL_pct": 37.7, "label_TP_pct": 23.8, "label_TO_pct": 38.5}
+    },
+    "alpha_decomposition": {
+      "random_entry_baseline_EV": -3.33,
+      "model_raw_EV": -0.101,
+      "model_alpha_delta_EV": 3.23,
+      "note": "Filter layers apply ~50pp WR uplift (live B: 12.8%→63%). Absolute EV is negative without filtering, but relative advantage is structural. Shadow period validates non-linear filter amplification."
+    },
+    "shadow_kpis": {
+      "fire_rate": "Daily should_trade=True count — must not exceed live B baseline × 2",
+      "post_gate_wr": "Filtered WR must exceed 53% to be commercially viable at RR=1.0",
+      "cross_veto": "Signal correlation with live candidate B — watch for resonance/divergence"
+    },
+    "dead_man_switch": {
+      "max_shadow_days": 7,
+      "early_abort_conditions": ["fire_rate > 10× live", "post_gate_WR < 40% after 50 trades"]
+    }
+  },
+  "vote_weight": 0.0,
+  "magic": 90320,
+  "brain_role": "alpha_brain",
+  "training_horizon": 12,
+  "strategy": "m30_swing",
+  "timeframe": "M30",
+  "training_params": {
+    "sl_atr_mult": 2.5,
+    "tp_atr_mult": 2.5,
+    "horizon": 12,
+    "n_estimators": 300,
+    "learning_rate": 0.05,
+    "max_depth": 5,
+    "objective": "multi:softprob",
+    "num_class": 3,
+    "label_encoding": "0=SL_hit, 1=timeout, 2=TP_hit",
+    "purge_bars": 12
+  },
+  "training_metrics": {
+    "test_accuracy": 0.44,
+    "test_wr_raw": 0.181,
+    "test_pf_raw": 0.642,
+    "test_ev_r_raw": -0.101,
+    "n_train": 38315,
+    "n_val": 11780,
+    "n_test": 8844,
+    "label_distribution": {
+      "SL_hit_pct": 29.6,
+      "timeout_pct": 45.2,
+      "TP_hit_pct": 25.2
+    },
+    "_note": "Metrics are RAW (no filtering). Live filtering layers (confidence_threshold, governance, gate, regime) apply ~50pp WR uplift. Post-gate WR is the only commercially meaningful metric for shadow evaluation."
+  },
+  "features": [
+    "D1_Ret_1",
+    "D1_Body_Ratio",
+    "D1_ATR_14",
+    "D1_RSI_14",
+    "D1_MACD",
+    "D1_Vol_ZScore",
+    "D1_Bollinger_Width",
+    "D1_ADX_14",
+    "H4_Trend_Strength",
+    "H4_ATR_Ratio",
+    "H4_RSI_Divergence",
+    "H4_vs_D1_Alignment",
+    "Cross_Gold_Silver_Ratio",
+    "Cross_DXY_Return",
+    "Cross_EURUSD_Return",
+    "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin",
+    "Derived_Weekday_Cos",
+    "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week",
+    "Derived_Weekend_Gap",
+    "Derived_Vol_Regime",
+    "Derived_Momentum_5D",
+    "Derived_Momentum_20D",
+    "tick_return",
+    "hl_ratio",
+    "co_ratio",
+    "avg_spread",
+    "OIM",
+    "tick_velocity",
+    "XAGUSDc_return",
+    "EURUSDc_return",
+    "USDJPYc_return",
+    "TF_OU_Theta",
+    "TF_Hurst"
+  ],
+  "n_features": 35,
+  "n_train_samples": 38315,
+  "trained_at": "2026-07-06T10:57:20.363655Z",
+  "label_contract": {
+    "sl_atr_mult": 2.5,
+    "tp_atr_mult": 2.5,
+    "contract_type": "symmetric_barrier",
+    "rr_ratio": 1.0,
+    "requires_dedicated_strategy_line": false,
+    "aligned_with": "m30_swing strategy line (SL=2.0/TP=3.0 config) — training-serving MISMATCH by design (Tracer Bullet Protocol). Shadow validation quantifies mismatch impact before any strategy line reconfiguration.",
+    "graduation_path": "If shadow WR>53% × 7 days → propose m30_swing strategy line SL/TP update to 2.5/2.5 for Candidate A, keeping live B on current SL/TP as hedge."
+  },
+  "governance": {
+    "min_confidence": 0.50,
+    "cooldown_cycles": 3
+  },
+  "confidence_params": {
+    "method": "quantile_gaussian",
+    "p95": 0.70,
+    "peak_conf": 0.60,
+    "lambda_decay": 80.0,
+    "_note": "Placeholder calibration — P95/Peak_Conf/λ will be recalibrated after 100+ shadow prediction samples. Using conservative defaults for initial shadow deployment."
+  },
+  "last_retrained": "2026-07-06T10:57:20.363655Z"
+}

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-05T17:14:11Z
-> **扫描模块数**: 724
+> **自动生成**: 2026-07-06T04:16:08Z
+> **扫描模块数**: 725
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -796,6 +796,7 @@
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
 | `optimize_sltp_params.py` | ✅ active | — | 4 | 310 | — | |
+| `optimize_xau_sltp_institutional.py` | ✅ active | SurfacePoint | 12 | 611 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
 | `phase4_final_audit.py` | ✅ active | — | 7 | 594 | — | |
 | `phase4_shadow_review.py` | ✅ active | — | 11 | 419 | — | |
