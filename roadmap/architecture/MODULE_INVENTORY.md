@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-06T05:05:47Z
-> **扫描模块数**: 727
+> **自动生成**: 2026-07-06T08:04:39Z
+> **扫描模块数**: 728
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -547,7 +547,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 986 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 1043 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 1091 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -635,6 +635,7 @@
 |------|------|----|------|------|------|------|
 | `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 159 | — | |
 | `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
+| `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |

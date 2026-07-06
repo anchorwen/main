@@ -1,18 +1,17 @@
 {
   "schema_version": "brain_registry_entry.v1",
-  "brain_id": "Swing_V9_M30_V2",
+  "brain_id": "Swing_V9_M30_V4",
   "brain_type": "xgboost_v9",
   "contract_group": "m30_swing",
   "training_contract": "m30_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
-  "model_path": "data\\models\\swing_tracer_c\\Swing_V9_M30_V2_model.json",
-  "artifact_path": "data\\models\\swing_tracer_c\\Swing_V9_M30_V2_model.json",
-  "model_version": "swing_v9_m30_v2",
-  "artifact_hash": "472e9270115f85cc2eec512dbd29b4a800908b4c5123370362650794e0d97b30",
-  "status": "frozen",
-  "vote_weight": 0.0,
-  "_note": "FIX-20260706-026: Frozen — superseded by V4. V2 TP=2.5 misaligned with m30_swing serving TP=3.0. V4 retrained with correct SL=2.0/TP=3.0 (seed=77).",
+  "model_path": "data\\models\\swing\\Swing_V9_M30_V4_model.json",
+  "artifact_path": "data\\models\\swing\\Swing_V9_M30_V4_model.json",
+  "model_version": "swing_v9_m30_v4",
+  "artifact_hash": "2436910dda22551a680298438821710ada4dd9b27517d38f5409a623a8dbef7b",
+  "status": "candidate",
+  "vote_weight": 1.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -20,19 +19,19 @@
   "timeframe": "M30",
   "training_params": {
     "sl_atr_mult": 2.0,
-    "tp_atr_mult": 2.5,
+    "tp_atr_mult": 3.0,
     "horizon": 12,
     "n_estimators": 300,
     "learning_rate": 0.05,
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.4152,
-    "val_accuracy": 0.4152,
-    "test_accuracy": 0.3981,
-    "test_trade_win_rate": 0.3981,
-    "test_profit_factor": 1.9837,
-    "test_sharpe": 29.0189
+    "train_accuracy": 0.3874,
+    "val_accuracy": 0.3874,
+    "test_accuracy": 0.3609,
+    "test_trade_win_rate": 0.361,
+    "test_profit_factor": 1.9987,
+    "test_sharpe": 27.8043
   },
   "features": [
     "D1_Ret_1",
@@ -73,17 +72,17 @@
   ],
   "n_features": 35,
   "n_train_samples": 38315,
-  "trained_at": "2026-07-06T03:00:23.837762Z",
+  "trained_at": "2026-07-06T07:51:42.743984Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
   "label_contract": {
     "sl_atr_mult": 2.0,
-    "tp_atr_mult": 2.5,
-    "rr_ratio": 1.25,
+    "tp_atr_mult": 3.0,
+    "rr_ratio": 1.5,
     "contract_type": "asymmetric_barrier",
-    "training_serving_alignment": "misaligned",
-    "_note": "TP misaligned — training TP=2.5, serving m30_swing TP=3.0. Candidate brain pending retrain."
+    "training_serving_alignment": "aligned",
+    "_note": "FIX-20260706-026: V4 retrained with SL=2.0/TP=3.0 matching m30_swing serving contract. Seed=77 (≠V2 seed=42) to avoid identity leak."
   }
 }
