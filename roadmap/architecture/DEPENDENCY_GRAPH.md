@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-06T04:16:08Z
+> **自动生成**: 2026-07-06T05:05:47Z
 
 ## Package-Level Dependencies
 
@@ -554,6 +554,7 @@
 - `_deep_dive_btc_source.py` → (无内部依赖)
 - `_diagnose_model_raw_output.py` → (无内部依赖)
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
+- `_fix_shadow_configs.py` → (无内部依赖)
 - `_institutional_reconcile.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
@@ -663,6 +664,7 @@
 - `diagnose_sl_performance.py` → (无内部依赖)
 - `dqaf053_phase1_sanitize.py` → `core.alpha.performance_store`, `core.alpha.registry`, `core.execution.conformal_calibrator`
 - `dqaf_collect.py` → (无内部依赖)
+- `eval_tracer_candidates.py` → (无内部依赖)
 - `export_ood_params.py` → `core.execution.ood_gateway`
 - `extract_health_checks.py` → (无内部依赖)
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`

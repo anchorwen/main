@@ -32,6 +32,20 @@ brains:
     enabled: true  # DQAF-20260630-201 P0: re-enabled — only live XAU brain
   - path: configs/brains/XAU_Swing_M30_Sym_A.json
     enabled: true  # DQAF-20260706-TB001: Tracer Bullet Candidate A (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+  - path: configs/brains/XAU_Swing_M30_Exec_A.json
+    enabled: true  # DQAF-20260706-002: M30 Exec (SL=2.0/TP=3.0, RR=1.5) — shadow, vote_weight=0.0, execution-aligned
+  - path: configs/brains/XAU_Swing_M15_Sym_A.json
+    enabled: true  # DQAF-20260706-002: M15 Sym (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+  - path: configs/brains/XAU_Swing_M15_Exec_A.json
+    enabled: true  # DQAF-20260706-002: M15 Exec (SL=2.0/TP=3.0, RR=1.5) — shadow, vote_weight=0.0, execution-aligned
+  - path: configs/brains/XAU_Swing_H1_Sym_A.json
+    enabled: true  # DQAF-20260706-002: H1 Sym (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+  - path: configs/brains/XAU_Swing_H1_Exec_A.json
+    enabled: true  # DQAF-20260706-002: H1 Exec (SL=2.0/TP=3.5, RR=1.75) — shadow, vote_weight=0.0, execution-aligned
+  - path: configs/brains/XAU_Swing_H4_Sym_A.json
+    enabled: true  # DQAF-20260706-002: H4 Sym (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+  - path: configs/brains/XAU_Swing_H4_Exec_A.json
+    enabled: true  # DQAF-20260706-002: H4 Exec (SL=2.0/TP=3.5, RR=1.75) — shadow, vote_weight=0.0, execution-aligned
   - path: configs/brains/Swing_V9_M30_V3.json
     enabled: false
   - path: configs/brains/Swing_V9_M15_V2.json

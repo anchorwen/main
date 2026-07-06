@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-06T04:16:08Z
-> **扫描模块数**: 725
+> **自动生成**: 2026-07-06T05:05:47Z
+> **扫描模块数**: 727
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -640,6 +640,7 @@
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
+| `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
@@ -749,6 +750,7 @@
 | `diagnose_sl_performance.py` | ✅ active | — | 3 | 156 | — | |
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 564 | — | |
+| `eval_tracer_candidates.py` | ✅ active | — | 3 | 184 | — | |
 | `export_ood_params.py` | ✅ active | — | 1 | 213 | — | |
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
