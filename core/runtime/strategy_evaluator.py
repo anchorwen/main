@@ -610,20 +610,33 @@ def evaluate_strategy_lines(
             )
             _total_voters = len(_voted_brain_ids)
             if _live_count == 0:
-                _degraded_confidence_floor = 0.50
-                _degraded_max_volume = 0.01
-                if decision.confidence < _degraded_confidence_floor:
+                # ── FIX-20260706-003: Shadow-brain fail-closed gate ──────
+                # When ALL voters have vote_weight=0 (shadow/observer),
+                # the trade MUST be blocked — shadows are observers, not
+                # authorized to drive real-money decisions, even in
+                # degraded mode.
+                #
+                # Historical: FIX-20260625-139 fixed the signal pipeline
+                # (BrainSignal vote_weight) but missed this governance
+                # degradation gate — third instance of the cross-file
+                # duplicate gate logic bug in strategy_evaluator.py
+                # (after FIX-20260629-174 + FIX-20260703-061).
+                _has_voting_power = any(
+                    governance_state.get("brain_states", {}).get(bid, {}).get("vote_weight", 0) > 0
+                    for bid in _voted_brain_ids
+                )
+                if not _has_voting_power:
                     decision.should_trade = False
-                    decision.reason = "no_live_brains_and_low_confidence"
+                    decision.reason = "no_live_brains_all_shadow_blocked"
                     print(
                         json.dumps(
                             {
-                                "event": "governance_degraded_blocked",
+                                "event": "governance_all_shadow_blocked",
                                 "time": _utc_iso(),
                                 "strategy": sname,
                                 "direction": decision.direction,
                                 "confidence": round(decision.confidence, 4),
-                                "live_brains": 0,
+                                "voters": _total_voters,
                                 "reason": decision.reason,
                             },
                             ensure_ascii=False,
@@ -631,24 +644,45 @@ def evaluate_strategy_lines(
                         flush=True,
                     )
                 else:
-                    decision.volume = min(decision.volume, _degraded_max_volume)
-                    decision.reason = (decision.reason or "") + " [degraded: no_live_brains]"
-                    print(
-                        json.dumps(
-                            {
-                                "event": "governance_degraded_volume",
-                                "time": _utc_iso(),
-                                "strategy": sname,
-                                "direction": decision.direction,
-                                "confidence": round(decision.confidence, 4),
-                                "volume": decision.volume,
-                                "live_brains": 0,
-                                "reason": decision.reason,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                    _degraded_confidence_floor = 0.50
+                    _degraded_max_volume = 0.01
+                    if decision.confidence < _degraded_confidence_floor:
+                        decision.should_trade = False
+                        decision.reason = "no_live_brains_and_low_confidence"
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "governance_degraded_blocked",
+                                    "time": _utc_iso(),
+                                    "strategy": sname,
+                                    "direction": decision.direction,
+                                    "confidence": round(decision.confidence, 4),
+                                    "live_brains": 0,
+                                    "reason": decision.reason,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    else:
+                        decision.volume = min(decision.volume, _degraded_max_volume)
+                        decision.reason = (decision.reason or "") + " [degraded: no_live_brains]"
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "governance_degraded_volume",
+                                    "time": _utc_iso(),
+                                    "strategy": sname,
+                                    "direction": decision.direction,
+                                    "confidence": round(decision.confidence, 4),
+                                    "volume": decision.volume,
+                                    "live_brains": 0,
+                                    "reason": decision.reason,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
             # ── Cut 4-bis: Non-active brain dominance gate ──────────────────
             # FIX-20260623-083 + FIX-20260703-061: When active brains
             # (live+probation) exist but are a MINORITY of voters, lower-status
@@ -666,7 +700,19 @@ def evaluate_strategy_lines(
             # they are actively trading with valid PnL data and the vote_weight
             # penalty already handles the governance trust discount.
             elif _total_voters > 0:
-                _live_ratio = _live_count / _total_voters
+                # FIX-20260706-003: Exclude shadow brains (vote_weight=0)
+                # from the denominator — shadows are observers, not voters.
+                # Without this, 1 live + 8 shadows → live_ratio=0.11 → false
+                # non_live_dominance trigger, allowing shadows to dominate
+                # the consensus despite having zero voting power.
+                _voting_voters = sum(
+                    1
+                    for bid in _voted_brain_ids
+                    if governance_state.get("brain_states", {}).get(bid, {}).get("vote_weight", 0)
+                    > 0
+                )
+                _effective_total = max(_voting_voters, 1)
+                _live_ratio = _live_count / _effective_total
                 if _live_ratio < 0.5:
                     _nonlive_confidence_floor = 0.55
                     _nonlive_max_volume = 0.01
@@ -683,6 +729,7 @@ def evaluate_strategy_lines(
                                     "confidence": round(decision.confidence, 4),
                                     "live_brains": _live_count,
                                     "total_voters": _total_voters,
+                                    "effective_voters": _voting_voters,
                                     "live_ratio": round(_live_ratio, 3),
                                     "reason": decision.reason,
                                 },
@@ -706,6 +753,7 @@ def evaluate_strategy_lines(
                                     "volume": decision.volume,
                                     "live_brains": _live_count,
                                     "total_voters": _total_voters,
+                                    "effective_voters": _voting_voters,
                                     "live_ratio": round(_live_ratio, 3),
                                     "reason": decision.reason,
                                 },
