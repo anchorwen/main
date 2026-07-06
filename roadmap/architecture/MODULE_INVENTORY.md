@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-06T08:04:39Z
-> **扫描模块数**: 728
+> **自动生成**: 2026-07-06T10:17:00Z
+> **扫描模块数**: 730
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -225,7 +225,7 @@
 | `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 822 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
-| `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 274 | — | |
+| `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 279 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 342 | — | |
@@ -266,13 +266,13 @@
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 589 | — | |
 | `regime_direction_gate.py` | ✅ active | RegimeDirectionGate | 4 | 220 | — | |
 | `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 841 | — | |
-| `rule_engine_strategy.py` | ✅ active | RuleEngineStrategyWrapper | 5 | 249 | — | |
+| `rule_engine_strategy.py` | ✅ active | RuleEngineStrategyWrapper | 5 | 251 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `session_detector.py` | ✅ active | SessionDetector | 3 | 182 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1888 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1906 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
@@ -520,10 +520,10 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4322 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4338 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 14 | 2179 | — | |
-| `market_ingress.py` | ✅ active | — | 5 | 226 | — | |
+| `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
 | `modify_trail_dispatch.py` | ✅ active | — | 1 | 100 | — | |
@@ -547,7 +547,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 986 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 1091 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 1102 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -637,8 +637,10 @@
 | `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
 | `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
+| `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
+| `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |

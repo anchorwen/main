@@ -104,8 +104,11 @@ def compute_dynamic_sl_tp(
     Args:
         base_sl_mult: Base SL multiplier at reference ATR (e.g. 2.0).
         base_tp_mult: Base TP multiplier at reference ATR (e.g. 3.5).
-        current_atr: Current ATR(14) value on the base (M5) timeframe.
-        ref_atr: Reference ATR (median / long-run average), default 5.0 for XAUUSD M5.
+        current_atr: Current ATR(14) value — should be from the strategy's own
+                     timeframe (e.g. M30 ATR for m30_swing, H1 ATR for
+                     btc_swing_h1).  FIX-20260706-027: no longer hardcoded M5.
+        ref_atr: Reference ATR (median / long-run average), scaled to match
+                 the strategy's timeframe.  Default 5.0 for XAUUSD M5.
         hard_sl_ratio: Hard SL = normal SL × this ratio (server-side disaster protection).
         min_sl_mult: Floor for effective SL/TP multiplier.
         max_sl_mult: Ceiling for effective SL multiplier.
@@ -142,12 +145,14 @@ def compute_dynamic_sl_tp(
     if current_atr <= 0:
         current_atr = ref_atr
 
-    # ── ATR preserved at native M5 scale (√t scaling removed FIX-20260629-197) ──
-    # √t scaling REMOVED: ATR stays at native M5 resolution.
-    # Training labels use M5 ATR; live SL/TP must match the same scale.
-    # Prior √t inflation (commit 6c081245, 2026-05-21) caused configured
-    # SL=2.0 ATR to become 5.8–13.9 ATR for non-M5 timeframes.
-    # See DQAF-20260629-197 for forensic evidence.
+    # ── ATR at strategy's own timeframe resolution (FIX-20260706-027) ──
+    # Prior to FIX-20260706-027, this was always M5 ATR (√t scaling was
+    # removed by FIX-20260629-197, assuming training labels use M5 ATR).
+    # DQAF-20260706-027 proved training labels use the strategy's own TF bars
+    # (e.g. M30 bars → M30 ATR for m30_swing), so serving was systematically
+    # 2.5–7× too tight for non-M5 strategies.
+    # FIX-20260706-027 injects per-TF ATR from real MT5 bars (no √t estimation)
+    # — the caller now passes the correct timeframe's ATR as `current_atr`.
     raw_atr = current_atr
     # timeframe_mult is retained for backward compatibility but no longer
     # applied to ATR.  It remains available for future non-SL/TP uses.

@@ -6,6 +6,7 @@ for all MT5 C++ calls — no daemon threads, no direct ``mt5.*`` access.
 
 from __future__ import annotations
 
+import contextlib
 import math
 from typing import TYPE_CHECKING, Any
 
@@ -41,18 +42,21 @@ MT5_TIMEFRAME_H4 = 16388  # 240-minute bars
 MT5_TIMEFRAME_D1 = 16408  # daily bars
 
 
-def _get_current_atr(
-    worker: MT5Worker, symbol: str, period: int = 14, count: int = 15, timeout: float = 10.0
-) -> float:
-    """Compute current M5 ATR(*period*) — rates fetched on worker thread, math is local."""
+# ── TF string → MT5 constant mapping ──
+_TF_STR_TO_MT5: dict[str, int] = {
+    "M5": MT5_TIMEFRAME_M5,
+    "M15": MT5_TIMEFRAME_M15,
+    "M30": MT5_TIMEFRAME_M30,
+    "H1": MT5_TIMEFRAME_H1,
+    "H4": MT5_TIMEFRAME_H4,
+    "D1": MT5_TIMEFRAME_D1,
+}
+
+
+def _compute_atr_from_rates(rates: list[dict[str, float]], period: int = 14) -> float:
+    """Compute ATR from MT5 rates array — pure math, no I/O."""
     import numpy as np
 
-    rates = None
-    with FaultTolerantContext(
-        level=FaultLevel.CRASH,
-        component="MT5_IPC:copy_rates_from_pos:get_current_atr",
-    ):
-        rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_M5, 0, count, timeout=timeout)
     if rates is None or len(rates) < period + 1:
         return 0.0
     h = np.array([r["high"] for r in rates], dtype=np.float64)
@@ -63,6 +67,93 @@ def _get_current_atr(
     cur_l = low[-period:]
     tr = np.maximum(cur_h - cur_l, np.maximum(abs(cur_h - prev_c), abs(cur_l - prev_c)))
     return float(np.mean(tr))
+
+
+def _get_current_atr(
+    worker: MT5Worker, symbol: str, period: int = 14, count: int = 15, timeout: float = 10.0
+) -> float:
+    """Compute current M5 ATR(*period*) — rates fetched on worker thread, math is local."""
+    rates = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH,
+        component="MT5_IPC:copy_rates_from_pos:get_current_atr",
+    ):
+        rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_M5, 0, count, timeout=timeout)
+    return _compute_atr_from_rates(rates, period)
+
+
+def get_multi_timeframe_atr(
+    worker: MT5Worker,
+    symbol: str,
+    timeframes: set[str],
+    period: int = 14,
+    count: int = 15,
+    timeout: float = 10.0,
+) -> dict[str, float]:
+    """Fetch ATR for multiple timeframes using real MT5 bars from each TF.
+
+    FIX-20260706-027 (L3): Per-strategy timeframe ATR injection.
+    Previous architecture hardcoded M5 ATR for ALL strategies regardless of
+    their own timeframe — btc_swing_h1 (H1) got M5 ATR, m30_swing (M30) got
+    M5 ATR, etc.  This caused:
+      - SL/TP barriers at serving time 2.5–7× tighter than training labels
+      - btc_swing (M5 SHORT) + btc_swing_h1 (H1 LONG) producing mirror SL/TP
+        barriers ($4 apart — essentially identical levels swapped).
+
+    Each timeframe fetches its own bars via MT5 and computes the ATR from
+    those bars — no √t estimation, no statistical approximation.
+
+    Args:
+        worker: MT5Worker for IPC calls.
+        symbol: Trading instrument (e.g. "XAUUSDc").
+        timeframes: Set of timeframe strings (e.g. {"M5", "M30", "H1"}).
+        period: ATR lookback period (default 14).
+        count: Number of bars to fetch (default 15 — period+1 minimum).
+        timeout: MT5 IPC timeout per TF.
+
+    Returns:
+        Dict mapping timeframe string → ATR value.  M5 is always present
+        (computed first as the canonical fallback).  TFs that fail to fetch
+        fall back to the M5 value with a logged warning.
+    """
+    import logging as _logging
+
+    _log = _logging.getLogger(__name__)
+    result: dict[str, float] = {}
+
+    # M5 always computed first — canonical fallback
+    m5_atr = _get_current_atr(worker, symbol, period=period, count=count, timeout=timeout)
+    result["M5"] = m5_atr
+
+    for tf in sorted(timeframes):
+        if tf == "M5":
+            continue  # already computed
+
+        mt5_tf = _TF_STR_TO_MT5.get(tf)
+        if mt5_tf is None:
+            _log.warning("get_multi_timeframe_atr: unknown timeframe %s, falling back to M5", tf)
+            result[tf] = m5_atr
+            continue
+
+        rates = None
+        with FaultTolerantContext(
+            level=FaultLevel.DEGRADE,
+            component=f"MT5_IPC:copy_rates_from_pos:get_atr_{tf}",
+        ):
+            rates = worker.copy_rates_from_pos(symbol, mt5_tf, 0, count, timeout=timeout)
+
+        tf_atr = _compute_atr_from_rates(rates, period)
+        if tf_atr <= 0:
+            _log.warning(
+                "get_multi_timeframe_atr: %s ATR fetch returned 0, falling back to M5 (%.4f)",
+                tf,
+                m5_atr,
+            )
+            result[tf] = m5_atr
+        else:
+            result[tf] = tf_atr
+
+    return result
 
 
 def _position_count(worker: MT5Worker, symbol: str, timeout: float = 5.0) -> int:
@@ -224,3 +315,65 @@ def _feed_regime_gate_cycle(
         h1_bar = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_H1, 0, 1, timeout=timeout)
     if h1_bar is not None and len(h1_bar) == 1:
         gate.feed_h1_bar(h1_bar[0]["high"], h1_bar[0]["low"], h1_bar[0]["close"])
+
+
+def build_tf_atr_map(
+    mt5_worker: MT5Worker,
+    symbol: str,
+    strategies: dict[str, Any],
+    base_tf_atr_map: dict[str, float],
+) -> dict[str, float]:
+    """Collect unique timeframes from strategies and fetch per-TF ATR.
+
+    FIX-20260706-027 (L3): Extracted from live_cycle.py to preserve monolith
+    decoupling — live_cycle calls this single function instead of inlining
+    ~25 lines of TF collection + multi-TF fetch logic.
+
+    Non-M5 strategies (M15/M30/H1/H4) were previously using M5 ATR for
+    SL/TP → systematically tight barriers (2.5–7× too tight relative to
+    training labels).  This function fetches each TF's ATR from real MT5
+    bars — no √t estimation.
+
+    Args:
+        mt5_worker: MT5Worker for IPC calls.
+        symbol: Trading instrument.
+        strategies: Dict of strategy_name → strategy_object from
+                    _build_strategy_lines().
+        base_tf_atr_map: Pre-populated map (must contain "M5" key).
+
+    Returns:
+        Updated dict with per-TF ATR values.  Strategies whose TF fetch
+        fails fall back to M5 ATR.
+    """
+    import logging as _logging
+
+    _log = _logging.getLogger(__name__)
+
+    if base_tf_atr_map.get("M5", 0.0) <= 0:
+        return base_tf_atr_map
+
+    _active_tfs: set[str] = set()
+    for _strat in strategies.values():
+        _tf = getattr(_strat.config, "timeframe", "M5")
+        if _tf and _tf != "M5":
+            _active_tfs.add(_tf)
+
+    if not _active_tfs:
+        return base_tf_atr_map
+
+    try:
+        _mtf = get_multi_timeframe_atr(mt5_worker, symbol, _active_tfs)
+        base_tf_atr_map.update(_mtf)
+        with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+            _log.info(
+                "Multi-TF ATR map: %s",
+                {k: round(v, 4) for k, v in base_tf_atr_map.items()},
+            )
+    except (RuntimeError, ValueError, TypeError, OSError) as _mtf_exc:
+        with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
+            _log.warning(
+                "Multi-TF ATR fetch failed (%s) — all strategies fall back to M5 ATR",
+                _mtf_exc,
+            )
+
+    return base_tf_atr_map

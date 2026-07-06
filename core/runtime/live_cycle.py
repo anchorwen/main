@@ -802,6 +802,7 @@ def _evaluate_strategy_lines(
     bid: float | None,
     ask: float | None,
     current_atr: float,
+    tf_atr_map: dict[str, float] | None = None,  # FIX-20260706-027: per-TF ATR
     regime_info: dict[str, Any],
     regime_gate: RegimeGate | None,
     regime_modulation: Any = None,
@@ -861,6 +862,7 @@ def _evaluate_strategy_lines(
         bid=bid,
         ask=ask,
         current_atr=current_atr,
+        tf_atr_map=tf_atr_map,  # FIX-20260706-027: per-TF ATR for strategy SL/TP
         regime_info=regime_info,
         regime_gate=regime_gate,
         regime_modulation=regime_modulation,
@@ -2736,6 +2738,8 @@ def execute_live_cycle(
 
     # ── Market regime detection ──
     regime_info: dict[str, Any] = {}
+    # ── FIX-20260706-027 (L3): Per-TF ATR map — built once, consumed by all strategies ──
+    tf_atr_map: dict[str, float] = {"M5": 0.0}
     if not config.no_mt5 and regime_detector is not None:
         # _get_current_atr internally wraps MT5 IPC in FTC(CRASH) — let it propagate
         current_atr = (
@@ -2743,6 +2747,7 @@ def execute_live_cycle(
             if broker is not None
             else _get_current_atr(mt5_worker, config.symbol)
         )
+        tf_atr_map["M5"] = current_atr
         try:
             if current_atr > 0:
                 regime_info = regime_detector.update(current_atr)
@@ -2756,6 +2761,8 @@ def execute_live_cycle(
             # TypeError (wrong input type).
             with contextlib.suppress(RuntimeError, ValueError, KeyError, TypeError, OSError):
                 logger.warning("Regime detector update failed — using stale regime values")
+
+        # Multi-TF ATR injection moved to after strategies are built (L2848+)
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
     if not config.no_mt5:
         try:
@@ -2847,6 +2854,14 @@ def execute_live_cycle(
         # Partition brains into contract groups and build strategy lines
         strategies = _build_strategy_lines(brains, config)
         state._strategies = strategies  # FIX-072: stash for execution state persistence
+
+        # ── FIX-20260706-027 (L3): Per-TF ATR injection ──
+        # Single call into market_ingress — avoids adding ~25 lines of
+        # TF-collection + fetch orchestration to the live_cycle monolith.
+        if not config.no_mt5:
+            from core.runtime.market_ingress import build_tf_atr_map
+
+            build_tf_atr_map(mt5_worker, config.symbol, strategies, tf_atr_map)
 
         # ── FIX-20260609-010: Restore budget state EVERY cycle ────────────────
         # _build_strategy_lines() above creates fresh StrategyBudget objects
@@ -3431,6 +3446,7 @@ def execute_live_cycle(
             bid=_bid,  # FIX-20260529-038: wire real bid price for Max_Spread_Gate
             ask=_ask,  # FIX-20260529-038: wire real ask price for Max_Spread_Gate
             current_atr=current_atr,
+            tf_atr_map=tf_atr_map,  # FIX-20260706-027: per-TF ATR for strategy SL/TP
             regime_info=regime_info,
             regime_gate=regime_gate,
             regime_modulation=regime_modulation,

@@ -51,6 +51,7 @@ def evaluate_strategy_lines(
     bid: float | None,
     ask: float | None,
     current_atr: float,
+    tf_atr_map: dict[str, float] | None = None,  # FIX-20260706-027: per-TF ATR
     regime_info: dict[str, Any],
     regime_gate: RegimeGate | None,
     regime_modulation: Any = None,
@@ -377,6 +378,15 @@ def evaluate_strategy_lines(
                     flush=True,
                 )
 
+        # ── FIX-20260706-027: Per-strategy TF ATR lookup ──
+        # Look up the strategy's own timeframe ATR from the multi-TF map.
+        # Non-M5 strategies (M15/M30/H1/H4) were previously receiving M5 ATR,
+        # causing SL/TP barriers 2.5–7× tighter than training labels.
+        _strategy_tf = getattr(strategy.config, "timeframe", "M5")
+        _strategy_atr: float | None = None
+        if tf_atr_map and _strategy_tf in tf_atr_map:
+            _strategy_atr = tf_atr_map[_strategy_tf]
+
         decision = strategy.evaluate(
             feature_vector=_fv,
             micro_feature_vector=micro_feature_vector,
@@ -384,6 +394,7 @@ def evaluate_strategy_lines(
             bid=bid,
             ask=ask,
             current_atr=current_atr,
+            strategy_atr=_strategy_atr,  # FIX-20260706-027: per-TF ATR
             regime_info=regime_info,
             regime_gate_mode=gate_mode,
             trend_direction=trend_direction,

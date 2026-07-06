@@ -512,6 +512,7 @@ class StrategyLine:
         bid: float | None = None,
         ask: float | None = None,
         current_atr: float = 5.0,
+        strategy_atr: float | None = None,  # FIX-20260706-027: per-TF ATR for SL/TP
         regime_info: dict[str, Any] | None = None,
         regime_gate_mode: str = "full",
         trend_direction: str = "neutral",
@@ -1184,14 +1185,31 @@ class StrategyLine:
         if regime_info and regime_info.get("atr_mean", 0) > 0:
             _dynamic_ref_atr = regime_info["atr_mean"]
 
+        # ── FIX-20260706-027 (L3): Per-strategy TF ATR for SL/TP ──
+        # strategy_atr is the ATR computed from this strategy's own timeframe
+        # bars (e.g. M30 ATR for m30_swing, H1 ATR for btc_swing_h1).
+        # When available, use it as the ATR input and scale ref_atr
+        # proportionally so vol_ratio stays correct.
+        # Falls back to current_atr (M5 ATR) when strategy_atr is not
+        # provided (M5 strategies, or multi-TF fetch degraded).
+        _effective_atr = current_atr
+        _effective_ref_atr = _dynamic_ref_atr
+        if strategy_atr is not None and strategy_atr > 0 and current_atr > 0:
+            _effective_atr = strategy_atr
+            # Scale ref_atr proportionally: if M5_ATR=3.4 and ref=5.0, and
+            # M30_ATR=8.5, then M30_ref = 5.0 × (8.5/3.4) = 12.5.
+            # This preserves the vol_ratio identical to what M5 would see.
+            _atr_scale = strategy_atr / current_atr
+            _effective_ref_atr = max(_dynamic_ref_atr * _atr_scale, strategy_atr * 0.5)
+
         _spread_cost = self.config.spread_points * self.config.tick_size
         # FIX-20260704-005: _spread_cost=0.0 when spread_points=0 is the
         # fail_open_guard default — no pre-compensation, old RR guard behavior.
         dsl = compute_dynamic_sl_tp(
             base_sl_mult=self.config.base_sl_atr_mult,
             base_tp_mult=self.config.base_tp_atr_mult,
-            current_atr=current_atr,
-            ref_atr=_dynamic_ref_atr,
+            current_atr=_effective_atr,
+            ref_atr=_effective_ref_atr,
             hard_sl_ratio=self.config.hard_sl_ratio,
             timeframe_mult=self.config.timeframe_mult,
             min_sl_distance=self.config.min_sl_distance,
@@ -1413,7 +1431,7 @@ class StrategyLine:
         # Kelly applied inside _compute_volume BEFORE lot_step rounding (single rounding at end)
         volume = self._compute_volume(
             confidence,
-            current_atr,
+            _effective_atr,  # FIX-20260706-027: per-TF ATR for vol-targeted sizing
             regime_info,
             regime_gate_mode,
             macro_regime,

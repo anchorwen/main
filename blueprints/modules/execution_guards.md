@@ -49,6 +49,14 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260706-027 — Per-Timeframe ATR Injection (2026-07-06)
+
+**Root Cause**: L3 — `_get_current_atr()` hardcoded `MT5_TIMEFRAME_M5` for ALL strategies regardless of their own timeframe. Non-M5 strategies (M15/M30/H1/H4) received SL/TP barriers 2.5–7× tighter than training labels. Caused btc_swing (M5 SHORT) + btc_swing_h1 (H1 LONG) to produce mirror SL/TP barriers ($4 apart).
+
+**Fix**: `market_ingress.py`: `get_multi_timeframe_atr()` fetches real MT5 bars per TF (no √t estimation). `strategy_evaluator.py` routes `strategy_atr` per strategy. `strategy_line.py`: `_effective_atr` uses strategy's own TF ATR for SL/TP + ref_atr proportional scaling for vol-targeted sizing. `rule_engine_strategy.py`: `strategy_atr` param for interface uniformity (M5-only, accepted and ignored).
+
+**Files**: `core/execution/dynamic_sl_tp.py` (docstring), `core/execution/strategy_line.py`, `core/execution/rule_engine_strategy.py`, `core/runtime/market_ingress.py`, `core/runtime/strategy_evaluator.py`, `core/runtime/live_cycle.py`
+
 ### FIX-20260704-007 — RR Guard Floating-Point Boundary (2026-07-04)
 
 **Root Cause**: L2 — FIX-005 spread pre-compensation produces mathematically exact RR == min_rr_ratio (e.g. 0.85), but IEEE 754 floating-point rounding makes `tp_dist/sl_dist ≈ min_rr_ratio - 2.8e-14`, failing the `>=` check. This caused ~100% of low-volatility BTC cycles to be blocked by `rr_below_minimum` despite the math being correct.

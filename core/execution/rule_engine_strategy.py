@@ -79,6 +79,8 @@ class RuleEngineStrategyWrapper:
         bid: float | None = None,
         ask: float | None = None,
         current_atr: float | None = None,
+        strategy_atr: float
+        | None = None,  # FIX-20260706-027: accepted for interface uniformity; M5-only rule engines ignore it
         regime_info: dict[str, Any] | None = None,
         regime_gate_mode: str = "full",
         trend_direction: str = "neutral",
