@@ -47,6 +47,8 @@ for _schema_id in [
     "btc_macro_enhanced_41",
     "btc_macro_enhanced_41_v2",  # FIX-20260625-137: clean contract
     "btc_macro_enhanced_37",  # legacy alias → 41 dims (kept for backward compat)
+    "btc_macro_flow_46",  # DQAF-20260707-004: 41 base + 5 OFI flow
+    "btc_h1_directional_48",  # DQAF-20260707-003: 41 base + 7 H1 directional
     "swing_enhanced_35",
     "swing_enhanced_29",
     "swing_enhanced_21",

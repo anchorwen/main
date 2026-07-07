@@ -17,6 +17,7 @@ from core.features.schemas.btc_macro_enhanced_schema import (
     BTC_MACRO_ENHANCED_37_FEATURES,
     BTC_MACRO_ENHANCED_41_FEATURES,  # noqa: F401 — canonical name, imported for re-export
     BTC_MACRO_ENHANCED_41_V2_FEATURES,  # noqa: F401 — FIX-20260625-137: clean contract
+    BTC_MACRO_FLOW_46_FEATURES,  # noqa: F401 — DQAF-20260707-004: 41 base + 5 OFI flow
 )
 from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
@@ -51,6 +52,10 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
     "btc_macro_enhanced_41": 41,  # 37 macro + 4 regime derivatives (delta_OU, delta_Hurst, OU_x_Hurst, OU_div_ADX)
     # FIX-20260625-137: V2 clean contract — same features as v1 but signals router to skip legacy shim
     "btc_macro_enhanced_41_v2": 41,
+    # DQAF-20260707-003: 48-dim H1 directional — 41 base + 7 H1-scale momentum features
+    "btc_h1_directional_48": 48,
+    # DQAF-20260707-004: 46-dim Flow — 41 base + 5 OFI flow features
+    "btc_macro_flow_46": 46,
 }
 
 # Canonical name resolution (alias → canonical)
@@ -125,6 +130,18 @@ def get_schema_feature_names(schema_name: str) -> list[str]:
         )
 
         names = list(BTC_MACRO_ENHANCED_41_V2_FEATURES)
+    elif canonical == "btc_h1_directional_48":
+        from core.features.schemas.btc_macro_enhanced_schema import (
+            BTC_H1_DIRECTIONAL_48_FEATURES,
+        )
+
+        names = list(BTC_H1_DIRECTIONAL_48_FEATURES)
+    elif canonical == "btc_macro_flow_46":
+        from core.features.schemas.btc_macro_enhanced_schema import (
+            BTC_MACRO_FLOW_46_FEATURES,
+        )
+
+        names = list(BTC_MACRO_FLOW_46_FEATURES)
     elif canonical == "v9_institutional_40":
         names = list(V9_INSTITUTIONAL_40_FEATURES)
     elif canonical == "v9_micro_49":

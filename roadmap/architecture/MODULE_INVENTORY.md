@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-07T04:05:51Z
-> **扫描模块数**: 731
+> **自动生成**: 2026-07-07T10:23:29Z
+> **扫描模块数**: 736
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -285,13 +285,13 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
-| `feature_assembler.py` | ✅ active | — | 3 | 257 | — | |
-| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 293 | — | |
+| `feature_assembler.py` | ✅ active | — | 3 | 290 | — | |
+| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 295 | — | |
 | `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 405 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
 | `meta_feature_builder.py` | ✅ active | — | 1 | 135 | — | |
-| `ofi_collector.py` | ✅ active | OFICollector | 5 | 178 | — | |
+| `ofi_collector.py` | ✅ active | OFICollector | 5 | 250 | — | |
 | `rolling_normalizer.py` | ✅ active | RollingNormalizer | 15 | 234 | — | |
 | `store_contracts.py` | ✅ active | FeatureSchema, FeatureRecord, FeatureQuery, FeatureStore | 8 | 87 | — | |
 | `update_job.py` | ✅ active | FeatureUpdateResult, IncrementalFeatureUpdateJob | 3 | 63 | — | |
@@ -310,7 +310,7 @@
 | `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 429 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 223 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 573 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 627 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 339 | — | |
 | `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 97 | — | |
 
@@ -318,10 +318,10 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 106 | — | |
+| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 156 | — | |
 | `daily_swing_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `microstructure_schema.py` | ✅ active | — | 1 | 32 | — | |
-| `registry.py` | ✅ active | — | 4 | 229 | — | |
+| `registry.py` | ✅ active | — | 4 | 246 | — | |
 | `swing_enhanced_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `v9_institutional_schema.py` | 📄 config | — | 0 | 42 | — | |
 | `v9_micro_schema.py` | ✅ active | — | 1 | 27 | — | |
@@ -517,6 +517,7 @@
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `gods_eye_bridge.py` | ✅ active | — | 2 | 148 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 290 | — | |
+| `h1_features.py` | ✅ active | — | 1 | 112 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
@@ -634,6 +635,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 159 | — | |
+| `_analyze_btc_segmented.py` | ✅ active | — | 4 | 262 | — | |
 | `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
 | `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
@@ -645,6 +647,8 @@
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
+| `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
+| `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_btc_deep_diagnosis.py` | ✅ active | — | 5 | 830 | — | |
@@ -716,7 +720,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 717 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 718 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
@@ -792,7 +796,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 35 | 2105 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 35 | 2107 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |
@@ -905,6 +909,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
+| `augment_h1_directional_features.py` | ✅ active | — | 3 | 442 | — | |
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 7 | 258 | — | |

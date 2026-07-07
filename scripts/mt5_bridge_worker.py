@@ -1255,6 +1255,7 @@ def run_worker(args: argparse.Namespace) -> int:
                                 bid=float(getattr(_t, "bid", 0) or 0),
                                 ask=float(getattr(_t, "ask", 0) or 0),
                                 volume=float(getattr(_t, "volume", 0) or 0),
+                                volume_real=float(getattr(_t, "volume_real", 0) or 0),
                             )
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                     pass
@@ -1705,6 +1706,7 @@ def run_zmq_worker(
                                 bid=float(getattr(_t, "bid", 0) or 0),
                                 ask=float(getattr(_t, "ask", 0) or 0),
                                 volume=float(getattr(_t, "volume", 0) or 0),
+                                volume_real=float(getattr(_t, "volume_real", 0) or 0),
                             )
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                     pass

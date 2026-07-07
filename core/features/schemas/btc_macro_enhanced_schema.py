@@ -98,9 +98,59 @@ BTC_MACRO_ENHANCED_41_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES
 # ordering (train_btc_swing_v9.py Order B).
 BTC_MACRO_ENHANCED_41_V2_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES
 
-# ── Verify dimension ──
+# ── DQAF-20260707-003: H1 directional features ──
+# The 41-dim schema lacks H1-timescale momentum.  These 7 features capture
+# 1-4 hour returns, volatility, acceleration, mean-reversion, and multi-scale
+# divergence from the M5 mid-price buffer (see core/runtime/h1_features.py).
+_H1_DIRECTIONAL_7 = [
+    "H1_Ret_1",
+    "H1_Ret_2",
+    "H1_Ret_4",
+    "H1_Realized_Vol",
+    "H1_Ret_Accel",
+    "H1_MeanRev",
+    "H1_M5_Div",
+]
+
+# ── 48-dim H1 directional schema: 41 base + 7 H1 ──
+BTC_H1_DIRECTIONAL_48_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES + _H1_DIRECTIONAL_7
+
+# ── DQAF-20260707-004: OFI Flow Features (5) ──
+# These capture order flow imbalance, cumulative delta, delta/price divergence,
+# and real/tick volume ratio — all computed by the OFICollector in the bridge
+# worker and written to ofi_snapshot.json.  They flow into the Feature Lake via
+# Source 8 (feature_router.py) and become available to any schema that includes
+# their names.
+#
+# Rationale: The 41-dim btc_macro_enhanced schema lacks any order-flow
+# information — OIM (Order Imbalance Metric from tick direction counts) is
+# a price-change heuristic, not actual trade flow.  These 5 features provide
+# direct measurement of aggressive buy/sell pressure from tick data.
+#
+# Feature descriptions:
+#   OFI_M5                 — Per-bar buy-sell volume imbalance (raw delta)
+#   OFI_ZScore_20          — Statistical significance of current OFI vs 20-bar history
+#   OFI_Cumulative_Delta   — Running sum of all OFI_M5 since bridge start (persistent flow)
+#   OFI_Delta_Divergence   — 1.0 when price and delta disagree (reversal signal)
+#   OFI_Volume_Real_Ratio  — Real/tick volume ratio (institutional flow proxy, 0-1)
+_FLOW_FEATURES_5 = [
+    "OFI_M5",
+    "OFI_ZScore_20",
+    "OFI_Cumulative_Delta",
+    "OFI_Delta_Divergence",
+    "OFI_Volume_Real_Ratio",
+]
+
+# ── 46-dim Flow schema: 41 base + 5 OFI flow features ──
+BTC_MACRO_FLOW_46_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES + _FLOW_FEATURES_5
+
+# ── Verify dimensions ──
 assert (
     len(BTC_MACRO_ENHANCED_41_FEATURES) == 41
 ), f"BTC schema dimension mismatch: {len(BTC_MACRO_ENHANCED_41_FEATURES)} != 41"
+assert (
+    len(BTC_MACRO_FLOW_46_FEATURES) == 46
+), f"BTC Flow schema dimension mismatch: {len(BTC_MACRO_FLOW_46_FEATURES)} != 46"
 # ── Verify uniqueness ──
 assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 41, "BTC schema has duplicate feature names"
+assert len(set(BTC_MACRO_FLOW_46_FEATURES)) == 46, "BTC Flow schema has duplicate feature names"

@@ -278,6 +278,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/features/computers/v9_live_computer.py",
         "core/features/computers/microstructure_computer.py",
         "core/features/computers/btc_feature_augmenter.py",  # FIX-20260625-137
+        "core/features/ofi_collector.py",  # DQAF-20260707-004: OFI flow features
         "core/features/adapters/v9_feature_adapter.py",
         "core/features/adapters/microstructure_feature_adapter.py",
         "core/features/computers/daily_computer.py",

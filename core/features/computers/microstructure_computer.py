@@ -48,6 +48,7 @@ def _safe_div(numerator: float, denominator: float, fallback: float = 0.0) -> fl
         return fallback
     return numerator / denominator
 
+
 CROSS_SYMBOLS = ["XAGUSDc", "EURUSDc", "USDJPYc"]
 CROSS_FEATURE_NAMES = ["XAGUSDc_return", "EURUSDc_return", "USDJPYc_return"]
 FEATURE_NAMES = [
@@ -356,6 +357,7 @@ class MicrostructureFeatureComputer:
             return self._copy_rates(self._symbol, MT5_TIMEFRAME_M5, 0, count)
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             return None
+
     def _fetch_tf_rates(self, count: int, tf_str: str):
         """Fetch rates directly at a given timeframe (not resampled)."""
         try:
@@ -365,6 +367,7 @@ class MicrostructureFeatureComputer:
             return self._copy_rates(self._symbol, tf, 0, count)
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             return None
+
     def _bar_to_features(
         self,
         bar: dict[str, float],
@@ -456,7 +459,18 @@ class MicrostructureFeatureComputer:
         result["tick_velocity"] = float(len(ticks) / duration) if duration > 0 else 0.0
 
         # ── OFI (Order Flow Imbalance) for toxicity gate ──
-        # Computed from tick volume + flags (bid/ask direction).
+        # DQAF-20260707-004: Fixed tick flag classification.
+        # MT5 COPY_TICKS_ALL flags (verified 2026-07-07):
+        #   TICK_FLAG_BID=2 (0x02), ASK=4 (0x04), LAST=8 (0x08),
+        #   VOLUME=16 (0x10), BUY=32 (0x20), SELL=64 (0x40)
+        #
+        # Pre-FIX bug: used exact equality checks with wrong values
+        #   (_flgs==1 never-matched, _flgs==4=ASK→"bid", _flgs==2=BID→"ask").
+        #   BUY/SELL deal flags (32/64) were completely ignored.
+        #
+        # Post-FIX: Primary = BUY/SELL deal flags (trade direction),
+        #   Fallback = BID/ASK price-change flags (no deal on this tick).
+        #   volume_real (index 7) used for real-volume OFI when available.
         # Per-bar OFI raw → rolling z-score over 100-bar buffer.
         # NOT part of ML feature schema — consumed only by strategy_line toxicity gate.
         # Fail-open: if OFI computation fails for any reason, OFI=0.0 (gate skipped).
@@ -465,18 +479,58 @@ class MicrostructureFeatureComputer:
             # COPY_TICKS_ALL returns 8-field ticks: (time, bid, ask, last, volume, time_msc, flags, volume_real)
             # flags is at index 6; index 5 is time_msc (~1.78e12 → overflows np.int32).
             _flgs = np.array([int(t[6]) if len(t) > 6 else 4 for t in ticks], dtype=np.int32)
-            _bid_mask = (_flgs == 1) | (_flgs == 4)
-            _ask_mask = _flgs == 2
-            _bid_vol = float(np.sum(_vols[_bid_mask]))
-            _ask_vol = float(np.sum(_vols[_ask_mask]))
+            # volume_real at index 7 (actual traded volume, may be zero for non-deal ticks)
+            _vols_real = np.array(
+                [float(t[7]) if len(t) > 7 else 0.0 for t in ticks], dtype=np.float64
+            )
+
+            # ── DQAF-20260707-004: Primary — BUY/SELL deal flags (bitwise) ──
+            _TICK_FLAG_BUY = 32  # 0x20
+            _TICK_FLAG_SELL = 64  # 0x40
+            _TICK_FLAG_BID = 2  # 0x02 (fallback)
+            _TICK_FLAG_ASK = 4  # 0x04 (fallback)
+
+            _buy_deal_mask = (_flgs & _TICK_FLAG_BUY) != 0
+            _sell_deal_mask = (_flgs & _TICK_FLAG_SELL) != 0
+
+            # ── Fallback: ticks without deal flags use BID/ASK heuristic ──
+            _no_deal = ~(_buy_deal_mask | _sell_deal_mask)
+            _bid_fallback = _no_deal & ((_flgs & _TICK_FLAG_BID) != 0)
+            _ask_fallback = _no_deal & ((_flgs & _TICK_FLAG_ASK) != 0)
+
+            # ── Combine: deal flags (primary) + BID/ASK fallback ──
+            _buy_mask = _buy_deal_mask | _bid_fallback
+            _sell_mask = _sell_deal_mask | _ask_fallback
+
+            _bid_vol = float(np.sum(_vols[_buy_mask]))
+            _ask_vol = float(np.sum(_vols[_sell_mask]))
+            _bid_vol_real = float(np.sum(_vols_real[_buy_mask]))
+            _ask_vol_real = float(np.sum(_vols_real[_sell_mask]))
+
+            # ── Tick-volume OFI (existing metric) ──
             _total_vol = _bid_vol + _ask_vol
             _ofi_raw = (_bid_vol - _ask_vol) / _total_vol if _total_vol > 0 else 0.0
+
+            # ── DQAF-20260707-004: Real-volume OFI (more accurate) ──
+            _total_vol_real = _bid_vol_real + _ask_vol_real
+            _ofi_real_raw = (
+                (_bid_vol_real - _ask_vol_real) / _total_vol_real
+                if _total_vol_real > 0
+                else _ofi_raw  # fall back to tick-volume OFI
+            )
+
             self._ofi_buffer.append(_ofi_raw)
             _ofi_mean = float(np.mean(self._ofi_buffer)) if self._ofi_buffer else 0.0
             _ofi_std = float(np.std(self._ofi_buffer)) if len(self._ofi_buffer) > 1 else 1e-8
             result["OFI"] = float((_ofi_raw - _ofi_mean) / _ofi_std) if _ofi_std > 1e-8 else 0.0
+            # DQAF-20260707-004: Real-volume OFI z-score for enhanced toxicity detection
+            result["OFI_Real"] = (
+                float((_ofi_real_raw - _ofi_mean) / _ofi_std) if _ofi_std > 1e-8 else 0.0
+            )
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             result["OFI"] = 0.0
+            result["OFI_Real"] = 0.0
+
     def _compute_tick_features_dict(
         self, *, reference_time: datetime | None = None
     ) -> dict[str, float]:

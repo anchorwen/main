@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-07T04:05:51Z
+> **自动生成**: 2026-07-07T10:23:29Z
 
 ## Package-Level Dependencies
 
@@ -449,6 +449,7 @@
 - `gate_audit_recorder.py` → (无内部依赖)
 - `gods_eye_bridge.py` → `core.execution.gods_eye`, `core.runtime.time_utils`
 - `golden_master.py` → `core.runtime.fault_handler`
+- `h1_features.py` → (无内部依赖)
 - `integration_contracts.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
 - `legacy_dispatch_reference.py` → (无内部依赖)
 - `live_bootstrap.py` → `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.live_daily_provider`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.runtime.time_utils`
@@ -548,6 +549,7 @@
 ### `scripts/`
 
 - `_analyze_btc_long_losses.py` → (无内部依赖)
+- `_analyze_btc_segmented.py` → (无内部依赖)
 - `_analyze_live_status.py` → (无内部依赖)
 - `_analyze_post_deployment.py` → (无内部依赖)
 - `_analyze_today_btc_entries.py` → (无内部依赖)
@@ -559,6 +561,8 @@
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
 - `_fix_shadow_configs.py` → (无内部依赖)
 - `_institutional_reconcile.py` → (无内部依赖)
+- `_surface_scan_horizon4.py` → (无内部依赖)
+- `_verify_btc_analysis_claims.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_btc_deep_diagnosis.py` → (无内部依赖)
@@ -805,6 +809,7 @@
 
 ### `scripts/training/`
 
+- `augment_h1_directional_features.py` → (无内部依赖)
 - `batch_train_skeleton.py` → `scripts.training.crt_manifest`
 - `brain_leaderboard.py` → (无内部依赖)
 - `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`

@@ -52,6 +52,7 @@ def assemble_features_by_schema(
     tf_ou: float = 0.0,
     tf_hurst: float = 0.5,
     btc_augment: np.ndarray | None = None,  # FIX-134/138: pre-augmented 41-dim BTC vector
+    h1_features: dict[str, float] | None = None,  # DQAF-20260707-003: H1 directional features
 ) -> np.ndarray:
     """Build a feature vector for a brain given its declared feature schema.
 
@@ -92,6 +93,7 @@ def assemble_features_by_schema(
         "swing_enhanced" in schema_name
         or "daily_swing" in schema_name
         or "btc_macro" in schema_name
+        or "btc_h1" in schema_name  # DQAF-20260707-003: H1 directional schema
     ):
         return _build_swing_vector(
             schema_name,
@@ -100,6 +102,7 @@ def assemble_features_by_schema(
             tf_ou=tf_ou,
             tf_hurst=tf_hurst,
             btc_augment=btc_augment,
+            h1_features=h1_features,
         )
 
     # Unknown / unset schema → fall back to V9 40-dim (legacy default).
@@ -154,6 +157,7 @@ def _build_swing_vector(
     tf_ou: float = 0.0,
     tf_hurst: float = 0.5,
     btc_augment: np.ndarray | None = None,  # FIX-134: pre-augmented 41-dim BTC vector
+    h1_features: dict[str, float] | None = None,  # DQAF-20260707-003: H1 directional features
 ) -> np.ndarray:
     """Build a swing feature vector from components using schema metadata.
 
@@ -211,11 +215,40 @@ def _build_swing_vector(
         tf_hurst=_hur,
         btc_augment=btc_augment,
         schema_name=canonical,  # FIX-20260625-137: controls legacy BTC 41 shim
+        extra_features=h1_features,  # DQAF-20260707-003: H1 directional features
     )
     try:
         return _router.dispatch(_lake, canonical)
     except (KeyError, RuntimeError):
         pass  # Schema not in router contracts — fall through to legacy path
+
+    # ── DQAF-20260707-004: btc_macro_flow_46 — 41 base + 5 OFI flow ──
+    # OFI features flow into the lake from ofi_snapshot.json (Source 8).
+    # Graceful degradation: zero-fill when snapshot is unavailable (cold-start,
+    # bridge not running, backtest mode without OFI data).
+    if canonical == "btc_macro_flow_46":
+        if btc_augment is not None and len(btc_augment) == 41:
+            base = np.asarray(btc_augment, dtype=np.float64)
+        else:
+            # Graceful degradation: zero-fill 41-dim base when augmenter unavailable.
+            # This is NOT fail-closed like btc_macro_enhanced_41 because the flow
+            # schema is designed for shadow evaluation — it must not abort live cycles.
+            base = np.zeros(41, dtype=np.float64)
+
+        _flow_keys = [
+            "OFI_M5",
+            "OFI_ZScore_20",
+            "OFI_Cumulative_Delta",
+            "OFI_Delta_Divergence",
+            "OFI_Volume_Real_Ratio",
+        ]
+        _flow_vals = np.array(
+            [_lake.get(k, 0.0) for k in _flow_keys],
+            dtype=np.float64,
+        )
+        # NaN guard
+        _flow_vals = np.nan_to_num(_flow_vals, nan=0.0, posinf=0.0, neginf=0.0, copy=False)
+        return np.concatenate([base, _flow_vals])
 
     fv_35 = np.concatenate([daily_arr[:24], micro_arr[:9], [_ou, _hur]])
 
