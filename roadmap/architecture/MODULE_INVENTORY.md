@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-07T10:23:29Z
-> **扫描模块数**: 736
+> **自动生成**: 2026-07-07T11:08:40Z
+> **扫描模块数**: 737
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -720,7 +720,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 718 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 719 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
@@ -775,6 +775,7 @@
 | `hook_pre_push.py` | ✅ active | — | 6 | 284 | — | |
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
+| `inspect_ofi_history.py` | ✅ active | — | 3 | 156 | — | |
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
 | `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
@@ -796,7 +797,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 35 | 2107 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 36 | 2136 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |

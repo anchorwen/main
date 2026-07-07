@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260707-005 | 2026-07-07 | cursor-agent | — | **MODULE_SOURCE_MAP: add inspect_ofi_history.py→features_service**. OFI history accumulation monitor (DQAF-20260707-005 Phase 2) — new analysis script mapped to features_service module. | RC-12 — new module registration |
 | FIX-20260707-004 | 2026-07-07 | cursor-agent | — | **MODULE_SOURCE_MAP: add ofi_collector.py→features_service**. OFICollector flow features (DQAF-20260707-003 Phase 1) — ofi_collector.py was unmapped. Added to features_service module alongside other feature computer/collector files. | RC-12 — new module registration |
 | FIX-20260705-065 | 2026-07-05 | cursor-agent | — | **MODULE_SOURCE_MAP: add execution_ood→ood_gateway.py + export_ood_params.py**. New OODGateway module and calibration script (DQAF-20260705-064 P2) not mapped in MODULE_SOURCE_MAP. Added to execution_ood blueprint module. | RC-12 — new module registration |
 | FIX-20260705-064 | 2026-07-05 | cursor-agent | — | **MODULE_SOURCE_MAP: add execution_netting→core/execution/portfolio_netting.py**. New PortfolioNettingGate module (DQAF-20260705-064 P1) not mapped in MODULE_SOURCE_MAP. Added to execution_netting blueprint module. | RC-12 — new module registration |

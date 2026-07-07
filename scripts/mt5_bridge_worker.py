@@ -87,6 +87,29 @@ def _list_pending(outbox_dir: Path) -> list[Path]:
     return sorted(outbox_dir.rglob("*.mt5.json"))
 
 
+# ── DQAF-20260707-005 Phase 2: OFI history recorder ──
+# ofi_snapshot.json is overwrite-only (latest bar) — the 46-dim training
+# set needs an aligned OFI *time series*.  This appends each settled OFI
+# bar to ofi_history.jsonl with a bridge-injected UTC timestamp, so the
+# training-side aggregator can bucket 30s settles into H1 windows.
+# Timestamp injection lives here (bridge owns the wall clock) — OFICollector
+# stays pure/time-agnostic.  Fail-safe: telemetry never crashes the bridge.
+# Growth: ~2,880 records/day (~150B each ≈ 0.4MB/day); retention is a
+# daily_ops concern, not this hot path (Decoupling).
+
+
+def _append_ofi_history(history_path: Path, ofi_data: dict[str, Any]) -> None:
+    """Append one settled OFI bar to the history JSONL with a UTC timestamp."""
+    if not ofi_data:
+        return
+    _record = {"time": _utc_now(), **ofi_data}
+    try:
+        with open(history_path, "a", encoding="utf-8") as _fh:
+            _fh.write(json.dumps(_record, ensure_ascii=False) + "\n")
+    except (OSError, ValueError, TypeError):
+        pass  # fail-safe: OFI history is best-effort telemetry
+
+
 # ── DQAF-20260621-034 Phase 1: Persisted WAL processed-ID watermark ──
 # Replaces the in-memory _processed_ids set (lost on Bridge restart) with
 # an append-only JSONL file so dedup survives crashes.  File is capped at
@@ -1231,6 +1254,7 @@ def run_worker(args: argparse.Namespace) -> int:
     # ofi_snapshot.json.  Live cycle reads this file in Feature Lake.
     _ofi_collector = None
     _ofi_path = health_path.parent / "ofi_snapshot.json"
+    _ofi_hist_path = health_path.parent / "ofi_history.jsonl"
     if mt5 is not None and args.default_symbol:
         import threading as _thr2
 
@@ -1347,6 +1371,8 @@ def run_worker(args: argparse.Namespace) -> int:
                                 json.dumps(_ofi_data, ensure_ascii=False), encoding="utf-8"
                             )
                             os.replace(str(_ofi_tmp), str(_ofi_path))
+                            # DQAF-20260707-005: append to aligned history series
+                            _append_ofi_history(_ofi_hist_path, _ofi_data)
                     except OSError:
                         pass  # OFI best-effort
 
@@ -1682,6 +1708,7 @@ def run_zmq_worker(
     # ── FIX-20260616-099: OFI TickPoller for ZMQ mode ──
     _ofi_collector_zmq = None
     _ofi_path_zmq = health_path.parent / "ofi_snapshot.json"
+    _ofi_hist_path_zmq = health_path.parent / "ofi_history.jsonl"
     if mt5 is not None:
         import threading as _thr3
 
@@ -1988,6 +2015,8 @@ def run_zmq_worker(
                                 json.dumps(_ofi_data, ensure_ascii=False), encoding="utf-8"
                             )
                             os.replace(str(_ofi_tmp), str(_ofi_path_zmq))
+                            # DQAF-20260707-005: append to aligned history series
+                            _append_ofi_history(_ofi_hist_path_zmq, _ofi_data)
                     except OSError:
                         pass
             # ── MT5 heartbeat + reconnect ──

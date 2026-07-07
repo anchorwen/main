@@ -296,6 +296,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/features/feature_store_warmer.py",
         "scripts/feature_store_maintenance.py",
         "scripts/augment_journal_strategy.py",
+        "scripts/inspect_ofi_history.py",  # DQAF-20260707-005: OFI history monitor
     ],
     "market_mtf": [
         "core/market/mtf_price_service.py",

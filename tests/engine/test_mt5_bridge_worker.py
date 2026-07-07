@@ -1,6 +1,11 @@
 import json
 
-from scripts.mt5_bridge_worker import _coerce_positive_float, main, process_one
+from scripts.mt5_bridge_worker import (
+    _append_ofi_history,
+    _coerce_positive_float,
+    main,
+    process_one,
+)
 
 
 def _write_outbox_message(
@@ -101,6 +106,39 @@ def test_coerce_positive_float_handles_invalid_values():
     assert _coerce_positive_float(0) is None
     assert _coerce_positive_float(-1) is None
     assert _coerce_positive_float("1.25") == 1.25
+
+
+def test_append_ofi_history_writes_timestamped_record(tmp_path):
+    """DQAF-20260707-005: recorder appends a UTC-stamped JSONL line."""
+    hist_path = tmp_path / "ofi_history.jsonl"
+    ofi_data = {
+        "OFI_M5": -14.0,
+        "OFI_ZScore_20": -0.788,
+        "OFI_Cumulative_Delta": -145.0,
+        "OFI_Delta_Divergence": 0.0,
+        "OFI_Volume_Real_Ratio": 0.0,
+    }
+    _append_ofi_history(hist_path, ofi_data)
+
+    lines = hist_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    rec = json.loads(lines[0])
+    assert "time" in rec  # bridge-injected wall-clock timestamp
+    assert rec["OFI_Cumulative_Delta"] == -145.0
+    assert rec["OFI_M5"] == -14.0
+
+
+def test_append_ofi_history_appends_and_skips_empty(tmp_path):
+    """Successive settles append; empty settle (idempotency) writes nothing."""
+    hist_path = tmp_path / "ofi_history.jsonl"
+    _append_ofi_history(hist_path, {"OFI_M5": 1.0})
+    _append_ofi_history(hist_path, {})  # already-settled bar → no-op
+    _append_ofi_history(hist_path, {"OFI_M5": 2.0})
+
+    lines = hist_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["OFI_M5"] == 1.0
+    assert json.loads(lines[1])["OFI_M5"] == 2.0
 
 
 def test_mt5_bridge_respects_protection_flag(tmp_path):

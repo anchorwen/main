@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-07T10:23:29Z
+> **自动生成**: 2026-07-07T11:08:40Z
 
 ## Package-Level Dependencies
 
@@ -689,6 +689,7 @@
 - `hook_pre_push.py` → (无内部依赖)
 - `ingest_live_journal_to_alpha.py` → `core.alpha.performance_store`, `core.runtime.schema_versions`, `scripts.trade_quality_report`
 - `inject_regime_to_labels.py` → (无内部依赖)
+- `inspect_ofi_history.py` → (无内部依赖)
 - `journal_freeze_gate.py` → (无内部依赖)
 - `live_audit_realtime.py` → (无内部依赖)
 - `live_auto_healthcheck.py` → `core.deployment.scheduled_task_registry`, `scripts.live_dispatch_policy`
