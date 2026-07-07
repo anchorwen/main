@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-06T10:17:00Z
-> **扫描模块数**: 730
+> **自动生成**: 2026-07-07T02:17:42Z
+> **扫描模块数**: 731
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -258,7 +258,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2170 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2198 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 514 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -275,7 +275,7 @@
 | `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1906 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 319 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 226 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 293 | — | |
@@ -522,7 +522,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4338 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 14 | 2179 | — | |
+| `management_phase.py` | ✅ active | — | 14 | 2188 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 203 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -553,7 +553,7 @@
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
-| `trail_dispatch.py` | ✅ active | — | 1 | 311 | — | |
+| `trail_dispatch.py` | ✅ active | — | 1 | 328 | — | |
 | `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 205 | — | |
 
 ## core/schemas
@@ -661,6 +661,7 @@
 | `analyze_shadow_exit.py` | ✅ active | — | 7 | 414 | — | |
 | `analyze_shadow_predictions.py` | ✅ active | — | 11 | 569 | — | |
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
+| `analyze_ticket_4067021409.py` | ✅ active | — | 2 | 288 | — | |
 | `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |
 | `analyze_two_positions.py` | ✅ active | — | 2 | 203 | — | |
 | `analyze_xau_institutional.py` | ✅ active | — | 17 | 1362 | — | |

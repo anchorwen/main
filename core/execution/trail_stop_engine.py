@@ -135,8 +135,14 @@ class TrailStopEngine:
         Short: min(current_sl, lowest_low + trail_mult × atr)
 
         The trail never exceeds original_SL + max_lock_atr × entry_atr
-        (respects the model training contract).  The original TP remains
-        the hard ceiling — never cancelled.
+        (respects the model training contract).
+
+        FIX-20260707-009: TP yields to Trailing SL upon bracket crossover.
+        When the Chandelier trail advances the SL past the TP zone — or
+        compute_trail_tp() detects that a tightened TP would fall inside
+        the current SL — the TP is released (set to 0.0, i.e. no
+        take-profit).  The position is then fully managed by the trailing
+        stop, bounded by max_lock_atr and graduated_lock_levels.
 
         FIX-20260603-064: Activation watermark — trail stays at initial SL
         until unrealized profit exceeds trail_activation_atr × entry_atr.

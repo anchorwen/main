@@ -124,6 +124,23 @@ def compute_and_dispatch_trail(
         _reasons.append("tp")
         _final_tp = _trail_tp
 
+    # ── FIX-20260707-009: Bracket Integrity Guard ──
+    # Last line of defence before dispatch.  If the trailing SL has
+    # overtaken the TP (or compute_trail_tp released TP as 0.0), the
+    # bracket is invalid and MT5 will reject with "Invalid stops"
+    # (retcode 10016).  Drop the TP modification and let trailing SL
+    # fully manage the position.
+    # Only fires when both SL and TP are non-trivial (>0) — a TP of 0.0
+    # from the Dynamic Anchor release above is already correct and passes
+    # through without further modification.
+    if _final_tp > 0 and _final_sl > 0:
+        if pos.side == "long" and _final_sl >= _final_tp:
+            _final_tp = 0.0  # TP yields to trailing SL
+            _reasons.append("tp_released_bracket_inversion")
+        elif pos.side == "short" and _final_sl <= _final_tp:
+            _final_tp = 0.0
+            _reasons.append("tp_released_bracket_inversion")
+
     # ── Diagnostic log ──
     print(
         json.dumps(

@@ -1647,10 +1647,31 @@ class ActivePositionManager:
 
         Long:  candidate = mid + tp_atr_mult × current_atr  (but ≤ original TP)
         Short: candidate = mid - tp_atr_mult × current_atr  (but ≥ original TP)
+
+        FIX-20260707-009: Bracket Inversion — Dynamic Anchor Paradigm.
+        When the trailing SL has advanced past the TP zone (or the tightened
+        candidate would fall inside the current SL), the TP becomes a physical
+        hindrance — it blocks SL advancement because MT5 rejects SL ≥ TP for
+        LONG (or SL ≤ TP for SHORT) as "Invalid stops" (retcode 10016).
+
+        In this case TP yields to Trailing SL: we return 0.0 to signal
+        "release take-profit" to the execution gateway.  The position is
+        then fully managed by the Chandelier trailing stop, which is
+        independently bounded by max_lock_atr and graduated_lock_levels.
         """
         pos = self._get_pos(ticket)
         if pos is None or pos.entry_atr <= 0 or current_atr <= 0:
             return None
+
+        # ── FIX-20260707-009: Bracket inversion pre-check ──
+        # If SL has already overtaken TP (e.g. SL trailed up while TP was
+        # anchored to entry_price), release TP immediately — don't wait for
+        # ATR contraction to fire.
+        if pos.current_sl > 0 and pos.current_tp > 0:
+            if pos.side == "long" and pos.current_sl >= pos.current_tp:
+                return 0.0  # TP yields to trailing SL
+            if pos.side == "short" and pos.current_sl <= pos.current_tp:
+                return 0.0
 
         atr_ratio = current_atr / pos.entry_atr
         # Only tighten when ATR has contracted meaningfully
@@ -1662,10 +1683,17 @@ class ActivePositionManager:
         tp_distance = _trail_mult * current_atr * 1.75  # TP trail uses 1.75x the SL trail mult
         if pos.side == "long":
             candidate = pos.entry_price + tp_distance
+            # ── FIX-20260707-009: Bracket inversion candidate check ──
+            # If the tightened TP would fall at or inside the current SL,
+            # release TP instead of dispatching an illegal bracket.
+            if pos.current_sl > 0 and candidate <= pos.current_sl:
+                return 0.0
             if candidate < pos.current_tp:
                 return round(candidate, 3)
         else:
             candidate = pos.entry_price - tp_distance
+            if pos.current_sl > 0 and candidate >= pos.current_sl:
+                return 0.0
             if candidate > pos.current_tp:
                 return round(candidate, 3)
         return None

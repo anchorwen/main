@@ -1312,6 +1312,7 @@ def execute_management_phase(
         if pos.trail_rejection_streak >= 3:
             _send_trail_rejection_alert(
                 config=config,
+                state=state,
                 ticket=pos.ticket,
                 streak=pos.trail_rejection_streak,
                 last_retcode=pos.trail_last_rejection_code,
@@ -1795,12 +1796,20 @@ def _check_trail_rejection(ticket: int, config: Any) -> dict | None:
 def _send_trail_rejection_alert(
     *,
     config: Any,
+    state: Any,
     ticket: int,
     streak: int,
     last_retcode: int,
     strategy_name: str = "",
 ) -> None:
-    """Send DingTalk alert when trail modifications are repeatedly rejected."""
+    """Send DingTalk alert when trail modifications are repeatedly rejected.
+
+    FIX-20260707-009: alert_hub attribute mismatch corrected.
+    Previously looked up ``config.alert_hub``, but ``LiveCycleConfig``
+    (a dataclass) has no ``alert_hub`` field — the hub lives on
+    ``LiveCycleState``.  This caused every rejection alert to silently
+    fall through to ``logger.warning()``, never reaching DingTalk.
+    """
     _msg = (
         f"TRAIL_MODIFICATION_FAILED\n"
         f"Position: {ticket}\n"
@@ -1810,7 +1819,7 @@ def _send_trail_rejection_alert(
         f"Action: Trail suspended for this position, will retry next cycle."
     )
     try:
-        _hub = getattr(config, "alert_hub", None)
+        _hub = getattr(state, "alert_hub", None)
         if _hub is not None and hasattr(_hub, "send_alert"):
             _hub.send_alert(
                 severity="warning",
