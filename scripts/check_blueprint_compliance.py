@@ -136,6 +136,10 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "execution_netting": [
         "core/execution/portfolio_netting.py",
     ],
+    "execution_ood": [
+        "core/execution/ood_gateway.py",
+        "scripts/export_ood_params.py",
+    ],
     "risk_policies": ["core/risk/risk_policies.py", "core/risk/risk_evaluation_service.py"],
     "risk_regime": [
         "core/risk/regime_detector.py",
@@ -382,7 +386,6 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/training/",
         "core/backtest/strategy_adapter.py",
         "scripts/training/",
-        "scripts/calibrate_binary_threshold.py",
         "scripts/tuning/",
         "scripts/check_training_readiness.py",
         "scripts/analyze_live_journal.py",

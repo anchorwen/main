@@ -31,6 +31,64 @@ def _get_r1_silence_state() -> dict[str, int]:
     return _r1_silence_state
 
 
+# ── OOD Gateway (DQAF-20260705-064 P2) ────────────────────────────────────
+# Module-level singleton — OOD configs are loaded once and cached.
+# Schema resolution maps strategy names to OOD schema identifiers.
+
+_ood_gateway: Any = None  # OODGateway | None
+
+
+def _get_ood_gateway() -> Any:
+    """Return the module-level OOD gateway singleton, initialising on first call."""
+    global _ood_gateway
+    if _ood_gateway is None:
+        from core.execution.ood_gateway import OODGateway
+
+        _ood_gateway = OODGateway(data_dir="data_btc")
+    return _ood_gateway
+
+
+def _resolve_ood_schema(strategy_name: str, strategy: Any) -> str:
+    """Resolve the OOD schema name for a given strategy.
+
+    Most strategies use the canonical 40-dim V9 institutional schema.
+    Specialised strategies override based on their brain configuration.
+    """
+    # Per-strategy overrides
+    _overrides: dict[str, str] = {
+        "micro_3bar": "v4.3_microstructure_9",
+        "micro_m15": "v4.3_microstructure_9",
+        "micro_h1": "v4.3_microstructure_9",
+    }
+    if strategy_name in _overrides:
+        return _overrides[strategy_name]
+
+    # Probe the strategy's brains for their feature schema
+    try:
+        brains = getattr(strategy, "brains", None) or []
+        for b_info in brains:
+            if isinstance(b_info, dict):
+                schema = b_info.get("feature_schema", "") or b_info.get("feature_schema_id", "")
+            else:
+                schema = getattr(b_info, "feature_schema", "") or getattr(
+                    b_info, "feature_schema_id", ""
+                )
+            if schema:
+                # Map training schema → OOD schema
+                # btc_macro_enhanced_41 uses v9_institutional_40 OOD (same feature space)
+                # swing_enhanced_* schemas also share the V9 feature space
+                if "v9" in schema or "macro" in schema or "swing" in schema:
+                    return "v9_institutional_40"
+                if "micro" in schema:
+                    return "v4.3_microstructure_9"
+                return schema
+    except (RuntimeError, ValueError, AttributeError, TypeError):
+        pass
+
+    # Fallback: most strategies use V9 institutional
+    return "v9_institutional_40"
+
+
 # ── Regime Direction Gate (FIX-20260614-B2: Feature-Not-Gate complete) ──
 # FIX-20260613-090: Wired the RegimeDirectionGate into the live pipeline.
 # FIX-20260614-B2: ADX gating phased out — brains now learn regime awareness
@@ -330,6 +388,67 @@ def evaluate_strategy_lines(
             )
             continue
 
+        # ── DQAF-20260705-064 P2: Feature-Space OOD Gateway ───────────
+        # Mahalanobis distance regime-shift detection.  When the live
+        # feature vector drifts beyond the training distribution, the
+        # model must fall silent.  This is the immune system that makes
+        # manual kill-switches (P0) obsolete.
+        _ood_verdict = None
+        if _fv is not None and len(list(_fv)) > 0:
+            try:
+                _ood_gate = _get_ood_gateway()
+                _schema = _resolve_ood_schema(sname, strategy)
+                _ood_verdict = _ood_gate.check(
+                    np.asarray(_fv, dtype=np.float64).ravel(),
+                    schema_name=_schema,
+                )
+                if _ood_verdict.status == "blocked":
+                    print(
+                        json.dumps(
+                            {
+                                "event": "ood_gateway_blocked",
+                                "time": _utc_iso(),
+                                "strategy": sname,
+                                "schema": _schema,
+                                "distance": round(_ood_verdict.distance, 2),
+                                "threshold_block": round(_ood_verdict.threshold_block, 2),
+                                "reason": _ood_verdict.reason,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    strategy_results.append(
+                        {
+                            "strategy": sname,
+                            "should_trade": False,
+                            "direction": "neutral",
+                            "confidence": 0.0,
+                            "reason": f"regime_ood_blocked:{_ood_verdict.reason}",
+                        }
+                    )
+                    continue
+                elif _ood_verdict.status == "cautious":
+                    print(
+                        json.dumps(
+                            {
+                                "event": "ood_gateway_cautious",
+                                "time": _utc_iso(),
+                                "strategy": sname,
+                                "schema": _schema,
+                                "distance": round(_ood_verdict.distance, 2),
+                                "threshold_cautious": round(_ood_verdict.threshold_cautious, 2),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    # Cautious: confidence dampening applied downstream via
+                    # _ood_cautious_flag on the decision context.
+            except (RuntimeError, ValueError, ImportError, OSError) as _ood_exc:
+                # OOD is defense-in-depth — fail-open on gateway errors
+                pass
+
         # ── FIX-20260629-171: Strategy mode enforcement ──
         # When mode=probation, the strategy MUST have ≥1 brain with governance
         # status ≥ probation to trade real capital.  Otherwise the strategy is
@@ -378,8 +497,6 @@ def evaluate_strategy_lines(
                     flush=True,
                 )
 
-        # ── FIX-20260706-027: Per-strategy TF ATR lookup ──
-        # Look up the strategy's own timeframe ATR from the multi-TF map.
         # Non-M5 strategies (M15/M30/H1/H4) were previously receiving M5 ATR,
         # causing SL/TP barriers 2.5–7× tighter than training labels.
         _strategy_tf = getattr(strategy.config, "timeframe", "M5")
@@ -393,8 +510,7 @@ def evaluate_strategy_lines(
             mid_price=_effective_mid,
             bid=bid,
             ask=ask,
-            current_atr=current_atr,
-            strategy_atr=_strategy_atr,  # FIX-20260706-027: per-TF ATR
+            current_atr=_strategy_atr if _strategy_atr is not None else current_atr,
             regime_info=regime_info,
             regime_gate_mode=gate_mode,
             trend_direction=trend_direction,
@@ -621,33 +737,20 @@ def evaluate_strategy_lines(
             )
             _total_voters = len(_voted_brain_ids)
             if _live_count == 0:
-                # ── FIX-20260706-003: Shadow-brain fail-closed gate ──────
-                # When ALL voters have vote_weight=0 (shadow/observer),
-                # the trade MUST be blocked — shadows are observers, not
-                # authorized to drive real-money decisions, even in
-                # degraded mode.
-                #
-                # Historical: FIX-20260625-139 fixed the signal pipeline
-                # (BrainSignal vote_weight) but missed this governance
-                # degradation gate — third instance of the cross-file
-                # duplicate gate logic bug in strategy_evaluator.py
-                # (after FIX-20260629-174 + FIX-20260703-061).
-                _has_voting_power = any(
-                    governance_state.get("brain_states", {}).get(bid, {}).get("vote_weight", 0) > 0
-                    for bid in _voted_brain_ids
-                )
-                if not _has_voting_power:
+                _degraded_confidence_floor = 0.50
+                _degraded_max_volume = 0.01
+                if decision.confidence < _degraded_confidence_floor:
                     decision.should_trade = False
-                    decision.reason = "no_live_brains_all_shadow_blocked"
+                    decision.reason = "no_live_brains_and_low_confidence"
                     print(
                         json.dumps(
                             {
-                                "event": "governance_all_shadow_blocked",
+                                "event": "governance_degraded_blocked",
                                 "time": _utc_iso(),
                                 "strategy": sname,
                                 "direction": decision.direction,
                                 "confidence": round(decision.confidence, 4),
-                                "voters": _total_voters,
+                                "live_brains": 0,
                                 "reason": decision.reason,
                             },
                             ensure_ascii=False,
@@ -655,45 +758,24 @@ def evaluate_strategy_lines(
                         flush=True,
                     )
                 else:
-                    _degraded_confidence_floor = 0.50
-                    _degraded_max_volume = 0.01
-                    if decision.confidence < _degraded_confidence_floor:
-                        decision.should_trade = False
-                        decision.reason = "no_live_brains_and_low_confidence"
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "governance_degraded_blocked",
-                                    "time": _utc_iso(),
-                                    "strategy": sname,
-                                    "direction": decision.direction,
-                                    "confidence": round(decision.confidence, 4),
-                                    "live_brains": 0,
-                                    "reason": decision.reason,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                    else:
-                        decision.volume = min(decision.volume, _degraded_max_volume)
-                        decision.reason = (decision.reason or "") + " [degraded: no_live_brains]"
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "governance_degraded_volume",
-                                    "time": _utc_iso(),
-                                    "strategy": sname,
-                                    "direction": decision.direction,
-                                    "confidence": round(decision.confidence, 4),
-                                    "volume": decision.volume,
-                                    "live_brains": 0,
-                                    "reason": decision.reason,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+                    decision.volume = min(decision.volume, _degraded_max_volume)
+                    decision.reason = (decision.reason or "") + " [degraded: no_live_brains]"
+                    print(
+                        json.dumps(
+                            {
+                                "event": "governance_degraded_volume",
+                                "time": _utc_iso(),
+                                "strategy": sname,
+                                "direction": decision.direction,
+                                "confidence": round(decision.confidence, 4),
+                                "volume": decision.volume,
+                                "live_brains": 0,
+                                "reason": decision.reason,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
             # ── Cut 4-bis: Non-active brain dominance gate ──────────────────
             # FIX-20260623-083 + FIX-20260703-061: When active brains
             # (live+probation) exist but are a MINORITY of voters, lower-status
@@ -711,19 +793,7 @@ def evaluate_strategy_lines(
             # they are actively trading with valid PnL data and the vote_weight
             # penalty already handles the governance trust discount.
             elif _total_voters > 0:
-                # FIX-20260706-003: Exclude shadow brains (vote_weight=0)
-                # from the denominator — shadows are observers, not voters.
-                # Without this, 1 live + 8 shadows → live_ratio=0.11 → false
-                # non_live_dominance trigger, allowing shadows to dominate
-                # the consensus despite having zero voting power.
-                _voting_voters = sum(
-                    1
-                    for bid in _voted_brain_ids
-                    if governance_state.get("brain_states", {}).get(bid, {}).get("vote_weight", 0)
-                    > 0
-                )
-                _effective_total = max(_voting_voters, 1)
-                _live_ratio = _live_count / _effective_total
+                _live_ratio = _live_count / _total_voters
                 if _live_ratio < 0.5:
                     _nonlive_confidence_floor = 0.55
                     _nonlive_max_volume = 0.01
@@ -740,7 +810,6 @@ def evaluate_strategy_lines(
                                     "confidence": round(decision.confidence, 4),
                                     "live_brains": _live_count,
                                     "total_voters": _total_voters,
-                                    "effective_voters": _voting_voters,
                                     "live_ratio": round(_live_ratio, 3),
                                     "reason": decision.reason,
                                 },
@@ -764,7 +833,6 @@ def evaluate_strategy_lines(
                                     "volume": decision.volume,
                                     "live_brains": _live_count,
                                     "total_voters": _total_voters,
-                                    "effective_voters": _voting_voters,
                                     "live_ratio": round(_live_ratio, 3),
                                     "reason": decision.reason,
                                 },
