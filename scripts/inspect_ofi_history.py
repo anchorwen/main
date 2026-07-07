@@ -5,11 +5,13 @@ to ``ofi_history.jsonl``.  This script reports accumulation progress so we
 know when enough aligned OFI data exists to build the 46-dim training set.
 
 Statistics reported (Iron Law #11 — script is the only legal evidence source):
-  - Record count + wall-clock span
+  - Record count + wall-clock span + distinct H1 windows
   - Per-feature coverage (non-zero rate) for the 5 flow features
   - Delta_Divergence firing rate (sparse binary — informs effective dim)
   - Volume_Real_Ratio availability (BTC often lacks real_volume)
-  - Readiness verdict against evaluation (2,000) and retrain (5,000) thresholds
+  - Dual-count readiness gates (raw settle ≠ H1 training sample):
+      Gate 1 (screening): raw settles + regime span → Wasserstein feature scan
+      Gate 2 (retrain):   distinct H1 windows → H1-cadence training samples
 
 Usage::
 
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,9 +35,19 @@ _FLOW_FEATURES = [
     "OFI_Volume_Real_Ratio",
 ]
 
-# ── Readiness thresholds (settled bars, ~2,880/day at 30s cadence) ──
-_EVAL_THRESHOLD = 2_000  # Minimum for Wasserstein directional evaluation
-_RETRAIN_THRESHOLD = 5_000  # Minimum for a competitive production retrain
+# ── Dual-count readiness gates (raw settle ≠ H1 training sample) ──
+# Gate 1 (screening): raw 30s settles + regime span → Wasserstein feature scan.
+#   raw settles accrue ~2,880/day, but a valid scan needs ≥1 week of varied
+#   regimes so forward-return labels are not drawn from a single trend.
+# Gate 2 (retrain): distinct H1 windows → H1-cadence training samples.
+#   The H1 direction model trains on 1 sample/hour (verified: btc_swing_v12_h1
+#   NPZ timestamps are spaced exactly 3600s). 5,000 raw settles ≈ only ~42 H1
+#   windows, so raw count MUST NOT gate a retrain. 1,000 H1 windows is the
+#   minimum for a transfer/adapter retrain (freeze 41-dim, learn OFI delta).
+_EVAL_RAW_THRESHOLD = 2_000  # Gate 1: min raw settles for Wasserstein scan
+_EVAL_SPAN_DAYS = 7.0  # Gate 1: min wall-clock span for regime coverage
+_RETRAIN_H1_THRESHOLD = 1_000  # Gate 2: min distinct H1 windows (adapter-viable)
+_H1_BUCKET_LEN = 13  # "YYYY-MM-DDTHH" prefix identifies one H1 window
 
 
 def _load_history(path: Path) -> list[dict[str, Any]]:
@@ -56,6 +69,28 @@ def _load_history(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _distinct_h1_windows(records: list[dict[str, Any]]) -> int:
+    """Count unique calendar-hour buckets — the true H1 training-sample count."""
+    buckets: set[str] = set()
+    for r in records:
+        t = r.get("time")
+        if isinstance(t, str) and len(t) >= _H1_BUCKET_LEN:
+            buckets.add(t[:_H1_BUCKET_LEN])
+    return len(buckets)
+
+
+def _span_days(records: list[dict[str, Any]]) -> float:
+    """Wall-clock span between first and last record, in days (regime coverage)."""
+    times = [t for r in records if isinstance((t := r.get("time")), str)]
+    if len(times) < 2:
+        return 0.0
+    try:
+        delta = datetime.fromisoformat(times[-1]) - datetime.fromisoformat(times[0])
+    except (ValueError, TypeError):
+        return 0.0
+    return max(0.0, delta.total_seconds() / 86_400.0)
+
+
 def inspect(data_dir: Path) -> dict[str, Any]:
     """Compute accumulation statistics from ofi_history.jsonl."""
     hist_path = data_dir / "reports" / "ofi_history.jsonl"
@@ -74,8 +109,12 @@ def inspect(data_dir: Path) -> dict[str, Any]:
     # ── Wall-clock span ──
     first_ts = records[0].get("time", "?")
     last_ts = records[-1].get("time", "?")
+    span_days = _span_days(records)
+    h1_windows = _distinct_h1_windows(records)
     result["first_ts"] = first_ts
     result["last_ts"] = last_ts
+    result["span_days"] = round(span_days, 2)
+    result["distinct_h1_windows"] = h1_windows
 
     # ── Per-feature non-zero coverage ──
     coverage: dict[str, float] = {}
@@ -99,18 +138,37 @@ def inspect(data_dir: Path) -> dict[str, Any]:
     result["effective_flow_dim"] = len(live_feats)
     result["effective_schema_dim"] = 41 + len(live_feats)
 
-    # ── Readiness verdict ──
-    if n >= _RETRAIN_THRESHOLD:
-        verdict = f"RETRAIN_READY — {n:,} bars ≥ {_RETRAIN_THRESHOLD:,} (production retrain viable)"
-    elif n >= _EVAL_THRESHOLD:
-        pct = 100 * n / _RETRAIN_THRESHOLD
+    # ── Gate 1: Wasserstein screening (raw settles + regime span) ──
+    eval_ready = n >= _EVAL_RAW_THRESHOLD and span_days >= _EVAL_SPAN_DAYS
+    result["gate1_screening"] = {
+        "ready": eval_ready,
+        "detail": (
+            f"{n:,}/{_EVAL_RAW_THRESHOLD:,} raw settles, "
+            f"{span_days:.1f}/{_EVAL_SPAN_DAYS:.0f}d span"
+        ),
+    }
+
+    # ── Gate 2: H1-cadence retrain (distinct H1 windows) ──
+    retrain_ready = h1_windows >= _RETRAIN_H1_THRESHOLD
+    result["gate2_retrain"] = {
+        "ready": retrain_ready,
+        "detail": f"{h1_windows:,}/{_RETRAIN_H1_THRESHOLD:,} distinct H1 windows",
+    }
+
+    # ── Overall verdict ──
+    if retrain_ready:
+        verdict = f"RETRAIN_READY — {h1_windows:,} H1 windows ≥ {_RETRAIN_H1_THRESHOLD:,}"
+    elif eval_ready:
         verdict = (
-            f"EVAL_READY — {n:,} bars ≥ {_EVAL_THRESHOLD:,} (Wasserstein scan viable; "
-            f"{pct:.0f}% to retrain threshold)"
+            f"EVAL_READY — Gate 1 met ({n:,} settles / {span_days:.1f}d); "
+            f"Gate 2 at {h1_windows:,}/{_RETRAIN_H1_THRESHOLD:,} H1 windows"
         )
     else:
-        pct = 100 * n / _EVAL_THRESHOLD
-        verdict = f"ACCUMULATING — {n:,}/{_EVAL_THRESHOLD:,} bars ({pct:.0f}% to eval threshold)"
+        pct = 100 * n / _EVAL_RAW_THRESHOLD
+        verdict = (
+            f"ACCUMULATING — {n:,}/{_EVAL_RAW_THRESHOLD:,} settles ({pct:.0f}%), "
+            f"{span_days:.1f}/{_EVAL_SPAN_DAYS:.0f}d span, {h1_windows:,} H1 windows"
+        )
     result["verdict"] = verdict
 
     return result
@@ -139,6 +197,9 @@ def main() -> None:
         return
 
     print(f"  Span:    {stats['first_ts']} → {stats['last_ts']}")
+    print(
+        f"           ({stats['span_days']:.2f} days, {stats['distinct_h1_windows']:,} distinct H1 windows)"
+    )
     print("\n  Non-zero coverage per flow feature:")
     for feat, cov in stats["nonzero_coverage"].items():
         bar = "#" * int(cov * 20)
@@ -149,6 +210,10 @@ def main() -> None:
         f"  Live flow features:    {stats['effective_flow_dim']}/5 → "
         f"effective schema = {stats['effective_schema_dim']}-dim"
     )
+    g1, g2 = stats["gate1_screening"], stats["gate2_retrain"]
+    print("\n  Gates:")
+    print(f"    [{'✓' if g1['ready'] else ' '}] Gate 1 (Wasserstein scan):  {g1['detail']}")
+    print(f"    [{'✓' if g2['ready'] else ' '}] Gate 2 (H1 retrain):        {g2['detail']}")
     print(f"\n  VERDICT: {stats['verdict']}")
 
 

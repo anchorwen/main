@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-07T11:08:40Z
+> **自动生成**: 2026-07-07T15:37:02Z
 > **扫描模块数**: 737
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -775,7 +775,7 @@
 | `hook_pre_push.py` | ✅ active | — | 6 | 284 | — | |
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
-| `inspect_ofi_history.py` | ✅ active | — | 3 | 156 | — | |
+| `inspect_ofi_history.py` | ✅ active | — | 5 | 221 | ✅ | |
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
 | `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
