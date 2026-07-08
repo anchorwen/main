@@ -57,6 +57,23 @@
 
 > 关联记忆: [[deferred_46dim_flow_retrain]] · [[diagnostics_20260628_btc_all_long_bias]]
 
+## T22: BTC V4 confidence 校准影子监控 (FIX-20260708-002)
+
+| 字段 | 值 |
+|:---|:---|
+| **状态** | 🟡 MONITORING (观察中) |
+| **创建时间** | 2026-07-08 |
+| **关联 Fix** | FIX-20260708-002 (V4 confidence_params = quantile_gaussian, n=128 bootstrap) |
+| **背景** | DQAF-20260707-003 唯一 live 行为变更: V4 从 tanh fallback 改用 quantile_gaussian 校准 (机制已 live 于 8 XAU brain)。参数为 GM back-calc bootstrap, 待实盘 brain_votes 重校准。 |
+| **前置条件** | V4 采用新校准后累计 ≥500 golden_master V4 周期 (含 brain_votes raw_score) |
+| **当前值** | 0 周期 (校准刚生效 2026-07-08) |
+| **目标值** | (1) V4 PF 不低于基线 1.36; (2) confidence 分布不塌缩 (std 不回退至 ~0.01) |
+| **采集命令** | `python scripts/analyze_live_journal.py --data-dir data_btc` (V4 PF) + golden_master brain_votes/confidence std 统计 |
+| **达标后动作** | 从 brain_votes raw_score 重新校准 p95/peak_conf/lambda_decay (替换 n=128 bootstrap) |
+| **异常阈值** | V4 PF < 1.0 持续 5 日 OR confidence std < 0.02 → 回滚 confidence_params 至 tanh fallback (删除该 block) |
+
+> 关联记忆: [[deferred_brain_governance_rectification_20260628]] · DQAF-20260707-003 (CCT-20260708-002)
+
 ---
 
 ## 快速状态
