@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-07T15:37:02Z
+> **自动生成**: 2026-07-08T05:09:21Z
 
 ## Package-Level Dependencies
 
@@ -332,7 +332,7 @@
 - `execution_reconciliation_service.py` → `core.contracts.domain_keys`, `core.observability.metric_names`
 - `gate_decision_refs.py` → `core.contracts.domain_keys`
 - `journal_cleanup.py` → `core.contracts.strategy_magic`, `core.infrastructure.distributed_lock`
-- `journal_gate.py` → `core.contracts.journal_sla`
+- `journal_gate.py` → `core.contracts.journal_sla`, `core.data.ticket_resolver`
 - `pnl_guard.py` → (无内部依赖)
 - `replay_execution_reader.py` → `core.contracts.domain_keys`, `core.ledger.stream_names`
 - `replay_execution_writer.py` → `core.contracts.domain.replay_execution_record`, `core.contracts.ids`, `core.ledger.stream_names`
@@ -560,6 +560,7 @@
 - `_diagnose_model_raw_output.py` → (无内部依赖)
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
 - `_fix_shadow_configs.py` → (无内部依赖)
+- `_forensic_orphan_closes.py` → (无内部依赖)
 - `_institutional_reconcile.py` → (无内部依赖)
 - `_surface_scan_horizon4.py` → (无内部依赖)
 - `_verify_btc_analysis_claims.py` → (无内部依赖)
@@ -572,7 +573,7 @@
 - `analyze_exit_optimization_effect.py` → (无内部依赖)
 - `analyze_feature_shift.py` → (无内部依赖)
 - `analyze_live_brain_performance.py` → (无内部依赖)
-- `analyze_live_journal.py` → (无内部依赖)
+- `analyze_live_journal.py` → `core.data.ticket_resolver`
 - `analyze_m30_trailing_sltp.py` → (无内部依赖)
 - `analyze_ou_pnl.py` → (无内部依赖)
 - `analyze_recent_losses.py` → (无内部依赖)

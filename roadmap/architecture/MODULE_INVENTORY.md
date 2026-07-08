@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-07T15:37:02Z
-> **扫描模块数**: 737
+> **自动生成**: 2026-07-08T05:09:21Z
+> **扫描模块数**: 738
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -118,7 +118,7 @@
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 232 | — | |
 | `journal_sla.py` | ✅ active | ReconStatus, JournalHealthSLA | 2 | 133 | — | |
 | `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 938 | — | |
-| `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 150 | — | |
+| `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 155 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
 | `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
 | `validators.py` | ✅ active | ContractViolation, ContractValidator | 7 | 123 | — | |
@@ -162,7 +162,7 @@
 |------|------|----|------|------|------|------|
 | `event_writer.py` | ✅ active | EventWriter | 9 | 128 | — | |
 | `projections.py` | ✅ active | — | 7 | 271 | — | |
-| `ticket_resolver.py` | ✅ active | TicketResolutionError | 3 | 101 | — | |
+| `ticket_resolver.py` | ✅ active | TicketResolutionError | 4 | 137 | — | |
 | `wap.py` | ✅ active | WAPStore | 11 | 219 | — | |
 | `write_ahead_log.py` | ✅ active | WALConfig, WALRecord, WriteAheadLog | 21 | 526 | — | |
 
@@ -382,7 +382,7 @@
 | `execution_reconciliation_service.py` | ✅ active | ExecutionReconciliationService | 9 | 264 | — | |
 | `gate_decision_refs.py` | ✅ active | — | 4 | 30 | — | |
 | `journal_cleanup.py` | ✅ active | — | 13 | 857 | — | |
-| `journal_gate.py` | ✅ active | JournalGate | 13 | 240 | — | |
+| `journal_gate.py` | ✅ active | JournalGate | 13 | 248 | — | |
 | `pnl_guard.py` | ✅ active | PnlGuard | 2 | 138 | — | |
 | `replay_execution_reader.py` | ✅ active | ReplayExecutionReader | 5 | 35 | — | |
 | `replay_execution_writer.py` | ✅ active | ReplayExecutionWriter | 2 | 26 | — | |
@@ -531,7 +531,7 @@
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 594 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 597 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 314 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
@@ -646,6 +646,7 @@
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
+| `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
@@ -658,7 +659,7 @@
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
 | `analyze_feature_shift.py` | ✅ active | — | 5 | 323 | — | |
 | `analyze_live_brain_performance.py` | ✅ active | — | 6 | 672 | — | |
-| `analyze_live_journal.py` | ✅ active | — | 6 | 797 | — | |
+| `analyze_live_journal.py` | ✅ active | — | 6 | 811 | — | |
 | `analyze_m30_trailing_sltp.py` | ✅ active | — | 5 | 550 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
@@ -740,7 +741,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 41 | 3528 | — | |
+| `daily_ops.py` | ✅ active | — | 41 | 3532 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -943,7 +944,7 @@
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
 | `governance_scheduler.py` | ✅ active | — | 8 | 822 | — | |
-| `label_builder.py` | ✅ active | — | 19 | 1044 | — | |
+| `label_builder.py` | ✅ active | — | 19 | 1047 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |
 | `optimize_ensemble_weights.py` | ✅ active | — | 4 | 164 | — | |

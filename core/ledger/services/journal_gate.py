@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from core.contracts.journal_sla import QUARANTINE_DAILY_LIMIT, QUARANTINE_DEGRADED
+from core.data.ticket_resolver import resolve_identity
 
 _log = logging.getLogger(__name__)
 
@@ -89,9 +90,14 @@ class JournalGate:
         if entry.get("_source") == "mt5_backfill":
             return True
 
-        ticket = entry.get("position_ticket")
+        # FIX-20260708-001: admit on the IMMUTABLE identity, not the mutable
+        # MT5 ticket.  A re-ticketed close (partial-close/netting) carries a NEW
+        # position_ticket but the SAME position_identifier as its open leg, which
+        # register_open recorded.  Keying admission on the mutable ticket
+        # quarantined ~17 legitimate re-ticketed closes/day as false orphans.
+        ticket = resolve_identity(entry)
         if not isinstance(ticket, int) or ticket <= 0:
-            _log.warning("JournalGate: close entry has no valid position_ticket")
+            _log.warning("JournalGate: close entry has no valid position identity")
             return False
 
         if ticket in self._known_tickets:
@@ -150,7 +156,9 @@ class JournalGate:
                 except json.JSONDecodeError:
                     continue
                 if e.get("action") == "open":
-                    ticket = e.get("position_ticket")
+                    # FIX-20260708-001: register the immutable identity (== the
+                    # opening ticket at open time) so re-ticketed closes match.
+                    ticket = resolve_identity(e)
                     if isinstance(ticket, int) and ticket > 0:
                         self._known_tickets.add(ticket)
                         count += 1

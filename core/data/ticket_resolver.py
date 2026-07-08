@@ -92,6 +92,42 @@ def resolve_required(record: dict[str, Any]) -> int:
     return ticket
 
 
+def resolve_identity(record: dict[str, Any]) -> int | None:
+    """Extract the canonical IMMUTABLE position-lifecycle key (the join key).
+
+    DQAF-20260708-001 / FIX-20260708-001 (Canonical Immutable-Identity Join
+    Authority): ``position_ticket`` is overloaded — it is BOTH the mutable MT5
+    broker ticket AND, historically, the open<->close join key.  MT5 re-tickets
+    a position on partial-close/netting, so joining lifecycle legs on the
+    mutable ticket structurally manufactures "orphan" closes every time a ticket
+    changes.  This function returns the IMMUTABLE anchor instead:
+
+    1. ``position_identifier`` — MT5 POSITION_IDENTIFIER, stable across
+       re-ticketing (populated from ``deal.position_id`` in the close adapter and
+       written on both open and close journal legs).  At open time it equals the
+       ticket; after re-ticketing it still equals the ORIGINAL opening ticket, so
+       both legs resolve to the same value.
+
+    2. Fallback to :func:`resolve` (the mutable ticket) ONLY for legacy /
+       pre-identifier records that never captured ``position_identifier``.  Those
+       degrade to today's behaviour rather than raising.
+
+    Use this for JOINING open<->close, orphan detection, gate admission, and
+    training-label pairing.  Do NOT use it where the real MT5 ticket is required
+    (broker order/close/modify requests) — use :func:`resolve` there, because the
+    broker only knows the mutable ticket.
+
+    >>> resolve_identity({"position_identifier": 3946545788, "position_ticket": 3946550905})
+    3946545788
+    >>> resolve_identity({"position_ticket": 3946550905})  # legacy, no identifier
+    3946550905
+    """
+    identity = record.get("position_identifier")
+    if _is_valid_ticket(identity):
+        return int(identity)
+    return resolve(record)
+
+
 class TicketResolutionError(ValueError):
     """Raised by :func:`resolve_required` when ticket resolution fails."""
 

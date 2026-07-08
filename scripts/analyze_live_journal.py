@@ -10,7 +10,9 @@ All conclusions must be based SOLELY on the stdout output of this script.
 
 ---
 Dedup logic:
-  - Trade journal: group by position_ticket, take the LAST close event with
+  - Trade journal: group by position identity (immutable position_identifier,
+    falling back to the mutable position_ticket for legacy records), take the
+    LAST close event with
     non-null PnL as the realized outcome.
   - Position snapshots: group by ticket, analyze per-snapshot trailing_sl_distance
     relative to current_atr.
@@ -43,6 +45,10 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from core.data.ticket_resolver import resolve_identity  # noqa: E402
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -81,11 +87,16 @@ def analyze_journal(
         raw_actions[r.get("action", "?")] += 1
         raw_ack[r.get("ack_status", "?")] += 1
 
-    # ── Group by position_ticket ──
+    # ── Group by IMMUTABLE position identity (not the mutable MT5 ticket) ──
+    # FIX-20260708-001: MT5 re-tickets a position on partial-close/netting, so
+    # grouping open/close legs by the mutable position_ticket manufactured a
+    # false "orphan close" every time a ticket changed.  resolve_identity()
+    # returns position_identifier (stable across re-ticketing), falling back to
+    # the ticket only for legacy pre-identifier records.
     tickets = defaultdict(list)
     orphan_events = []
     for r in records:
-        pt = r.get("position_ticket")
+        pt = resolve_identity(r)
         if pt:
             tickets[pt].append(r)
         else:
@@ -129,9 +140,11 @@ def analyze_journal(
             "entry_sl": open_evt.get("sl") if open_evt else None,
             "entry_tp": open_evt.get("tp") if open_evt else None,
             "entry_price": (
-                open_evt.get("detail", {}).get("request", {}).get("price") if open_evt else None
+                ((open_evt.get("detail") or {}).get("request") or {}).get("price")
+                if open_evt
+                else None
             ),
-            "entry_atr": (open_evt.get("entry_context", {}).get("atr") if open_evt else None),
+            "entry_atr": ((open_evt.get("entry_context") or {}).get("atr") if open_evt else None),
             "brain_ids": trade_brain_ids,
             "is_orphan": is_orphan,
         }
@@ -518,12 +531,13 @@ def print_report(journal: dict, snapshots: dict) -> None:
                 f"     are INCLUDED above. Their aggregate PnL: ${dq.get('orphan_close_pnl_usd', 0):.2f}."
             )
             print(
-                f"     These come from early journal period (pre ~June 7) with missing open entries."
+                f"     After FIX-20260708-001 (identity join) these are legacy records with"
+                f" neither position_identifier nor a matching open ticket (pre-DQAF-033 anchor)."
             )
 
     # ── Section 2: Realized Trade Performance ──
     real = journal.get("realized", {})
-    print("\n── 2. REALIZED TRADE PERFORMANCE (deduped by position_ticket) ──")
+    print("\n── 2. REALIZED TRADE PERFORMANCE (deduped by position identity) ──")
     print(f"  Total realized trades:        {real.get('total_trades', 0)}")
     print(f"  Wins (PnL > 0):               {real.get('wins', 0)}")
     print(f"  Losses (PnL < 0):             {real.get('losses', 0)}")

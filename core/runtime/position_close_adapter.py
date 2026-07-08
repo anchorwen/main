@@ -116,6 +116,9 @@ def record_position_opened(
         )
         evt = PositionOpened(
             position_ticket=ticket,
+            # FIX-20260708-001: at open the immutable identity equals the ticket
+            # (MT5 assigns POSITION_IDENTIFIER = opening position ticket).
+            position_identifier=ticket,
             symbol=symbol,
             side=side,
             strategy=strategy,

@@ -44,7 +44,9 @@
   2. journal 全量扫描去重 (检测 bridge 竞态) — FIX-20260612-024
   3. journal 行级 `action: close` 检测 — 同上
 - **历史原因**: 每层都是独立事故后追加的补丁
-- **修复方案**: 下一大版本建立统一的 `PositionStateMachine`，以 `position_ticket` 为 SSOT key，所有状态变更 (open/close/MIA/modify) 通过状态机 → 去重是状态机内建属性而非外部防线
+- **修复方案**: 下一大版本建立统一的 `PositionStateMachine`，以 **`position_identifier` (不可变 MT5 POSITION_IDENTIFIER)** 为 SSOT key，所有状态变更 (open/close/MIA/modify) 通过状态机 → 去重是状态机内建属性而非外部防线
+  - **⚠️ 键更正 (FIX-20260708-001 / DQAF-20260708-001)**: 本条目原写 "以 `position_ticket` 为 SSOT key" — **该键本身即缺陷**。`position_ticket` 是可变的 (MT5 在 partial-close/netting 时换号)，以其为生命周期 join 键会在每次换号时结构性制造孤儿平仓。正确 SSOT key 是不可变的 `position_identifier`。
+  - **首个增量已交付 (FIX-20260708-001)**: `core/data/ticket_resolver.py::resolve_identity()` 建立单一不可变身份解析权威，读侧 join (JournalGate/auditor/reconciliation/label_builder) 已改 identity-keyed；写侧 PositionOpened 补发锚。完整 PositionStateMachine 仍 Deferred。
 - **关联**: Iron Law #12 — 禁止补丁累积 (同模块 Deferred Architecture Fix >3 禁止继续补丁)
 
 ## TECH_DEBT-004 Detail — btc_macro_enhanced_37 Schema 维度分裂

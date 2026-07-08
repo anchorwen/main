@@ -30,6 +30,7 @@ from typing import Any
 
 from core.contracts.exceptions import DataIntegrityError
 from core.data.ticket_resolver import resolve as resolve_ticket
+from core.data.ticket_resolver import resolve_identity
 
 SCHEMA_VERSION = "daily_ops.v1"
 
@@ -735,11 +736,14 @@ def _step_journal_backfill(base_dir: str, *, dry_run: bool = False) -> dict[str,
             with suppress(json.JSONDecodeError):
                 entries.append(json.loads(_line))
 
-        # ── Build open-entry index: ticket → open entry ──
+        # ── Build open-entry index: IMMUTABLE identity → open entry ──
+        # FIX-20260708-001: key on position_identifier so a re-ticketed close
+        # (netting/partial) still resolves back to its open leg for PnL backfill
+        # instead of being falsely counted as skipped_no_open.
         open_by_ticket: dict[int, dict[str, Any]] = {}
         for e in entries:
             if e.get("action") == "open":
-                t = e.get("position_ticket")
+                t = resolve_identity(e)
                 if isinstance(t, int) and t > 0:
                     open_by_ticket[t] = e
 
@@ -754,7 +758,7 @@ def _step_journal_backfill(base_dir: str, *, dry_run: bool = False) -> dict[str,
             if e.get("pnl") is not None:
                 continue
 
-            ticket = e.get("position_ticket")
+            ticket = resolve_identity(e)
             if not isinstance(ticket, int):
                 skipped_no_open += 1
                 continue

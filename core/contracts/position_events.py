@@ -106,6 +106,10 @@ class PositionOpened:
     volume: float  # MUST be > 0
     sl: float = 0.0
     tp: float = 0.0
+    # FIX-20260708-001: emit the immutable anchor on the OPEN leg too (at open it
+    # equals the ticket).  Previously only the close leg carried it, leaving the
+    # join layer nothing to pair a re-ticketed close against on the open side.
+    position_identifier: int = 0  # DQAF-033: MT5 immutable anchor — POSITION_IDENTIFIER
     brain_ids: tuple[str, ...] = ()
     brain_votes: tuple = ()
     confidence: float = 0.0
@@ -132,6 +136,7 @@ class PositionOpened:
             "pnl": None,
             "label": None,
             "position_ticket": self.position_ticket,
+            "position_identifier": self.position_identifier or self.position_ticket,
             "magic": self.magic,
             "strategy": self.strategy,
             "entry_price": self.entry_price,

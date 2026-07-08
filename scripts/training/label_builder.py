@@ -37,7 +37,7 @@ from typing import Any
 import numpy as np
 
 from core.contracts.training.label_contract import BarrierResult, LabelContract
-from core.data.ticket_resolver import resolve as resolve_ticket
+from core.data.ticket_resolver import resolve_identity
 
 SCHEMA_VERSION = "training_label.v1"
 
@@ -445,9 +445,12 @@ def build_trade_records(
     unlinked: list[dict[str, Any]] = []
 
     for rec in entries:
-        ticket = resolve_ticket(rec)
-        # DQAF-20260623-073: unified ticket resolver handles position_ticket,
-        # detail.order, and bare ticket fields in canonical priority order.
+        ticket = resolve_identity(rec)
+        # FIX-20260708-001: pair open<->close on the IMMUTABLE position_identity,
+        # not the mutable MT5 ticket.  A re-ticketed close (netting/partial) landed
+        # in a different by_ticket bucket than its open, so the trade produced NO
+        # training label at all (silent dual-track label loss).  resolve_identity
+        # groups both legs together; falls back to the ticket for legacy records.
         if ticket is not None:
             by_ticket.setdefault(ticket, []).append(rec)
         else:
