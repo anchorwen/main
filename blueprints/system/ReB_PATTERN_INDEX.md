@@ -20,6 +20,20 @@
 
 ---
 
+### ReB-20260708-PROFIT_RATCHET_NEVER_REACHES_BROKER
+- **Pattern Signature**: `PROFIT_RATCHET_NEVER_REACHES_BROKER`
+- **Date Cataloged**: 2026-07-08
+- **Source Docket**: DQAF-20260708-004
+- **Related**: FIX-20260708-004, FIX-20260707-009 (bracket inversion — the 2.5-4% tail, NOT the main cause), FIX-20260603-064 (activation watermark), DQAF-20260609-001 (nonlinear decay)
+
+**Definition**: A profitable position reaches a meaningful peak (+1.4R..+6.3R) but the trailing stop never places a POSITIVE floor at the broker, so a model exit (signal_close) realises ~$0 at breakeven, or a retracement hits the original SL. The give-back is dominated (87-89% of the cohort) by "trail never locked", NOT by bracket inversion (which was only 2.5-4%). The trailing calculator has three coupled holes: (1) it returns `None` when the raw candidate does not advance — so on a cycle where the trail cannot tighten, NO floor is applied at all; (2) its candidate is priced off `current_atr`, which balloons in volatile moves and pushes the goalpost away from a positive lock in the +1R..+1.5R band; (3) its breakeven floor depends on an intent-latch (`breakeven_triggered`) that is set even when the modify was feasibility-skipped or broker-rejected, so once latched the floor logic silently disengages. A telltale is a flood of `NO_CHANGES` (retcode 10025) modify rejections — the engine re-sends an SL the broker already holds because local state is stale. The trap: a prior fix (bracket inversion) addressed a small tail and looked like "the" fix, masking that the dominant cohort never had a floor at all.
+
+**Prevention**: A monotonic profit ratchet inside the trail calculator that is (a) measured against a STABLE goalpost (`entry_atr`, not `current_atr`), (b) armed off the monotonic peak (`highest_high`/`lowest_low`) so it can only ratchet up, (c) applied via `max()/min()` into the candidate so it FIRES EVEN WHEN the raw trail returned `None`, and (d) INDEPENDENT of any intent-latch. Because the lock is monotonic, the existing `min_step` guard suppresses `NO_CHANGES` resends. A broker-bound positive floor physically caps how far price can retrace before the stop catches it, so a downstream model exit is structurally forced to close at a protected level — no separate "give-back guard" is needed (avoid duplicating a give-back mechanism that already exists as governed shadow infra, e.g. V6 RatchetRisk). Diagnostic rule: when auditing a give-back, reconstruct the per-ticket lifecycle (snapshots + opens + modifies + closes) and attribute the DOMINANT failure mode before fixing — do not let a small, already-fixed tail (bracket inversion) masquerade as the root cause.
+
+**检测方法**: `scripts/_diagnose_giveback_lifecycle.py` — per-ticket give-back attribution (MODE_A modify_rejected / MODE_B trail_never_locked / MODE_C model_exit_at_be / MODE_D tp_released). In production, watch `management_phase_diag.ratchet_floor_r` — it should become non-zero once a position's peak arms the ratchet; a give-back cohort with `ratchet_floor_r == 0` at high MFE means the ratchet did not arm. Watch modify-reject retcode histograms for a 10025 (NO_CHANGES) spike = trail re-sending an unchanged SL.
+
+**Cross-References**: FIX_REGISTRY.md FIX-20260708-004, DQAF_DOCKET_REGISTRY.md DQAF-20260708-004, CCT_LEDGER.md CCT-20260708-004
+
 ### ReB-20260708-BLIND_DEAL_INDEX_FABRICATES_BREAKEVEN
 - **Pattern Signature**: `BLIND_DEAL_INDEX_FABRICATES_BREAKEVEN`
 - **Date Cataloged**: 2026-07-08

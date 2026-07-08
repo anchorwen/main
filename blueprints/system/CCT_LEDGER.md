@@ -27,6 +27,25 @@
 
 ---
 
+### CCT-20260708-004
+- **Docket ID**: DQAF-20260708-004
+- **日期**: 2026-07-08
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 仓位冲到 +1.4R~+6.3R MFE 后回撤, 被 signal_close 在 ~保本处市价平仓实现 ~$0, 或进一步回撤打 SL。give-back cohort (MFE≥1R 却 pnl≤0): BTC 121 / XAU 74。样本 4090084166 (short +1.44R, **0 改单**, signal_close breakeven); 样本 4067021409 (XAU long +6.30R, 27 改单 26 拒, tp@close 未置 0)。
+  - [Layer 2 — 中间异常]: 唯一锁利机制=trailing SL, 但 87-89% 从未把 SL 推过 entry (SL@close 锁定 ≤0R)。三种失效: (a) `compute_trail_stop` 候选没推进就返回 None → 完全无底线; (b) 候选=extreme±mult×**current_atr**, 波动放大时 goalpost 移动, +1~1.5R 激活即锁负; (c) breakeven 楼层依赖 `breakeven_triggered`, 但 trail_dispatch.py:117 无条件置 True (意图锁, feasibility-skip/reject 也 latch)。主拒绝码 10025 NO_CHANGES (BTC 35/XAU 109)=重发同 SL。graduated_lock 首档 +3R 留 +1~3R 死区。
+  - [Layer 3 — 根因]: RC-12 (missing-capability) L3 — 系统缺少一条**能抵达券商、抗改单失败、单调的硬利润棘轮**, 且模型出场(signal_close)在无底线时于保本处实现 $0。bracket 反转 (FIX-009) 仅 MODE_D 2.5-4% 尾部, **原 DQAF-004 假设误把尾部当主因, 被生命周期脚本推翻**。
+- **证据引用**:
+  - Source 1: `scripts/_diagnose_giveback_lifecycle.py` stdout — BTC MODE_B 105/121(86.8%) MODE_C 101/121(83.5%) MODE_D 3(2.5%); XAU MODE_B 66/74(89.2%) MODE_C 59(79.7%) MODE_D 3(4.1%); reject retcodes {10025,10006,10016}
+  - Source 2: `data_btc/position_snapshots.jsonl` + `live_trade_journal.jsonl` ticket 4090084166 (+1.44R, 0 modify, SL@close=62831 在 entry 62651 之上=锁负)
+  - Source 3 (对照): `data/` ticket 4067021409 (+6.30R, 27 modify/26 rej, tp@close=4186 未释放 → FIX-009 未生效)
+  - Source 4 (机制): `core/execution/trail_stop_engine.py:131` compute_trail_stop (返 None 无底线) + `core/runtime/trail_dispatch.py:117` (breakeven_triggered 意图锁) + `scripts/mt5_bridge_worker.py:440` (10025 不在 _TRANSIENT_RETCODES)
+- **AR 对抗反驳**: 反假设"bracket 反转 (SL 越 TP → FIX-009 释放 TP=0) 是主因"→ **被推翻**: MODE_D 仅 2.5-4%; FIX-009 本尊 ticket 4067021409 的 tp@close 仍=4186 (未置 0, FIX-009 未生效); BTC 侧主拒绝码是 10025 NO_CHANGES 非 10016 INVALID_STOPS。存活假设=trail 从未锁正底线 (MODE_B 87-89%)。
+- **是否被推翻**: 否 (存活假设; 原 bracket-反转假设已被 AR 证伪并降级为 2.5-4% 尾部)
+- **关联 ReB Pattern**: ReB-20260708-PROFIT_RATCHET_NEVER_REACHES_BROKER
+- **关联 FIX**: FIX-20260708-004
+- **状态**: **CLOSED** — Profit Ratchet Floor: peak r_max(entry_atr)≥arm_r 强制 SL 锁 ≥max(0.1R,r_max−1.0R), 折入候选即使 Chandelier 返 None 也托底, 独立于意图锁, 单调抑 NO_CHANGES。broker-bound 楼层封顶回撤 → R1 结构性吸收 MODE_C。意图锁 [[deferred_breakeven_intent_latch_20260708]] Deferred。
+
 ### CCT-20260708-003
 - **Docket ID**: DQAF-20260708-003
 - **日期**: 2026-07-08
