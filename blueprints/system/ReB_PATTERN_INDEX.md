@@ -977,3 +977,21 @@
 **检测方法**: Compare pre/post-augmentation separability in `training_summary.json` (`cv_summary.*.mean_val_wr` near 0.50 = no edge); a retrain whose val_wr stays ≈ coin-flip is a rescue failure. Watch FIX_REGISTRY for repeated same-strategy retrains with escalating feature counts and flat WR.
 
 **Cross-References**: FIX_REGISTRY.md FIX-20260708-002, DQAF_DOCKET_REGISTRY.md DQAF-20260707-003, CCT_LEDGER.md CCT-20260708-002
+
+---
+
+### ReB-20260709-GET_DEFAULT_NULL_TRAP
+- **Pattern Signature**: `GET_DEFAULT_NULL_TRAP`
+- **Date Cataloged**: 2026-07-09
+- **Source Docket**: DQAF-20260709-001
+- **关联 FIX IDs**: FIX-20260709-001
+- **关联 Docket IDs**: DQAF-20260709-001
+- **Related**: FIX-20260613-066 (same script, same None-format class, patched at the PRINT site — the recurrence this boundary fix supersedes), FIX-20260626-144 (write-side null-label seal), Iron Law #12 (禁止补丁累积), CLAUDE.md #4 (`dict.get(key, default)` paper-over 反模式)
+
+**Definition**: `dict.get(key, default)` substitutes `default` ONLY when the key is ABSENT; a key PRESENT with a `None` value returns `None`, not `default`. Code that uses `.get(k, sentinel)` to "guarantee a non-null value" is therefore wrong whenever the data legitimately carries `key: null`. The `None` flows past the very boundary the guard was meant to protect and detonates downstream — here it became a `pnl_by_label` dict KEY and crashed a `format(None, ':s')` call. Distinct from a missing-key bug: the key exists, so presence/schema checks pass; only the VALUE is null. A print-site guard (`or "?"`) patches ONE consumer while leaving the boundary leaking, so the same class recurs at the next unguarded consumer (FIX-20260613-066 print-site guard → this docket's Section-3 crash).
+
+**预防策略**: (1) Normalise present-but-null at the INGESTION boundary once (`_coalesce(mapping, key, default)` = get, then `None -> default`), not at each print/consumer site. (2) For categorical fields later formatted or used as dict keys, prefer an explicit `is None` coalesce over `.get(k, default)` — use `(mapping.get(k) or default)` ONLY when falsy-but-valid values (`0`, `""`) are not meaningful for that field. (3) When a None-format crash is fixed, immediately fix the SIBLING fields built at the same construction (side/ack) in that one place — do not wait for each to crash in turn.
+
+**检测方法**: grep `\.get\([^,]+,\s*["']` (get-with-string-default) whose result feeds a `:s`/`:d`/`:f` format or a dict key; `TypeError: unsupported format string passed to NoneType.__format__` names this class (but NOT which field — every `format(None, spec)` raises the same message, so enumerate present-but-null candidates). Regression: feed a record with `field: null` and assert the aggregation key is a `str`, never `None` (`tests/scripts/test_analyze_live_journal_null_label.py`).
+
+**Cross-References**: FIX_REGISTRY.md FIX-20260709-001, DQAF_DOCKET_REGISTRY.md DQAF-20260709-001, CCT_LEDGER.md CCT-20260709-001

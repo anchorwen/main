@@ -1107,3 +1107,21 @@
 - **关联 ReB Pattern**: `FEATURE_ENGINEERING_CANNOT_RESCUE_UNSEPARABLE_SIGNAL`
 - **关联 FIX**: FIX-20260708-002
 - **状态**: **CLOSED (退役决策)** — FIX-20260708-002. BTC live 收敛至 V4 + B-path binary(probation); V4 confidence 采用 quantile_gaussian 校准 (T22 监控); 48-dim serving 休眠留待 Path C horizon=4。
+
+---
+
+### CCT-20260709-001
+- **Docket ID**: DQAF-20260709-001
+- **日期**: 2026-07-09
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `scripts/analyze_live_journal.py --data-dir data` (XAU) 在 Section 3 崩 `TypeError: unsupported format string passed to NoneType.__format__` (line 559 `{lbl:<55s}`), 完整 7 段审计不可得。证据: `scripts/analyze_live_journal.py:559`; 直接调用 `analyze_journal(Path("data"))` 产出 `pnl_by_label` 含 None 键 `{count:114, pnl_usd:0.68, wins:34, losses:20}`。
+  - [Layer 2 — 根因]: RC-01 missing-null-check — line 135 `final_close.get("label", "?")` 对 present-but-null 失效: `dict.get(k, default)` 仅在 key **缺失**时替换 default; key 存在值为 None 时返回 None。114 条 XAU close 合法携带 `label: null` (no-ticket 孤儿分支, 早于 FIX-20260626-144 write-side 加固) → None 贯穿 realized → 成 `pnl_by_label` 字典键 → :559 `:s` 格式化崩溃。同构潜伏点 :133 side / :136 ack。上游 write-side null-label 已由 FIX-20260626-144 封堵, 但 114 条为不可变历史遗留 → 审计脚本须对合法 null 鲁棒。
+- **证据引用**:
+  - Source 1: 代码 — `scripts/analyze_live_journal.py:135` (`.get("label","?")`), :559 (`{lbl:<55s}`)
+  - Source 2: 数据 — `data/live_trade_journal.jsonl` 114 条 label:null; `analyze_journal()` 直调产出 None 键
+  - Source 3 (cross-symbol): `data_btc/live_trade_journal.jsonl` — BTC 0 null-label 不崩 (影响面隔离)
+- **是否被推翻**: 否 (AR 证伪了 "None 是 pnl_usd 不是 label" — 该项 pnl_usd=0.68 有效 float, KEY 才是 None; 并证伪 "在 :559 打印处加 guard" — FIX-20260613-066 已在 Section 4 打印处 guard 却复发 → 须摄入边界根治)
+- **关联 ReB Pattern**: `GET_DEFAULT_NULL_TRAP`
+- **关联 FIX**: FIX-20260709-001
+- **状态**: **CLOSED** — FIX-20260709-001 committed d9c147e8. `_coalesce()` 摄入边界单点规整 side/label/ack; XAU 恢复完整审计 + `(unlabeled)` 桶 114/+$0.68; 6 回归测试 (tests/scripts/test_analyze_live_journal_null_label.py)。
