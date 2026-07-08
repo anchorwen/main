@@ -62,6 +62,22 @@ def load_jsonl(path: Path) -> list[dict]:
     return records
 
 
+def _coalesce(mapping: dict, key: str, default: str) -> str:
+    """Return ``mapping[key]``, treating a present-but-null value like a missing key.
+
+    ``dict.get(key, default)`` substitutes *default* ONLY when *key* is absent;
+    a key present with a ``None`` value still returns ``None``.  Live journal
+    records legitimately carry ``label: null`` (e.g. the no-ticket orphan branch,
+    pre FIX-20260626-144 write-side hardening), so a bare ``.get(k, default)`` let
+    ``None`` propagate into ``pnl_by_label`` keys and formatted output, crashing
+    ``format(None, ':s')`` (TypeError). Normalising categorical fields at this
+    ingestion boundary keeps every downstream consumer null-free — the single
+    root-cause point, versus re-guarding each print site (FIX-20260613-066).
+    """
+    value = mapping.get(key)
+    return default if value is None else value
+
+
 def analyze_journal(
     data_dir: Path, brain_filter: list[str] | None = None, exclusive: bool = False
 ) -> dict:
@@ -130,10 +146,10 @@ def analyze_journal(
             "ticket": ticket,
             "open_time": open_evt.get("recorded_at") if open_evt else None,
             "close_time": final_close.get("recorded_at"),
-            "side": final_close.get("side", "?"),
+            "side": _coalesce(final_close, "side", "?"),
             "pnl": final_close.get("pnl", 0.0),
-            "label": final_close.get("label", "?"),
-            "ack": final_close.get("ack_status", "?"),
+            "label": _coalesce(final_close, "label", "(unlabeled)"),
+            "ack": _coalesce(final_close, "ack_status", "?"),
             "close_attempts": len(close_events),
             "total_events": len(events),
             "entry_confidence": open_evt.get("confidence") if open_evt else None,
