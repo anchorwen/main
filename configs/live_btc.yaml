@@ -149,8 +149,11 @@ brains:
   # ── V12_H1_Survival RETIRED (FIX-20260626-140): SL=3.0/TP=2.0 → 87.1% TP degenerate labels → constant model (σ=0.014). Replaced by V12_H1_15. ──
   - enabled: false
     path: configs/brains_btc/BTC_Swing_V12_H1_Survival.json
-  # ── FIX-20260625-138: V12_H1_15 shadow variant — H1, SL=1.5/TP=1.5, horizon=12, vote_weight=0.0 ──
-  - enabled: true
+  # ── RETIRED (DQAF-20260707-003): V12_H1_15 kill-switch — Wasserstein=0.0084
+  #   zero directional discrimination, 48-dim H1 feature engineering failed
+  #   (Wasserstein worsened to 0.0019).  Strategy line btc_swing_h1 also retired.
+  #   Path C pending: horizon=4 retrain with 48-dim features.
+  - enabled: false
     path: configs/brains_btc/BTC_Swing_V12_H1_15.json
   # ── FIX-20260706-015: B-path binary directional classifier (M5, probation)
   #   43,613 samples, WR=51.1%, XGBoost binary:logistic → binary_directional deadzone.
@@ -307,51 +310,46 @@ strategy_lines:
   # V12_H1_Survival retired (FIX-20260626-140, L3 degenerate contract). V12_H1_15 is
   # now the sole brain: LightGBM, SL=1.5/TP=1.5 symmetric, 47% TP balanced labels.
   btc_swing_h1:
+    # ── RETIRED (DQAF-20260707-003): Kill-switch — Wasserstein=0.0084 zero directional
+    #   discrimination, 48-dim feature engineering failed (Wasserstein worsened to 0.0019).
+    #   Path C pending: horizon=4 retrain with 48-dim features.
+    enabled: false
+    mode: retired
     base_volume: 0.01
     brain_types:
     - lightgbm_v1
     budget:
-      daily_loss_limit_pct: -0.03     # narrower SL → smaller individual losses
-      max_consecutive_losses: 8       # symmetric 47% TP expects more consecutive losses
-      cooldown_minutes: 0             # fail-closed
-    confidence_threshold: 0.35        # standard — not survival mode
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 8
+      cooldown_minutes: 0
+    confidence_threshold: 0.35
     direction_balance:
       long_bias_discount: 0.0
-    # ── DQAF-20260705-064 KILL SWITCH LIFTED (2026-07-05) ──
-    # Kill switch reason: V12_H1_15 structural LONG bias (885 LONG vs 6 SHORT, 0.6%)+
-    #   V4 locked SHORT → cross-strategy hedge → net PnL ≈ 0 minus costs.
-    # Resolution: (1) PortfolioNettingGate active (swallow mode, 0.20 threshold) provides
-    #   systemic hedge protection. (2) V12_H1_15 direction normalized — 67% LONG, 6% SHORT,
-    #   21% NEUTRAL in recent 100 golden_master records. Both strategies now agree on LONG.
-    #   (3) OOD gateway module exists (core/execution/ood_gateway.py), integration deferred.
-    # Institutional oversight: Netting gate will swallow any future cross-hedge automatically.
-    enabled: true
     exit:
       confidence_decay_exit: true
-      flip_exit_enabled: true         # symmetric contract — flip on signal reversal
+      flip_exit_enabled: true
       flip_threshold: 0.5
-      hesitation_cycles: 12           # H1 × 12 = 12h patience
-      time_exit_cycles: 72            # H1 × 72 = 3 days max hold
-      trail_activation_atr: 1.2       # FIX-20260704-003: 0.5→1.2 — defer breakeven trigger to 80% of TP target, let graduated_lock_levels (3R→+1.5R, 5R→+3.5R) take over profit protection
-      trail_atr_mult: 2.0             # matches symmetric SL=1.5
+      hesitation_cycles: 12
+      time_exit_cycles: 72
+      trail_activation_atr: 1.2
+      trail_atr_mult: 2.0
       trail_enabled: true
     magic: 90411
     max_spread_points: 3000
     max_volume: 0.1
-    min_p_win: 0.45                   # FIX-20260628-170: 0.50→0.45 — brain_confidence fallback with new brain (1 settled trade), matches btc_swing floor
+    min_p_win: 0.45
     min_valid_brains: 1
-    mode: probation                   # shadow brain — observe before promotion
     sl:
-      base_atr_mult: 1.5              # matches V12_H1_15 training SL
+      base_atr_mult: 1.5
       dynamic: true
       hard_sl_ratio: 1.5
-      min_rr_ratio: 0.85              # FIX-20260628-170: 1.0→0.85 — symmetric SL/TP + spread + min_sl_distance floor makes RR≥1.0 mathematically impossible
+      min_rr_ratio: 0.85
       min_sl_distance: 100.0
     spread_points: 200
     strategy_family: trend_following
     timeframe: H1
     tp:
-      base_atr_mult: 1.5              # matches V12_H1_15 training TP
+      base_atr_mult: 1.5
       partial_tp_enabled: false
       partial_tp_r: 0.0
       partial_tp_ratio: 0.0

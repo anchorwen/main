@@ -26,6 +26,7 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
     "swing_enhanced_21",  # 21 swing macro only — pure daily, no micro/TF
     "btc_macro_enhanced_41",  # FIX-081: BTC 37-dim (AUDJPY, XAU, BTC/XAU ratio + ROC)
     "btc_macro_enhanced_41_v2",  # FIX-20260625-137: clean contract — same features, no legacy shim
+    "btc_h1_directional_48",  # DQAF-20260707-003: 41 base + 7 H1 directional momentum
     "v6_price_series_1",  # OU Params Z-Score
 }
 

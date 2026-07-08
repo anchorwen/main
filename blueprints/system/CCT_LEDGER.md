@@ -1052,3 +1052,22 @@
 - **关联 ReB Pattern**: `MUTABLE_TICKET_JOIN_ON_IMMUTABLE_POSITION`
 - **关联 FIX**: FIX-20260708-001
 - **状态**: **CLOSED** — FIX-20260708-001 committed f139ab87. BTC 孤儿 157→119, $126 回收; journal_gate 覆盖 0%→86%。
+
+---
+
+### CCT-20260708-002
+- **Docket ID**: DQAF-20260707-003
+- **日期**: 2026-07-08
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: btc_swing_h1 (V12_H1_15) golden_master 近乎 100% 输出 LONG (记忆 diagnostics_20260628_btc_all_long_bias); 模型对多空无判别力 (Wasserstein=0.0084)。
+  - [Layer 2 — 中间异常]: 补 7 个 H1 时间尺度方向特征 (H1_Ret_1/2/4, H1_Realized_Vol, H1_Ret_Accel, H1_MeanRev, H1_M5_Div) 做 48-dim 重训后, 判别力不升反降 (Wasserstein 0.0084→0.0019)。证据: `data_btc/models/btc_swing_h1_binary_48/training_summary.json` cv mean_val_wr xgb=0.5081 / lgbm=0.4895。
+  - [Layer 3 — 根因]: L3 结构性 — H1 尺度方向不可从现有 M5/D1/H4 特征空间线性分离; 加特征无法拯救不可分信号 → 正确响应是退役该策略线, 而非继续调参 (反例 BTC 三连打地鼠)。
+- **证据引用**:
+  - Source 1: 训练 — `data_btc/models/btc_swing_h1_binary_48/training_summary.json` (val_wr ≈ 50%, 与随机不可区分)
+  - Source 2: 配置 — `configs/live_btc.yaml:152/313` (V12_H1_15 + btc_swing_h1 retired, Wasserstein 记录)
+  - Source 3 (机制复用): `core/brains/adapters/base_adapter.py:217-228` (quantile_gaussian 已 live 于 8 XAU brain)
+- **是否被推翻**: 否 (AR 证伪了 "48-dim 模型其实可用只是没部署" — val_wr 50.8%±0.7% 与随机不可区分)
+- **关联 ReB Pattern**: `FEATURE_ENGINEERING_CANNOT_RESCUE_UNSEPARABLE_SIGNAL`
+- **关联 FIX**: FIX-20260708-002
+- **状态**: **CLOSED (退役决策)** — FIX-20260708-002. BTC live 收敛至 V4 + B-path binary(probation); V4 confidence 采用 quantile_gaussian 校准 (T22 监控); 48-dim serving 休眠留待 Path C horizon=4。

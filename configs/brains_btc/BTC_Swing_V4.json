@@ -88,6 +88,13 @@
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
+  "confidence_params": {
+    "method": "quantile_gaussian",
+    "p95": 0.7004,
+    "peak_conf": 0.6046,
+    "lambda_decay": 80.0,
+    "_note": "DQAF-20260707-003: Bootstrap calibration from W4 golden_master confidence back-calc (n=128). P95=atanh(C95)=0.7004. Recalibrate from brain_votes raw_score after Fix 3 golden_master accumulates 500+ V4 cycles."
+  },
   "last_retrained": "2026-06-28T02:58:33Z",
   "label_contract": {
     "sl_atr_mult": 1.5,

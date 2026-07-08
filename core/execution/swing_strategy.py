@@ -68,19 +68,23 @@ class SwingStrategy(StrategyLine):
 
         from core.features.feature_assembler import assemble_features_by_schema
 
+        # ── DQAF-20260707-003: H1 directional features ──
+        # Compute 7 H1-scale features from the rolling M5 close buffer.
+        # These features are only used by btc_h1_directional_48 schema;
+        # other schemas ignore them (None → no-op in build_lake).
+        _h1_feats: dict[str, float] | None = None
+        _any_h1_brain = any(
+            "btc_h1" in b_info.get("feature_schema_id", "") for b_info in self.brains
+        )
+        if _any_h1_brain and len(self._tf_close_buffer) >= 49:
+            from core.runtime.h1_features import compute_h1_directional_features
+
+            _h1_feats = compute_h1_directional_features(list(self._tf_close_buffer))
+
         for b_info in self.brains:
             try:
                 adapter = b_info["adapter"]
                 # ── FIX-20260610-009: Schema resolution anchored to brain config ──
-                # PREVIOUSLY queried the runtime Adapter instance for a
-                # 'feature_schema' property that does NOT exist on
-                # LightGBM/XGBoost adapters.  getattr silently returned "",
-                # cascading into ``or "v9_institutional"`` → 40-dim V9 vector
-                # for ALL brains regardless of their training contract.
-                # BTC brains (37-dim btc_macro_enhanced_41) received 40-dim
-                # vectors → dimension mismatch → raw_score=0.0 fallback.
-                # This single line spawned RC-06 across 5 failed patches
-                # (FIX-022, FIX-025, FIX-017, FIX-081, FIX-135).
                 schema = b_info.get("feature_schema_id", "")
                 if not schema:
                     raise ValueError(
@@ -97,6 +101,7 @@ class SwingStrategy(StrategyLine):
                     tf_ou=self._compute_tf_ou_theta(),
                     tf_hurst=self._compute_tf_hurst(),
                     btc_augment=btc_augment if "btc_macro" in schema else None,
+                    h1_features=_h1_feats if "btc_h1" in schema else None,
                 )
                 prop = adapter.inference(fv)
 
@@ -107,7 +112,7 @@ class SwingStrategy(StrategyLine):
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                     pass
                 proposals.append(prop)
-            except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
+            except Exception as _exc:  # noqa: BLE001 — FOG (logged, Phase 3b)
                 print(
                     json.dumps(
                         {

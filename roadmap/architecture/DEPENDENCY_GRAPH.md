@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-08T05:09:21Z
+> **自动生成**: 2026-07-08T08:06:11Z
 
 ## Package-Level Dependencies
 
@@ -242,7 +242,7 @@
 - `strategy_decision.py` → (无内部依赖)
 - `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.config.asset_registry`, `core.execution.brain_gates`, `core.execution.conformal_ou_gate`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_filter_routing`, `core.execution.meta_pipeline`, `core.execution.ofi_gate`, `core.execution.pre_trade_guards`, `core.execution.pwin_chain`, `core.execution.strategy_decision`, `core.execution.trend_isolation_gates`, `core.execution.trend_volume_guard`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.shadow_recorder`
 - `strategy_type.py` → (无内部依赖)
-- `swing_strategy.py` → `core.execution.strategy_line`, `core.features.feature_assembler`
+- `swing_strategy.py` → `core.execution.strategy_line`, `core.features.feature_assembler`, `core.runtime.h1_features`
 - `trail_stop_engine.py` → `core.execution.position_manager`
 - `trend_detector.py` → (无内部依赖)
 - `trend_isolation_gates.py` → `core.execution.strategy_decision`, `core.execution.strategy_line`

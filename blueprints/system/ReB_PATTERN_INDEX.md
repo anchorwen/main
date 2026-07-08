@@ -933,3 +933,21 @@
 **检测方法**: grep for `by_ticket` / `open_by_ticket` / `\.get\("position_ticket"\)` join/pairing patterns that should route through `resolve_identity()`; regression tests pinning that a re-ticketed close (new ticket, same identifier) pairs with its open and is admitted (`tests/data/test_ticket_resolver_identity.py`, `tests/ledger/test_journal_gate.py::test_reticketed_close_admitted_by_identity`).
 
 **Cross-References**: TECH_DEBT_REGISTRY.md TECH_DEBT-003, FIX_REGISTRY.md FIX-20260708-001
+
+---
+
+### ReB-20260707-FEATURE_ENGINEERING_CANNOT_RESCUE_UNSEPARABLE_SIGNAL
+- **Pattern Signature**: `FEATURE_ENGINEERING_CANNOT_RESCUE_UNSEPARABLE_SIGNAL`
+- **Date Cataloged**: 2026-07-08
+- **Source Docket**: DQAF-20260707-003
+- **关联 FIX IDs**: FIX-20260708-002
+- **关联 Docket IDs**: DQAF-20260707-003
+- **Related**: FIX-20260705-064 (V12_H1_15 kill-switch precedent), BTC 三连打地鼠 family (spread→max_spread→min_sl), Iron Law #12 (架构优先修复 — 禁止补丁累积)
+
+**Definition**: When a model exhibits a directional pathology (e.g. ~100% LONG output) and diagnostics show near-zero class separability (Wasserstein ≈ 0), the reflex is to ADD features to inject the missing signal. This pattern names the failure mode where the target signal is STRUCTURALLY inseparable from the available feature space — adding engineered features does not raise separability. Here 7 H1-scale momentum features moved Wasserstein 0.0084→0.0019 (WORSE) and cv val_wr stayed at coin-flip (xgb 50.8% / lgbm 49.0%). Continuing to add features is whack-a-mole that burns retrain cycles without changing the outcome. The institutionally-correct response is to RETIRE the strategy line (architecturally admit the signal is dead at this timescale), not to iterate feature engineering.
+
+**预防策略**: (1) Before a feature-augmentation retrain, run a cheap separability probe (Wasserstein / AUC on holdout) on the CANDIDATE features — GO only if it materially raises discrimination. (2) Gate feature-rescue attempts: if N consecutive augmentations fail to raise separability, retire the strategy line rather than patch again (Iron Law #12). (3) Preserve the failed experiment's serving wiring as dormant infra (not deleted) so a genuinely different signal source (order-flow / Path C) can reuse it without re-plumbing.
+
+**检测方法**: Compare pre/post-augmentation separability in `training_summary.json` (`cv_summary.*.mean_val_wr` near 0.50 = no edge); a retrain whose val_wr stays ≈ coin-flip is a rescue failure. Watch FIX_REGISTRY for repeated same-strategy retrains with escalating feature counts and flat WR.
+
+**Cross-References**: FIX_REGISTRY.md FIX-20260708-002, DQAF_DOCKET_REGISTRY.md DQAF-20260707-003, CCT_LEDGER.md CCT-20260708-002

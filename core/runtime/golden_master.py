@@ -159,7 +159,7 @@ def record_cycle_outputs(
     else:
         _iterable = ()
     for name, result in _iterable:
-        outputs[name] = {
+        _out: dict[str, Any] = {
             "direction": result.get("direction", "neutral"),
             "confidence": round(float(result.get("confidence", 0)), 4),
             "should_trade": bool(result.get("should_trade", False)),
@@ -170,6 +170,25 @@ def record_cycle_outputs(
             "sl": round(float(result.get("sl", 0.0)), 2),
             "tp": round(float(result.get("tp", 0.0)), 2),
         }
+        # ── DQAF-20260707-003: Brain-level observability ──
+        # Extract brain_ids, brain_votes, p_win, p_win_source, kelly_mult
+        # from the StrategyDecision objects in decisions_map (when available).
+        # StrategyDecision dataclass already carries these fields populated
+        # by _make_decision() in strategy_line.py.  Golden Master was only
+        # recording the 7 summary fields above — blind to per-brain signals.
+        _sd = decisions_map.get(name) if isinstance(decisions_map, dict) else None
+        if _sd is not None:
+            try:
+                _brain_ids: list[str] = list(getattr(_sd, "brain_ids", []) or [])
+                _brain_votes: list[dict[str, Any]] = list(getattr(_sd, "brain_votes", []) or [])
+                _out["brain_ids"] = _brain_ids
+                _out["brain_votes"] = _brain_votes
+                _out["p_win"] = round(float(getattr(_sd, "p_win", 0.5)), 4)
+                _out["p_win_source"] = str(getattr(_sd, "p_win_source", "unknown"))
+                _out["kelly_mult"] = round(float(getattr(_sd, "kelly_mult", 1.0)), 4)
+            except (RuntimeError, AttributeError, TypeError):
+                pass  # BLE001:FOG — brain_votes enrichment is non-blocking telemetry
+        outputs[name] = _out
 
     capture["outputs"] = outputs
     if isinstance(strategy_results, list):

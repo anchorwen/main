@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-08T05:09:21Z
+> **自动生成**: 2026-07-08T08:06:11Z
 > **扫描模块数**: 738
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -274,7 +274,7 @@
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
 | `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1906 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
-| `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 127 | — | |
+| `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 319 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 226 | — | |
@@ -287,7 +287,7 @@
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
 | `feature_assembler.py` | ✅ active | — | 3 | 290 | — | |
 | `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 295 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 405 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 406 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
 | `meta_feature_builder.py` | ✅ active | — | 1 | 135 | — | |
@@ -516,7 +516,7 @@
 | `feature_freshness.py` | ✅ active | — | 2 | 81 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `gods_eye_bridge.py` | ✅ active | — | 2 | 148 | — | |
-| `golden_master.py` | ✅ active | — | 8 | 290 | — | |
+| `golden_master.py` | ✅ active | — | 8 | 309 | — | |
 | `h1_features.py` | ✅ active | — | 1 | 112 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
@@ -911,7 +911,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `augment_h1_directional_features.py` | ✅ active | — | 3 | 442 | — | |
+| `augment_h1_directional_features.py` | ✅ active | — | 3 | 470 | — | |
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 7 | 258 | — | |
