@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-08T08:06:11Z
-> **扫描模块数**: 738
+> **自动生成**: 2026-07-08T11:55:41Z
+> **扫描模块数**: 741
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -118,7 +118,7 @@
 | `journal_contract.py` | ✅ active | JournalAccepted, JournalClosed | 6 | 232 | — | |
 | `journal_sla.py` | ✅ active | ReconStatus, JournalHealthSLA | 2 | 133 | — | |
 | `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 938 | — | |
-| `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 155 | — | |
+| `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 167 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
 | `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
 | `validators.py` | ✅ active | ContractViolation, ContractValidator | 7 | 123 | — | |
@@ -504,6 +504,7 @@
 | `cycle_replay.py` | ✅ active | RuntimeReplayReport, RuntimeCycleReplay | 4 | 124 | — | |
 | `daily_ops_scheduler.py` | ✅ active | — | 2 | 255 | — | |
 | `data_health_monitor.py` | ✅ active | — | 1 | 68 | — | |
+| `deal_selection.py` | ✅ active | ExitResolution | 8 | 195 | — | |
 | `dispatch_post.py` | ✅ active | — | 2 | 92 | — | |
 | `evidence_contracts.py` | ✅ active | RuntimeEvidenceRecord | 2 | 61 | — | |
 | `evidence_reader.py` | ✅ active | RuntimeEvidenceReader | 5 | 42 | — | |
@@ -525,17 +526,17 @@
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 14 | 2188 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
-| `mia_close.py` | ✅ active | — | 2 | 203 | — | |
+| `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
 | `modify_trail_dispatch.py` | ✅ active | — | 1 | 100 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 597 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 618 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 314 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
-| `reconciliation.py` | ✅ active | — | 2 | 429 | — | |
+| `reconciliation.py` | ✅ active | — | 2 | 435 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
 | `restart_state.py` | ✅ active | — | 1 | 376 | — | |
@@ -647,6 +648,7 @@
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
 | `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
+| `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
 | `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
@@ -705,6 +707,7 @@
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
 | `audit_xau_exits.py` | ✅ active | — | 2 | 152 | — | |
 | `augment_journal_strategy.py` | ✅ active | — | 4 | 182 | — | |
+| `backfill_fabricated_breakeven.py` | ✅ active | — | 9 | 310 | ✅ | |
 | `backfill_journal_orphans.py` | ✅ active | — | 2 | 224 | — | |
 | `backfill_journal_pnl.py` | ✅ active | — | 7 | 353 | — | |
 | `backtest_rule_strategies.py` | ✅ active | — | 7 | 572 | — | |
@@ -721,7 +724,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 719 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 720 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |

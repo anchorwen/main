@@ -55,6 +55,15 @@ class PositionClosed:
     tp: float = 0.0
     recorded_at: str = ""
 
+    # ── Provenance (DQAF-20260708-003) ──
+    # close_price_source: how the close price was resolved by deal_selection —
+    #   "mt5_exit_deal" (authoritative) | "no_exit_deal" (anomaly).  Makes the
+    #   pre-SSOT fabrication (close_price == entry_price from the opening deal)
+    #   self-declaring in the journal.
+    close_price_source: str = ""
+    # pnl_status: whether pnl is broker-verified, price-estimated, or pending.
+    pnl_status: str = ""
+
     def to_journal_entry(self) -> dict:
         """Convert to live_trade_journal.v2 format."""
         return {
@@ -87,6 +96,9 @@ class PositionClosed:
             "trail_contribution": self.trail_contribution,
             "entry_price": self.entry_price,
             "exit_price": self.close_price,
+            # ── Provenance (DQAF-20260708-003) ──
+            "_close_price_source": self.close_price_source or None,
+            "_pnl_status": self.pnl_status or None,
         }
 
 

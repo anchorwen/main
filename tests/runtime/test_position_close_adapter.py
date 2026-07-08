@@ -13,7 +13,7 @@ import json
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -32,8 +32,10 @@ from core.runtime.position_close_adapter import (
 class TestRecordMiaCloses:
     def test_returns_zero_when_mia_empty(self) -> None:
         recorded = record_mia_closes(
-            mia_entries=[], mt5_worker=MagicMock(),
-            symbol="XAUUSDc", journal_path="/fake/path.jsonl",
+            mia_entries=[],
+            mt5_worker=MagicMock(),
+            symbol="XAUUSDc",
+            journal_path="/fake/path.jsonl",
         )
         assert recorded == 0
 
@@ -53,11 +55,19 @@ class TestRecordPositionOpened:
         with tempfile.TemporaryDirectory() as tmpdir:
             jpath = str(Path(tmpdir) / "live_trade_journal.jsonl")
             result = record_position_opened(
-                ticket=5001, symbol="XAUUSDc", side="long",
-                strategy="test_swing", magic=90001, entry_price=4700.0,
-                volume=0.1, sl=4650.0, tp=4800.0,
-                brain_ids=["brain_1"], confidence=0.75,
-                journal_path=jpath, state=None,
+                ticket=5001,
+                symbol="XAUUSDc",
+                side="long",
+                strategy="test_swing",
+                magic=90001,
+                entry_price=4700.0,
+                volume=0.1,
+                sl=4650.0,
+                tp=4800.0,
+                brain_ids=["brain_1"],
+                confidence=0.75,
+                journal_path=jpath,
+                state=None,
             )
             assert result is True
             lines = Path(jpath).read_text().strip().split("\n")
@@ -70,11 +80,19 @@ class TestRecordPositionOpened:
         """Returns False when journal path is a directory (write fails)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             result = record_position_opened(
-                ticket=5001, symbol="XAUUSDc", side="long",
-                strategy="test", magic=90001, entry_price=4700.0,
-                volume=0.1, sl=0, tp=0,
-                brain_ids=[], confidence=0.5,
-                journal_path=tmpdir, state=None,
+                ticket=5001,
+                symbol="XAUUSDc",
+                side="long",
+                strategy="test",
+                magic=90001,
+                entry_price=4700.0,
+                volume=0.1,
+                sl=0,
+                tp=0,
+                brain_ids=[],
+                confidence=0.5,
+                journal_path=tmpdir,
+                state=None,
             )
             assert result is False
 
@@ -84,11 +102,19 @@ class TestRecordPositionOpened:
             jpath = str(Path(tmpdir) / "live_trade_journal.jsonl")
             state = SimpleNamespace(known_open_tickets={})
             result = record_position_opened(
-                ticket=5001, symbol="BTCUSDc", side="short",
-                strategy="test", magic=90002, entry_price=60000.0,
-                volume=0.1, sl=61000.0, tp=59000.0,
-                brain_ids=["brain_btc"], confidence=0.8,
-                journal_path=jpath, state=state,
+                ticket=5001,
+                symbol="BTCUSDc",
+                side="short",
+                strategy="test",
+                magic=90002,
+                entry_price=60000.0,
+                volume=0.1,
+                sl=61000.0,
+                tp=59000.0,
+                brain_ids=["brain_btc"],
+                confidence=0.8,
+                journal_path=jpath,
+                state=state,
             )
             assert result is True
             assert 5001 in state.known_open_tickets
@@ -103,12 +129,19 @@ class TestPositionCloseAdapterRecord:
             adapter = PositionCloseAdapter(tick_size=0.01)
 
             event = PositionClosed(
-                position_ticket=1001, symbol="XAUUSDc", side="long",
-                strategy="test_swing", magic=90001,
-                entry_price=4700.0, close_price=4750.0,
-                closed_volume=0.1, remaining_volume=0.0,
-                original_volume=0.1, pnl=5.0,
-                exit_reason="tp_hit", close_time="2026-06-19T12:00:00Z",
+                position_ticket=1001,
+                symbol="XAUUSDc",
+                side="long",
+                strategy="test_swing",
+                magic=90001,
+                entry_price=4700.0,
+                close_price=4750.0,
+                closed_volume=0.1,
+                remaining_volume=0.0,
+                original_volume=0.1,
+                pnl=5.0,
+                exit_reason="tp_hit",
+                close_time="2026-06-19T12:00:00Z",
                 label="win",
             )
 
@@ -128,13 +161,21 @@ class TestPositionCloseAdapterRecord:
         """Second record of same (ticket, deal_id) returns False."""
         adapter = PositionCloseAdapter()
         event = PositionClosed(
-            position_ticket=1001, symbol="XAUUSDc", side="long",
-            strategy="test", magic=90001,
-            entry_price=4700.0, close_price=4750.0,
-            closed_volume=0.1, remaining_volume=0.0,
-            original_volume=0.1, pnl=5.0,
-            exit_reason="tp", close_time="2026-01-01T00:00:00Z",
-            label="win", deal_id=777,
+            position_ticket=1001,
+            symbol="XAUUSDc",
+            side="long",
+            strategy="test",
+            magic=90001,
+            entry_price=4700.0,
+            close_price=4750.0,
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            original_volume=0.1,
+            pnl=5.0,
+            exit_reason="tp",
+            close_time="2026-01-01T00:00:00Z",
+            label="win",
+            deal_id=777,
         )
         adapter._recorded_deals.add((event.position_ticket, event.deal_id))
         result = adapter.record(event, "/fake/path.jsonl", state=None)
@@ -176,11 +217,19 @@ class TestConstants:
 class TestNotifyBudget:
     def test_appends_to_pending_when_available(self) -> None:
         event = PositionClosed(
-            position_ticket=100, symbol="XAUUSDc", side="long",
-            strategy="test", magic=1, entry_price=100.0, close_price=110.0,
-            closed_volume=0.1, remaining_volume=0.0,
-            original_volume=0.1, pnl=10.0,
-            exit_reason="close", close_time="2026-01-01T00:00:00Z",
+            position_ticket=100,
+            symbol="XAUUSDc",
+            side="long",
+            strategy="test",
+            magic=1,
+            entry_price=100.0,
+            close_price=110.0,
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            original_volume=0.1,
+            pnl=10.0,
+            exit_reason="close",
+            close_time="2026-01-01T00:00:00Z",
             label="win",
         )
         state = SimpleNamespace(_pending_budget_records=[])
@@ -191,11 +240,19 @@ class TestNotifyBudget:
 
     def test_noop_when_pending_is_none(self) -> None:
         event = PositionClosed(
-            position_ticket=100, symbol="XAUUSDc", side="long",
-            strategy="test", magic=1, entry_price=100.0, close_price=110.0,
-            closed_volume=0.1, remaining_volume=0.0,
-            original_volume=0.1, pnl=10.0,
-            exit_reason="close", close_time="2026-01-01T00:00:00Z",
+            position_ticket=100,
+            symbol="XAUUSDc",
+            side="long",
+            strategy="test",
+            magic=1,
+            entry_price=100.0,
+            close_price=110.0,
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            original_volume=0.1,
+            pnl=10.0,
+            exit_reason="close",
+            close_time="2026-01-01T00:00:00Z",
             label="win",
         )
         PositionCloseAdapter._notify_budget(event, SimpleNamespace(_pending_budget_records=None))
@@ -240,7 +297,9 @@ class TestDetectAndBuild:
         mock_worker = MagicMock()
         mock_worker.positions_get.return_value = []
         events = adapter.detect_and_build(
-            known_tickets={}, mt5_worker=mock_worker, symbol="XAUUSDc",
+            known_tickets={},
+            mt5_worker=mock_worker,
+            symbol="XAUUSDc",
         )
         assert events == []
 
@@ -268,11 +327,17 @@ class TestRecordOpen:
             jpath = str(Path(tmpdir) / "live_trade_journal.jsonl")
             adapter = PositionCloseAdapter(tick_size=0.01)
             event = PositionOpened(
-                position_ticket=5001, symbol="XAUUSDc", side="long",
-                strategy="test_swing", magic=90001,
-                entry_price=4700.0, volume=0.1,
-                sl=4650.0, tp=4800.0,
-                brain_ids=("brain_1",), confidence=0.75,
+                position_ticket=5001,
+                symbol="XAUUSDc",
+                side="long",
+                strategy="test_swing",
+                magic=90001,
+                entry_price=4700.0,
+                volume=0.1,
+                sl=4650.0,
+                tp=4800.0,
+                brain_ids=("brain_1",),
+                confidence=0.75,
             )
             state = SimpleNamespace(known_open_tickets={})
             result = adapter.record_open(event, jpath, state=state)
@@ -285,11 +350,134 @@ class TestRecordOpen:
             jpath = str(Path(tmpdir) / "live_trade_journal.jsonl")
             adapter = PositionCloseAdapter(tick_size=0.01)
             event = PositionOpened(
-                position_ticket=5002, symbol="XAUUSDc", side="short",
-                strategy="test", magic=1,
-                entry_price=100.0, volume=0.1,
-                sl=110.0, tp=90.0,
-                brain_ids=(), confidence=0.5,
+                position_ticket=5002,
+                symbol="XAUUSDc",
+                side="short",
+                strategy="test",
+                magic=1,
+                entry_price=100.0,
+                volume=0.1,
+                sl=110.0,
+                tp=90.0,
+                brain_ids=(),
+                confidence=0.5,
             )
             result = adapter.record_open(event, jpath, state=None)
             assert result is True
+
+
+def _mt5_deal(**kw: object) -> SimpleNamespace:
+    """Fake MT5 Deal (history_deals_get shape)."""
+    base = {
+        "entry": 0,
+        "ticket": 1,
+        "price": 100.0,
+        "profit": 0.0,
+        "reason": 3,
+        "time": 0,
+        "volume": 0.1,
+        "position_id": 1,
+        "comment": "",
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+class TestBuildEventExitDealSSOT:
+    """DQAF-20260708-003: _build_event resolves the close from the EXIT deal,
+    never the opening deal (which fabricated break-even at the entry price).
+    """
+
+    def test_full_close_uses_exit_deal_price_and_profit(self) -> None:
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        entry = _mt5_deal(entry=0, ticket=1, price=63514.66, profit=0.0, reason=3, time=100)
+        exit_ = _mt5_deal(entry=1, ticket=2, price=64598.99, profit=1084.0, reason=5, time=200)
+        worker = MagicMock()
+        worker.history_deals_get.return_value = [entry, exit_]
+
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={
+                "entry_price": 63514.66,
+                "side": "long",
+                "strategy": "btc_swing",
+                "volume": 0.1,
+                "magic": 90411,
+            },
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=worker,
+        )
+        assert evt is not None
+        # close price MUST be the exit deal price, not the 63514.66 entry price
+        assert evt.close_price == 64598.99
+        assert evt.pnl == 1084.0
+        assert evt.label == "tp_hit_first"
+        assert evt.close_price_source == "mt5_exit_deal"
+        assert evt.pnl_status == "verified_from_mt5_deal"
+        # entry_price must NOT collapse to the close price
+        assert evt.entry_price == 63514.66
+
+    def test_sl_hit_records_loss_not_breakeven(self) -> None:
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        entry = _mt5_deal(entry=0, ticket=1, price=64000.0, profit=0.0, time=100)
+        exit_ = _mt5_deal(entry=1, ticket=2, price=63000.0, profit=-1000.0, reason=4, time=200)
+        worker = MagicMock()
+        worker.history_deals_get.return_value = [entry, exit_]
+
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={
+                "entry_price": 64000.0,
+                "side": "long",
+                "strategy": "btc_swing",
+                "volume": 0.1,
+            },
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=worker,
+        )
+        assert evt is not None
+        assert evt.pnl == -1000.0
+        assert evt.label == "sl_hit_first"
+        assert evt.close_price == 63000.0
+
+    def test_only_entry_deal_returns_none_no_fabrication(self) -> None:
+        """When only the opening deal exists, build NO event — never fabricate."""
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        entry = _mt5_deal(entry=0, ticket=1, price=64000.0, profit=0.0)
+        worker = MagicMock()
+        worker.history_deals_get.return_value = [entry]
+
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={"entry_price": 64000.0, "side": "long", "strategy": "s", "volume": 0.1},
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=worker,
+        )
+        assert evt is None
+
+    def test_journal_entry_carries_provenance(self) -> None:
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        entry = _mt5_deal(entry=0, ticket=1, price=100.0, profit=0.0, time=100)
+        exit_ = _mt5_deal(entry=1, ticket=2, price=110.0, profit=10.0, reason=5, time=200)
+        worker = MagicMock()
+        worker.history_deals_get.return_value = [entry, exit_]
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={"entry_price": 100.0, "side": "long", "strategy": "s", "volume": 0.1},
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=worker,
+        )
+        assert evt is not None
+        je = evt.to_journal_entry()
+        assert je["_close_price_source"] == "mt5_exit_deal"
+        assert je["_pnl_status"] == "verified_from_mt5_deal"
+        assert je["detail"]["close_price"] == 110.0
+        assert je["pnl"] == 10.0

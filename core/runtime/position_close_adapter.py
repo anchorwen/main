@@ -347,39 +347,41 @@ class PositionCloseAdapter:
                 _time_module.sleep(1.0)
                 continue
 
-            # Find first unprocessed DEAL after cursor
-            _new_deals = [d for d in deals if getattr(d, "ticket", 0) > _cursor]
-            if not _new_deals:
-                # All deals already processed — this shouldn't happen
-                # with volume-delta detection, but handle gracefully
-                _log.warning(
-                    "PositionCloseAdapter: no new deals for ticket=%s (cursor=%s)",
+            # ── DQAF-20260708-003: authoritative exit-deal resolution (SSOT) ──
+            # Previously this picked ``_new_deals[0]`` (the earliest deal after
+            # the cursor).  Because the adapter is re-instantiated every cycle
+            # the cursor is always 0, so ``[0]`` was the DEAL_ENTRY_IN opening
+            # deal → close_price == entry_price, profit == 0 → every full close
+            # was fabricated as a break-even.  resolve_exit_deal() enforces the
+            # invariant "close comes from a DEAL_ENTRY_OUT deal" and NEVER falls
+            # back to the entry deal's price.
+            from core.runtime.deal_selection import resolve_exit_deal
+
+            _res = resolve_exit_deal(deals, _cursor)
+            # ``has_exit`` already guarantees ``close_price is not None`` (see
+            # ExitResolution.has_exit); the explicit ``is None`` disjunct makes
+            # that invariant visible to the type checker and is defensive in depth.
+            if _res is None or not _res.has_exit or _res.close_price is None:
+                _log.error(
+                    "[CRITICAL] PositionCloseAdapter: no exit deal for ticket=%s "
+                    "(cursor=%s, source=%s) — cannot build event",
                     ticket,
                     _cursor,
+                    _res.close_price_source if _res is not None else "no_deals",
                 )
+                # Advance cursor past any inspected exit deal; retry next cycle.
+                if _res is not None and _res.deal_id:
+                    self._last_deal_id[ticket] = _res.deal_id
                 return None
 
-            _deal = _new_deals[0]  # earliest unprocessed deal
-            _deal_id = getattr(_deal, "ticket", 0)
-            _close_price = float(getattr(_deal, "price", 0) or 0)
-            _deal_volume = float(getattr(_deal, "volume", 0) or 0)
-            _deal_profit = float(getattr(_deal, "profit", 0) or 0)
-            _deal_reason = getattr(_deal, "reason", -1)
-            _deal_time = getattr(_deal, "time", 0)
-            _position_identifier = int(getattr(_deal, "position_id", 0) or 0)
-            # DQAF-064 §1: Extract deal comment for watchdog label preservation
-            _deal_comment = str(getattr(_deal, "comment", "") or "")
-
-            if _close_price <= 0:
-                _log.error(
-                    "[CRITICAL] PositionCloseAdapter: deal %s for ticket=%s "
-                    "has close_price=0 — cannot build event",
-                    _deal_id,
-                    ticket,
-                )
-                # Update cursor to skip this broken deal
-                self._last_deal_id[ticket] = _deal_id
-                return None
+            _deal_id = _res.deal_id
+            _close_price = float(_res.close_price)
+            _deal_reason = _res.close_reason if _res.close_reason is not None else -1
+            _deal_time = _res.close_time or 0
+            _position_identifier = _res.position_id
+            # DQAF-064 §1: deal comment for watchdog label preservation
+            _deal_comment = _res.comment
+            _close_price_source = _res.close_price_source
 
             # Update cursor
             self._last_deal_id[ticket] = _deal_id
@@ -398,6 +400,23 @@ class PositionCloseAdapter:
             # FIX-20260623-084: propagate p_win from open decision through
             # to PositionClosed so the calibrator receives actual p_win
             _p_win = float(open_entry.get("p_win", 0.5) or 0.5)
+
+            # ── DQAF-20260708-003: PnL from broker-authoritative deal.profit,
+            #    else price-based estimate; provenance recorded in _pnl_status ──
+            if _res.close_pnl is not None:
+                _deal_profit = float(_res.close_pnl)
+                _pnl_status = "verified_from_mt5_deal"
+            else:
+                _ep_est = _entry_price or (_res.entry_fill_price or 0.0)
+                if _ep_est > 0 and _side == "long":
+                    _deal_profit = round((_close_price - _ep_est) * closed_volume, 2)
+                    _pnl_status = "estimated_from_close_price"
+                elif _ep_est > 0 and _side == "short":
+                    _deal_profit = round((_ep_est - _close_price) * closed_volume, 2)
+                    _pnl_status = "estimated_from_close_price"
+                else:
+                    _deal_profit = 0.0
+                    _pnl_status = "pending_mt5_confirmation"
 
             # ── Label from deal reason ──
             # DQAF-064 §1: Preserve watchdog exit reason from deal comment
@@ -434,7 +453,7 @@ class PositionCloseAdapter:
                 side=_side,
                 strategy=_strategy,
                 magic=_magic,
-                entry_price=_entry_price or _close_price,  # fallback
+                entry_price=_entry_price or _res.entry_fill_price or _close_price,  # fallback
                 close_price=_close_price,
                 closed_volume=closed_volume,
                 remaining_volume=remaining_volume,
@@ -451,6 +470,8 @@ class PositionCloseAdapter:
                 tp=_tp,
                 deal_id=_deal_id,
                 p_win=_p_win,
+                close_price_source=_close_price_source,
+                pnl_status=_pnl_status,
             )
 
         _log.error(

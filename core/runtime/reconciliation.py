@@ -98,45 +98,36 @@ def reconcile_closed_positions(
         ):
             deals = mt5_worker.history_deals_get(position=ticket)
 
+        # ── DQAF-20260708-003: authoritative exit-deal resolution (SSOT) ──
+        # Shares core.runtime.deal_selection with position_close_adapter and
+        # mia_close — one place that knows the MT5 deal model.  The SSOT NEVER
+        # falls back to the opening deal's price for a close.
+        from core.runtime.deal_selection import resolve_exit_deal
+
         close_price = None
         close_time = None
         close_reason: int | None = None
         close_deal_comment: str = ""  # DQAF-064 §1: preserve watchdog label
+        close_price_source: str = "no_deals"
         close_volume = open_entry.get("volume") or open_entry.get("effective_volume_hint", 0.0)
+        _deal_pnl: float | None = None
 
-        if deals:
-            for deal in deals:
-                deal_reason = getattr(deal, "reason", -1)
-                if deal_reason in (4, 5):  # DEAL_REASON_SL=4, DEAL_REASON_TP=5
-                    close_price = getattr(deal, "price", None)
-                    close_time = getattr(deal, "time", None)
-                    close_reason = deal_reason
-                    close_deal_comment = str(getattr(deal, "comment", "") or "")
-                    break  # SL/TP deal is the definitive close — stop searching
-
-            if close_price is None and deals and len(deals) >= 2:
-                exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
-                if exit_deals:
-                    last_exit = max(exit_deals, key=lambda d: getattr(d, "time", 0))
-                    close_price = getattr(last_exit, "price", None)
-                    close_time = getattr(last_exit, "time", None)
-                    close_deal_comment = close_deal_comment or str(
-                        getattr(last_exit, "comment", "") or ""
-                    )
-                if close_price is None:
-                    last_deal = max(deals, key=lambda d: getattr(d, "time", 0))
-                    close_price = getattr(last_deal, "price", None)
-                    close_time = getattr(last_deal, "time", None)
+        _res = resolve_exit_deal(deals) if deals else None
+        if _res is not None and _res.has_exit:
+            close_price = _res.close_price
+            close_time = _res.close_time
+            close_reason = _res.close_reason
+            close_deal_comment = _res.comment
+            close_price_source = _res.close_price_source
+            _deal_pnl = _res.close_pnl
+            if _res.close_volume > 0:
+                close_volume = _res.close_volume
 
         side = str(open_entry.get("side", ""))
-        # ── Resolve entry price from MT5 deal history (actual fill) ──
+        # ── Resolve entry price: MT5 actual fill (SSOT) → request price → engine ──
         entry_price: float | None = None
-        if deals:
-            entry_deals = [d for d in deals if getattr(d, "entry", -1) == 0]
-            if entry_deals:
-                _entry_fill = getattr(entry_deals[0], "price", None)
-                if _entry_fill is not None and _entry_fill > 0:
-                    entry_price = float(_entry_fill)
+        if _res is not None and _res.entry_fill_price:
+            entry_price = float(_res.entry_fill_price)
         # Fallback L1: open journal entry's order request price
         if entry_price is None:
             detail = open_entry.get("detail", {})
@@ -151,8 +142,12 @@ def reconcile_closed_positions(
             if _reg_ep is not None and float(_reg_ep) > 0:
                 entry_price = float(_reg_ep)
 
+        # ── PnL: prefer broker-authoritative deal.profit (SSOT), else recompute
+        #    from price*volume ──
         pnl = None
-        if entry_price is not None and close_price is not None and close_volume:
+        if _deal_pnl is not None:
+            pnl = float(_deal_pnl)
+        elif entry_price is not None and close_price is not None and close_volume:
             if side == "long":
                 pnl = round((close_price - entry_price) * close_volume, 2)
             elif side == "short":
@@ -174,6 +169,14 @@ def reconcile_closed_positions(
                         close_price = close_price or _fallback_close
                 except (IndexError, ValueError):
                     pass
+
+        # ── DQAF-20260708-003: pnl provenance ──
+        if _deal_pnl is not None:
+            _pnl_status = "verified_from_mt5_deal"
+        elif pnl is not None:
+            _pnl_status = "estimated_from_close_price"
+        else:
+            _pnl_status = "pending_mt5_confirmation"
 
         # ── FIX-20260612-003: Trail-aware SL label ──
         # When close_reason == 4 (SL hit), check if the position had trail
@@ -276,6 +279,7 @@ def reconcile_closed_positions(
                 "reason": close_reason_str,
                 "close_price": close_price,
                 "pnl": pnl,
+                "close_price_source": close_price_source,
             },
             "symbol": symbol,
             "action": "close",
@@ -290,6 +294,8 @@ def reconcile_closed_positions(
             "tp": open_entry.get("tp"),
             "open_message_id": open_entry.get("message_id"),
             "brain_ids": open_entry.get("brain_ids"),
+            "_close_price_source": close_price_source,
+            "_pnl_status": _pnl_status,
         }
         closed_entries.append(close_entry)
 

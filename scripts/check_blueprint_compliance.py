@@ -349,6 +349,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/analyze_trail_impact.py",
         "scripts/live_intent_loop.py",
         "scripts/backfill_journal_orphans.py",
+        "scripts/backfill_fabricated_breakeven.py",  # DQAF-20260708-003 append-only PnL correction
         "scripts/live_launcher.py",
         "scripts/bridge_supervisor.py",
         "scripts/live_micro_rollout_gate.py",

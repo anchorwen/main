@@ -93,6 +93,12 @@ def build_mia_close_entry(
         },
         "open_message_id": known_entry.get("message_id"),
         "brain_ids": known_entry.get("brain_ids"),
+        # DQAF-20260708-003: SL-estimate provenance — overridden by
+        # enrich_mia_from_deals() once broker deal history is available.
+        "_close_price_source": "mia_sl_estimate",
+        "_pnl_status": (
+            "estimated_from_close_price" if pnl is not None else "pending_mt5_confirmation"
+        ),
     }
 
 
@@ -105,97 +111,80 @@ def enrich_mia_from_deals(
     Overrides the conservative SL-hit estimate with actual close_price
     and close_reason from deal history.  Mutates mia_entry in place.
     """
-    close_price = None
-    close_time = None
-    close_reason: int | None = None
+    from core.runtime.deal_selection import resolve_exit_deal
 
-    for deal in deals:
-        deal_reason = getattr(deal, "reason", -1)
-        if deal_reason in (4, 5):  # DEAL_REASON_SL=4, DEAL_REASON_TP=5
-            close_price = getattr(deal, "price", None)
-            close_time = getattr(deal, "time", None)
-            close_reason = deal_reason
-
-    if close_price is None and deals and len(deals) >= 2:
-        exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
-        if exit_deals:
-            last_exit = max(exit_deals, key=lambda d: getattr(d, "time", 0))
-            close_price = getattr(last_exit, "price", None)
-            close_time = getattr(last_exit, "time", None)
-        if close_price is None:
-            last_deal = max(deals, key=lambda d: getattr(d, "time", 0))
-            close_price = getattr(last_deal, "price", None)
-            close_time = getattr(last_deal, "time", None)
-
-    if close_price is not None:
-        mia_entry["detail"]["close_price"] = close_price
-        close_reason_str = {4: "sl_hit", 5: "tp_hit"}.get(close_reason or 0, "unknown_close")
-        mia_entry["detail"]["reason"] = close_reason_str
-
-        side = mia_entry.get("side", "")
-        entry_price = mia_entry.get("detail", {}).get("entry_price") or mia_entry.get(
-            "entry_price", 0
+    _res = resolve_exit_deal(deals) if deals else None
+    # ``has_exit`` already guarantees ``close_price is not None``; the explicit
+    # ``is None`` disjunct narrows the type for the arithmetic below and is
+    # defensive in depth.
+    if _res is None or not _res.has_exit or _res.close_price is None:
+        # No authoritative exit deal — keep the conservative SL estimate that
+        # build_mia_close_entry() already set, and record provenance so the
+        # non-broker-verified close is not mistaken for a real exit price.
+        mia_entry["_close_price_source"] = (
+            _res.close_price_source if _res is not None else "no_deals"
         )
-        close_volume = mia_entry.get("volume", 0) or 0.0
+        return
 
-        if close_volume <= 0.0 and deals:
-            _deal_volume = 0.0
-            for _d in deals:
-                if getattr(_d, "entry", -1) == 1:
-                    _dv = float(getattr(_d, "volume", 0) or 0)
-                    _deal_volume += _dv
-            if _deal_volume > 0:
-                close_volume = _deal_volume
-                mia_entry["volume"] = close_volume
+    close_price = _res.close_price
+    close_time = _res.close_time
+    close_reason = _res.close_reason
 
-        # FIX-20260626-143: Prefer MT5 deal.profit over spread-based PnL calc.
-        # deal.profit is broker-authoritative — accounts for slippage,
-        # commission, and swap.  Fall back to spread calc only if no profit
-        # data is available in the deals.
-        _deal_profit: float | None = None
-        for _d in deals:
-            _dp = getattr(_d, "profit", None)
-            if _dp is not None and _dp != 0:
-                _deal_profit = float(_dp)
-                break
+    mia_entry["detail"]["close_price"] = close_price
+    mia_entry["_close_price_source"] = _res.close_price_source
+    close_reason_str = {4: "sl_hit", 5: "tp_hit"}.get(close_reason or 0, "unknown_close")
+    mia_entry["detail"]["reason"] = close_reason_str
 
-        if _deal_profit is not None:
-            mia_entry["pnl"] = _deal_profit
-            mia_entry["_pnl_status"] = "verified_from_mt5_deal"
-            if isinstance(mia_entry.get("detail"), dict):
-                mia_entry["detail"]["pnl"] = _deal_profit
-        elif isinstance(entry_price, int | float) and entry_price > 0 and close_price > 0:
-            if side == "long":
-                mia_entry["pnl"] = round((close_price - entry_price) * float(close_volume), 2)
-            elif side == "short":
-                mia_entry["pnl"] = round((entry_price - close_price) * float(close_volume), 2)
-            mia_entry["_pnl_status"] = "estimated_from_close_price"
-            if isinstance(mia_entry.get("detail"), dict):
-                mia_entry["detail"]["pnl"] = mia_entry["pnl"]
+    side = mia_entry.get("side", "")
+    entry_price = mia_entry.get("detail", {}).get("entry_price") or mia_entry.get("entry_price", 0)
+    close_volume = mia_entry.get("volume", 0) or 0.0
+    if close_volume <= 0.0 and _res.close_volume > 0:
+        close_volume = _res.close_volume
+        mia_entry["volume"] = close_volume
 
-        if mia_entry.get("pnl") is not None:
-            # Use PnlGuard for safe label classification
-            from core.ledger.services.pnl_guard import PnlGuard
+    # FIX-20260626-143 / DQAF-20260708-003: prefer MT5 deal.profit
+    # (SSOT-aggregated across exit deals) — broker-authoritative, accounts for
+    # slippage/commission/swap.  Fall back to price-based estimate only when no
+    # deal carries a profit.
+    _deal_profit: float | None = _res.close_pnl
 
-            if mia_entry.get("_pnl_status") != "verified_from_mt5_deal":
-                mia_entry["label"] = PnlGuard.classify_label(mia_entry)
+    if _deal_profit is not None:
+        mia_entry["pnl"] = _deal_profit
+        mia_entry["_pnl_status"] = "verified_from_mt5_deal"
+        if isinstance(mia_entry.get("detail"), dict):
+            mia_entry["detail"]["pnl"] = _deal_profit
+    elif isinstance(entry_price, int | float) and entry_price > 0 and close_price > 0:
+        if side == "long":
+            mia_entry["pnl"] = round((close_price - entry_price) * float(close_volume), 2)
+        elif side == "short":
+            mia_entry["pnl"] = round((entry_price - close_price) * float(close_volume), 2)
+        mia_entry["_pnl_status"] = "estimated_from_close_price"
+        if isinstance(mia_entry.get("detail"), dict):
+            mia_entry["detail"]["pnl"] = mia_entry["pnl"]
+
+    if mia_entry.get("pnl") is not None:
+        # Use PnlGuard for safe label classification
+        from core.ledger.services.pnl_guard import PnlGuard
+
+        if mia_entry.get("_pnl_status") != "verified_from_mt5_deal":
+            mia_entry["label"] = PnlGuard.classify_label(mia_entry)
+        else:
+            pnl = mia_entry["pnl"]
+            if pnl < 0:
+                mia_entry["label"] = "loss"
+            elif pnl > 0:
+                mia_entry["label"] = "win"
             else:
-                pnl = mia_entry["pnl"]
-                if pnl < 0:
-                    mia_entry["label"] = "loss"
-                elif pnl > 0:
-                    mia_entry["label"] = "win"
-                else:
-                    mia_entry["label"] = "breakeven"
+                mia_entry["label"] = "breakeven"
 
-        if close_reason == 4:
-            _tc = mia_entry.get("trail_contribution", {})
-            if isinstance(_tc, dict) and _tc.get("trail_advances", 0) > 0:
-                mia_entry["label"] = "sl_hit_trailed"
-            else:
-                mia_entry["label"] = "sl_hit_first"
-        elif close_reason == 5:
-            mia_entry["label"] = "tp_hit_first"
+    if close_reason == 4:
+        _tc = mia_entry.get("trail_contribution", {})
+        if isinstance(_tc, dict) and _tc.get("trail_advances", 0) > 0:
+            mia_entry["label"] = "sl_hit_trailed"
+        else:
+            mia_entry["label"] = "sl_hit_first"
+    elif close_reason == 5:
+        mia_entry["label"] = "tp_hit_first"
 
     if close_time is not None:
         mia_entry["recorded_at"] = (

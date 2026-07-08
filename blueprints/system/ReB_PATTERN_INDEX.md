@@ -20,6 +20,18 @@
 
 ---
 
+### ReB-20260708-BLIND_DEAL_INDEX_FABRICATES_BREAKEVEN
+- **Pattern Signature**: `BLIND_DEAL_INDEX_FABRICATES_BREAKEVEN`
+- **Date Cataloged**: 2026-07-08
+- **Source Docket**: DQAF-20260708-003
+- **Related**: FIX-20260708-003, FIX-20260601-046 (label_builder 盲取 closes[0] 同类), FIX-20260612-004 (bridge deal.profit capture)
+
+**Definition**: Code that resolves a position's close from an MT5 `history_deals_get()` list by positional index (`deals[0]` / `_new_deals[0]`) instead of filtering by the deal role flag (`entry == 1` = DEAL_ENTRY_OUT). The earliest deal is the DEAL_ENTRY_IN **opening** deal, which carries `price == entry_fill` and `profit == 0`. Selecting it fabricates a break-even close AT THE ENTRY PRICE — `close_price == entry_price`, `pnl == 0`, `label == breakeven` — for every full close. The fabrication is silent: it corrupts governance WR/PF and the calibrator, and hides real wins/losses (a give-back that hit SL is recorded as $0). Aggravating factor: the same MT5-deal knowledge was implemented three times (adapter wrong; reconciliation and mia_close correct), with no upstream invariant forcing all paths to agree — so one copy could silently diverge.
+
+**Prevention**: A single deal-selection SSOT (`core/runtime/deal_selection.py::resolve_exit_deal()`) that is the ONE place encoding the MT5 deal model. It filters `entry == 1`, prefers SL/TP-reason deals, aggregates exit-deal profit, and — critically — returns a `no_exit_deal` provenance with `close_price == None` when no exit deal exists, so callers can NEVER fall back to the entry deal's price. All close-detection paths (adapter/reconciliation/mia_close) call it. Every close carries `close_price_source` / `pnl_status` provenance, making any future fabrication self-declaring in the journal. New MT5-deal consumers must call the SSOT, never index a raw deal list.
+
+**Detection**: `scripts/backfill_fabricated_breakeven.py` — fingerprint `label==breakeven ∧ pnl∈{0,None} ∧ close_price==entry_price ∧ _close_price_source≠mt5_exit_deal`. Runs read-only (Iron Law #11) per symbol. Ongoing: any close whose `_close_price_source == "no_exit_deal"` is an anomaly to alert on. Unit guard: `tests/runtime/test_deal_selection.py` locks "never resolve close from the opening deal".
+
 ### ReB-20260628-GOVERNANCE_REGISTRATION_SILENT_SKIP
 - **Pattern Signature**: `GOVERNANCE_REGISTRATION_SILENT_SKIP`
 - **Date Cataloged**: 2026-06-28

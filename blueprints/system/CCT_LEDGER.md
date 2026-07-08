@@ -27,6 +27,23 @@
 
 ---
 
+### CCT-20260708-003
+- **Docket ID**: DQAF-20260708-003
+- **日期**: 2026-07-08
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 用户实盘观察 BTC 到/超止盈却不平仓, 回撤后打止损; journal 却记为 breakeven ($0)。地面真相 ticket 3947528377: close 记录 close_price=63514.66 == entry_price 精确相等, pnl=0.0, reason=signal_close, label=breakeven; 而下一单 3 分钟后 @64598.99 开仓 → 真实市场 ~64599, ~+1084 点被记为 $0。
+  - [Layer 2 — 中间异常]: `position_close_adapter._build_event` 取 `_new_deals = [d for d in deals if d.ticket > _cursor]` 后 `_deal = _new_deals[0]` (最早 deal)。adapter 每周期经 reconcile_and_record_closes() 新建实例 → `self._last_deal_id` 恒空 → cursor 恒 0 → `_new_deals` 含全部 deal → `[0]` = 最早 = DEAL_ENTRY_IN 入场 deal (price=入场价, profit=0, reason=3 signal) → close_price=入场价, pnl=0, label=breakeven。
+  - [Layer 3 — 根因]: RC-06 (contract-violation) L3 — MT5 deal 模型知识在三处独立实现 (adapter 错取 deals[0]; reconciliation.py:118 与 mia_close.py:120 正确过滤 entry==1)。上游从未强制"一个 close 必须取自 DEAL_ENTRY_OUT 出场 deal"不变量, 允许分叉 → adapter 分支违约。同类模式 FIX-20260601-046 (label_builder 盲取 closes[0])。
+- **证据引用**:
+  - Source 1: `core/runtime/position_close_adapter.py` (pre-fix `_new_deals[0]` 无 entry 过滤)
+  - Source 2: `data_btc/live_trade_journal.jsonl` ticket 3947528377 (close==entry==63514.66, pnl=0) + 次单 @64598.99
+  - Source 3 (跨品种): `scripts/backfill_fabricated_breakeven.py` dry-run — BTC 14 (data_btc) + XAU 1 (data, ticket 4059439852) 同签名
+  - Source 4 (对照正确路径): `core/runtime/reconciliation.py:118` + `core/runtime/mia_close.py:120` 均 `entry==1` 出场过滤
+- **AR 对抗反驳**: 反假设"close==entry 是真实瞬时平仓(真 breakeven)"→ 被推翻: 次单 @64598.99 (相差 1084 点) 证明 3 分钟内市场已远离入场价, 若真在入场价平仓不可能在千点外重新开仓; pnl=0 与 reason=signal 是入场 deal 固有特征而非平仓结果。
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260708-BLIND_DEAL_INDEX_FABRICATES_BREAKEVEN
+
 ### CCT-20260628-062
 - **Docket ID**: DQAF-20260628-062
 - **日期**: 2026-06-28

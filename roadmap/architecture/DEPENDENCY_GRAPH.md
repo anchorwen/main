@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-08T08:06:11Z
+> **自动生成**: 2026-07-08T11:55:41Z
 
 ## Package-Level Dependencies
 
@@ -436,6 +436,7 @@
 - `cycle_replay.py` → `core.runtime.evidence_reader`, `core.runtime.schema_versions`
 - `daily_ops_scheduler.py` → `core.execution.pre_trade_guards`, `core.features.local_feature_store`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.runtime.live_cycle`, `core.runtime.time_utils`, `core.state.catalog`, `core.state.writer`, `scripts.daily_ops`, `scripts.training.governance_scheduler`
 - `data_health_monitor.py` → `core.observability.data_health_service`
+- `deal_selection.py` → (无内部依赖)
 - `dispatch_post.py` → `core.execution.pre_trade_guards`, `core.runtime.order_dispatch`, `core.runtime.time_utils`
 - `evidence_contracts.py` → `core.runtime.integration_contracts`, `core.runtime.schema_versions`
 - `evidence_reader.py` → `core.ledger.stream_names`
@@ -457,17 +458,17 @@
 - `live_startup.py` → `core.governance.governance_service`, `core.risk.risk_evaluation_service`, `core.risk.risk_policies`, `core.runtime.fault_handler`
 - `management_phase.py` → `core.contracts.domain.dispatch_context`, `core.contracts.strategy_magic`, `core.execution.capital_allocator`, `core.execution.live_order_sender`, `core.execution.managed_close`, `core.features.schemas.registry`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.live_cycle`, `core.runtime.market_ingress`, `core.runtime.mia_close`, `core.runtime.modify_trail_dispatch`, `core.runtime.ou_hurst`, `core.runtime.signal_health`, `core.runtime.time_utils`, `core.runtime.trail_dispatch`, `core.trading.position_lifecycle`, `core.trading.ratchet_risk`
 - `market_ingress.py` → `core.config.asset_registry`, `core.execution.mt5_worker`, `core.runtime.fault_handler`
-- `mia_close.py` → `core.contracts.strategy_magic`, `core.ledger.services.pnl_guard`, `core.runtime.time_utils`
+- `mia_close.py` → `core.contracts.strategy_magic`, `core.ledger.services.pnl_guard`, `core.runtime.deal_selection`, `core.runtime.time_utils`
 - `micro_persist.py` → `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.features.store_contracts`
 - `modify_trail_dispatch.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`
 - `order_dispatch.py` → `apps.engine.runtime_loop`, `core.brains.brain_registry`, `core.contracts.domain.decision_intent`, `core.contracts.domain.system_mode_state`, `core.contracts.enums`, `core.contracts.ids`, `core.state.schema_versions`
 - `ou_hurst.py` → (无内部依赖)
 - `pnl_recording.py` → `core.brains.brain_registry`
-- `position_close_adapter.py` → `core.contracts.position_events`, `core.execution.reentry_guard`, `core.ledger.services.journal_cleanup`
+- `position_close_adapter.py` → `core.contracts.position_events`, `core.execution.reentry_guard`, `core.ledger.services.journal_cleanup`, `core.runtime.deal_selection`
 - `position_ownership.py` → (无内部依赖)
 - `position_registration.py` → `core.execution.trail_stop_engine`, `core.runtime.fault_handler`
 - `pre_close_check.py` → `core.market.calendar`
-- `reconciliation.py` → `core.contracts.events`, `core.contracts.strategy_magic`, `core.data.event_writer`, `core.execution.reentry_guard`, `core.runtime.fault_handler`, `core.runtime.time_utils`
+- `reconciliation.py` → `core.contracts.events`, `core.contracts.strategy_magic`, `core.data.event_writer`, `core.execution.reentry_guard`, `core.runtime.deal_selection`, `core.runtime.fault_handler`, `core.runtime.time_utils`
 - `reentry_alert.py` → `core.runtime.time_utils`
 - `reentry_recording.py` → `core.execution.reentry_guard`, `core.runtime.time_utils`
 - `restart_state.py` → `core.contracts.strategy_magic`, `core.execution.reentry_guard`
@@ -561,6 +562,7 @@
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
 - `_fix_shadow_configs.py` → (无内部依赖)
 - `_forensic_orphan_closes.py` → (无内部依赖)
+- `_forensic_tp_profit_giveback.py` → (无内部依赖)
 - `_institutional_reconcile.py` → (无内部依赖)
 - `_surface_scan_horizon4.py` → (无内部依赖)
 - `_verify_btc_analysis_claims.py` → (无内部依赖)
@@ -619,6 +621,7 @@
 - `audit_xau_directional_bias.py` → (无内部依赖)
 - `audit_xau_exits.py` → (无内部依赖)
 - `augment_journal_strategy.py` → `core.contracts.strategy_magic`
+- `backfill_fabricated_breakeven.py` → `core.infrastructure.distributed_lock`, `core.runtime.deal_selection`
 - `backfill_journal_orphans.py` → (无内部依赖)
 - `backfill_journal_pnl.py` → `core.infrastructure.distributed_lock`
 - `backtest_rule_strategies.py` → `scripts.scan_barrier_params`
