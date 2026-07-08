@@ -915,3 +915,21 @@
 **Detection**: For each governance gate dimension (status, vote_weight, access path), grep both strategy_line.py and strategy_evaluator.py for the gate condition — flag if they differ.
 
 **Cross-References**: FIX-20260625-125, CCT-20260625-125
+
+---
+
+### ReB-20260708-MUTABLE_TICKET_JOIN_ON_IMMUTABLE_POSITION
+- **Pattern Signature**: `MUTABLE_TICKET_JOIN_ON_IMMUTABLE_POSITION`
+- **Date Cataloged**: 2026-07-08
+- **Source Docket**: DQAF-20260708-001
+- **关联 FIX IDs**: FIX-20260708-001
+- **关联 Docket IDs**: DQAF-20260708-001
+- **Related**: TECH_DEBT-003 (PositionStateMachine — SSOT key corrected ticket→identifier), FIX-20260626-144 (prior orphan patch), `CONFIG_GOVERNANCE_DUAL_TRACK_DRIFT`
+
+**Definition**: A position lifecycle keys its open<->close join — and every derived consumer (orphan detection, journal-gate admission, PnL reconciliation, training-label pairing) — on `position_ticket`, which MT5 MUTATES on partial-close/netting re-ticketing. The close then carries a NEW ticket while the open keeps the original, so ticket-equality join structurally manufactures a false "orphan close" on every re-ticket: real closes get quarantined (invisible to PnL/labels) and re-ticketed trades silently produce no training label. The immutable `position_identifier` (== the original opening ticket, sourced from MT5 `deal.position_id`) already rides on the close leg, but no consumer joins on it. Distinct sibling failure: `position_identifier`/`position_ticket` BOTH absent on a close (key-missing, not key-changed) — resolve_identity cannot repair those; they need write-side stamping.
+
+**预防策略**: (1) One immutable-identity resolver (`core/data/ticket_resolver.py::resolve_identity()`) is the ONLY join-key authority; every open<->close pairing consumer imports it; broker-facing sites (real MT5 close/modify order requests) keep the mutable `resolve()` ticket. (2) Write BOTH legs with the immutable anchor (`PositionOpened`/`PositionClosed.to_journal_entry` emit `position_identifier`) so the join never depends on the mutable field. (3) Never key a persistent lifecycle join on a broker-mutable identifier — separate "broker handle" from "lifecycle identity".
+
+**检测方法**: grep for `by_ticket` / `open_by_ticket` / `\.get\("position_ticket"\)` join/pairing patterns that should route through `resolve_identity()`; regression tests pinning that a re-ticketed close (new ticket, same identifier) pairs with its open and is admitted (`tests/data/test_ticket_resolver_identity.py`, `tests/ledger/test_journal_gate.py::test_reticketed_close_admitted_by_identity`).
+
+**Cross-References**: TECH_DEBT_REGISTRY.md TECH_DEBT-003, FIX_REGISTRY.md FIX-20260708-001

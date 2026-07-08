@@ -1033,3 +1033,22 @@
 - **关联 ReB Pattern**: `CROSS_FILE_DUPLICATE_GATE_LOGIC`
 - **关联 FIX**: FIX-20260706-003
 - **状态**: **CLOSED** — FIX-20260701-204 deployed. H4_V3 macro exemption active on both governance paths. Restart required for promotion evaluation.
+
+---
+
+### CCT-20260708-001
+- **Docket ID**: DQAF-20260708-001
+- **日期**: 2026-07-08
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: analyze_live_journal 报 157 BTC 孤儿平仓 (-$170.04); JournalGate 隔离区 184 条全 `close_without_open` (153 in July, ~17/day); label_builder 静默丢弃换号交易 (双轨标签损失)。证据: `scripts/analyze_live_journal.py:88/116`, `core/ledger/services/journal_gate.py:92`, `scripts/_forensic_orphan_closes.py` stdout
+  - [Layer 2 — 中间异常]: MT5 在 partial-close/netting 换号 → 平仓携带新 `position_ticket`, 开仓保留原始 ticket; 所有 join 站点用可变 ticket 配对 open<->close。证据: `core/runtime/live_cycle.py:3749-3786` (换号只更新内存), `core/runtime/position_close_adapter.py:366/429` (close 从 deal.position_id 取 identifier)
+  - [Layer 3 — 根因]: RC-02 type-confusion — 无单一以不可变 `position_identifier` 为键的生命周期权威; 可变 ticket 被当作稳定 join 键。~30 次历史修复全在下游打补丁; TECH_DEBT-003 命名 remedy 但记错 SSOT key。
+- **证据引用**:
+  - Source 1: Journal — `data_btc/live_trade_journal.jsonl` (34/35 identifier-matched-to-open, 0 identifier==ticket)
+  - Source 2: State — `data_btc/journal_orphan_quarantine.jsonl` (184 close_without_open, 153 July)
+  - Source 3 (cross-symbol): `data/live_trade_journal.jsonl` — XAU 53 orphan + 8009 no-ticket (异质分支: 键缺失而非键变, 3975/Jun→26/Jul 已自愈, 独立跟踪)
+- **是否被推翻**: 否 (AR 证伪了 "pre-June-7 legacy" 与 "open leg lost" 两个反假设)
+- **关联 ReB Pattern**: `MUTABLE_TICKET_JOIN_ON_IMMUTABLE_POSITION`
+- **关联 FIX**: FIX-20260708-001
+- **状态**: **CLOSED** — FIX-20260708-001 committed f139ab87. BTC 孤儿 157→119, $126 回收; journal_gate 覆盖 0%→86%。
