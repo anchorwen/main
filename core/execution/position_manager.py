@@ -144,6 +144,14 @@ class ActivePosition:
     ratchet_drawdown_armed: bool = False  # peak PnL > 2×ATR_cost → lock active
     ratchet_peak_pnl: float = 0.0  # highest net PnL achieved this position
 
+    # ── FIX-20260708-004: Profit Ratchet Floor telemetry (Risk Exit side) ──
+    # Last positive SL lock (in entry_atr R-units) demanded by the Chandelier
+    # profit ratchet.  Distinct from the V6 RatchetRisk fields above (which are
+    # a shadow-mode close-only subsystem): this one drives the broker-bound
+    # trailing SL floor and is surfaced in management_phase_diag for give-back
+    # verification.  0.0 = not yet armed.
+    ratchet_floor_r: float = 0.0
+
     # ── V6 P2/P5 context: anchor values at entry for z-trajectory analysis ──
     entry_mu: float = 0.0  # OU long-term mean at entry (0 = unknown / not OU)
 

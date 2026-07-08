@@ -70,6 +70,29 @@ class TrailPolicy:
     decay_full_r: float = 2.0  # R-multiple where decay completes (trail hits min_mult)
     decay_enabled: bool = True  # set False to restore pre-009 behavior
 
+    # ── FIX-20260708-004: Profit Ratchet Floor — broker-bound positive lock ──
+    # DQAF-20260708-004 give-back root cause: the trailing SL never locked a
+    # POSITIVE floor at the broker (MODE_B 87-89% of give-backs), so a model
+    # exit (signal_close) realised ~$0 at breakeven (MODE_C 80-84%).  The
+    # Chandelier trail alone leaves three structural holes: it returns None
+    # (no floor at all) when the raw candidate did not advance; its candidate
+    # uses current_atr which balloons the goalpost in volatile moves; and it
+    # only floors via graduated_lock at +3R, leaving the dominant +1R..+3R
+    # band unprotected.  The ratchet floor closes all three: once the peak
+    # reaches ratchet_arm_r (measured in ENTRY_ATR — a stable goalpost), the
+    # SL is forced to lock at least ratchet_breakeven_floor_r and to give back
+    # no more than ratchet_giveback_r from the peak, INDEPENDENT of the
+    # breakeven_triggered intent latch, and applied even when the Chandelier
+    # trail itself did not advance.  It is monotonic (peak R only grows), so
+    # the min_step guard suppresses NO_CHANGES (retcode 10025) resends, and it
+    # is combined with the Chandelier candidate via max()/min() so a running
+    # winner (tighter Chandelier) is unaffected — the floor only binds when the
+    # Chandelier failed to protect.
+    ratchet_enabled: bool = True
+    ratchet_arm_r: float = 1.0  # peak R (entry_atr units) at which the floor arms
+    ratchet_giveback_r: float = 1.0  # max R surrendered from the peak once armed
+    ratchet_breakeven_floor_r: float = 0.1  # min positive lock (covers spread+commission)
+
 
 # ── Trail Stop Engine ──────────────────────────────────────────────────────
 
@@ -128,6 +151,33 @@ class TrailStopEngine:
         decayed = base_mult - ratio * (base_mult - tp.min_trail_mult)
         return max(tp.min_trail_mult, decayed)
 
+    @staticmethod
+    def _ratchet_lock_r(pos: ActivePosition, tp: TrailPolicy) -> float | None:
+        """Return the profit-ratchet floor lock in ENTRY_ATR R-units, or None.
+
+        FIX-20260708-004.  Once the position's peak favorable excursion reaches
+        ``ratchet_arm_r`` (measured against entry_atr — a stable goalpost that
+        does not balloon with current_atr), guarantee a positive SL floor that
+        gives back at most ``ratchet_giveback_r`` from the peak, never less than
+        ``ratchet_breakeven_floor_r``, and never more than ``max_lock_atr``.
+
+        The lock is a pure function of the monotonic peak (highest_high /
+        lowest_low), so it only ratchets up — combined with the caller's
+        min_step guard this cannot re-send an unchanged SL (retcode 10025).
+        Returns None when the ratchet is disabled, entry_atr is unusable, or
+        the peak has not yet reached the arming threshold.
+        """
+        if not tp.ratchet_enabled or pos.entry_atr <= 0:
+            return None
+        if pos.side == "long":
+            r_max = (pos.highest_high - pos.entry_price) / pos.entry_atr
+        else:
+            r_max = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+        if r_max < tp.ratchet_arm_r:
+            return None
+        lock_r = max(tp.ratchet_breakeven_floor_r, r_max - tp.ratchet_giveback_r)
+        return min(lock_r, tp.max_lock_atr)
+
     def compute_trail_stop(self, pos: ActivePosition, current_atr: float) -> float | None:
         """Return new SL if the trail has advanced, else None.
 
@@ -173,6 +223,14 @@ class TrailStopEngine:
                 for r_threshold, lock_r in tp.graduated_lock_levels:
                     if current_r >= r_threshold:
                         candidate = max(candidate, pos.entry_price + lock_r * pos.entry_atr)
+            # ── FIX-20260708-004: Profit Ratchet Floor (long) ──
+            # Enforce a positive lock even if the Chandelier candidate above did
+            # not advance — this is the safety net that stops the +1R..+3R
+            # give-back cohort from unwinding to breakeven.
+            _ratchet_r = self._ratchet_lock_r(pos, tp)
+            if _ratchet_r is not None:
+                pos.ratchet_floor_r = _ratchet_r
+                candidate = max(candidate, pos.entry_price + _ratchet_r * pos.entry_atr)
             max_lock = pos.entry_price + tp.max_lock_atr * pos.entry_atr
             candidate = min(candidate, max_lock)
             if candidate <= pos.current_sl + tp.min_step:
@@ -188,6 +246,14 @@ class TrailStopEngine:
                 for r_threshold, lock_r in tp.graduated_lock_levels:
                     if current_r >= r_threshold:
                         candidate = min(candidate, pos.entry_price - lock_r * pos.entry_atr)
+            # ── FIX-20260708-004: Profit Ratchet Floor (short) ──
+            # Mirror of the long branch: force the SL down to lock at least
+            # _ratchet_r in entry_atr units so a retracement cannot reach
+            # breakeven before the broker-side stop catches it.
+            _ratchet_r = self._ratchet_lock_r(pos, tp)
+            if _ratchet_r is not None:
+                pos.ratchet_floor_r = _ratchet_r
+                candidate = min(candidate, pos.entry_price - _ratchet_r * pos.entry_atr)
             max_lock = pos.entry_price - tp.max_lock_atr * pos.entry_atr
             candidate = max(candidate, max_lock)
             if candidate >= pos.current_sl - tp.min_step:

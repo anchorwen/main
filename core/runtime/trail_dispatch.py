@@ -160,6 +160,10 @@ def compute_and_dispatch_trail(
                 "trail_sl_candidate": round(_trail_sl, 3) if _trail_sl is not None else None,
                 "trail_fired": _trail_sl is not None
                 and abs(_trail_sl - pos.current_sl) >= config.exit_min_step,
+                # FIX-20260708-004: profit-ratchet floor demanded this cycle (R
+                # in entry_atr units).  Non-zero once the peak armed the ratchet;
+                # lets the give-back audit confirm a positive floor was enforced.
+                "ratchet_floor_r": round(getattr(pos, "ratchet_floor_r", 0.0), 4),
                 "breakeven_fired": _be_triggered,
                 "breakeven_improves": _be_dispatched,
                 "breakeven_skipped_price": _be_skipped_price,

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-08T11:55:41Z
+> **自动生成**: 2026-07-08T14:40:10Z
 
 ## Package-Level Dependencies
 
@@ -558,7 +558,9 @@
 - `_check_status.py` → (无内部依赖)
 - `_deep_dive_btc_source.py` → (无内部依赖)
 - `_diagnose_atr_misalignment.py` → (无内部依赖)
+- `_diagnose_giveback_lifecycle.py` → (无内部依赖)
 - `_diagnose_model_raw_output.py` → (无内部依赖)
+- `_diagnose_tp_giveback_pollution.py` → (无内部依赖)
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
 - `_fix_shadow_configs.py` → (无内部依赖)
 - `_forensic_orphan_closes.py` → (无内部依赖)

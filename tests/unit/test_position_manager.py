@@ -139,35 +139,34 @@ def test_trail_stop_moves_down_for_short(short_position, manager):
 
 
 def test_trail_stop_never_moves_backward_long(long_position, manager):
-    """SL should not go down for a long when price retreats — but CAN
-    advance via nonlinear decay when R-max is high enough.
+    """SL should not go down for a long when price retreats.
 
-    DQAF-20260609-001: With decay, trail_mult tightens at high R.
-    At R=2.0, trail_mult has decayed to min_mult=1.2 → candidate=2504 > 2500.
-    The trail advances, which is the CORRECT profit-locking behavior.
+    FIX-20260708-004: the Profit Ratchet Floor dominates at a +2R peak.
+    At R_max=2.0 the ratchet locks ``r_max - ratchet_giveback_r`` = 1.0R, so the
+    SL is floored to entry + 1.0*entry_atr = 2505 — more protective than the
+    decayed Chandelier candidate (2504).  This is the intended give-back guard.
     """
     manager.graduated_lock_enabled = False
     pos = manager._position = long_position
     pos.highest_high = 2510.0  # +10 pts = +2.0R (entry_price=2500, entry_atr=5)
     pos.current_sl = 2500.0  # already trailed up
-    # R_max = (2510-2500)/5 = 2.0 → fully decayed to min_trail_mult=1.2
-    # candidate = 2510 - 1.2*5 = 2504 > 2500 → trail advances
+    # R_max = (2510-2500)/5 = 2.0 → ratchet floor = entry + (2.0-1.0)*5 = 2505
     new_sl = manager.compute_trail_stop(current_atr=5.0)
-    assert new_sl == 2504.0  # trail advances via decayed multiplier
+    assert new_sl == 2505.0  # ratchet floor (+1.0R) dominates decayed trail (2504)
 
 
 def test_graduated_lock_advances_sl_at_3r_long(long_position, manager):
-    """At +3R peak, graduated lock raises SL floor to +1.5R.
+    """At +3R peak the Profit Ratchet Floor locks +2R.
 
-    DQAF-20260609-001: With decay, trail_mult has fully decayed to 1.2 at R=3.0.
-    candidate = 2515 - 1.2*5 = 2509, graduated lock floor = 2507.5.
-    max(2509, 2507.5) = 2509 (candidate from decayed trail wins over lock floor).
+    FIX-20260708-004: at R_max=3.0 the ratchet locks ``r_max - giveback_r`` =
+    2.0R → SL = entry + 2.0*entry_atr = 2510, dominating both the decayed
+    Chandelier candidate (2509) and the graduated_lock floor (+1.5R = 2507.5).
     """
     pos = manager._position = long_position
     pos.highest_high = 2515.0  # +15 = 3R at entry_atr=5.0
     pos.current_sl = 2500.0  # at breakeven
     new_sl = manager.compute_trail_stop(current_atr=5.0)
-    assert new_sl == 2509.0
+    assert new_sl == 2510.0
 
 
 def test_trail_stop_none_when_no_improvement(long_position, manager):
@@ -179,21 +178,38 @@ def test_trail_stop_none_when_no_improvement(long_position, manager):
 
 
 def test_trail_stop_after_breakeven_long(long_position, manager):
-    """After breakeven: SL floored at entry_price, advances with decay.
+    """After breakeven the Profit Ratchet Floor locks +0.6R at a +1.6R peak.
 
-    DQAF-20260609-001: Nonlinear decay allows trail to break through
-    the breakeven floor once R-max provides enough multiplier decay.
-    At R=1.6, trail_mult has decayed to ~1.41 → candidate=2500.93 > 2500.
+    FIX-20260708-004: at R_max=1.6 the ratchet locks ``r_max - giveback_r`` =
+    0.6R → SL = entry + 0.6*entry_atr = 2503, dominating the decayed Chandelier
+    candidate (2500.93).  This is the give-back protection that stops a +1.6R
+    position from unwinding to breakeven.
     """
     pos = manager._position = long_position
     pos.breakeven_triggered = True
     pos.highest_high = 2508.0  # +8 pts = +1.6R
     pos.current_sl = 2500.0  # at breakeven
     new_sl = manager.compute_trail_stop(current_atr=5.0)
-    # R_max = 1.6 → decayed_mult = 2.0 - (1.1/1.5)*0.8 ≈ 1.413
-    # candidate = max(entry, 2508 - 1.413*5) = max(2500, 2500.93) = 2500.93
-    # 2500.93 > 2500 + 0.15 → trail advances via decay
-    assert new_sl == pytest.approx(2500.933, abs=0.01)
+    assert new_sl == 2503.0
+
+
+def test_ratchet_floor_fires_when_chandelier_would_not_advance_long(long_position, manager):
+    """FIX-20260708-004: the ratchet floor protects profit even when the raw
+    Chandelier trail would return None (candidate <= current_sl + min_step).
+
+    Reproduces the give-back cohort (e.g. BTC ticket 4090084166): peak reached
+    +1.44R but a ballooned current_atr pushes the Chandelier candidate below
+    current_sl, so without the ratchet the trail advances nothing and no
+    positive floor is ever placed.  The ratchet (measured in stable entry_atr)
+    still floors the SL to entry + (1.44-1.0)*entry_atr = 2502.2.
+    """
+    manager.graduated_lock_enabled = False
+    pos = manager._position = long_position
+    pos.highest_high = 2507.2  # +7.2 pts = +1.44R at entry_atr=5.0
+    pos.current_sl = 2500.0
+    # Chandelier candidate = 2507.2 - ~1.50*20 ≈ 2477 < current_sl → would be None.
+    new_sl = manager.compute_trail_stop(current_atr=20.0)  # ballooned ATR
+    assert new_sl == pytest.approx(2502.2, abs=0.01)  # ratchet floor at +0.44R
 
 
 def test_trail_stop_above_breakeven_long(long_position, manager):
