@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-09T12:52:49Z
+> **自动生成**: 2026-07-09T14:34:08Z
 > **扫描模块数**: 747
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -275,7 +275,7 @@
 | `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1906 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 417 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 421 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 226 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 293 | — | |

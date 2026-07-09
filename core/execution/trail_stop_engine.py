@@ -187,7 +187,9 @@ class TrailStopEngine:
         lock_r = max(tp.ratchet_breakeven_floor_r, r_max - tp.ratchet_giveback_r)
         return min(lock_r, tp.max_lock_atr)
 
-    def compute_trail_stop(self, pos: ActivePosition, _current_atr: float) -> float | None:
+    def compute_trail_stop(
+        self, pos: ActivePosition, current_atr: float
+    ) -> float | None:  # current_atr vestigial post PER_TF migration
         """Return new SL if the trail has advanced, else None.
 
         Long:  max(current_sl, highest_high - trail_mult × atr)
@@ -277,7 +279,9 @@ class TrailStopEngine:
                 return None
             return round(candidate, 3)
 
-    def should_breakeven(self, pos: ActivePosition, _current_atr: float) -> bool:
+    def should_breakeven(
+        self, pos: ActivePosition, current_atr: float
+    ) -> bool:  # current_atr vestigial post PER_TF migration
         """Return True when the favorable move exceeds the breakeven threshold.
 
         FIX-20260603-064: activation watermark — breakeven is suppressed until
