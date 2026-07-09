@@ -102,7 +102,9 @@ class ExitWatchdog:
         ack_poll_timeout: float = ACK_POLL_TIMEOUT,
         slippage_escalation: int = SLIPPAGE_ESCALATION,
         max_slippage_points: int = MAX_SLIPPAGE_POINTS,
-        # ── FIX-20260613-086: Structural exit triggers ──
+        # Vestigial since FIX-20260709-005 removed the structural evaluator that
+        # consumed these; retained only for live_intent_loop.py caller/init-log
+        # compat. Slated for removal on the next live_intent_loop.py touch.
         time_decay_cycles: int = 60,
         price_decay_bars: int = 5,
         price_decay_sl_proximity: float = 0.5,
@@ -114,7 +116,7 @@ class ExitWatchdog:
         self.ack_poll_timeout = ack_poll_timeout
         self.slippage_escalation = slippage_escalation
         self.max_slippage_points = max_slippage_points
-        # Structural exit parameters (model-independent)
+        # Vestigial (see __init__ note): read only by the live_intent_loop init-log echo.
         self.time_decay_cycles = time_decay_cycles
         self.price_decay_bars = price_decay_bars
         self.price_decay_sl_proximity = price_decay_sl_proximity
@@ -122,98 +124,6 @@ class ExitWatchdog:
         self._alerts: list[str] = []
         self._alert_log_path = self.data_dir / "reports" / "exit_watchdog_alerts.jsonl"
         self._alert_log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # -- Position Evaluation (FIX-20260613-086) ──
-
-    def evaluate_position(
-        self,
-        position: Any,
-        current_bars: int,
-        context: dict[str, Any] | None = None,
-    ) -> str | None:
-        """Multi-dimensional exit trigger evaluation.
-
-        Encapsulates ALL structural exit logic (model-independent).
-        Live Cycle calls this once per open position per cycle.
-
-        Returns exit reason string or None.
-        """
-        # 1. Time decay: position held too long without profit
-        if self._check_time_decay(position, current_bars):
-            return f"time_decay_{current_bars}c"
-
-        # 2. Price decay: price action deteriorating toward SL
-        if self._check_price_decay(position, current_bars, context or {}):
-            return f"price_decay_{current_bars}b"
-
-        return None
-
-    def _check_time_decay(self, position: Any, current_bars: int) -> bool:
-        """Position held beyond time_decay_cycles without reaching positive PnL.
-
-        Structural risk: the longer a position stays negative, the less
-        likely it is to recover.  Model-independent — pure time + PnL check.
-        """
-        if current_bars < self.time_decay_cycles:
-            return False
-        # Only trigger if position has never been profitable
-        highest_r = float(getattr(position, "highest_r", 0) or 0)
-        unrealized_r = float(getattr(position, "unrealized_pnl_r", 0) or 0)
-        if highest_r > 0.15:
-            return False  # was in profit — let trail handle it
-        return unrealized_r < 0
-
-    def _check_price_decay(
-        self, position: Any, current_bars: int, context: dict[str, Any]
-    ) -> bool:
-        """Price has closed against the position for N consecutive bars,
-        and the current price is within price_decay_sl_proximity of SL.
-
-        Structural risk: price action is deteriorating with momentum.
-        Model-independent — pure price action check.
-
-        Domain isolation (IC Review):
-          - Trailing Stop Engine owns PROFITABLE positions (unrealized_pnl > 0
-            or SL already moved).  Watchdog must NOT interfere.
-          - ExitWatchdog price_decay owns LOSING positions where SL has
-            never been moved and price is approaching the initial SL.
-          - Mutual exclusion: if either condition is violated, return False.
-        """
-        if current_bars < self.price_decay_bars:
-            return False
-
-        # ── Mutual Exclusion Assertion 1: position must be losing ──
-        unrealized_r = float(getattr(position, "unrealized_pnl_r", 0) or 0)
-        if unrealized_r > 0:
-            return False  # Trail Stop Engine's domain — watchdog hands off
-
-        # ── Mutual Exclusion Assertion 2: SL must NOT have been moved ──
-        trail_advances = int(getattr(position, "trail_advances", 0) or 0)
-        breakeven_triggered = bool(getattr(position, "breakeven_triggered", False))
-        if trail_advances > 0 or breakeven_triggered:
-            return False  # Trail is active — watchdog hands off
-
-        # ── Watchdog domain: losing position, no trail, approaching SL ──
-        sl = float(getattr(position, "current_sl", 0) or 0)
-        entry = float(getattr(position, "entry_price", 0) or 0)
-        side = str(getattr(position, "side", "") or "")
-        mid_price = float(context.get("mid_price", 0) or 0)
-        if sl <= 0 or entry <= 0 or not side or mid_price <= 0:
-            return False
-        # Distance to SL as fraction of initial SL distance
-        initial_sl_dist = abs(entry - sl)
-        if initial_sl_dist < 1e-6:
-            return False
-        current_sl_dist = abs(mid_price - sl)
-        proximity = current_sl_dist / initial_sl_dist
-        if proximity > self.price_decay_sl_proximity:
-            return False  # still far from SL
-        # Check: price is on the wrong side of entry
-        if side == "long" and mid_price < entry:
-            return True
-        if side == "short" and mid_price > entry:
-            return True
-        return False
 
     # -- Public API --
 
@@ -296,7 +206,7 @@ class ExitWatchdog:
                                 attempts=attempts,
                                 alerts=alerts,
                             )
-                    except Exception as _l2_exc:  # BLE001:FOG (logged, Phase 3b)
+                    except Exception as _l2_exc:  # noqa: BLE001  # BLE001:FOG (logged, Phase 3b)
                         import logging as _lg
 
                         _lg.getLogger(__name__).critical(
@@ -352,7 +262,7 @@ class ExitWatchdog:
             try:
                 result = dispatch_fn(payload)
                 att.dispatch_success = bool(result.get("dispatched", False))
-            except Exception as exc:  # BLE001:FOG (logged, Phase 3b)
+            except Exception as exc:  # noqa: BLE001  # BLE001:FOG (logged, Phase 3b)
                 att.error = f"dispatch_exception:{exc}"
                 attempts.append(att)
                 continue
@@ -429,7 +339,7 @@ class ExitWatchdog:
                         attempts=attempts,
                         alerts=alerts,
                     )
-            except Exception as _l2f_exc:  # BLE001:FOG (logged, Phase 3b)
+            except Exception as _l2f_exc:  # noqa: BLE001  # BLE001:FOG (logged, Phase 3b)
                 import logging as _lg
 
                 _lg.getLogger(__name__).critical(

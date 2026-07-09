@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-09T06:24:03Z
+> **自动生成**: 2026-07-09T11:13:35Z
 
 ## Package-Level Dependencies
 
@@ -606,6 +606,7 @@
 - `audit_data_health_journal.py` → (无内部依赖)
 - `audit_data_integrity.py` → `scripts.alert_dispatcher`
 - `audit_data_module.py` → (无内部依赖)
+- `audit_deferred_pertf_geometry_20260709.py` → (无内部依赖)
 - `audit_deferred_tasks.py` → (无内部依赖)
 - `audit_entry_spread.py` → (无内部依赖)
 - `audit_entry_spread_coverage.py` → (无内部依赖)

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-09T06:24:03Z
-> **扫描模块数**: 745
+> **自动生成**: 2026-07-09T11:13:35Z
+> **扫描模块数**: 746
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -229,7 +229,7 @@
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 342 | — | |
-| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 11 | 597 | — | |
+| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 507 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
 | `fix_execution_mapper.py` | ✅ active | FixExecutionReportMapper | 5 | 75 | — | |
@@ -692,6 +692,7 @@
 | `audit_data_health_journal.py` | ✅ active | — | 2 | 170 | — | |
 | `audit_data_integrity.py` | ✅ active | — | 12 | 1002 | — | |
 | `audit_data_module.py` | ✅ active | — | 3 | 358 | — | |
+| `audit_deferred_pertf_geometry_20260709.py` | ✅ active | — | 4 | 192 | — | |
 | `audit_deferred_tasks.py` | ✅ active | TriggerCondition, TaskAssessment | 11 | 577 | — | |
 | `audit_entry_spread.py` | ✅ active | — | 2 | 108 | — | |
 | `audit_entry_spread_coverage.py` | ✅ active | — | 2 | 181 | — | |
