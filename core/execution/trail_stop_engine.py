@@ -54,11 +54,19 @@ class TrailPolicy:
     # stopping out a position that never had room to breathe.
     trail_activation_atr: float = 1.0  # 0 = immediate (old behavior)
     min_trail_mult: float = 1.2  # absolute floor on effective trail multiplier
-    max_lock_atr: float = 4.0  # max R to lock in via trailing
+    max_lock_atr: float = (
+        2.0  # max R(bracket) to lock in via trailing  [PER_TF: 4.0→2.0, bracket_atr units]
+    )
     graduated_lock_enabled: bool = True
     graduated_lock_levels: tuple[tuple[float, float], ...] = (
-        (3.0, 1.5),  # at +3R peak, SL floor >= +1.5R
-        (5.0, 3.5),  # at +5R peak, SL floor >= +3.5R
+        (
+            1.0,
+            0.5,
+        ),  # at +1.0R(bracket) peak, SL floor >= +0.5R(bracket)  [PER_TF: folded from (3.0,1.5)]
+        (
+            2.0,
+            1.0,
+        ),  # at +2.0R(bracket) peak, SL floor >= +1.0R(bracket)  [PER_TF: folded from (5.0,3.5)]
     )
     # DQAF-20260609-001: Non-linear dynamic decay — profit-aware trail tightening.
     # Multiplier decays from base to min_trail_mult as R-multiple grows from
@@ -132,14 +140,15 @@ class TrailStopEngine:
         The effective_mult is then capped by max(min_trail_mult, decayed_value).
         """
         base_mult = max(tp.min_trail_mult, pos.trail_multiplier)
-        if not tp.decay_enabled or pos.entry_atr <= 0:
+        _geom_atr = TrailStopEngine._resolve_geometry_atr(pos)
+        if not tp.decay_enabled or _geom_atr <= 0:
             return base_mult
 
-        # R_max from highest_high or lowest_low
+        # R_max from highest_high or lowest_low — bracket_atr units (PER_TF geometry)
         if pos.side == "long":
-            r_max = (pos.highest_high - pos.entry_price) / pos.entry_atr
+            r_max = (pos.highest_high - pos.entry_price) / _geom_atr
         else:
-            r_max = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+            r_max = (pos.entry_price - pos.lowest_low) / _geom_atr
 
         if r_max < tp.decay_start_r:
             return base_mult
@@ -178,7 +187,7 @@ class TrailStopEngine:
         lock_r = max(tp.ratchet_breakeven_floor_r, r_max - tp.ratchet_giveback_r)
         return min(lock_r, tp.max_lock_atr)
 
-    def compute_trail_stop(self, pos: ActivePosition, current_atr: float) -> float | None:
+    def compute_trail_stop(self, pos: ActivePosition, _current_atr: float) -> float | None:
         """Return new SL if the trail has advanced, else None.
 
         Long:  max(current_sl, highest_high - trail_mult × atr)
@@ -202,27 +211,31 @@ class TrailStopEngine:
         tp = self._resolve_policy(pos)
 
         # ── Activation watermark check ──
-        if tp.trail_activation_atr > 0 and pos.entry_atr > 0:
-            _activation_price = tp.trail_activation_atr * pos.entry_atr
+        _geom_atr = self._resolve_geometry_atr(pos)
+        if tp.trail_activation_atr > 0 and _geom_atr > 0:
             if pos.side == "long":
-                _unrealized_r = (pos.highest_high - pos.entry_price) / pos.entry_atr
+                _unrealized_r = (pos.highest_high - pos.entry_price) / _geom_atr
             else:
-                _unrealized_r = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+                _unrealized_r = (pos.entry_price - pos.lowest_low) / _geom_atr
             if _unrealized_r < tp.trail_activation_atr:
                 return None  # not enough profit yet — keep initial SL
 
         effective_mult = self._compute_decayed_mult(pos, tp)
 
         if pos.side == "long":
-            candidate = pos.highest_high - effective_mult * current_atr
+            candidate = (
+                pos.highest_high - effective_mult * _geom_atr
+            )  # PER_TF: bracket_atr trail distance
             if pos.breakeven_triggered:
                 candidate = max(candidate, pos.entry_price)
             candidate = max(candidate, pos.initial_sl)
-            if tp.graduated_lock_enabled and pos.entry_atr > 0:
-                current_r = (pos.highest_high - pos.entry_price) / pos.entry_atr
+            if tp.graduated_lock_enabled and _geom_atr > 0:
+                current_r = (
+                    pos.highest_high - pos.entry_price
+                ) / _geom_atr  # PER_TF: bracket_atr units
                 for r_threshold, lock_r in tp.graduated_lock_levels:
                     if current_r >= r_threshold:
-                        candidate = max(candidate, pos.entry_price + lock_r * pos.entry_atr)
+                        candidate = max(candidate, pos.entry_price + lock_r * _geom_atr)
             # ── FIX-20260708-004: Profit Ratchet Floor (long) ──
             # Enforce a positive lock even if the Chandelier candidate above did
             # not advance — this is the safety net that stops the +1R..+3R
@@ -231,21 +244,25 @@ class TrailStopEngine:
             if _ratchet_r is not None:
                 pos.ratchet_floor_r = _ratchet_r
                 candidate = max(candidate, pos.entry_price + _ratchet_r * pos.entry_atr)
-            max_lock = pos.entry_price + tp.max_lock_atr * pos.entry_atr
+            max_lock = pos.entry_price + tp.max_lock_atr * _geom_atr  # PER_TF: bracket_atr units
             candidate = min(candidate, max_lock)
             if candidate <= pos.current_sl + tp.min_step:
                 return None
             return round(candidate, 3)
         else:
-            candidate = pos.lowest_low + effective_mult * current_atr
+            candidate = (
+                pos.lowest_low + effective_mult * _geom_atr
+            )  # PER_TF: bracket_atr trail distance
             if pos.breakeven_triggered:
                 candidate = min(candidate, pos.entry_price)
             candidate = min(candidate, pos.initial_sl)
-            if tp.graduated_lock_enabled and pos.entry_atr > 0:
-                current_r = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+            if tp.graduated_lock_enabled and _geom_atr > 0:
+                current_r = (
+                    pos.entry_price - pos.lowest_low
+                ) / _geom_atr  # PER_TF: bracket_atr units
                 for r_threshold, lock_r in tp.graduated_lock_levels:
                     if current_r >= r_threshold:
-                        candidate = min(candidate, pos.entry_price - lock_r * pos.entry_atr)
+                        candidate = min(candidate, pos.entry_price - lock_r * _geom_atr)
             # ── FIX-20260708-004: Profit Ratchet Floor (short) ──
             # Mirror of the long branch: force the SL down to lock at least
             # _ratchet_r in entry_atr units so a retracement cannot reach
@@ -254,13 +271,13 @@ class TrailStopEngine:
             if _ratchet_r is not None:
                 pos.ratchet_floor_r = _ratchet_r
                 candidate = min(candidate, pos.entry_price - _ratchet_r * pos.entry_atr)
-            max_lock = pos.entry_price - tp.max_lock_atr * pos.entry_atr
+            max_lock = pos.entry_price - tp.max_lock_atr * _geom_atr  # PER_TF: bracket_atr units
             candidate = max(candidate, max_lock)
             if candidate >= pos.current_sl - tp.min_step:
                 return None
             return round(candidate, 3)
 
-    def should_breakeven(self, pos: ActivePosition, current_atr: float) -> bool:
+    def should_breakeven(self, pos: ActivePosition, _current_atr: float) -> bool:
         """Return True when the favorable move exceeds the breakeven threshold.
 
         FIX-20260603-064: activation watermark — breakeven is suppressed until
@@ -270,17 +287,20 @@ class TrailStopEngine:
         if pos.breakeven_triggered:
             return False
         tp = self._resolve_policy(pos)
+        _geom_atr = self._resolve_geometry_atr(pos)
 
         # ── Activation watermark check ──
-        if tp.trail_activation_atr > 0 and pos.entry_atr > 0:
+        if tp.trail_activation_atr > 0 and _geom_atr > 0:
             if pos.side == "long":
-                _unrealized_r = (pos.highest_high - pos.entry_price) / pos.entry_atr
+                _unrealized_r = (
+                    pos.highest_high - pos.entry_price
+                ) / _geom_atr  # PER_TF: bracket_atr units
             else:
-                _unrealized_r = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+                _unrealized_r = (pos.entry_price - pos.lowest_low) / _geom_atr
             if _unrealized_r < tp.trail_activation_atr:
                 return False  # not enough profit yet — keep breakeven suppressed
 
-        threshold = tp.breakeven_threshold_atr * current_atr
+        threshold = tp.breakeven_threshold_atr * _geom_atr  # PER_TF: bracket_atr units
         if pos.side == "long":
             return (pos.highest_high - pos.entry_price) >= threshold
         else:
@@ -316,6 +336,18 @@ class TrailStopEngine:
         """Return the position's TrailPolicy, or the engine default."""
         tp = getattr(pos, "trail_policy", None)
         return tp if tp is not None else self.default_policy
+
+    @staticmethod
+    def _resolve_geometry_atr(pos: ActivePosition) -> float:
+        """Return the ATR that governs exit geometry (trail/breakeven/lock).
+
+        PER_TF_ATR_HALF_MIGRATION: geometry uses ``bracket_atr`` (per-TF
+        bracket-sizing ATR, FIX-20260709-004) instead of ``entry_atr``
+        (M5-scale).  Falls back to entry_atr for positions created before
+        bracket_atr was introduced so the engine never divides by zero.
+        """
+        batr = getattr(pos, "bracket_atr", 0.0) or 0.0
+        return batr if batr > 0 else pos.entry_atr
 
     def _compute_adaptive_trail_k(
         self, current_atr: float, pos: ActivePosition, base_k: float

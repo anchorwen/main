@@ -1320,14 +1320,17 @@ class ActivePositionManager:
         pos.ou_handoff_active = True
         pos.ou_handoff_r = self._compute_r_multiple(mid)
         # Force breakeven SL floor (entry + 0.1 ATR) so handoff doesn't give
-        # back what was already earned
-        if not pos.breakeven_triggered and pos.entry_atr > 0:
+        # back what was already earned.
+        # PER_TF: be_sl offset uses bracket_atr (per-TF bracket sizing ATR)
+        # so high-TF positions get a proportional lock instead of M5-micro.
+        _be_atr = pos.bracket_atr or pos.entry_atr
+        if not pos.breakeven_triggered and _be_atr > 0:
             if pos.side == "long":
-                be_sl = pos.entry_price + 0.1 * pos.entry_atr
+                be_sl = pos.entry_price + 0.1 * _be_atr
                 if be_sl > pos.current_sl:
                     pos.current_sl = round(be_sl, 3)
             else:
-                be_sl = pos.entry_price - 0.1 * pos.entry_atr
+                be_sl = pos.entry_price - 0.1 * _be_atr
                 if be_sl < pos.current_sl:
                     pos.current_sl = round(be_sl, 3)
             pos.breakeven_triggered = True

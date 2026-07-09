@@ -43,7 +43,7 @@
 - **是否被推翻**: 否 (存活假设; 三反假设均证伪)
 - **关联 ReB Pattern**: ReB-20260709-R_UNIT_MISMATCH_CROSS_TIMEFRAME (PER_TF_ATR_HALF_MIGRATION)
 - **关联 FIX**: FIX-20260709-004
-- **状态**: **CLOSED** — bracket_atr 原语 (持久化 per-TF 定尺 ATR) + compute_trail_tp 距离乘 bracket_atr/entry_atr; GATE 尺度不变量不变; entry_atr 不动 (R/ratchet/MetaExit M5 参照, 改之须 backtest → Deferred); bracket_atr=0 复现旧行为; +#10 fail_open_guard 硬化。几何余项 (Chandelier/breakeven/proximity/R 度量) 同根 Deferred。
+- **状态**: **CLOSED (终态)** — TP 侧 FIX-20260709-004 + 几何余项 FIX-20260709-006 (bracket_atr 换锚 breakeven/Chandelier/graduated_lock/max_lock)。激活端 (A1-A3): watermark/threshold/candidate 全切 bracket_atr with entry_atr fallback。锁定端 (L1-L2): graduated_lock_levels (3.0,1.5)/(5.0,3.5)→(1.0,0.5)/(2.0,1.0), max_lock_atr 4.0→2.0, bracket_atr 单位。Ratchet floor 故意未动 (entry_atr 稳定标尺, 双轨制)。反事实回测 96.1% XAU / 94.3% BTC breakeven death 存活。最终阈值标 SHADOW_TUNING_PENDING。proximity(Sev 4) + R 度量(observational) 仍 Deferred。
 
 ### CCT-20260708-004
 - **Docket ID**: DQAF-20260708-004
@@ -1170,3 +1170,46 @@
 - **关联 ReB Pattern**: `BROKER_STATE_NOT_CONSULTED_BEFORE_UNTRACK` (出场), `DORMANT_SAFETY_GUARD_NEVER_WIRED` (进场), `R_UNIT_MISMATCH_CROSS_TIMEFRAME` (持仓)
 - **关联 FIX**: FIX-20260709-002 (出场), FIX-20260709-003 (进场)
 - **状态**: **CLOSED** — 出场 017d726d + 进场 10e22cb2 committed+pushed; 持仓相搁置 (Deferred: R 度量 ATR 错配 + bars_held 重启冻结)。
+
+---
+
+## CCT Entry — DQAF-20260709-005
+
+- **Docket ID**: DQAF-20260709-005
+- **Severity**: Sev 4 (IC revised DOWN from initial Sev 1 escalation via Adversarial Review)
+- **Date**: 2026-07-09
+- **Layer 1 — Symptom (Extinction)**:
+  `exit_watchdog.py:164` `_check_time_decay` `return unrealized_r < 0`.
+  Because `position.unrealized_pnl_r` was NEVER set on ActivePosition dataclass
+  (grep-confirmed: no `.unrealized_pnl_r =` / `setattr` / kwarg / SimpleNamespace),
+  `getattr(position, "unrealized_pnl_r", 0)` always returns 0 → the check always
+  returns False → `_check_time_decay` and `_check_price_decay` never fire.
+- **Layer 2 — Intermediate (Viability)**:
+  `evaluate_position` (the ONLY caller of `_check_time_decay` / `_check_price_decay`)
+  has ZERO external callers repo-wide (grep-confirmed: only `def` at line 128).
+  Zero `time_decay_` / `price_decay_` exits in any journal (data/ + data_btc/).
+  → Not a "silently failed safety net" but a superseded, never-wired code path.
+- **Layer 3 — Root Cause (Architectural)**:
+  FIX-20260613-086 added `evaluate_position` as a model-independent structural
+  evaluator.  Sometime later the time-decay exit role was absorbed by
+  `PositionManager.should_exit_hesitation` (per-strategy `exit_hesitation_cycles`
+  × `timeframe_scaling` → per-TF correct), producing the real
+  `hesitation_Nc_no_breakeven` exits wired at `management_phase.py:1775`.
+  The old evaluator was superseded but NEVER deleted, and its docstring
+  (`exit_watchdog.py:137`) still claims "Live Cycle calls this once per open
+  position per cycle" — a latent re-wiring trap.
+- **AR Adversarial Review**:
+  Reverse hypothesis "the attribute IS injected elsewhere" tested and REFUTED
+  (grep all *.py). The initial IC Sev 1 "silent safety-net failure requiring
+  immediate Hotfix" premise was overturned: the net was never deployed, not
+  silently failing; fixing the attribute would resurrect an INFERIOR
+  M5-hardcoded (60c) path that was deliberately superseded.
+- **ECoL Evidence**:
+  - Source 1: `exit_watchdog.py:161` getattr(position, "unrealized_pnl_r", 0) — never set
+  - Source 2: grep `evaluate_position` repo-wide — 0 external callers
+  - Source 3: journal grep `time_decay_\d+c` / `price_decay_\d+b` — 0 occurrences
+  - Source 4: `position_manager.py:1826` `should_exit_hesitation` — TF-scaled wired equivalent
+- **是否被推翻**: 是 — 原 Sev 1 前提被 AR 证伪; 降 Sev 4, 撤 Hotfix, 执行死代码删除
+- **关联 ReB Pattern**: `SUPERSEDED_ORPHAN_CODE_WITH_STALE_DOCSTRING` (子签名: `PHANTOM_ATTR_IN_DEAD_BRANCH`)
+- **关联 FIX**: FIX-20260709-005 (446ba31f)
+- **状态**: **CLOSED** — 3 方法删除 + BLE001 noqa 标化 committed+pushed; 构造参数保留 vestigial (hot-path omega 约束, 下次 live_intent_loop.py 变更清理); 零僵尸测试

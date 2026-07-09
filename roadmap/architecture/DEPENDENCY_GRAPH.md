@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-09T11:13:35Z
+> **自动生成**: 2026-07-09T12:52:49Z
 
 ## Package-Level Dependencies
 
@@ -627,6 +627,7 @@
 - `backfill_fabricated_breakeven.py` → `core.infrastructure.distributed_lock`, `core.runtime.deal_selection`
 - `backfill_journal_orphans.py` → (无内部依赖)
 - `backfill_journal_pnl.py` → `core.infrastructure.distributed_lock`
+- `backtest_pertf_geometry_counterfactual.py` → (无内部依赖)
 - `backtest_rule_strategies.py` → `scripts.scan_barrier_params`
 - `backtest_runner.py` → `core.backtest.data_feed`, `core.backtest.engine`, `core.backtest.metrics`, `core.backtest.strategy_adapter`, `core.contracts.strategy_magic`, `core.metrics.brinson_attribution`, `core.metrics.factor_attribution`
 - `backtest_structural_swing.py` → `core.strategies.structural_swing_v1`

@@ -387,6 +387,27 @@
 
 ---
 
+### ReB-20260709-SUPERSEDED_ORPHAN_CODE_WITH_STALE_DOCSTRING
+
+- **Pattern Signature**: `SUPERSEDED_ORPHAN_CODE_WITH_STALE_DOCSTRING`
+- **Sub-signature**: `PHANTOM_ATTR_IN_DEAD_BRANCH`
+- **Date Cataloged**: 2026-07-09
+- **Source Docket**: DQAF-20260709-005 (AR revised from Sev 1 to Sev 4)
+- **关联 FIX IDs**: FIX-20260709-005 (446ba31f)
+- **关联 Docket IDs**: DQAF-20260709-005
+
+**Definition**: A structural evaluator is replaced by a superior mechanism (TF-scaled, better criteria) but the OLD implementation is LEFT in-place with a misleading docstring claiming it is still wired. The code is dead (zero callers repo-wide), reads phantom attributes never set (always-0 getattrs), and produces zero execution-path outputs in journals — yet its docstring asserts "Live Cycle calls this once per open position per cycle". When first discovered it can masquerade as a "silent safety-net failure" (Sev 1) but AR reveals it is Sev 4 dead-code cleanup because the role is already covered and the dead code was never wired.
+
+**Detection**: (1) grep method name repo-wide — if only `def` matches, suspect orphan. (2) Check attributes read via getattr — if no assignment exists, the getattrs are phantom. (3) Check journals for the expected exit reason — zero occurrences confirms dead.
+
+**Prevention (Proactive Amputation)**: When a structural evaluator is superseded by a new mechanism, DELETE the old implementation in the SAME commit that wires the new one. DEPRECATED marks are invisible to grep-callers and do not prevent future re-wiring. Docstring alone is insufficient — code MUST be removed to prevent maintenance tax.
+
+**Notable Case: ExitWatchdog FIX-20260613-086 evaluator**: `evaluate_position` + `_check_time_decay` + `_check_price_decay` remained after `should_exit_hesitation` (per-strategy TF-scaled, wired at `management_phase.py:1775`) took over. Phantom `unrealized_pnl_r` attribute (only written to snapshot dict in `trail_dispatch.py:229`, never set on ActivePosition) made `_check_time_decay` always return False. IC initially Sev 1 Hotfix — AR overturned to Sev 4 dead-code removal.
+
+**Cross-References**: DQAF_DOCKET_REGISTRY.md DQAF-20260709-005, CCT_LEDGER.md CCT-20260709-005; Related: [[deferred_r_unit_mismatch_cross_tf_20260709]]
+
+---
+
 以下模式来自 FIX_REGISTRY.md 中反复出现的 Bug 类型，作为初始化参考：
 
 ### PATTERN-PLACEHOLDER-001
@@ -1038,7 +1059,7 @@
 - **Pattern Signature**: `R_UNIT_MISMATCH_CROSS_TIMEFRAME`
 - **Date Cataloged**: 2026-07-09
 - **Source Docket**: DQAF-20260709-002 (持仓相 — AR 推翻 + Deferred); DQAF-20260709-003 (止盈坍缩 — trail-TP 表现已修)
-- **关联 FIX IDs**: FIX-20260709-004 (trail-TP 表现: bracket_atr 原语 + compute_trail_tp TF-scaling); 几何余项 (Chandelier/breakeven/proximity/R 度量) 仍 Deferred
+- **关联 FIX IDs**: FIX-20260709-004 (trail-TP 表现: bracket_atr 原语 + compute_trail_tp TF-scaling) + FIX-20260709-006 (几何余项: breakeven + Chandelier + graduated_lock + max_lock 全部换 bracket_atr, 阈值折叠, ratchet 不动); proximity(Sev 4 inert) + R 度量(observational) 仍 Deferred
 - **关联 Docket IDs**: DQAF-20260709-002, DQAF-20260709-003
 - **Related**: FIX-20260706-027 (per-timeframe ATR injection — the source of the two ATR scales), Iron Law #9 (AR 对抗反驳), 机构级 mandate #1 (禁投机修改)
 

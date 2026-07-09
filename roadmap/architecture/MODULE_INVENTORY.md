@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-09T11:13:35Z
-> **扫描模块数**: 746
+> **自动生成**: 2026-07-09T12:52:49Z
+> **扫描模块数**: 747
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -258,7 +258,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2235 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2238 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 514 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -275,7 +275,7 @@
 | `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1906 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 9 | 385 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 417 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 226 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 293 | — | |
@@ -713,6 +713,7 @@
 | `backfill_fabricated_breakeven.py` | ✅ active | — | 9 | 310 | ✅ | |
 | `backfill_journal_orphans.py` | ✅ active | — | 2 | 224 | — | |
 | `backfill_journal_pnl.py` | ✅ active | — | 7 | 353 | — | |
+| `backtest_pertf_geometry_counterfactual.py` | ✅ active | BeCounterfactual, ChandelierCounterfactual | 13 | 631 | — | |
 | `backtest_rule_strategies.py` | ✅ active | — | 7 | 572 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 271 | — | |
 | `backtest_structural_swing.py` | ✅ active | — | 5 | 340 | — | |
