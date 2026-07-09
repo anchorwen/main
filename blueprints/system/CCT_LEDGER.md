@@ -27,6 +27,24 @@
 
 ---
 
+### CCT-20260709-003
+- **Docket ID**: DQAF-20260709-003
+- **日期**: 2026-07-09
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: live XAU h4_swing 4103318355 (SHORT) 的 TP 被 `comment='tp'` 逐周期从开仓 3823.46 (距 entry 232 点=3.5×H4_ATR, RR 1.66) 拉到 4044.8 (距 entry 11 点, RR 0.08, 冒 140 博 11)。影响半径: h4_swing 162/436(37.2%) + h1_swing 80/625(12.8%) 快照 RR<0.5。
+  - [Layer 2 — 中间异常]: `position_manager.compute_trail_tp` gate `atr_ratio=current_atr/entry_atr`(均 M5, 3.40/4.61=0.738≤0.80) 触发, 然后 `tp_distance=trail_mult(2.0)×current_atr(M5,3.40)×1.75=11.9` 以 M5 小尺度覆盖 H4 大尺度开仓 TP (candidate=4055.844−11.9=4043.9≈实测 4044.8)。SL 全程不动 (H4 尺度 139.9)。
+  - [Layer 3 — 根因]: RC-05 (boundary-error) L3 — per-TF ATR **半迁移**: FIX-20260706-027 把 per-TF ATR 注入**开仓定尺** (dynamic_sl_tp), 但 pos.entry_atr 仍存 M5 base (position_registration:198) 且管理期 current_atr 仍 M5 → 所有 bracket-relative 消费者 (compute_trail_tp / R 度量 / ratchet) 在错误尺度运算。跨 entry→management 交接的尺度边界未携带。
+- **证据引用**:
+  - Source 1: `scripts/verify_xau_post_restart_20260709.py` + ad-hoc RR 扫描 stdout — h4 37.2% / h1 12.8% RR<0.5 (Iron Law #11)
+  - Source 2: `data/live_trade_journal.jsonl` 4103318355 open tp=3823.46 → modify tp=4044.8; `position_snapshots.jsonl` entry_atr=4.61/current_atr=3.40 (M5) 而 SL 距 139.9=2.0×H4_ATR
+  - Source 3 (机制): `core/execution/position_manager.py:1691` `tp_distance=mult×current_atr×1.75`; `core/execution/dynamic_sl_tp.py:148` per-TF 定尺 vs `core/runtime/position_registration.py:198` `entry_atr=current_atr`(M5)
+- **AR 对抗反驳**: 反假设(a)"SL 用 H4/TP 用 M5 开仓即异尺"→ **推翻** (open bracket 正是 1.66 RR); (b)"H4 ATR 真收缩到 3.4"→ **推翻** (若 H4 尺度 tp_distance≈210, 实测 11→反推 M5); (c)"entry_atr(4.61) 是定尺 ATR"→ **推翻** (SL 139.9≠2×4.61)。存活假设=compute_trail_tp 在 M5 尺度运算并覆盖 H4 bracket。
+- **是否被推翻**: 否 (存活假设; 三反假设均证伪)
+- **关联 ReB Pattern**: ReB-20260709-R_UNIT_MISMATCH_CROSS_TIMEFRAME (PER_TF_ATR_HALF_MIGRATION)
+- **关联 FIX**: FIX-20260709-004
+- **状态**: **CLOSED** — bracket_atr 原语 (持久化 per-TF 定尺 ATR) + compute_trail_tp 距离乘 bracket_atr/entry_atr; GATE 尺度不变量不变; entry_atr 不动 (R/ratchet/MetaExit M5 参照, 改之须 backtest → Deferred); bracket_atr=0 复现旧行为; +#10 fail_open_guard 硬化。几何余项 (Chandelier/breakeven/proximity/R 度量) 同根 Deferred。
+
 ### CCT-20260708-004
 - **Docket ID**: DQAF-20260708-004
 - **日期**: 2026-07-08

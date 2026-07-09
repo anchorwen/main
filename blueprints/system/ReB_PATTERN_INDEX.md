@@ -1037,10 +1037,12 @@
 ### ReB-20260709-R_UNIT_MISMATCH_CROSS_TIMEFRAME
 - **Pattern Signature**: `R_UNIT_MISMATCH_CROSS_TIMEFRAME`
 - **Date Cataloged**: 2026-07-09
-- **Source Docket**: DQAF-20260709-002 (持仓相 — AR 推翻 + Deferred)
-- **关联 FIX IDs**: — (Deferred; no code change — root cause refuted)
-- **关联 Docket IDs**: DQAF-20260709-002
+- **Source Docket**: DQAF-20260709-002 (持仓相 — AR 推翻 + Deferred); DQAF-20260709-003 (止盈坍缩 — trail-TP 表现已修)
+- **关联 FIX IDs**: FIX-20260709-004 (trail-TP 表现: bracket_atr 原语 + compute_trail_tp TF-scaling); 几何余项 (Chandelier/breakeven/proximity/R 度量) 仍 Deferred
+- **关联 Docket IDs**: DQAF-20260709-002, DQAF-20260709-003
 - **Related**: FIX-20260706-027 (per-timeframe ATR injection — the source of the two ATR scales), Iron Law #9 (AR 对抗反驳), 机构级 mandate #1 (禁投机修改)
+
+**Sub-signature — PER_TF_ATR_HALF_MIGRATION** (DQAF-20260709-003): a scale-carrying parameter (ATR) is migrated to per-timeframe at the ENTRY sizing path but the migration is NOT propagated to the stored anchor (`pos.entry_atr` still M5) nor to in-flight consumers (trail/R/ratchet still M5). The bracket is thus sized in one timeframe (H4) but managed in another (M5): `compute_trail_tp`'s `tp_distance = mult × current_atr(M5) × 1.75` OVERWRITES the H4-scale TP whenever `atr_ratio ≤ 0.80`, collapsing RR 1.66 → 0.08 on h1/h4 swings (37 %/13 % of snapshots). Fix (FIX-20260709-004): carry the per-TF sizing ATR on the position (`bracket_atr`) and scale the trail-TP distance by `bracket_atr / entry_atr` — the contraction GATE stays scale-invariant, `entry_atr` stays the M5 reference for R/ratchet/MetaExit (changing it needs a backtest). The R-metric + Chandelier + breakeven + proximity-exit consumers share the same root and remain Deferred.
 
 **Definition**: A risk/telemetry metric expressed in "R" (risk multiples) is computed with a DIFFERENT ATR than the one that sized the position's SL/TP. For a multi-timeframe strategy (h4_swing), SL = 2.0×H4_ATR (≈63.9) but the snapshot's `unrealized_pnl_r` divides PnL by the M5/entry `entry_atr` (≈6.41), inflating the reading ~10×. A position at −0.65 H4-ATR (≈26 % to its SL — a normal swing drawdown) is reported as "−6.5R", which reads as a catastrophic un-protected loss. This is a MEASUREMENT ARTIFACT, not a trading defect — acting on it (adding "losing-leg SL protection") would be a speculative behavior change grounded in a mislabelled metric. The AR step must convert the apparent R into the SL's own ATR units before concluding distress.
 
