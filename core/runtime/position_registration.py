@@ -34,6 +34,7 @@ def register_dispatched_positions(
     brains: list[dict[str, Any]],
     journal_path: Path | None,
     current_atr: float,
+    tf_atr_map: dict[str, float] | None = None,  # FIX-20260709-004: per-TF ATR for bracket sizing
     mid_price: float | None,
     bid: float | None = None,
     ask: float | None = None,
@@ -188,6 +189,17 @@ def register_dispatched_positions(
             # have "ownerless" positions — every open ticket gets trail coverage.
             _strategy_name = dr.strategy_name or "fallback_unmanaged"
             _is_fallback = _strategy_name == "fallback_unmanaged"
+            # ── FIX-20260709-004 (L3): capture the per-TF ATR that sized the bracket ──
+            # decision.sl/tp were sized with the strategy's own-timeframe ATR
+            # (FIX-20260706-027 via dynamic_sl_tp / strategy_evaluator).  Persist
+            # that same per-TF ATR as bracket_atr so the trailing-TP geometry can
+            # scale to the bracket's timeframe instead of collapsing it to M5
+            # (DQAF-20260709-003).  entry_atr stays the M5 reference consumed by the
+            # R-metric / ratchet / MetaExit features (deliberately unchanged).
+            _entry_tf = str(config.strategy_configs.get(_strategy_name, {}).get("timeframe", "M5"))
+            _bracket_atr = current_atr
+            if tf_atr_map and _entry_tf in tf_atr_map and tf_atr_map[_entry_tf] > 0:
+                _bracket_atr = float(tf_atr_map[_entry_tf])
             position_manager.register_position(
                 ticket=ticket,
                 side=decision.direction,
@@ -196,6 +208,7 @@ def register_dispatched_positions(
                 initial_sl=decision.sl,
                 initial_tp=decision.tp,
                 entry_atr=current_atr,
+                bracket_atr=_bracket_atr,  # FIX-20260709-004: per-TF bracket sizing ATR
                 entry_cycle=loop_iteration,
                 entry_z_score=getattr(decision, "entry_z_score", 0.0),
                 entry_half_life=getattr(decision, "entry_half_life", 0.0),

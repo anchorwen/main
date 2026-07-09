@@ -61,6 +61,13 @@ class ActivePosition:
     entry_cycle: int
     entry_z_score: float = 0.0  # OU z-score at entry (0 = unknown / recovered position)
     entry_half_life: float = 0.0  # OU half-life at entry (0 = unknown / not OU)
+    # FIX-20260709-004 (L3): per-TF ATR that sized the SL/TP bracket
+    # (dynamic_sl_tp used the strategy's own-timeframe ATR — FIX-20260706-027).
+    # entry_atr stays the M5 reference for R-metric/ratchet/MetaExit features;
+    # bracket_atr lets trail-TP geometry scale to the bracket's timeframe instead
+    # of collapsing it to M5.  0.0 = unknown (pre-fix / M5 strategy) → callers
+    # fall back to the entry_atr scale (identical legacy behaviour).
+    bracket_atr: float = 0.0
     entry_consensus: dict[str, Any] = field(default_factory=dict)
     supporting_brain_ids: list[str] = field(default_factory=list)
 
@@ -498,6 +505,7 @@ class ActivePositionManager:
         entry_cycle: int,
         entry_z_score: float = 0.0,
         entry_half_life: float = 0.0,
+        bracket_atr: float = 0.0,  # FIX-20260709-004: per-TF ATR that sized the bracket
         entry_consensus: dict[str, Any] | None = None,
         supporting_brain_ids: list[str] | None = None,
         model_horizons: dict[str, int] | None = None,
@@ -580,6 +588,7 @@ class ActivePositionManager:
             entry_cycle=entry_cycle,
             entry_z_score=entry_z_score,
             entry_half_life=entry_half_life,
+            bracket_atr=bracket_atr,  # FIX-20260709-004: per-TF bracket sizing ATR
             entry_consensus=dict(entry_consensus or {}),
             supporting_brain_ids=list(supporting_brain_ids or []),
             model_horizons=dict(model_horizons or {}),
@@ -1686,9 +1695,24 @@ class ActivePositionManager:
         if atr_ratio > 0.80:
             return None
 
-        # Compute what the TP would be at current ATR
+        # ── FIX-20260709-004 (L3): scale trail-TP distance to the bracket's ATR ──
+        # The SL/TP bracket was sized with the strategy's own-timeframe ATR
+        # (FIX-20260706-027 via dynamic_sl_tp), but this trailing-TP distance was
+        # computed from the M5-scale `current_atr`, collapsing an H4-scale bracket
+        # to M5 scale (RR 1.66 → 0.08 on h1/h4 swings — DQAF-20260709-003).
+        # `bracket_atr` carries the per-TF ATR that sized the bracket; the ratio
+        # bracket_atr/entry_atr converts the M5-scale distance to the bracket's own
+        # timeframe.  The contraction GATE (atr_ratio) above is deliberately
+        # unchanged — it is scale-invariant (current_atr and entry_atr are both M5).
+        # bracket_atr == 0 (pre-fix state / M5 strategies) → factor 1.0 → identical
+        # legacy behaviour.
+        _bracket_atr = getattr(pos, "bracket_atr", 0.0) or 0.0
+        _tf_scale = (
+            (_bracket_atr / pos.entry_atr) if (_bracket_atr > 0 and pos.entry_atr > 0) else 1.0
+        )
+        # Compute what the TP would be at current ATR, scaled to the bracket TF
         _trail_mult = getattr(pos, "trail_atr_mult", self.trail_atr_mult)
-        tp_distance = _trail_mult * current_atr * 1.75  # TP trail uses 1.75x the SL trail mult
+        tp_distance = _trail_mult * current_atr * 1.75 * _tf_scale  # 1.75× SL trail mult, TF-scaled
         if pos.side == "long":
             candidate = pos.entry_price + tp_distance
             # ── FIX-20260707-009: Bracket inversion candidate check ──
@@ -1994,6 +2018,7 @@ class ActivePositionManager:
                         "breakeven_triggered": pos.breakeven_triggered,
                         "partial_tp_done": pos.partial_tp_triggered,
                         "entry_atr": pos.entry_atr,  # FIX-018: persist for R-multiple calc across restarts
+                        "bracket_atr": pos.bracket_atr,  # FIX-20260709-004: per-TF bracket sizing ATR
                         "entry_price": pos.entry_price,  # FIX-018: needed for PnL estimation
                         # DQAF-20260621-034 Addendum: strategy-attribution intent
                         # fields — cannot be recovered from MT5, must survive
@@ -2074,6 +2099,7 @@ class ActivePositionManager:
                 highest_high=float(d.get("highest_high", d["entry_price"])),
                 lowest_low=float(d.get("lowest_low", d["entry_price"])),
                 entry_atr=float(d.get("entry_atr", 2.0)),
+                bracket_atr=float(d.get("bracket_atr", 0.0)),  # FIX-20260709-004
                 entry_cycle=int(d.get("entry_cycle", 0)),
                 entry_z_score=float(d.get("entry_z_score", 0.0)),
                 entry_consensus=d.get("entry_consensus", {}),
@@ -2127,6 +2153,9 @@ class ActivePositionManager:
                 ),  # FIX-017: default to entry_price, not 0
                 lowest_low=float(d.get("entry_price", 0)),  # FIX-017: prevents premature breakeven
                 entry_atr=float(d.get("entry_atr", 2.0)),  # FIX-018: persisted since v3
+                bracket_atr=float(
+                    d.get("bracket_atr", 0.0)
+                ),  # FIX-20260709-004: persisted since v3
                 entry_cycle=0,
                 cycles_held=int(d.get("cycles_held", 0)),
                 breakeven_triggered=bool(d.get("breakeven_triggered", False)),

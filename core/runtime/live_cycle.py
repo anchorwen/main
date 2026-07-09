@@ -3880,24 +3880,33 @@ def execute_live_cycle(
             # Strangler Fig #10: extracted to core/runtime/position_registration.py
             from core.runtime.position_registration import register_dispatched_positions
 
-            _reg_result = register_dispatched_positions(
-                config=config,
-                position_manager=state.position_manager,
-                known_open_tickets=state.known_open_tickets,
-                loop_iteration=state.loop_iteration,
-                limit_monitor=state.limit_monitor,
-                dispatch_results=dispatch_results,
-                eval_summary=eval_summary,
-                brains=brains,
-                journal_path=journal_path,
-                current_atr=current_atr,
-                mid_price=mid_price,
-                bid=_bid,
-                ask=_ask,
-                mt5_worker=mt5_worker,
-                _utc_iso_fn=_utc_iso,
-                _DEFAULT_HORIZON=_DEFAULT_HORIZON,
-            )
+            # FIX-20260709-004 (#10 hot-path hardening): isolate registration
+            # failures.  The orders are already live at the broker — a setup
+            # exception here (decisions_map / journal parse) must NOT abort the
+            # whole live cycle and starve every OTHER open position of exit
+            # management.  fail_open_guard logs + contains it; the next cycle
+            # re-registers via the orphan-adoption path.  (_reg_result was
+            # assigned but never read — dropped.)
+            with fail_open_guard("PositionRegistration"):
+                register_dispatched_positions(
+                    config=config,
+                    position_manager=state.position_manager,
+                    known_open_tickets=state.known_open_tickets,
+                    loop_iteration=state.loop_iteration,
+                    limit_monitor=state.limit_monitor,
+                    dispatch_results=dispatch_results,
+                    eval_summary=eval_summary,
+                    brains=brains,
+                    journal_path=journal_path,
+                    current_atr=current_atr,
+                    tf_atr_map=tf_atr_map,  # FIX-20260709-004: per-TF ATR for bracket_atr storage
+                    mid_price=mid_price,
+                    bid=_bid,
+                    ask=_ask,
+                    mt5_worker=mt5_worker,
+                    _utc_iso_fn=_utc_iso,
+                    _DEFAULT_HORIZON=_DEFAULT_HORIZON,
+                )
 
         # ── LEGACY: Contract-group consensus (fallback) ──
         pre_close = _check_pre_close(config, state)

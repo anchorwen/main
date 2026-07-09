@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-09T01:01:16Z
+> **自动生成**: 2026-07-09T06:24:03Z
 
 ## Package-Level Dependencies
 
@@ -784,6 +784,7 @@
 - `verify_pnl_data_integrity.py` → (无内部依赖)
 - `verify_sqrt_scaling.py` → `core.execution.dynamic_sl_tp`
 - `verify_training_serving_parity.py` → `scripts.build_btc_metafilter_v2_dataset`
+- `verify_xau_post_restart_20260709.py` → (无内部依赖)
 - `watchdog_daily_ops.py` → (无内部依赖)
 
 ### `scripts/audit/`

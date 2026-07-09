@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-09T01:01:16Z
-> **扫描模块数**: 744
+> **自动生成**: 2026-07-09T06:24:03Z
+> **扫描模块数**: 745
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -258,7 +258,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2206 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2235 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 514 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -522,7 +522,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4369 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4378 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2286 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -534,7 +534,7 @@
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
 | `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 618 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
-| `position_registration.py` | ✅ active | — | 1 | 314 | — | |
+| `position_registration.py` | ✅ active | — | 1 | 327 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 435 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
@@ -870,6 +870,7 @@
 | `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 292 | — | |
 | `verify_sqrt_scaling.py` | ✅ active | — | 4 | 526 | — | |
 | `verify_training_serving_parity.py` | ✅ active | — | 7 | 492 | — | |
+| `verify_xau_post_restart_20260709.py` | ✅ active | — | 2 | 125 | — | |
 | `watchdog_daily_ops.py` | ✅ active | — | 3 | 171 | — | |
 
 ## scripts/audit
