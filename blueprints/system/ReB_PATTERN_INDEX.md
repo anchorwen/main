@@ -995,3 +995,57 @@
 **检测方法**: grep `\.get\([^,]+,\s*["']` (get-with-string-default) whose result feeds a `:s`/`:d`/`:f` format or a dict key; `TypeError: unsupported format string passed to NoneType.__format__` names this class (but NOT which field — every `format(None, spec)` raises the same message, so enumerate present-but-null candidates). Regression: feed a record with `field: null` and assert the aggregation key is a `str`, never `None` (`tests/scripts/test_analyze_live_journal_null_label.py`).
 
 **Cross-References**: FIX_REGISTRY.md FIX-20260709-001, DQAF_DOCKET_REGISTRY.md DQAF-20260709-001, CCT_LEDGER.md CCT-20260709-001
+
+---
+
+### ReB-20260709-BROKER_STATE_NOT_CONSULTED_BEFORE_UNTRACK
+- **Pattern Signature**: `BROKER_STATE_NOT_CONSULTED_BEFORE_UNTRACK`
+- **Date Cataloged**: 2026-07-09
+- **Source Docket**: DQAF-20260709-002 (出场相)
+- **关联 FIX IDs**: FIX-20260709-002
+- **关联 Docket IDs**: DQAF-20260709-002
+- **Related**: FIX-20260603-074 (_active_open_mids restart reconciliation), FIX-20260525-024 (MIA preflight — the sibling Guard 2 that DOES consult the broker), FIX-20260708-001 (immutable position_identifier join), Iron Law #12
+
+**Definition**: A management/tracking path removes a position from its managed set (position_manager / known_open_tickets) using a LOCAL absence signal — "not in the local tracker" or "positions_get returned empty during a transient window" — and treats that absence as a confirmed close, WITHOUT consulting the broker's authoritative `positions_get` for that specific ticket. The broker is the SSOT for "is this position still open?"; the local tracker can transiently lose a still-open position (e.g. a market-closed restart where orphan re-adoption runs only at loop_iteration==1). When the false removal is also persisted to the state file (active_position.json), it desyncs permanently and the only self-healing net (restart-only orphan adoption) creates a stale-clear ↔ re-adopt PING-PONG: the position is open at the broker but never stably managed, so it never exits. Here XAU LONG 4098917446 got `position_manager_stale_cleared` ×11 while `mt5_tickets=[SHORT,LONG]` proved both open.
+
+**预防策略**: (1) Any tracking-removal decision must be broker-authoritative: probe `positions_get(ticket)` before clearing; if still open, RE-ADOPT (self-heal) instead of clearing. (2) An inconclusive probe (MT5 timeout) is NEVER "closed" — retain and retry. (3) Extract the removal decision into a pure, unit-tested function (tracked/readopt/retain/clear) so the branch table is verifiable without the full management phase. (4) Prefer confirming a close via a broker EXIT DEAL (DEAL_ENTRY_OUT) — the same SSOT invariant PositionCloseAdapter enforces.
+
+**检测方法**: grep for `clear_position` / `known_open_tickets.pop` whose guard is "not in known_open_tickets" or "not positions_get" with NO per-ticket broker re-probe. Runtime: `position_manager_stale_cleared` repeating for the SAME ticket across cycles + `orphan_position_adopted` for that ticket = a ping-pong. A ticket in `mt5_tickets` but absent from `active_position_tickets` is a persisted desync.
+
+**Cross-References**: FIX_REGISTRY.md FIX-20260709-002, DQAF_DOCKET_REGISTRY.md DQAF-20260709-002, CCT_LEDGER.md CCT-20260709-002
+
+---
+
+### ReB-20260709-DORMANT_SAFETY_GUARD_NEVER_WIRED
+- **Pattern Signature**: `DORMANT_SAFETY_GUARD_NEVER_WIRED`
+- **Date Cataloged**: 2026-07-09
+- **Source Docket**: DQAF-20260709-002 (进场相)
+- **关联 FIX IDs**: FIX-20260709-003
+- **关联 Docket IDs**: DQAF-20260709-002
+- **Related**: FIX-20260705-064 (PortfolioNettingGate — the sibling guard that IS wired; order-level vs this position-level), Iron Law #12
+
+**Definition**: A safety component is fully implemented with an active-by-default mode, but its injection point in the production assembly path defaults to `None` and no caller ever passes an instance. The guard that consumes it (`if component is not None:`) is therefore permanent dead code — the safety never runs in production despite existing, tested, and documented. Here CrossStrategyCoordinator (mode="block") shipped at P4-2 but strategy_evaluator's `cross_strategy_coordinator` param defaulted None and live_cycle never injected one, so opposing same-symbol positions were never blocked → an XAU LONG hedged an existing SHORT.
+
+**预防策略**: (1) An optional `X | None = None` safety param is a smell — audit whether ANY production caller injects it; if none, the guard is dormant. (2) Prefer wiring safety components as non-optional dependencies, or add a startup assertion/telemetry that logs whether each safety guard is ACTIVE. (3) When adding a guard, add the injection in the SAME change as the guard, and a test that the production assembly passes a non-None instance (or lock the config default).
+
+**检测方法**: grep for `: SomeGuard | None = None` params; then grep the production call sites for whether that kwarg is ever passed. A guard whose only reference is its own `is not None` check is dormant. Lock with a test asserting the config/default activates it (e.g. `LiveCycleConfig.cross_strategy_mode == "block"`).
+
+**Cross-References**: FIX_REGISTRY.md FIX-20260709-003, DQAF_DOCKET_REGISTRY.md DQAF-20260709-002, CCT_LEDGER.md CCT-20260709-002
+
+---
+
+### ReB-20260709-R_UNIT_MISMATCH_CROSS_TIMEFRAME
+- **Pattern Signature**: `R_UNIT_MISMATCH_CROSS_TIMEFRAME`
+- **Date Cataloged**: 2026-07-09
+- **Source Docket**: DQAF-20260709-002 (持仓相 — AR 推翻 + Deferred)
+- **关联 FIX IDs**: — (Deferred; no code change — root cause refuted)
+- **关联 Docket IDs**: DQAF-20260709-002
+- **Related**: FIX-20260706-027 (per-timeframe ATR injection — the source of the two ATR scales), Iron Law #9 (AR 对抗反驳), 机构级 mandate #1 (禁投机修改)
+
+**Definition**: A risk/telemetry metric expressed in "R" (risk multiples) is computed with a DIFFERENT ATR than the one that sized the position's SL/TP. For a multi-timeframe strategy (h4_swing), SL = 2.0×H4_ATR (≈63.9) but the snapshot's `unrealized_pnl_r` divides PnL by the M5/entry `entry_atr` (≈6.41), inflating the reading ~10×. A position at −0.65 H4-ATR (≈26 % to its SL — a normal swing drawdown) is reported as "−6.5R", which reads as a catastrophic un-protected loss. This is a MEASUREMENT ARTIFACT, not a trading defect — acting on it (adding "losing-leg SL protection") would be a speculative behavior change grounded in a mislabelled metric. The AR step must convert the apparent R into the SL's own ATR units before concluding distress.
+
+**预防策略**: (1) Compute "R" against the SAME ATR that sized the SL for that position/timeframe; carry `sl_atr` on the snapshot so R is self-consistent. (2) Before any exit/ratchet logic consumes `unrealized_pnl_r` as a threshold, verify the R unit matches the SL unit — a cross-TF mismatch silently mis-triggers arm/floor thresholds. (3) In diagnosis, always normalise apparent R by `SL_distance / SL_mult` (the true risk-unit) before calling a position "distressed".
+
+**检测方法**: For any strategy, check `SL_distance / config_SL_mult` vs the `entry_atr` used in the R metric; a ~N× gap (N = TF-ATR ratio) flags the mismatch. Symptom: multi-TF (h1/h4) positions showing alarming R (−5R..−9R) while price is well inside the SL. Audit consumers of `unrealized_pnl_r` / `highest_r` in trail/ratchet/time_decay for TF-unit assumptions.
+
+**Cross-References**: DQAF_DOCKET_REGISTRY.md DQAF-20260709-002, CCT_LEDGER.md CCT-20260709-002; Deferred: R-metric ATR consistency + bars_held restart continuity

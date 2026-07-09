@@ -1125,3 +1125,30 @@
 - **关联 ReB Pattern**: `GET_DEFAULT_NULL_TRAP`
 - **关联 FIX**: FIX-20260709-001
 - **状态**: **CLOSED** — FIX-20260709-001 committed d9c147e8. `_coalesce()` 摄入边界单点规整 side/label/ack; XAU 恢复完整审计 + `(unlabeled)` 桶 114/+$0.68; 6 回归测试 (tests/scripts/test_analyze_live_journal_null_label.py)。
+
+---
+
+### CCT-20260709-002
+- **Docket ID**: DQAF-20260709-002
+- **日期**: 2026-07-09
+- **置信度**: confirmed (出场/进场) + refuted-then-reclassified (持仓)
+- **因果链** (三相独立根因, Iron Law #12 禁捆绑):
+  - **[出场相]**
+    - [Layer 1 — 症状]: XAU LONG 4098917446 (m30_swing) 开在 broker 却失管不平, 与 SHORT 4098792728 (h4_swing) 构成对冲。证据: LONG 快照停于 21:00:27; LONG 0 真实平仓 / 19 拒绝。
+    - [Layer 2 — 中间异常]: 21:00 休市重启风暴 (launcher log 13 次重启 20:55–22:40); LONG 脱离 known_open_tickets → Guard 1 `position_manager_stale_cleared` ×11 (21:06–22:05) ↔ orphan 采纳 (仅 loop_iteration==1) → 乒乓; `active_position.json` 持久化 LONG 缺席 (orphan_position_adopted: active_position_tickets=[SHORT], mt5_tickets=[both])。
+    - [Layer 3 — 根因]: L3 — Guard 1 (management_phase.py:947) 以 known_open_tickets 缺席推断"已平仓", **从不查 broker** (positions_get 才是 SSOT); 违反"broker 开着的仓必在管理集"不变量。
+  - **[进场相]**
+    - [Layer 1 — 症状]: 16:24 m30_swing LONG 对既有 (15:59) h4_swing SHORT 成形对冲。
+    - [Layer 2/3 — 根因]: L3 — CrossStrategyCoordinator (block 默认) 自 P4-2 从未注入 live; strategy_evaluator.py:1071 守卫 `is not None` 恒 False → 反向持仓守卫死代码。
+  - **[持仓相 — AR 推翻]**
+    - [Layer 1 — 表观症状]: snapshot `unrealized_pnl_r` 达 -6.5R, SHORT SL 全程冻结 4162.674, 疑"亏损腿裸奔无保护"。
+    - [Layer 2 — AR 证伪]: SL distance 127.76 = 2.0×63.88; h4_swing 配置 SL=2.0×ATR (H4 ATR≈63.9, FIX-20260706-027 per-TF ATR)。snapshot `entry_atr`=6.41 是 M5/入场 ATR, 仅供 R 度量。"-6.5R"=-6.5×M5_ATR≈-0.65×H4_ATR = 仅到 H4 止损的 ~26%。**正常 H4 swing, 非交易缺陷**。
+    - [Layer 3 — 重分类]: 表观"亏损腿失护"根因**被推翻**; 真实次生问题为 R 度量 ATR 错配 (M5 vs H4) 与 bars_held 重启冻结 (可观测性/连续性, 非交易), 经 IC 裁决登记 Deferred, 不做投机交易改动 (机构级 mandate #1)。
+- **证据引用**:
+  - Source 1: 取证 — `scripts/forensic_xau_hedge_20260709.py` stdout (Iron Law #11); `data/position_snapshots.jsonl`; `data/live_trade_journal.jsonl` open 事件 sl=4162.674
+  - Source 2: 日志 — `data/logs/live_launcher_20260708T154609Z.log` (stale_cleared ×11, orphan_position_adopted, 13 restarts, data_health current_positions=2)
+  - Source 3: 代码 — `core/runtime/management_phase.py:947`, `core/runtime/strategy_evaluator.py:158/1071`, `configs/live.yaml` h4_swing SL=2.0×ATR
+- **是否被推翻**: 出场/进场 否 (AR 证伪"经重启过滤/周期对账脱管"—SHORT 对照存活+LONG 0 exit deal; 证伪"PNG 已覆盖"—PNG 同周期, 对冲跨周期)。持仓 **是** (AR 证伪"亏损腿失护"—SL 按 H4 ATR 正确定尺, R 单位错配假象)。
+- **关联 ReB Pattern**: `BROKER_STATE_NOT_CONSULTED_BEFORE_UNTRACK` (出场), `DORMANT_SAFETY_GUARD_NEVER_WIRED` (进场), `R_UNIT_MISMATCH_CROSS_TIMEFRAME` (持仓)
+- **关联 FIX**: FIX-20260709-002 (出场), FIX-20260709-003 (进场)
+- **状态**: **CLOSED** — 出场 017d726d + 进场 10e22cb2 committed+pushed; 持仓相搁置 (Deferred: R 度量 ATR 错配 + bars_held 重启冻结)。
