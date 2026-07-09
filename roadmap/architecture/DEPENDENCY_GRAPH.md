@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-08T23:26:16Z
+> **自动生成**: 2026-07-09T00:40:17Z
 
 ## Package-Level Dependencies
 
@@ -684,6 +684,7 @@
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`
 - `feedback_loop.py` → `core.feedback.brain_performance_tracker`
 - `forensic_feature_analysis.py` → (无内部依赖)
+- `forensic_xau_hedge_20260709.py` → (无内部依赖)
 - `generate_btc_empirical_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `generate_micro_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `governance_promote_m15.py` → (无内部依赖)

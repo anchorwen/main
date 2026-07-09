@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-08T23:26:16Z
-> **扫描模块数**: 743
+> **自动生成**: 2026-07-09T00:40:17Z
+> **扫描模块数**: 744
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -524,7 +524,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4338 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 14 | 2188 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2286 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -770,6 +770,7 @@
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
 | `forensic_feature_analysis.py` | ✅ active | — | 2 | 294 | — | |
+| `forensic_xau_hedge_20260709.py` | ✅ active | — | 6 | 216 | — | |
 | `generate_btc_empirical_scaler.py` | ✅ active | — | 3 | 221 | — | |
 | `generate_micro_scaler.py` | ✅ active | — | 5 | 320 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |

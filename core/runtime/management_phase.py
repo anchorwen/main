@@ -909,6 +909,75 @@ def _evaluate_brain_ensemble(
     }
 
 
+def _resolve_stale_position_action(
+    pos: Any,
+    state: Any,
+    mt5_worker: Any,
+    config: Any,
+) -> tuple[str, dict[str, Any] | None]:
+    """Decide what to do with a managed position absent from known_open_tickets.
+
+    The broker's ``positions_get`` is the SSOT for "is this position still
+    open?".  A position can transiently vanish from ``known_open_tickets``
+    across a market-closed restart (orphan re-adoption runs only at
+    loop_iteration==1); treating that absence as a close blind-cleared a
+    STILL-OPEN position and produced a stale-clear ↔ restart-readopt ping-pong
+    that left the position hedged and unmanaged (DQAF-20260709-002).
+
+    Returns ``(action, entry)``:
+      - ``("tracked", None)``  — pos IS tracked; no reconciliation needed.
+      - ``("readopt", entry)`` — broker confirms OPEN but untracked; *entry* is
+        a fully-formed ``known_open_tickets`` record to re-adopt (self-heal).
+      - ``("retain", None)``   — probe inconclusive (MT5 timeout); retain & retry.
+      - ``("clear", None)``    — broker confirms GONE (or no_mt5); stale-clear.
+
+    Pure decision function — performs the read-only broker probe but mutates
+    nothing, so the caller owns all state changes and the branch table is unit
+    testable without the full management phase.
+    """
+    if not (state.known_open_tickets and pos.ticket not in state.known_open_tickets):
+        return ("tracked", None)
+
+    if mt5_worker is None or config.no_mt5:
+        # No broker to consult (backtest / no_mt5) — preserve legacy semantics:
+        # the local tracker is the only authority available.
+        return ("clear", None)
+
+    from core.runtime.fault_handler import _MT5_TIMEOUT_SENTINEL, mt5_call_with_timeout
+
+    _broker_pos: Any = None
+    with FaultTolerantContext(
+        level=FaultLevel.DEGRADE,
+        component="MT5_IPC:positions_get:stale_guard",
+    ):
+        _broker_pos = mt5_call_with_timeout(
+            mt5_worker.positions_get, ticket=pos.ticket, timeout=5.0
+        )
+    if _broker_pos is _MT5_TIMEOUT_SENTINEL:
+        return ("retain", None)
+    if not _broker_pos:
+        return ("clear", None)
+
+    # Broker confirms the position is still open → build a re-adopt record.
+    # Attribution comes from the (richer) position_manager entry; magic is taken
+    # from the broker-authoritative position record.
+    _bp = _broker_pos[0] if isinstance(_broker_pos, list | tuple) else _broker_pos
+    _entry: dict[str, Any] = {
+        "entry_price": float(getattr(pos, "entry_price", 0.0) or 0.0),
+        "side": str(getattr(pos, "side", "")),
+        "strategy": str(getattr(pos, "strategy_name", "")),
+        "magic": int(getattr(_bp, "magic", 0) or 0),
+        "volume": float(getattr(pos, "volume", 0.0) or 0.0),
+        "brain_ids": list(getattr(pos, "supporting_brain_ids", []) or []),
+        "message_id": "",
+        "sl": float(getattr(pos, "current_sl", 0.0) or getattr(pos, "initial_sl", 0.0) or 0.0),
+        "tp": float(getattr(pos, "current_tp", 0.0) or getattr(pos, "initial_tp", 0.0) or 0.0),
+        "source": "management_readopt",
+        "readopted_at": _utc_iso(),
+    }
+    return ("readopt", _entry)
+
+
 def execute_management_phase(
     config: LiveCycleConfig,
     state: LiveCycleState,
@@ -942,15 +1011,44 @@ def execute_management_phase(
     if pos is None:
         return False
 
-    # Guard: if MT5 already closed this position (detected by reconciliation),
-    # clear the stale position and skip management phase entirely.
-    if state.known_open_tickets and pos.ticket not in state.known_open_tickets:
+    # Guard 1: broker-authoritative presence reconciliation (DQAF-20260709-002).
+    # "present in position_manager but absent from known_open_tickets" is NOT
+    # proof of a close — known_open_tickets can transiently lose a still-open
+    # position across a market-closed restart (orphan re-adoption runs only at
+    # loop_iteration==1).  Consult the broker (SSOT) before removing anything;
+    # re-adopt a still-open position instead of stale-clearing it, so the
+    # stale-clear ↔ restart-readopt ping-pong that left a hedged position
+    # unmanaged and un-exited cannot recur.
+    _stale_action, _readopt_entry = _resolve_stale_position_action(pos, state, mt5_worker, config)
+    if _stale_action == "retain":
+        # Absence UNCONFIRMED (MT5 timeout) — retain tracking, retry next cycle.
+        _emit(
+            "position_manager_stale_probe_inconclusive",
+            ticket=pos.ticket,
+            reason="mt5_timeout_retain",
+        )
+        return False
+    if _stale_action == "clear":
+        # Broker CONFIRMS gone (or backtest / no_mt5) → genuine stale close.
         pm.clear_position(ticket=pos.ticket)
         _emit(
-            "position_manager_stale_cleared", ticket=pos.ticket, reason="not_in_known_open_tickets"
+            "position_manager_stale_cleared",
+            ticket=pos.ticket,
+            reason="not_in_known_open_tickets",
         )
-
         return False
+    if _stale_action == "readopt" and _readopt_entry is not None:
+        # Broker CONFIRMS still open but untracked → self-heal instead of
+        # clearing so the next pm.save_state() re-persists it into
+        # active_position.json and breaks the ping-pong.
+        state.known_open_tickets[pos.ticket] = _readopt_entry
+        _emit(
+            "position_manager_readopted",
+            ticket=pos.ticket,
+            reason="broker_open_but_untracked",
+            strategy=str(_readopt_entry.get("strategy", "")),
+        )
+    # "tracked" / "readopt" → fall through to normal management
 
     # Guard 2: verify position still exists in MT5 (catches closes between
     # reconciliation cycles — up to 10 min window). Single-ticket query is
