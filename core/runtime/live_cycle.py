@@ -145,6 +145,15 @@ class LiveCycleConfig:
     portfolio_max_net: float = 0.05
     portfolio_max_same_dir: int = 2
     portfolio_netting_mode: str = "net_out"  # "net_out" | "allow_coexist"
+    # ── DQAF-20260709-002 (entry-phase): cross-strategy opposing-position guard ──
+    # "block" (institutional default) skips a NEW entry when another strategy
+    # already holds an opposing same-symbol position.  This guard existed since
+    # P4-2 but was never injected into the live path, so an XAU LONG opened
+    # against an existing SHORT — a hedge that paid spread twice and cancelled
+    # edge.  "warn" = telemetry only; "off" = legacy (no cross-strategy check).
+    # Complementary to portfolio_netting (order-level, same-cycle): this is
+    # position-level (pending vs EXISTING positions).
+    cross_strategy_mode: str = "block"  # "block" | "warn" | "off"
 
     # ── FIX-20260605-120: Asset-specific reentry thresholds ──
     reentry_sl_cooldown: float = 180.0
@@ -225,6 +234,10 @@ class LiveCycleState:
     loop_iteration: int = 0
     flag_notice: bool = False
     known_open_tickets: dict[int, dict[str, Any]] = field(default_factory=dict)
+    # ── DQAF-20260709-002 (entry-phase): lazily-built cross-strategy
+    # opposing-position coordinator.  Held on state so its conflict telemetry
+    # accumulates across cycles.  None until first activated (or if mode="off").
+    cross_strategy_coordinator: Any = None
     consecutive_sl_hits: dict[str, int] = field(default_factory=dict)
     sl_streak_blocked_until: dict[str, float] = field(default_factory=dict)
     sl_streak_blocked_all_until: float = 0.0  # blocks ALL strategies only
@@ -850,6 +863,8 @@ def _evaluate_strategy_lines(
     base_dir: str = "",  # FIX-20260615-006/C8
     # ── FIX-20260629-188 (P1-3): time-based session gating ──
     blocked_entry_hours: list[int] | None = None,
+    # ── DQAF-20260709-002 (entry-phase): cross-strategy opposing-position guard ──
+    cross_strategy_coordinator: Any = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -907,6 +922,8 @@ def _evaluate_strategy_lines(
         base_dir=base_dir,
         # ── FIX-20260629-188 (P1-3) ──
         blocked_entry_hours=blocked_entry_hours,
+        # ── DQAF-20260709-002 (entry-phase) ──
+        cross_strategy_coordinator=cross_strategy_coordinator,
     )
 
 
@@ -3438,6 +3455,18 @@ def execute_live_cycle(
         # ── DQAF-20260616-002/P0.3: Phase 7 boundary log ──
         _log_phase_transition("7_strategy_evaluation", "Multi-strategy evaluation")
         # Evaluate all strategy lines
+        # ── DQAF-20260709-002 (entry-phase): activate the cross-strategy
+        # opposing-position guard (dormant since P4-2 — never injected into the
+        # live path).  Built once so conflict telemetry accumulates across
+        # cycles; skipped entirely when mode="off".
+        if state.cross_strategy_coordinator is None and config.cross_strategy_mode != "off":
+            from core.execution.cross_strategy_coordinator import (
+                CrossStrategyCoordinator,
+            )
+
+            state.cross_strategy_coordinator = CrossStrategyCoordinator(
+                mode=config.cross_strategy_mode
+            )
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
             feature_vector=feature_vector,
@@ -3495,6 +3524,8 @@ def execute_live_cycle(
             base_dir=config.base_dir,  # FIX-20260615-006/C8
             # ── FIX-20260629-188 (P1-3): time-based session gating ──
             blocked_entry_hours=config.blocked_entry_hours,
+            # ── DQAF-20260709-002 (entry-phase): cross-strategy opposing-position guard ──
+            cross_strategy_coordinator=state.cross_strategy_coordinator,
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──
