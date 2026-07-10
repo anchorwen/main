@@ -29,8 +29,9 @@ def _short(
     initial_sl: float = 2650.0,
     initial_tp: float = 2237.5,
     ticket: int = 1,
+    was_profitable: bool = True,
 ):
-    return pm.register_position(
+    pos = pm.register_position(
         ticket=ticket,
         side="short",
         entry_price=entry_price,
@@ -43,6 +44,13 @@ def _short(
         trail_atr_mult=2.0,
         current_high=entry_price,
     )
+    # FIX-20260710-001: compute_trail_tp now requires the position to have been
+    # profitable before tightening TP.  Simulate a brief favourable excursion
+    # so the ATR-contraction gate is reachable.
+    if was_profitable:
+        pos.lowest_low = entry_price - (entry_atr * 1.5)  # 1.5× entry ATR below entry
+        pos.highest_high = entry_price  # short: highest_high stays at entry
+    return pos
 
 
 def test_register_position_stores_bracket_atr() -> None:
@@ -133,3 +141,63 @@ def test_bracket_atr_survives_save_load_round_trip(tmp_path) -> None:
 
     assert restored is not None
     assert restored.bracket_atr == pytest.approx(69.96)
+
+
+def test_compute_trail_tp_suppressed_when_never_profitable() -> None:
+    """FIX-20260710-001 / DQAF-20260710-001: TP tightening must be suppressed
+    on positions that have NEVER seen favourable price movement.
+
+    A SHORT position with lowest_low >= entry_price means price never went
+    below entry — the position has been losing since open.  Tightening TP
+    closer to entry in this state makes recovery HARDER, not easier.
+    """
+    pm = ActivePositionManager()
+    _short(pm, entry_atr=5.0, bracket_atr=75.0, was_profitable=False)
+
+    # ATR contracts — would trigger tightening without the gate
+    new_tp = pm.compute_trail_tp(3.0, ticket=1)
+
+    # Gate must suppress: position was never profitable
+    assert new_tp is None
+
+
+def test_compute_trail_tp_allowed_when_was_profitable() -> None:
+    """Counter-case: with lowest_low below entry (was profitable), TP tightening
+    proceeds normally when ATR contracts."""
+    pm = ActivePositionManager()
+    _short(pm, entry_atr=5.0, bracket_atr=75.0, was_profitable=True)
+
+    new_tp = pm.compute_trail_tp(3.0, ticket=1)
+
+    # Gate must allow: position saw favourable excursion
+    assert new_tp is not None
+    assert new_tp < 2500.0  # SHORT TP tightened inward
+
+
+def test_compute_trail_tp_profitability_gate_long() -> None:
+    """LONG mirror: highest_high <= entry_price → never profitable → suppress."""
+    pm = ActivePositionManager()
+    pos = pm.register_position(
+        ticket=10,
+        side="long",
+        entry_price=2500.0,
+        volume=0.01,
+        initial_sl=2400.0,
+        initial_tp=2700.0,
+        entry_atr=5.0,
+        bracket_atr=75.0,
+        entry_cycle=0,
+        trail_atr_mult=2.0,
+        current_high=2500.0,
+    )
+    # Never profitable: highest_high == entry_price
+    assert pos.highest_high == pytest.approx(2500.0)
+
+    new_tp = pm.compute_trail_tp(3.0, ticket=10)
+    assert new_tp is None  # Gate must suppress
+
+    # Now simulate a profitable excursion
+    pos.highest_high = 2520.0  # price went above entry
+    new_tp = pm.compute_trail_tp(3.0, ticket=10)
+    assert new_tp is not None  # Gate must allow
+    assert new_tp > 2500.0  # LONG TP tightened inward

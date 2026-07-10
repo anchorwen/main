@@ -1693,6 +1693,19 @@ class ActivePositionManager:
             if pos.side == "short" and pos.current_sl <= pos.current_tp:
                 return 0.0
 
+        # ── FIX-20260710-001 (L3): Profitability Gate — TP tightening only
+        # makes sense when the position has seen favourable price movement.
+        # On a position that has NEVER been profitable, ATR contraction
+        # merely means "the market is calming down while you are wrong";
+        # tightening TP closer to entry makes it HARDER to recover if the
+        # market reverses, not easier.  Mirror the trail_activation_atr
+        # pattern that compute_trail_stop() already enforces (FIX-20260603-064).
+        # DQAF-20260710-001.
+        if pos.side == "long" and pos.highest_high <= pos.entry_price:
+            return None  # never profitable — leave original TP alone
+        if pos.side == "short" and pos.lowest_low >= pos.entry_price:
+            return None  # never profitable — leave original TP alone
+
         atr_ratio = current_atr / pos.entry_atr
         # Only tighten when ATR has contracted meaningfully
         if atr_ratio > 0.80:

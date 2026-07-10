@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-10T04:32:49Z
-> **扫描模块数**: 749
+> **自动生成**: 2026-07-10T06:54:39Z
+> **扫描模块数**: 750
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -258,7 +258,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2238 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2251 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 514 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -641,6 +641,7 @@
 | `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
 | `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
+| `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |

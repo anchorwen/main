@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-10T04:32:49Z
+> **自动生成**: 2026-07-10T06:54:39Z
 
 ## Package-Level Dependencies
 
@@ -555,6 +555,7 @@
 - `_analyze_post_deployment.py` → (无内部依赖)
 - `_analyze_today_btc_entries.py` → (无内部依赖)
 - `_analyze_two_positions_sltp.py` → (无内部依赖)
+- `_analyze_xau_now.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)
 - `_deep_dive_btc_source.py` → (无内部依赖)
 - `_diagnose_atr_misalignment.py` → (无内部依赖)
