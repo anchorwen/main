@@ -72,6 +72,15 @@ def compute_and_dispatch_trail(
     else:
         _trail_sl = None
 
+    # ── Spread & market-distance floor (shared by breakeven + trailing TP gates) ──
+    _spread = (
+        abs(ask - bid) if (bid is not None and ask is not None and bid > 0 and ask > 0) else 0.0
+    )
+    _min_market_distance = max(
+        config.exit_min_step,  # Floor: minimum step
+        round(_spread * 2.0, 8) if _spread > 0 else 0.0,  # Dynamic: 2× spread
+    )
+
     # ── Breakeven check — only fires once per position ──
     if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr, ticket=pos.ticket):
         _be_triggered = True
@@ -86,15 +95,6 @@ def compute_and_dispatch_trail(
         # with exit_min_step as absolute floor.  Degrades gracefully to mid-based
         # check when bid/ask unavailable (price-degraded cycles).
         if _be_improves:
-            _spread = (
-                abs(ask - bid)
-                if (bid is not None and ask is not None and bid > 0 and ask > 0)
-                else 0.0
-            )
-            _min_market_distance = max(
-                config.exit_min_step,  # Floor: minimum step
-                round(_spread * 2.0, 8) if _spread > 0 else 0.0,  # Dynamic: 2× spread
-            )
             if pos.side == "short":
                 _be_feasible = (
                     _be_sl > ask + _min_market_distance
@@ -140,6 +140,37 @@ def compute_and_dispatch_trail(
         elif pos.side == "short" and _final_sl <= _final_tp:
             _final_tp = 0.0
             _reasons.append("tp_released_bracket_inversion")
+
+    # ── DQAF-20260710-004: Trailing TP Market-Price Feasibility Gate ──
+    # FIX-20260707-009 guards bracket inversion (SL >= TP) but does NOT
+    # validate the TP distance from the current market price.  MT5 enforces
+    # a minimum stop distance (STOPLEVEL): for LONG, TP must be > bid +
+    # stop_level; for SHORT, TP must be < ask - stop_level.  When price has
+    # advanced toward the original TP, compute_trail_tp() — which derives the
+    # TP candidate from entry_price + ATR-based distance — produces a
+    # candidate that falls inside the STOPLEVEL exclusion zone.  MT5 rejects
+    # the entire modify_sltp with "Invalid stops" (retcode 10016), and the
+    # trailing SL (which WAS valid) is also discarded.  The position then
+    # loses ALL trailing protection for 7+ hours (observed on XAU
+    # 4118779584).  This gate mirrors the breakeven feasibility check above
+    # and releases TP to 0.0 when it would violate the minimum distance, so
+    # the Chandelier trailing SL can manage the position independently.
+    if _final_tp > 0:
+        if pos.side == "long":
+            _tp_feasible = (
+                _final_tp > bid + _min_market_distance
+                if bid is not None and bid > 0
+                else _final_tp > mid + _min_market_distance  # fallback to mid
+            )
+        else:
+            _tp_feasible = (
+                _final_tp < ask - _min_market_distance
+                if ask is not None and ask > 0
+                else _final_tp < mid - _min_market_distance  # fallback to mid
+            )
+        if not _tp_feasible:
+            _reasons.append("tp_released_stoplevel_violation")
+            _final_tp = 0.0
 
     # ── Diagnostic log ──
     print(
