@@ -6,17 +6,17 @@
   "training_contract": "btc_swing",
   "feature_schema": "btc_macro_enhanced_41",
   "feature_schema_id": "btc_macro_enhanced_41",
-  "model_path": "data_btc/models/btc_swing_v4_3class/xgboost_fold0_s42.json",
-  "artifact_path": "data_btc/models/btc_swing_v4_3class/xgboost_fold0_s42.json",
-  "model_version": "btc_swing_v4_3class",
-  "artifact_hash": "b3eb0e47cd221c5bef2dc8b983007a180fc84750198d24e7353362473f9482ad",
+  "model_path": "data_btc/models/btc_swing_v4_3class_v2/xgboost_fold0_s42.json",
+  "artifact_path": "data_btc/models/btc_swing_v4_3class_v2/xgboost_fold0_s42.json",
+  "model_version": "btc_swing_v4_3class_v2",
+  "artifact_hash": "b14a3c72440bd2352e3d7a7018df1d423151d142d13a25204539e575b827d77a",
   "status": "live",
   "vote_weight": 1.0,
   "magic": 90410,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
   "strategy": "btc_swing",
-  "timeframe": "BTC",
+  "timeframe": "M5",
   "training_params": {
     "sl_atr_mult": 1.5,
     "tp_atr_mult": 1.5,
@@ -24,18 +24,30 @@
     "n_estimators": 500,
     "learning_rate": 0.02,
     "max_depth": 5,
-    "objective": "multi:softprob"
+    "objective": "multi:softprob",
+    "data_source": "btcusdc_m5_merged.csv (100k bars, 2025-06-25 → 2026-06-07)",
+    "timeframe_minutes": 5,
+    "cross_asset_m5": ["AUDJPYc", "EURUSDc", "USDJPYc", "XAUUSDc"],
+    "curation": "ADX≥20 + exclude weekends + ATR p5-p95",
+    "spread_source": "per-bar real MT5 spread (median $18, range $10-$160)",
+    "label_method": "DQAF-20260703-062 directional profitability (independent LONG/SHORT outcome merge)",
+    "decay_half_life_days": 90,
+    "purge_bars": 12
   },
+  "_retraining_note": "FIX-20260710-V4-RETRAIN: Old V4 trained on H1 CSV with 4,950 samples → live M5 WR=27.6% (confidence inverted, HIGH conf=LOW WR). New V4: M5 CSV, 48,897 samples (10x), per-bar real spread, curation, real cross-asset M5 alignment, DQAF-062 directional labels. EV=+0.73R, calibration NOT inverted (higher conf→higher WR). Directional WR=50.05%, NEUTRAL gate reduces frequency naturally.",
   "training_metrics": {
-    "cv_mean_val_wr": 0.5178,
-    "cv_std_val_wr": 0.0547,
-    "cv_mean_val_acc": 0.3971,
+    "cv_mean_val_wr": 0.4906,
+    "cv_std_val_wr": 0.0178,
+    "cv_mean_val_acc": 0.3779,
+    "cv_mean_directional_wr": 0.5005,
     "cv_folds": 5,
+    "ev_r": 0.7314,
     "direction_diversity": {
-      "n_long": 827,
-      "n_short": 1271,
-      "n_neutral": 2027,
-      "short_ratio": 0.308
+      "n_long": 21657,
+      "n_short": 22385,
+      "n_neutral": 4855,
+      "short_ratio": 0.508,
+      "_note": "Training labels near-balanced. Post-argmax: SHORT=24533, NEUTRAL=9115, LONG=15249 (SHORT=61.6% of directional). Wasserstein=0.0034 — raw P(LONG)/P(SHORT) distributions near-identical; argmax forces choice. Per-fold range: Fold0=90.9%→Fold4=37.8% (regime-driven)."
     }
   },
   "features": [
@@ -82,20 +94,20 @@
     "Cross_BTC_Gold_Ratio_ROC"
   ],
   "n_features": 41,
-  "n_train_samples": 4950,
-  "trained_at": "2026-06-28T02:58:33Z",
+  "n_train_samples": 48897,
+  "trained_at": "2026-07-10T02:24:32Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
   "confidence_params": {
     "method": "quantile_gaussian",
-    "p95": 0.7004,
-    "peak_conf": 0.6046,
-    "lambda_decay": 80.0,
-    "_note": "DQAF-20260707-003: Bootstrap calibration from W4 golden_master confidence back-calc (n=128). P95=atanh(C95)=0.7004. Recalibrate from brain_votes raw_score after Fix 3 golden_master accumulates 500+ V4 cycles."
+    "p95": 0.14,
+    "peak_conf": 0.50,
+    "lambda_decay": 0.10,
+    "_calibration_note": "FIX-20260710-V4-RETRAIN: Calibrated for new M5 model's compressed score range (max |score|≈0.14). p95 set just above max to keep all signals in linear ramp: confidence = (|score|/0.14) * 0.50. |score|=0.05→conf=0.18, |score|=0.10→conf=0.36 (passes threshold=0.35), |score|=0.14→conf=0.50. Isotonic calibration confirms monotonic (not inverted): higher conf → higher actual WR (44%→55%). Full calibration: data_btc/models/btc_swing_v4_3class_v2/calibration.json"
   },
-  "last_retrained": "2026-06-28T02:58:33Z",
+  "last_retrained": "2026-07-10T02:24:32Z",
   "label_contract": {
     "sl_atr_mult": 1.5,
     "tp_atr_mult": 1.5,

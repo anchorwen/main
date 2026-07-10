@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-09T14:34:08Z
+> **自动生成**: 2026-07-10T04:32:49Z
 
 ## Package-Level Dependencies
 
@@ -572,6 +572,7 @@
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_btc_deep_diagnosis.py` → (无内部依赖)
 - `analyze_btc_post_fix_trading.py` → (无内部依赖)
+- `analyze_btc_randomness_audit.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)
 - `analyze_dual_symbol_trades.py` → (无内部依赖)
 - `analyze_exit_optimization_effect.py` → (无内部依赖)
@@ -839,6 +840,7 @@
 - `calibrate_labels.py` → `core.training.profitability_calibrator`
 - `calibrate_meta_filter.py` → `core.brains.online_mlp_model`
 - `calibrate_sl_tp.py` → (无内部依赖)
+- `calibrate_v4_isotonic.py` → (无内部依赖)
 - `champion_challenger.py` → `core.feedback.brain_performance_tracker`, `core.governance.governance_service`
 - `crt_manifest.py` → (无内部依赖)
 - `dataset_builder.py` → `core.contracts.training.label_contract`, `core.features.local_feature_store`, `core.features.schemas.v9_institutional_schema`

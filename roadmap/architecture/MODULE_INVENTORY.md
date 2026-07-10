@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-09T14:34:08Z
-> **扫描模块数**: 747
+> **自动生成**: 2026-07-10T04:32:49Z
+> **扫描模块数**: 749
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -658,6 +658,7 @@
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_btc_deep_diagnosis.py` | ✅ active | — | 5 | 830 | — | |
 | `analyze_btc_post_fix_trading.py` | ✅ active | — | 6 | 422 | — | |
+| `analyze_btc_randomness_audit.py` | ✅ active | — | 5 | 522 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `analyze_dual_symbol_trades.py` | ✅ active | — | 4 | 275 | — | |
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
@@ -939,6 +940,7 @@
 | `calibrate_labels.py` | ✅ active | — | 4 | 298 | — | |
 | `calibrate_meta_filter.py` | ✅ active | — | 4 | 218 | — | |
 | `calibrate_sl_tp.py` | ✅ active | — | 7 | 461 | — | |
+| `calibrate_v4_isotonic.py` | ✅ active | — | 4 | 365 | — | |
 | `champion_challenger.py` | ✅ active | — | 7 | 307 | — | |
 | `crt_manifest.py` | ✅ active | CRTManifestV1 | 9 | 159 | — | |
 | `dataset_builder.py` | ✅ active | — | 14 | 569 | — | |
