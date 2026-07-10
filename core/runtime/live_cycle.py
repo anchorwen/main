@@ -1337,6 +1337,38 @@ def execute_live_cycle(
         cycle_duration=_cycle_duration,
     )
 
+    # ── DQAF-20260710-003 (L3): Bootstrap known_open_tickets from journal ──
+    # On every fresh restart, known_open_tickets starts as {}.  Without this
+    # bootstrap, the startup reconciliation gate below (line 1356) evaluates
+    # to False and ghost-position detection is SKIPPED entirely.
+    # This scan finds every journal OPEN without a matching CLOSE and seeds
+    # known_open_tickets so the existing reconciliation logic (which already
+    # knows how to compare against MT5 positions_get and write close entries)
+    # can do its job.
+    # Must run BEFORE the reconciliation gate AND before bootstrap_restart_state
+    # (which uses known_open_tickets for _active_open_mids filtering).
+    if state.loop_iteration == 1 and not state.known_open_tickets and not config.no_mt5:
+        try:
+            from core.runtime.restart_state import bootstrap_known_open_from_journal
+
+            _bootstrapped = bootstrap_known_open_from_journal(str(journal_path))
+            if _bootstrapped:
+                state.known_open_tickets.update(_bootstrapped)
+                print(
+                    json.dumps(
+                        {
+                            "event": "known_open_bootstrapped_from_journal",
+                            "time": _utc_iso(),
+                            "count": len(_bootstrapped),
+                            "tickets": sorted(_bootstrapped.keys()),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
+
     # ── FIX-20260603-074: On first cycle, reconcile positions closed during
     # downtime BEFORE the restart state bootstrap.  Positions in known_open_tickets
     # that are no longer open in MT5 were closed (by SL/TP/external) while the

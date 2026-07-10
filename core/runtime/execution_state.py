@@ -266,3 +266,39 @@ def restore_execution_state(
     # Intraday DD kill — prevents restart from clearing drawdown block
     if data.get("intraday_dd_active", False):
         state.block_new_entries = True
+
+    # ── DQAF-20260710-003: Restore known_open_tickets from persisted state ──
+    # save_execution_state() persists known_open_tickets (v3 schema, line 72-75),
+    # but the restore path was NEVER wired — the round-trip was broken since the
+    # field was added (DQAF-20260615-004).  This caused every restart to start
+    # with known_open_tickets={}, which made the startup reconciliation gate
+    # (live_cycle.py:1349 `if state.known_open_tickets`) evaluate to False,
+    # skipping ghost-position detection entirely.
+    #
+    # Belt-and-suspenders with bootstrap_known_open_from_journal():
+    # - This restore covers the fast-restart case (<24h downtime) where
+    #   execution_state.json is still fresh.
+    # - The journal bootstrap (in restart_state.py) covers the cold-start
+    #   case where execution_state.json is expired or unavailable.
+    # - Only restore if known_open_tickets is currently empty so the
+    #   journal bootstrap (which runs earlier in the startup sequence)
+    #   takes precedence.
+    _saved_known = data.get("known_open_tickets", {})
+    if _saved_known and not state.known_open_tickets:
+        _restored: dict[int, dict[str, Any]] = {}
+        for _tkt_str, _tkt_data in _saved_known.items():
+            try:
+                _tkt = int(_tkt_str)
+            except (ValueError, TypeError):
+                continue
+            if isinstance(_tkt_data, dict):
+                _restored[_tkt] = dict(_tkt_data)
+        if _restored:
+            state.known_open_tickets.update(_restored)
+            import logging as _logging
+
+            _logger = _logging.getLogger(__name__)
+            _logger.info(
+                "Restored %d known_open_tickets from execution_state.json",
+                len(_restored),
+            )

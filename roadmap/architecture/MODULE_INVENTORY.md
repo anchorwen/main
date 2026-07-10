@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-10T06:54:39Z
+> **自动生成**: 2026-07-10T07:43:59Z
 > **扫描模块数**: 750
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -512,7 +512,7 @@
 | `execution_gates.py` | ✅ active | RuntimeRiskGate, RuntimeGovernanceGate, RuntimeExecutionApprovalChain | 6 | 107 | — | |
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
-| `execution_state.py` | ✅ active | — | 3 | 268 | — | |
+| `execution_state.py` | ✅ active | — | 3 | 304 | — | |
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 466 | — | |
 | `feature_freshness.py` | ✅ active | — | 2 | 81 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
@@ -522,7 +522,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4378 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4410 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2286 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -539,7 +539,7 @@
 | `reconciliation.py` | ✅ active | — | 2 | 435 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
-| `restart_state.py` | ✅ active | — | 1 | 376 | — | |
+| `restart_state.py` | ✅ active | — | 2 | 490 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
 | `session_guards.py` | ✅ active | — | 3 | 184 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |

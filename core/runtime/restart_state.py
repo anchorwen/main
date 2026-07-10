@@ -374,3 +374,117 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
             ),
             flush=True,
         )
+
+
+def bootstrap_known_open_from_journal(journal_path: str) -> dict[int, dict[str, Any]]:
+    """Scan journal for unclosed OPEN entries → seed ``known_open_tickets``.
+
+    DQAF-20260710-003 (L3 ghost-position root cause):
+    On every fresh restart, ``LiveCycleState.known_open_tickets`` starts as
+    ``{}``.  The startup reconciliation gate (live_cycle.py:1349) is guarded
+    by ``if state.known_open_tickets`` — which is ALWAYS False on a fresh
+    start, so reconciliation SKIPS entirely.  Ghost positions (closed in MT5
+    while the Python process was down) are never detected.
+
+    This function closes the bootstrap gap by scanning the journal (SSOT) for
+    every ``action: open`` entry whose ``message_id`` has no matching
+    ``action: close`` entry.  The returned dict is fed into
+    ``state.known_open_tickets`` BEFORE the startup reconciliation guard, so
+    the existing reconciliation code (which already knows how to detect
+    ghosts by comparing against MT5 ``positions_get``) can do its job.
+
+    Returns:
+        Dict keyed by ``position_ticket`` (int), values are the open journal
+        entries enriched with a ``_bootstrapped_from_journal: True`` marker.
+        Empty dict if journal is missing or unreadable.
+    """
+    _jp = _Path(journal_path)
+    if not _jp.exists():
+        _logger.warning(
+            "bootstrap_known_open: journal not found at %s — cannot seed known_open_tickets",
+            journal_path,
+        )
+        return {}
+
+    try:
+        _content = _jp.read_text(encoding="utf-8")
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        _logger.error(
+            "bootstrap_known_open: failed to read journal at %s.\n%s",
+            journal_path,
+            _traceback.format_exc(),
+        )
+        return {}
+
+    # ── Phase 1: collect all open entries indexed by message_id ──
+    # Also index by ticket for dedup (keep the LAST open per ticket).
+    _open_by_msg: dict[str, dict[str, Any]] = {}
+    _closed_msg_ids: set[str] = set()
+    _ticket_to_msg: dict[int, str] = {}  # ticket → latest open message_id
+
+    for _line in _content.splitlines():
+        _line = _line.strip()
+        if not _line:
+            continue
+        try:
+            _entry = json.loads(_line)
+        except json.JSONDecodeError:
+            continue
+
+        _action = _entry.get("action", "")
+
+        if _action == "open":
+            _mid = _entry.get("message_id", "")
+            if not _mid:
+                continue
+            _tkt = _entry.get("position_ticket", 0)
+            if isinstance(_tkt, int) and _tkt > 0:
+                _open_by_msg[_mid] = _entry
+                _ticket_to_msg[_tkt] = _mid
+        elif _action == "close":
+            _open_mid = _entry.get("open_message_id", "")
+            if _open_mid:
+                _closed_msg_ids.add(_open_mid)
+
+    # ── Phase 2: find unclosed opens ──
+    _unclosed: dict[int, dict[str, Any]] = {}
+    for _tkt, _mid in _ticket_to_msg.items():
+        if _mid in _closed_msg_ids:
+            continue  # has a matching close → not a ghost candidate
+        _open_entry = _open_by_msg.get(_mid)
+        if _open_entry is None:
+            continue
+
+        # Build a value dict compatible with what reconciliation.py expects
+        _side = _open_entry.get("side", "")
+        _volume = _open_entry.get("volume") or _open_entry.get("effective_volume_hint", 0.0)
+        _detail = _open_entry.get("detail", {})
+        _req = _detail.get("request", {}) if isinstance(_detail, dict) else {}
+        _entry_price = float(_req.get("price", 0) or 0)
+
+        _unclosed[_tkt] = {
+            "ticket": _tkt,
+            "side": _side,
+            "direction": _side,  # dual key — reconciliation uses "side", orphan uses "direction"
+            "volume": float(_volume) if _volume else 0.0,
+            "entry_price": _entry_price,
+            "message_id": _mid,
+            "strategy": _open_entry.get("strategy", ""),
+            "magic": _open_entry.get("magic", 0),
+            "sl": _open_entry.get("sl", 0.0),
+            "tp": _open_entry.get("tp", 0.0),
+            "detail": _detail,
+            "effective_volume_hint": float(_volume) if _volume else 0.0,
+            "_bootstrapped_from_journal": True,
+        }
+
+    if _unclosed:
+        _logger.info(
+            "bootstrap_known_open: seeded %d unclosed positions from journal "
+            "(total opens=%d, closed_msg_ids=%d)",
+            len(_unclosed),
+            len(_open_by_msg),
+            len(_closed_msg_ids),
+        )
+
+    return _unclosed
