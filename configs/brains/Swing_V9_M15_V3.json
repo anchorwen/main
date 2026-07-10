@@ -87,9 +87,9 @@
     "cooldown_cycles": 3
   },
   "label_contract": {
-    "sl_atr_mult": 2.0,
-    "tp_atr_mult": 3.0,
+    "sl_atr_mult": 3.0,
+    "tp_atr_mult": 1.5,
     "contract_type": "m15_swing",
-    "_note": "DQAF-20260630-200: aligned to strategy m15_swing live.yaml (was SL=3.0/TP=1.5 from training_params; training-serving skew to investigate)"
+    "_note": "DQAF-20260710-001: REVERTED to training_params (SL=3.0/TP=1.5). DQAF-20260630-200 incorrectly aligned label_contract to live.yaml instead of aligning live.yaml to training. Brain model weights trained with SL=3.0/TP=1.5 labels — label_contract must match."
   }
 }

@@ -570,15 +570,15 @@ strategy_lines:
     max_spread_points: 60
     spread_points: 30
     sl:
-      base_atr_mult: 2.0
+      base_atr_mult: 3.0
       hard_sl_ratio: 1.5
       dynamic: true
       min_rr_ratio: 0.5
     tp:
-      base_atr_mult: 3.0
+      base_atr_mult: 1.5
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
-      partial_tp_r: 1.5
+      partial_tp_r: 0.8
       ofi_partial_tp_threshold: 2.5
       ofi_partial_tp_r_mult: 0.5
     exit:

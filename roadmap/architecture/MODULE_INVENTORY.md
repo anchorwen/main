@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-10T12:28:13Z
-> **扫描模块数**: 750
+> **自动生成**: 2026-07-10T14:19:29Z
+> **扫描模块数**: 752
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -642,8 +642,10 @@
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
 | `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
 | `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
+| `_analyze_xau_today_20260710.py` | ✅ active | — | 3 | 302 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
+| `_deep_dive_m15_swing_20260710.py` | ✅ active | — | 3 | 220 | — | |
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
 | `_diagnose_giveback_lifecycle.py` | ✅ active | — | 5 | 247 | — | |
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
