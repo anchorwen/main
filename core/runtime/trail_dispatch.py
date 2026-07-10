@@ -72,7 +72,7 @@ def compute_and_dispatch_trail(
     else:
         _trail_sl = None
 
-    # ── Spread & market-distance floor (shared by breakeven + trailing TP gates) ──
+    # ── Spread & market-distance floor (shared by breakeven, SL, and trailing TP gates) ──
     _spread = (
         abs(ask - bid) if (bid is not None and ask is not None and bid > 0 and ask > 0) else 0.0
     )
@@ -150,11 +150,11 @@ def compute_and_dispatch_trail(
     # TP candidate from entry_price + ATR-based distance — produces a
     # candidate that falls inside the STOPLEVEL exclusion zone.  MT5 rejects
     # the entire modify_sltp with "Invalid stops" (retcode 10016), and the
-    # trailing SL (which WAS valid) is also discarded.  The position then
-    # loses ALL trailing protection for 7+ hours (observed on XAU
-    # 4118779584).  This gate mirrors the breakeven feasibility check above
-    # and releases TP to 0.0 when it would violate the minimum distance, so
-    # the Chandelier trailing SL can manage the position independently.
+    # trailing SL (which WAS valid) is also discarded.  This gate mirrors the
+    # breakeven feasibility check above and reverts the TP to its pre-cycle
+    # value (pos.current_tp) so MT5 keeps the existing TP unchanged.
+    # NOTE: reverting to pos.current_tp (not 0.0) prevents state corruption
+    # where pos.current_tp would be optimistically set to 0 on line 335.
     if _final_tp > 0:
         if pos.side == "long":
             _tp_feasible = (
@@ -170,7 +170,35 @@ def compute_and_dispatch_trail(
             )
         if not _tp_feasible:
             _reasons.append("tp_released_stoplevel_violation")
-            _final_tp = 0.0
+            _final_tp = pos.current_tp  # revert: keep existing TP unchanged
+
+    # ── DQAF-20260710-004b: Trailing SL Market-Price Feasibility Gate ──
+    # The counterpart to the TP gate above.  When price retraces after a
+    # Chandelier trail tightening, the computed trailing SL can end up on the
+    # wrong side of the current market price (e.g. LONG SL > bid after a
+    # pullback).  MT5 enforces: LONG SL must be < bid − StopLevel, SHORT SL
+    # must be > ask + StopLevel.  Without this gate, a valid TP modification
+    # is also discarded because MT5 rejects the entire modify_sltp payload
+    # when any single stop is invalid (retcode 10016).  Observed on XAU
+    # #4118779584 (m30_swing) and #4118881082 (m15_swing) post-restart:
+    # SL=4108.01 > bid=4106.47 → 10016 loop from 11:00Z onward.
+    # Reverting to pos.current_sl keeps the existing MT5-side SL unchanged.
+    if _final_sl > 0:
+        if pos.side == "long":
+            _sl_feasible = (
+                _final_sl < bid - _min_market_distance
+                if bid is not None and bid > 0
+                else _final_sl < mid - _min_market_distance  # fallback to mid
+            )
+        else:
+            _sl_feasible = (
+                _final_sl > ask + _min_market_distance
+                if ask is not None and ask > 0
+                else _final_sl > mid + _min_market_distance  # fallback to mid
+            )
+        if not _sl_feasible:
+            _reasons.append("sl_released_stoplevel_violation")
+            _final_sl = pos.current_sl  # revert: keep existing SL unchanged
 
     # ── Diagnostic log ──
     print(
@@ -275,7 +303,12 @@ def compute_and_dispatch_trail(
     # ── Single dispatch ──
     _sl_changed = abs(_final_sl - pos.current_sl) >= config.exit_min_step
     _tp_changed = abs(_final_tp - pos.current_tp) >= config.exit_min_step
-    if _reasons:
+    # Only dispatch if at least one stop effectively changed after all gates.
+    # When both SL and TP were reverted by feasibility gates (sl_released_* /
+    # tp_released_*), _reasons is non-empty but _final_sl == pos.current_sl
+    # and _final_tp == pos.current_tp — dispatching would be a no-op round-trip
+    # to MT5.
+    if _reasons and (_sl_changed or _tp_changed):
         _dispatch_modify_trail = dispatch_modify_trail_fn
         _dispatch_modify_trail(
             config,

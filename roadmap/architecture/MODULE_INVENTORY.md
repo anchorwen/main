@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-10T11:42:49Z
+> **自动生成**: 2026-07-10T12:28:13Z
 > **扫描模块数**: 750
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -555,7 +555,7 @@
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
-| `trail_dispatch.py` | ✅ active | — | 1 | 363 | — | |
+| `trail_dispatch.py` | ✅ active | — | 1 | 396 | — | |
 | `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 205 | — | |
 
 ## core/schemas
