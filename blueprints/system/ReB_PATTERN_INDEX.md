@@ -20,6 +20,20 @@
 
 ---
 
+### ReB-20260710-TP_TRAIL_NO_PROFITABILITY_GATE
+- **Pattern Signature**: `TP_TRAIL_NO_PROFITABILITY_GATE`
+- **Date Cataloged**: 2026-07-10
+- **Source Docket**: DQAF-20260710-001
+- **Related**: FIX-20260710-002, FIX-20260603-064 (trail_activation_atr — the proven SL-side pattern)
+
+**Definition**: A trailing mechanism operates on a pure volatility signal (ATR contraction) without checking whether the position has ever seen favourable price movement. The sibling mechanism (SL trail via `compute_trail_stop`) correctly enforces a `trail_activation_atr` profitability watermark, but the TP trail (`compute_trail_tp`) lacks an equivalent guard. The asymmetry means: on a losing position, ATR contraction (market calming down while you are wrong) triggers TP tightening — bringing the take-profit target closer to entry, making it HARDER to recover if the market reverses. The telltale: repeated `modify_sltp` with `comment='tp'` on a position that has never been profitable, verified by `lowest_low >= entry_price` (SHORT) or `highest_high <= entry_price` (LONG).
+
+**Prevention**: Any trailing mechanism that tightens a bracket toward entry MUST gate on profitability before activating. The minimal gate mirrors the `trail_activation_atr` pattern: `highest_high <= entry_price` → suppress (LONG), `lowest_low >= entry_price` → suppress (SHORT). The fields `highest_high`/`lowest_low` are already maintained per-cycle by `_update_single_position()`. When adding a new trail mechanism, audit that BOTH SL and TP sides have symmetric profitability gates — asymmetry is the signature of this defect class.
+
+**Detection**: Check `live_trade_journal.jsonl` for modify_sltp actions with `comment='tp'` on positions where `breakeven_triggered=false` AND `cycles_held > hesitation_cycles`. Also: positions with a high modify_sltp count (>10) but zero trail_sl modifications (SL unchanged) indicate TP-only trailing — a red flag if the position closed as a loss. Unit test pattern: `test_compute_trail_tp_suppressed_when_never_profitable` (LONG and SHORT variants).
+
+**Cross-References**: FIX_REGISTRY.md FIX-20260710-002, DQAF_DOCKET_REGISTRY.md DQAF-20260710-001, CCT_LEDGER.md CCT-20260710-001
+
 ### ReB-20260708-PROFIT_RATCHET_NEVER_REACHES_BROKER
 - **Pattern Signature**: `PROFIT_RATCHET_NEVER_REACHES_BROKER`
 - **Date Cataloged**: 2026-07-08

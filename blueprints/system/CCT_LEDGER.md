@@ -27,6 +27,23 @@
 
 ---
 
+### CCT-20260710-001
+- **Docket ID**: DQAF-20260710-001
+- **日期**: 2026-07-10
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU h4_swing ticket 4108944294 (SHORT@4107.272) 从未盈利, 但 ATR 收缩 (entry_atr=4.88→current_atr≈1.6, atr_ratio=0.33) 触发 25 次 TP 收紧 (3866.73→4060.36), 每次以 `comment='tp'` modify_sltp。SL 固定 4252.08, SL:TP 比从 [(4252-4107)/(4107-3866)]≈0.60 恶化至 [(4252-4107)/(4107-4060)]≈3.09 (TP 距 entry 仅 47 点, 冒 145 博 47)。
+  - [Layer 2 — 中间异常]: `compute_trail_tp()` gate `atr_ratio=current_atr/pos.entry_atr<0.80` 通过, `tp_distance=trail_mult×current_atr×1.75×tf_scale` 重算更近 TP。门禁仅检查 ATR 收缩, 无盈亏前提 — position_manager.py:1696-1712。
+  - [Layer 3 — 根因]: L3 设计不对称 — SL trail (compute_trail_stop) 有 `trail_activation_atr` 盈亏水位线 (FIX-20260603-064, trail_stop_engine.py:217-223), TP trail (compute_trail_tp) 无对等保护。两个 trail 机制同出一源 (Chandelier 体系) 但保护不对称: SL 侧要求 ≥1.0×ATR 盈利才激活, TP 侧零盈亏感知。
+- **证据引用**:
+  - Source 1: `data/live_trade_journal.jsonl` ticket 4108944294 — 25 modify_sltp actions with comment='tp', tp 3866.73→4060.36
+  - Source 2: `data/state/active_position.json` — entry_price=4107.272, cycles_held=14, breakeven_triggered=false
+  - Source 3 (机制): `core/execution/position_manager.py:1696-1699` atr_ratio-only gate; `core/execution/trail_stop_engine.py:217-223` trail_activation_atr check in compute_trail_stop (对比)
+  - Source 4 (golden_master): price path 4107.27→4136.30, never below entry (never profitable)
+- **AR 对抗反驳**: 反假设(a)"收紧是对的 — 低 ATR 意味着原 TP 太远"→ **推翻**: 此逻辑仅对盈利持仓成立, 亏损持仓收紧 TP 让回升更难止盈; (b)"这是个例"→ **部分推翻**: XAU TP:SL=1:3.8 (总体 TP 命中率仅 7.1%), 系统性证据; (c)"SL trail 的 trail_activation_atr 已覆盖"→ **推翻**: trail_activation_atr 仅保护 SL trail, TP trail 独立运作无交叉保护。
+- **是否被推翻**: 否 (存活假设; 三反假设均证伪)
+- **关联 ReB Pattern**: ReB-20260710-TP_TRAIL_NO_PROFITABILITY_GATE
+
 ### CCT-20260709-003
 - **Docket ID**: DQAF-20260709-003
 - **日期**: 2026-07-09
