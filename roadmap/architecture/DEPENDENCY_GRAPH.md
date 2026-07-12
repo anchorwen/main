@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-12T15:37:13Z
+> **自动生成**: 2026-07-12T15:55:13Z
 
 ## Package-Level Dependencies
 
@@ -204,6 +204,7 @@
 - `fix_execution_mapper.py` → `core.contracts.ids`, `core.execution.fix_contracts`, `core.execution.gateway_contracts`, `core.execution.order_state_machine`
 - `fix_gateway_adapter.py` → `core.execution.fix_contracts`, `core.execution.fix_execution_mapper`, `core.execution.fix_message_builder`, `core.execution.gateway_contracts`, `core.execution.order_state_machine`
 - `fix_message_builder.py` → `core.execution.fix_contracts`, `core.execution.gateway_contracts`
+- `gate_reachability.py` → (无内部依赖)
 - `gateway_contracts.py` → (无内部依赖)
 - `gods_eye.py` → (无内部依赖)
 - `kelly_sizer.py` → `core.execution.pwin_chain`
@@ -581,6 +582,7 @@
 - `analyze_dual_symbol_trades.py` → (无内部依赖)
 - `analyze_exit_optimization_effect.py` → (无内部依赖)
 - `analyze_feature_shift.py` → (无内部依赖)
+- `analyze_gate_activity.py` → (无内部依赖)
 - `analyze_live_brain_performance.py` → (无内部依赖)
 - `analyze_live_journal.py` → `core.data.ticket_resolver`
 - `analyze_m30_trailing_sltp.py` → (无内部依赖)

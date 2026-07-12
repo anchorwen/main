@@ -57,6 +57,14 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 **Files**: `core/execution/dynamic_sl_tp.py` (docstring), `core/execution/strategy_line.py`, `core/execution/rule_engine_strategy.py`, `core/runtime/market_ingress.py`, `core/runtime/strategy_evaluator.py`, `core/runtime/live_cycle.py`
 
+### FIX-20260712-003 — Phase 2 Layer 4: Gate Reachability Analyzer (2026-07-12)
+
+**Root Cause**: RC-12 (missing-feature) — no static analysis existed to verify gate thresholds are reachable by brain confidence ceilings. Cold start deadlock risk (p_win=0.50 < breakeven=0.541) was only discoverable by reading source code.
+
+**Fix**: `core/execution/gate_reachability.py` — static analysis of all strategy gates vs brain capability ceilings. Analyzes 7 gate categories per strategy line: confidence_threshold, sl_recovery_confidence, bleed_reentry_confidence, confidence_decay_exit, p_win_dynamic_floor (cold-start deadlock detection), min_p_win_vs_breakeven, rr_below_minimum + per-brain confidence_ceiling. CLI + importable API. Part of FIX-20260712-003 Phase 2.
+
+**Files**: `core/execution/gate_reachability.py`
+
 ### FIX-20260712-001 — BTC V4 family_spacing Decouple + Confidence Range (2026-07-12)
 
 **Root Cause**: RC-05 (boundary-error) — `btc_swing` (M5, BTC) was grouped with XAU swing strategies in `_SWING_FAMILY`, sharing the 900s `_SWING_FAMILY_MIN_TF_SEC` (M15 clock) despite running on a different MT5 terminal, symbol, and capital pool. Zero cross-symbol echo-trade risk. Additionally, `peak_conf=0.50` compressed post-retrain V4 confidence to a narrow band (0.50-0.61), making reentry gates structurally unreachable (sl_recovery needs 0.65, brain_flip needs 0.82).

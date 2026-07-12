@@ -64,6 +64,7 @@ See [Architecture](#architecture) above — the scheduler-driven pipeline (Task 
 
 | Date | FIX ID | Description |
 |------|--------|-------------|
+| 2026-07-12 | FIX-20260712-003 | **Phase 2 Layer 3: 2 new intent verification cross-checks**. `_check_brain_intent_alignment`: validates `_intent.trading` (shadow_only/probation_limited/full_live) vs governance status + live.yaml enabled. `_check_brain_config_annotation_freshness`: detects stale _note phrases ("not executed", "shadow only") contradicting probation/live status. Both registered in DataHealthService include_extras. Part of 4-layer config defense system Phase 2. |
 | 2026-07-12 | FIX-20260712-002 | **Phase 1 Layer 2: 2 new cross-checks + probation coverage**. (1) `_check_brain_config_governance_status_alignment`: config vs governance STATUS_RANK alignment. (2) `_check_live_yaml_enabled_vs_brain_status`: zombie/intent-conflict detection. (3) Existing registry↔governance check extended from live-only to live+probation. Part of 4-layer config defense system. |
 | 2026-06-17 | FIX-005 | Initial deployment: audit + tombstone + dedup + normalize |
 | 2026-06-17 | — | GAP 4: automated silent monitoring (--quiet --alert) |

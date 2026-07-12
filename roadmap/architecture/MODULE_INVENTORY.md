@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-12T15:37:13Z
-> **扫描模块数**: 753
+> **自动生成**: 2026-07-12T15:55:13Z
+> **扫描模块数**: 755
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -236,6 +236,7 @@
 | `fix_execution_mapper.py` | ✅ active | FixExecutionReportMapper | 5 | 75 | — | |
 | `fix_gateway_adapter.py` | ✅ active | FixGatewayAdapter | 12 | 136 | — | |
 | `fix_message_builder.py` | ✅ active | FixMessageBuilder | 5 | 57 | — | |
+| `gate_reachability.py` | ✅ active | GateReachabilityReport | 4 | 461 | — | |
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
 | `gods_eye.py` | ✅ active | GodsEyeVerdict, GodsEye | 15 | 479 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
@@ -425,14 +426,14 @@
 | `alert_service.py` | 🧪 stub | AlertRule, AlertChannel, LogAlertChannel, InMemoryAlertChannel, BatchingAlertChannel, SeverityRouter, AlertService | 28 | 479 | — | |
 | `audit_log.py` | ✅ active | StructuredAuditLog | 11 | 180 | — | |
 | `data_health_schema.py` | ✅ active | Tier, SourceStatus, SourceCheckResult, CrossCheckResult, OrphanFinding, BehavioralMetrics, HealthReport, HealthCheckMeta, SourceHealthRecord | 5 | 300 | — | |
-| `data_health_service.py` | ✅ active | DataHealthService | 9 | 317 | — | |
+| `data_health_service.py` | ✅ active | DataHealthService | 9 | 319 | — | |
 | `data_loss.py` | ✅ active | — | 1 | 103 | — | |
 | `degradation.py` | ✅ active | DegradationLevel, DegradationConstraints | 4 | 267 | — | |
 | `diagnostics_dashboard.py` | ✅ active | DiagnosticsDashboard | 7 | 149 | — | |
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
 | `event_bus.py` | ✅ active | EventBus | 7 | 65 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | 🧪 stub | HealthCheckMethods | 42 | 3006 | — | |
+| `health_checks.py` | 🧪 stub | HealthCheckMethods | 44 | 3274 | — | |
 | `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
 | `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 927 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
@@ -667,6 +668,7 @@
 | `analyze_dual_symbol_trades.py` | ✅ active | — | 4 | 275 | — | |
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
 | `analyze_feature_shift.py` | ✅ active | — | 5 | 323 | — | |
+| `analyze_gate_activity.py` | ✅ active | — | 3 | 194 | — | |
 | `analyze_live_brain_performance.py` | ✅ active | — | 6 | 672 | — | |
 | `analyze_live_journal.py` | ✅ active | — | 7 | 827 | — | |
 | `analyze_m30_trailing_sltp.py` | ✅ active | — | 5 | 550 | — | |
@@ -733,7 +735,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 720 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 722 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |

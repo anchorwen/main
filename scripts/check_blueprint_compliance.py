@@ -90,6 +90,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/dynamic_sl_tp.py",
         "core/execution/kelly_sizer.py",
         "core/execution/pwin_chain.py",
+        "core/execution/gate_reachability.py",  # FIX-20260712-003: Layer 4 gate reachability analyzer
         "core/alpha/contracts.py",
         "core/alpha/registry.py",
         "core/alpha/ou_optimizer.py",
@@ -337,6 +338,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/diagnose_mypy_baseline.py",
         "scripts/audit_btc_live_direction.py",  # DQAF-058: BTC direction bias audit
         "scripts/forensic_feature_analysis.py",  # DQAF-058: feature distribution forensics
+        "scripts/analyze_gate_activity.py",  # FIX-20260712-003: Layer 4 dead gate detection
     ],
     "runtime_live": [
         "main.py",

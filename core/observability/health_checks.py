@@ -3004,3 +3004,271 @@ class HealthCheckMethods:
             metrics={"warnings": warnings, "infos": infos},
             checked_at=_utc_iso(),
         )
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # FIX-20260712-003 Phase 2: Intent Verification & Annotation Freshness
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _check_brain_intent_alignment(self) -> CrossCheckResult:
+        """FIX-20260712-003: Detect brain _intent vs runtime behavior contradictions.
+
+        Layer 3 of the 4-layer config defense system.  The ``_intent`` field
+        (optional, 3-enum) declares human intent for a brain.  This check
+        verifies that actual runtime status (governance + live.yaml) matches
+        the declared intent.
+
+        Intent values:
+        - ``shadow_only``: should never trade real money → status=shadow, enabled=false
+        - ``probation_limited``: micro-lot trading only → status=probation
+        - ``full_live``: full-size trading → status=live
+
+        Missing ``_intent`` → SKIPPED (non-breaking; old configs grandfathered).
+        """
+        import json as _json
+        import os as _os
+
+        # Determine brains dirs
+        if "btc" in str(self._base_dir).lower():
+            brains_dirs = ["configs/brains_btc"]
+            yaml_path = "configs/live_btc.yaml"
+        else:
+            brains_dirs = ["configs/brains", "configs/brains_xau"]
+            yaml_path = "configs/live.yaml"
+
+        # Load all brain configs with _intent
+        intent_configs: dict[str, dict[str, str]] = {}
+        for bd in brains_dirs:
+            if not _os.path.isdir(bd):
+                continue
+            for f in sorted(_os.listdir(bd)):
+                if not f.endswith(".json") or ".normalization." in f:
+                    continue
+                try:
+                    entry = _json.loads(open(_os.path.join(bd, f), encoding="utf-8").read())
+                    if entry.get("schema_version") != "brain_registry_entry.v1":
+                        continue
+                    bid = entry.get("brain_id", "")
+                    intent = entry.get("_intent")
+                    if bid and isinstance(intent, dict):
+                        trading = intent.get("trading", "")
+                        if trading in ("shadow_only", "probation_limited", "full_live"):
+                            intent_configs[bid] = {
+                                "trading": trading,
+                                "config_status": entry.get("status", "unknown"),
+                            }
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
+
+        if not intent_configs:
+            return CrossCheckResult(
+                check_name="brain_intent_alignment",
+                status=SourceStatus.PASS,
+                primary_code="BI_ALIGN_NONE",
+                message="No brain configs with _intent field — old configs grandfathered",
+                checked_at=_utc_iso(),
+            )
+
+        # Load governance state
+        gov_path = _os.path.join(self._base_dir, "governance_state.json")
+        brain_states: dict[str, dict] = {}
+        if _os.path.exists(gov_path):
+            try:
+                gov = _json.loads(open(gov_path, encoding="utf-8").read())
+                brain_states = gov.get("brain_states", {})
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
+
+        # Load live.yaml enabled map
+        enabled_map: dict[str, bool] = {}
+        try:
+            if _os.path.exists(yaml_path):
+                import yaml as _yaml
+
+                with open(yaml_path, encoding="utf-8") as _yf:
+                    yc = _yaml.safe_load(_yf)
+                if isinstance(yc, dict):
+                    for re_entry in (yc.get("brains", {}) or {}).get("registry_entries", []) or []:
+                        path_str = re_entry.get("path", "")
+                        if path_str:
+                            bid = _os.path.basename(path_str).replace(".json", "")
+                            enabled_map[bid] = bool(re_entry.get("enabled", True))
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
+
+        # Validate each intent declaration
+        issues: list[str] = []
+        warnings: list[str] = []
+
+        for bid, intent in intent_configs.items():
+            trading = intent["trading"]
+            gov_state = brain_states.get(bid, {})
+            gov_status = (
+                gov_state.get("status", "unknown") if isinstance(gov_state, dict) else "unknown"
+            )
+            enabled = enabled_map.get(bid, None)
+
+            if trading == "shadow_only":
+                if gov_status in ("live", "probation"):
+                    issues.append(
+                        f"{bid}: _intent=shadow_only but governance={gov_status} — "
+                        f"declared shadow-only is trading real money"
+                    )
+                if enabled is True:
+                    issues.append(f"{bid}: _intent=shadow_only but live.yaml enabled=true")
+            elif trading == "probation_limited":
+                if gov_status == "live":
+                    warnings.append(
+                        f"{bid}: _intent=probation_limited but governance=live — "
+                        f"auto-promoted beyond intent; config may need update"
+                    )
+                if gov_status in ("retired", "frozen", "shadow"):
+                    issues.append(
+                        f"{bid}: _intent=probation_limited but governance={gov_status} — "
+                        f"declared probation but governance is below probation"
+                    )
+            elif trading == "full_live":
+                if gov_status != "live":
+                    warnings.append(
+                        f"{bid}: _intent=full_live but governance={gov_status} — "
+                        f"intended live but not yet promoted"
+                    )
+                if enabled is False:
+                    issues.append(f"{bid}: _intent=full_live but live.yaml enabled=false")
+
+        if issues:
+            return CrossCheckResult(
+                check_name="brain_intent_alignment",
+                status=SourceStatus.FAIL,
+                primary_code="BI_ALIGN_CONFLICT",
+                message=f"{len(issues)} intent conflict(s): {'; '.join(issues[:3])}",
+                metrics={"issues": issues, "warnings": warnings},
+                checked_at=_utc_iso(),
+            )
+
+        status = SourceStatus.WARN if warnings else SourceStatus.PASS
+        code = "BI_ALIGN_WARN" if warnings else "BI_ALIGN_OK"
+        msg_parts: list[str] = [f"{len(intent_configs)} intent(s) verified"]
+        if warnings:
+            msg_parts.append(f"{len(warnings)} warning(s)")
+        return CrossCheckResult(
+            check_name="brain_intent_alignment",
+            status=status,
+            primary_code=code,
+            message="; ".join(msg_parts),
+            metrics={"warnings": warnings},
+            checked_at=_utc_iso(),
+        )
+
+    def _check_brain_config_annotation_freshness(self) -> CrossCheckResult:
+        """FIX-20260712-003: Detect stale _note annotations vs actual config state.
+
+        Layer 3 of the 4-layer config defense system.  Scans all brain config
+        ``_note`` / ``_retraining_note`` fields for statements that contradict
+        the current ``status`` field:
+
+        - Note says "not executed" / "shadow only" / "signals recorded" but
+          status is probation/live → FAIL (stale comment masking real trading)
+        - Note references a FIX ID but config key fields have changed → WARN
+          (annotation may be stale)
+        """
+        import json as _json
+        import os as _os
+
+        # Determine brains dirs
+        if "btc" in str(self._base_dir).lower():
+            brains_dirs = ["configs/brains_btc"]
+        else:
+            brains_dirs = ["configs/brains", "configs/brains_xau"]
+
+        # Phrases that indicate "not trading" intent
+        NOT_TRADING_PHRASES = [
+            "not executed",
+            "shadow only",
+            "signals recorded",
+            "not trading",
+            "no real trading",
+            "paper only",
+            "observation only",
+            "observe only",
+            "disabled",
+            "deactivated",
+        ]
+
+        issues: list[str] = []
+        stale_hints: list[str] = []
+
+        for bd in brains_dirs:
+            if not _os.path.isdir(bd):
+                continue
+            for f in sorted(_os.listdir(bd)):
+                if not f.endswith(".json") or ".normalization." in f:
+                    continue
+                try:
+                    entry = _json.loads(open(_os.path.join(bd, f), encoding="utf-8").read())
+                    if entry.get("schema_version") != "brain_registry_entry.v1":
+                        continue
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    continue
+
+                bid = entry.get("brain_id", f"<{f}>")
+                status = entry.get("status", "unknown")
+
+                # Collect all annotation text
+                notes: list[str] = []
+                for key in ("_note", "_retraining_note"):
+                    val = entry.get(key, "")
+                    if isinstance(val, str) and val.strip():
+                        notes.append(val)
+
+                if not notes:
+                    continue
+
+                combined = " ".join(notes).lower()
+
+                # Check 1: "not trading" phrases vs actual trading status
+                if status in ("probation", "live"):
+                    for phrase in NOT_TRADING_PHRASES:
+                        if phrase in combined:
+                            issues.append(
+                                f"{bid}: _note says '{phrase}' but status={status} — "
+                                f"stale annotation masking real trading"
+                            )
+                            break  # one issue per brain is enough
+
+                # Check 2: FIX ID references — heuristic: config status
+                # changed but note wasn't updated
+                # (Simple heuristic: if note mentions a FIX ID, flag for review)
+                import re as _re
+
+                fix_refs = _re.findall(r"FIX-\d{8}-\d{3,4}", combined)
+                if fix_refs and status in ("probation", "live"):
+                    stale_hints.append(
+                        f"{bid}: _note references {', '.join(fix_refs[:2])} — "
+                        f"verify annotation is current for status={status}"
+                    )
+
+        if issues:
+            return CrossCheckResult(
+                check_name="brain_config_annotation_freshness",
+                status=SourceStatus.FAIL,
+                primary_code="BA_STALE_ANNOTATION",
+                message=f"{len(issues)} stale annotation(s): {'; '.join(issues[:3])}",
+                metrics={"issues": issues, "stale_hints": stale_hints},
+                checked_at=_utc_iso(),
+            )
+
+        status = SourceStatus.WARN if stale_hints else SourceStatus.PASS
+        code = "BA_HINTS" if stale_hints else "BA_FRESH"
+        msg = (
+            f"{len(stale_hints)} annotation(s) with FIX references to review"
+            if stale_hints
+            else "All annotations consistent with config state"
+        )
+        return CrossCheckResult(
+            check_name="brain_config_annotation_freshness",
+            status=status,
+            primary_code=code,
+            message=msg,
+            metrics={"stale_hints": stale_hints},
+            checked_at=_utc_iso(),
+        )

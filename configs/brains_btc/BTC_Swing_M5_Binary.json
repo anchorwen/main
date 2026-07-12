@@ -106,5 +106,9 @@
     "spread_per_bar": true,
     "slippage_points": 0.0
   },
-  "_note": "FIX-20260706-025 (upgrade from FIX-20260706-015 baseline): B-path binary directional classifier v2 — SYMMETRIC labels + REAL per-bar spread + REAL 41-dim features + curation. XGBoost binary:logistic WR=54.2% ±1.5% (+3.1pp over zero-fill baseline 51.1%). Per-fold: 56.4%/53.7%/54.1%/51.9%/55.2%. Label WR=58.1%, EV=-0.005R (near-zero — symmetric friction). Institutional mandate: NO threshold shifting — accept native 64.6% LONG (regime-honest). Deadzone θ=0.05 → [0.45,0.55] NEUTRAL. Shadow/probation only — signals recorded, not executed. Previous model (WR=51.1%) superseded."
+  "_intent": {
+    "trading": "probation_limited",
+    "note": "FIX-20260712-003: B-path binary classifier on probation — micro-lot real trading allowed. Previous _note said 'signals recorded, not executed' which was stale since status=probation."
+  },
+  "_note": "FIX-20260706-025 (upgrade from FIX-20260706-015 baseline): B-path binary directional classifier v2 — SYMMETRIC labels + REAL per-bar spread + REAL 41-dim features + curation. XGBoost binary:logistic WR=54.2% ±1.5% (+3.1pp over zero-fill baseline 51.1%). Per-fold: 56.4%/53.7%/54.1%/51.9%/55.2%. Label WR=58.1%, EV=-0.005R (near-zero — symmetric friction). Institutional mandate: NO threshold shifting — accept native 64.6% LONG (regime-honest). Deadzone θ=0.05 → [0.45,0.55] NEUTRAL. As of FIX-20260712-003: probation_limited trading active (see _intent field). Previous model (WR=51.1%) superseded."
 }
