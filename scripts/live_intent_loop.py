@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -319,10 +321,17 @@ def main(argv: list[str] | None = None) -> int:
     _reentry_cfg: dict[str, Any] = {}
     if args.config:
         try:
-            import yaml
-
             with open(args.config, encoding="utf-8") as fh:
                 full_cfg = yaml.safe_load(fh)
+            import yaml as _yaml
+            if full_cfg is None:
+                import sys as _sys
+                print(json.dumps({"event": "fatal_config_parse", "error": "YAML parsed to None — file may be empty or contain only comments"}))
+                _sys.exit(1)
+            if not isinstance(full_cfg, dict):
+                import sys as _sys
+                print(json.dumps({"event": "fatal_config_parse", "error": f"YAML parsed to {type(full_cfg).__name__}, expected dict"}))
+                _sys.exit(1)
             strategy_configs = full_cfg.get("strategy_lines", {})
             # ── Regime map: per-strategy discrete hardware guard ──
             _rg_cfg = full_cfg.get("regime_gate", {})
@@ -411,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                     pass
 
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError, yaml.YAMLError) as exc:  # BLE001:FOG
             import sys as _sys
 
             print(

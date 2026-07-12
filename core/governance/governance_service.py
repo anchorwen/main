@@ -125,6 +125,28 @@ class GovernanceService:
 
         try:
             with self._lock:
+                # ── FIX-20260712-002: transition_log integrity gate ──
+                # Detect and refuse to persist invalid transitions (e.g.
+                # live→shadow which is not a valid governance status).
+                _invalid_log_entries = []
+                for i, entry in enumerate(self._transition_log):
+                    _from = entry.get("from", "")
+                    _to = entry.get("to", "")
+                    if (
+                        _from in self.VALID_TRANSITIONS
+                        and _to not in self.VALID_TRANSITIONS.get(_from, set())
+                    ):
+                        _invalid_log_entries.append(
+                            f"[{i}] {entry.get('brain_id','?')}: "
+                            f"{_from}→{_to} (reason: {entry.get('reason','?')})"
+                        )
+                if _invalid_log_entries:
+                    raise InvalidTransitionError(
+                        f"Governance save BLOCKED: {len(_invalid_log_entries)} "
+                        f"invalid transition(s) in transition_log: "
+                        f"{'; '.join(_invalid_log_entries[:5])}"
+                    )
+
                 payload = {
                     "schema_version": GOVERNANCE_STATE_SCHEMA,
                     "brain_states": dict(self._brain_states),

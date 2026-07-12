@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260712-002 | 2026-07-12 | cursor-agent | — | **Phase 1 Layer 2: Abolish competing reconciliation algorithms — SSOT drift detection-only**. `verify_startup_integrity()` SSOT reconciliation: replaced auto-repair with detection-only reporting (WARNING log). `_load_live_yaml()`: YAMLError catch + non-dict check → fatal ValueError. Deleted `scripts/_institutional_reconcile.py` — cmd_reconcile() sole entry per Iron Law #14. Fixes V4 16× live↔probation oscillation. Part of 4-layer config defense system (FIX-20260712-002). | RC-09, RC-06 |
 | FIX-20260708-003 | 2026-07-08 | cursor-agent | — | **MODULE_SOURCE_MAP: add backfill_fabricated_breakeven.py→runtime_live**. Append-only PnL correction script for the deal-selection SSOT fix (DQAF-20260708-003) — mapped to runtime_live alongside backfill_journal_orphans.py. | RC-12 — new module registration |
 | FIX-20260707-005 | 2026-07-07 | cursor-agent | — | **MODULE_SOURCE_MAP: add inspect_ofi_history.py→features_service**. OFI history accumulation monitor (DQAF-20260707-005 Phase 2) — new analysis script mapped to features_service module. | RC-12 — new module registration |
 | FIX-20260707-004 | 2026-07-07 | cursor-agent | — | **MODULE_SOURCE_MAP: add ofi_collector.py→features_service**. OFICollector flow features (DQAF-20260707-003 Phase 1) — ofi_collector.py was unmapped. Added to features_service module alongside other feature computer/collector files. | RC-12 — new module registration |

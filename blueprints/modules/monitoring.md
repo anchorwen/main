@@ -64,6 +64,7 @@ See [Architecture](#architecture) above — the scheduler-driven pipeline (Task 
 
 | Date | FIX ID | Description |
 |------|--------|-------------|
+| 2026-07-12 | FIX-20260712-002 | **Phase 1 Layer 2: 2 new cross-checks + probation coverage**. (1) `_check_brain_config_governance_status_alignment`: config vs governance STATUS_RANK alignment. (2) `_check_live_yaml_enabled_vs_brain_status`: zombie/intent-conflict detection. (3) Existing registry↔governance check extended from live-only to live+probation. Part of 4-layer config defense system. |
 | 2026-06-17 | FIX-005 | Initial deployment: audit + tombstone + dedup + normalize |
 | 2026-06-17 | — | GAP 4: automated silent monitoring (--quiet --alert) |
 | 2026-06-17 | — | GAP 3: feature drift detection (PSI baseline) |

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-12T12:02:03Z
+> **自动生成**: 2026-07-12T15:37:13Z
 > **扫描模块数**: 753
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -63,7 +63,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `brain_registry.py` | ✅ active | BrainEntry, BrainRegistry | 16 | 174 | — | |
+| `brain_registry.py` | ✅ active | BrainEntry, BrainRegistry | 16 | 188 | — | |
 | `online_mlp_model.py` | ✅ active | OnlineMLP, _TorchOnlineMLP, _Module | 15 | 269 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 
@@ -102,6 +102,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `asset_registry.py` | ✅ active | AssetConfig | 2 | 68 | — | |
+| `consistency.py` | ✅ active | ConfigConsistencyError, ConsistencyReport | 4 | 142 | — | |
 
 ## core/contracts
 
@@ -174,7 +175,7 @@
 | `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 521 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 17 | 350 | — | |
-| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1356 | — | |
+| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 19 | 1283 | — | |
 | `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 23 | 548 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
@@ -347,7 +348,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `governance_rule_engine.py` | ✅ active | GovernanceRule, GovernanceRuleEngine | 15 | 396 | — | |
-| `governance_service.py` | ✅ active | GovernanceService | 19 | 337 | — | |
+| `governance_service.py` | ✅ active | GovernanceService | 19 | 359 | — | |
 | `shadow_tracker.py` | ✅ active | ShadowBrainMetrics, ShadowTracker | 9 | 132 | — | |
 
 ## core/infrastructure
@@ -424,14 +425,14 @@
 | `alert_service.py` | 🧪 stub | AlertRule, AlertChannel, LogAlertChannel, InMemoryAlertChannel, BatchingAlertChannel, SeverityRouter, AlertService | 28 | 479 | — | |
 | `audit_log.py` | ✅ active | StructuredAuditLog | 11 | 180 | — | |
 | `data_health_schema.py` | ✅ active | Tier, SourceStatus, SourceCheckResult, CrossCheckResult, OrphanFinding, BehavioralMetrics, HealthReport, HealthCheckMeta, SourceHealthRecord | 5 | 300 | — | |
-| `data_health_service.py` | ✅ active | DataHealthService | 9 | 315 | — | |
+| `data_health_service.py` | ✅ active | DataHealthService | 9 | 317 | — | |
 | `data_loss.py` | ✅ active | — | 1 | 103 | — | |
 | `degradation.py` | ✅ active | DegradationLevel, DegradationConstraints | 4 | 267 | — | |
 | `diagnostics_dashboard.py` | ✅ active | DiagnosticsDashboard | 7 | 149 | — | |
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
 | `event_bus.py` | ✅ active | EventBus | 7 | 65 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | 🧪 stub | HealthCheckMethods | 40 | 2777 | — | |
+| `health_checks.py` | 🧪 stub | HealthCheckMethods | 42 | 3006 | — | |
 | `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
 | `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 927 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
@@ -522,7 +523,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4410 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4473 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2286 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -655,7 +656,6 @@
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
 | `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
 | `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
-| `_institutional_reconcile.py` | ✅ active | — | 7 | 282 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
@@ -798,7 +798,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2826 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2835 | — | |
 | `live_launcher.py` | ✅ active | — | 15 | 1163 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |

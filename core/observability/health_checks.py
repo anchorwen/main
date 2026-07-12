@@ -1619,11 +1619,11 @@ class HealthCheckMethods:
                 checked_at=_utc_iso(),
             )
 
-        # Find live brains in governance
-        live_ids = {
+        # Find active brains in governance (live + probation)
+        active_ids = {
             bid
             for bid, bs in brain_states.items()
-            if isinstance(bs, dict) and bs.get("status") == "live"
+            if isinstance(bs, dict) and bs.get("status") in ("live", "probation")
         }
 
         # Try to load brain registry from configs (same dir pattern as live.yaml)
@@ -1649,19 +1649,19 @@ class HealthCheckMethods:
                         registry_entries[entry["brain_id"]] = entry
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                     pass
-        for bid in live_ids:
+        for bid in active_ids:
             if bid not in registry_entries:
-                warnings.append(f"LIVE brain {bid} has NO registry entry in {brains_dir}")
+                warnings.append(f"Active brain {bid} has NO registry entry in {brains_dir}")
             else:
                 entry = registry_entries[bid]
                 if entry.get("status") in ("retired", "frozen"):
                     warnings.append(
-                        f"LIVE brain {bid}: registry says {entry['status']} — status skew"
+                        f"Active brain {bid}: registry says {entry['status']} — status skew"
                     )
                 if float(entry.get("vote_weight", 0) or 0) <= 0:
-                    warnings.append(f"LIVE brain {bid}: vote_weight=0 — muted in parliament")
+                    warnings.append(f"Active brain {bid}: vote_weight=0 — muted in parliament")
 
-        # Check 2: Is each live brain enabled in live.yaml?
+        # Check 2: Is each active brain enabled in live.yaml?
         try:
             import yaml as _yaml
 
@@ -1672,11 +1672,11 @@ class HealthCheckMethods:
                 for re in (yc.get("brains", {}) or {}).get("registry_entries", []) or []:
                     if not re.get("enabled", True):
                         disabled_paths.add(str(re.get("path", "")))
-                for bid in live_ids:
+                for bid in active_ids:
                     entry = registry_entries.get(bid, {})
                     src = entry.get("_source_path", "") or f"{brains_dir}/{bid}.json"
                     if src in disabled_paths or any(bid in dp for dp in disabled_paths):
-                        warnings.append(f"LIVE brain {bid}: disabled in {yaml_path}")
+                        warnings.append(f"Active brain {bid}: disabled in {yaml_path}")
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass  # yaml not available — skip this check
         if warnings:
@@ -1693,7 +1693,7 @@ class HealthCheckMethods:
             check_name="brain_registry_governance_alignment",
             status=SourceStatus.PASS,
             primary_code="BR_GOV_ALIGN_OK",
-            message=f"{len(live_ids)} live brain(s) aligned with registry",
+            message=f"{len(active_ids)} active brain(s) aligned with registry",
             checked_at=_utc_iso(),
         )
 
@@ -2773,5 +2773,234 @@ class HealthCheckMethods:
             primary_code="GUARD_HEARTBEAT_OK",
             message=f"EntryContextGuard heartbeat: {_age:.0f}min old (pid={_data.get('pid', '?')})",
             metrics={"heartbeat_age_min": round(_age, 1), "pid": _data.get("pid")},
+            checked_at=_utc_iso(),
+        )
+
+    def _check_brain_config_governance_status_alignment(self) -> CrossCheckResult:
+        """FIX-20260712-002: Detect config status vs governance status drift.
+
+        Iron Law #14: Config is SSOT (L1), governance is runtime lifecycle (L2).
+        Governance status must never fall below config status (config-as-floor).
+        Auto-promotions (governance > config) are warnings only — they mean
+        config should be updated to reflect reality.
+        """
+        import json as _json
+        import os as _os
+
+        STATUS_RANK: dict[str, int] = {
+            "retired": 0,
+            "frozen": 1,
+            "shadow": 2,
+            "candidate": 3,
+            "probation": 4,
+            "live": 5,
+        }
+
+        gov_path = _os.path.join(self._base_dir, "governance_state.json")
+        try:
+            if not _os.path.exists(gov_path):
+                return CrossCheckResult(
+                    check_name="brain_config_governance_status_alignment",
+                    status=SourceStatus.SKIPPED,
+                    primary_code="BG_ALIGN_SKIPPED",
+                    message="governance_state.json not found",
+                    checked_at=_utc_iso(),
+                )
+            gov = _json.loads(open(gov_path, encoding="utf-8").read())
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            return CrossCheckResult(
+                check_name="brain_config_governance_status_alignment",
+                status=SourceStatus.SKIPPED,
+                primary_code="BG_ALIGN_SKIPPED",
+                message="governance_state.json unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        brain_states = gov.get("brain_states", {})
+        if not brain_states:
+            return CrossCheckResult(
+                check_name="brain_config_governance_status_alignment",
+                status=SourceStatus.PASS,
+                primary_code="BG_ALIGN_OK",
+                message="No brain states to check",
+                checked_at=_utc_iso(),
+            )
+
+        issues: list[str] = []
+        warnings: list[str] = []
+        brains_dirs = ["configs/brains_btc", "configs/brains_xau", "configs/brains"]
+
+        # Build config status map from all brain config directories
+        config_statuses: dict[str, str] = {}
+        for bd in brains_dirs:
+            if not _os.path.isdir(bd):
+                continue
+            for f in sorted(_os.listdir(bd)):
+                if not f.endswith(".json") or ".normalization." in f:
+                    continue
+                try:
+                    entry = _json.loads(open(_os.path.join(bd, f), encoding="utf-8").read())
+                    if entry.get("schema_version") == "brain_registry_entry.v1":
+                        bid = entry.get("brain_id")
+                        if bid:
+                            config_statuses[bid] = entry.get("status", "candidate")
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
+
+        for bid, bs in brain_states.items():
+            if not isinstance(bs, dict):
+                continue
+            gov_status = bs.get("status", "unknown")
+            cfg_status = config_statuses.get(bid)
+            if cfg_status is None:
+                continue  # brain not on disk — handled by orphan check
+            if cfg_status == "shadow":
+                cfg_status = "candidate"
+
+            gov_rank = STATUS_RANK.get(gov_status, -1)
+            cfg_rank = STATUS_RANK.get(cfg_status, -1)
+
+            if gov_rank < cfg_rank:
+                issues.append(
+                    f"{bid}: config-as-floor violation — config={cfg_status} (rank={cfg_rank}), "
+                    f"governance={gov_status} (rank={gov_rank})"
+                )
+            elif gov_rank > cfg_rank:
+                warnings.append(
+                    f"{bid}: auto-promotion honored — config={cfg_status}, governance={gov_status}"
+                )
+
+        if issues:
+            return CrossCheckResult(
+                check_name="brain_config_governance_status_alignment",
+                status=SourceStatus.FAIL,
+                primary_code="BG_ALIGN_FLOOR_VIOLATION",
+                message=f"{len(issues)} config-as-floor violation(s): {'; '.join(issues[:3])}",
+                metrics={"issues": issues, "warnings": warnings},
+                checked_at=_utc_iso(),
+            )
+
+        status = SourceStatus.WARN if warnings else SourceStatus.PASS
+        return CrossCheckResult(
+            check_name="brain_config_governance_status_alignment",
+            status=status,
+            primary_code="BG_ALIGN_OK",
+            message=f"{len(brain_states)} brain(s) checked, {len(warnings)} auto-promotion(s) not yet synced",
+            metrics={"warnings": warnings},
+            checked_at=_utc_iso(),
+        )
+
+    def _check_live_yaml_enabled_vs_brain_status(self) -> CrossCheckResult:
+        """FIX-20260712-002: Detect live.yaml enabled vs brain config status conflicts.
+
+        Cross-checks the live.yaml wiring (L3) against brain config status (L1 SSOT):
+        - enabled=true + retired/frozen → FAIL: zombie brain that should never trade
+        - enabled=false + live → WARN: intent conflict — live brain disconnected
+        - enabled=true + probation → INFO: probation with real trading (intentional)
+        """
+        import json as _json
+        import os as _os
+
+        # Determine which live.yaml to read
+        if "btc" in str(self._base_dir).lower():
+            yaml_path = "configs/live_btc.yaml"
+            brains_dirs = ["configs/brains_btc"]
+        else:
+            yaml_path = "configs/live.yaml"
+            brains_dirs = ["configs/brains", "configs/brains_xau"]
+
+        # Load live.yaml
+        try:
+            if not _os.path.exists(yaml_path):
+                return CrossCheckResult(
+                    check_name="live_yaml_enabled_vs_brain_status",
+                    status=SourceStatus.SKIPPED,
+                    primary_code="LY_BRAIN_SKIPPED",
+                    message=f"{yaml_path} not found",
+                    checked_at=_utc_iso(),
+                )
+            import yaml as _yaml
+
+            with open(yaml_path, encoding="utf-8") as _yf:
+                yc = _yaml.safe_load(_yf)
+            if not isinstance(yc, dict):
+                return CrossCheckResult(
+                    check_name="live_yaml_enabled_vs_brain_status",
+                    status=SourceStatus.SKIPPED,
+                    primary_code="LY_BRAIN_SKIPPED",
+                    message=f"{yaml_path} parsed to {type(yc).__name__}, expected dict",
+                    checked_at=_utc_iso(),
+                )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            return CrossCheckResult(
+                check_name="live_yaml_enabled_vs_brain_status",
+                status=SourceStatus.SKIPPED,
+                primary_code="LY_BRAIN_SKIPPED",
+                message=f"{yaml_path} unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        # Build enabled map from live.yaml
+        enabled_map: dict[str, bool] = {}
+        for re_entry in (yc.get("brains", {}) or {}).get("registry_entries", []) or []:
+            path_str = re_entry.get("path", "")
+            if path_str:
+                bid = _os.path.basename(path_str).replace(".json", "")
+                enabled_map[bid] = bool(re_entry.get("enabled", True))
+
+        # Load config statuses
+        config_statuses: dict[str, str] = {}
+        for bd in brains_dirs:
+            if not _os.path.isdir(bd):
+                continue
+            for f in sorted(_os.listdir(bd)):
+                if not f.endswith(".json") or ".normalization." in f:
+                    continue
+                try:
+                    entry = _json.loads(open(_os.path.join(bd, f), encoding="utf-8").read())
+                    if entry.get("schema_version") == "brain_registry_entry.v1":
+                        bid = entry.get("brain_id")
+                        if bid:
+                            config_statuses[bid] = entry.get("status", "candidate")
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                    pass
+
+        issues: list[str] = []
+        warnings: list[str] = []
+        infos: list[str] = []
+
+        for bid, enabled in enabled_map.items():
+            cfg_status = config_statuses.get(bid, "unknown")
+            if enabled and cfg_status in ("retired", "frozen"):
+                issues.append(f"{bid}: enabled=true but config status={cfg_status} (zombie)")
+            elif not enabled and cfg_status == "live":
+                warnings.append(f"{bid}: enabled=false but config status=live (intent conflict)")
+            elif enabled and cfg_status == "probation":
+                infos.append(f"{bid}: probation with real trading (intentional)")
+
+        if issues:
+            return CrossCheckResult(
+                check_name="live_yaml_enabled_vs_brain_status",
+                status=SourceStatus.FAIL,
+                primary_code="LY_BRAIN_ZOMBIE",
+                message=f"{len(issues)} zombie brain(s): {'; '.join(issues[:3])}",
+                metrics={"issues": issues, "warnings": warnings, "infos": infos},
+                checked_at=_utc_iso(),
+            )
+
+        status = SourceStatus.WARN if warnings else SourceStatus.PASS
+        message_parts: list[str] = []
+        if warnings:
+            message_parts.append(f"{len(warnings)} intent conflict(s)")
+        if infos:
+            message_parts.append(f"{len(infos)} probation-with-trading")
+        message = "; ".join(message_parts) if message_parts else "All brains aligned"
+
+        return CrossCheckResult(
+            check_name="live_yaml_enabled_vs_brain_status",
+            status=status,
+            primary_code="LY_BRAIN_OK",
+            message=message,
+            metrics={"warnings": warnings, "infos": infos},
             checked_at=_utc_iso(),
         )

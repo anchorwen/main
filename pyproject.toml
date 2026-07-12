@@ -84,6 +84,7 @@ ignore = [
 "core/runtime/data_health_monitor.py" = ["SIM105", "F401", "UP017"]
 "core/runtime/execution_state.py" = ["SIM105"]
 "core/observability/health_checks.py" = ["BLE001"]  # DQAF-058: pre-existing BLE001:FOG patterns, all wrapped in fail_open_guard
+"core/observability/data_health_service.py" = ["BLE001"]  # DQAF-058: pre-existing BLE001:FOG in _run() check farm dispatch
 "core/training/__init__.py" = ["F401"]
 "scripts/check_preconditions.py" = ["I001", "UP038"]
 "tests/unit/test_execution_state.py" = ["I001", "F401"]

@@ -34,6 +34,7 @@ configs/brains/*.json → BrainRegistry.load() → {brain_id: BrainEntry}
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260712-002 | 2026-07-12 | cursor-agent | — | **Phase 1 Layer 1: BrainRegistry hard validation on missing/invalid status**. Replaced `status=raw.get("status", "shadow")` silent default with `ValueError` for missing/unknown status. Valid statuses: shadow, candidate, probation, live, frozen, retired, archived. Part of 4-layer config defense system (FIX-20260712-002). | RC-09 |
 | FIX-20260521-001 | 2026-05-21 | cursor-agent | — | Meta_Stage1_Huber_V1 vote_weight 0.0→0.8:解除物理阻断。V3脑禁用后Huber成为barrier_12bar唯一投票者，但vote_weight=0导致total_weight=0→parliament返回None→策略永远无法开单。0.8保留未来第二脑权重空间。 | RC-09 |
 | FIX-20260520-027 | 2026-05-20 | cursor-agent | — | BrainEntry added training_params field (dict[str, Any]) with sl_atr_mult, tp_atr_mult, horizon_bars, min_rr_ratio. BrainRegistry._load_all() parses training_params from JSON. Brain config schema extended: all 14 registry entries backfilled. | RC-09 |
 | FIX-20260522-021 | 2026-05-22 | cursor-agent | — | Layer 1 immutable contracts: Brain schema reference updated — `BrainSignal` supersedes `BrainDecisionProposal.prediction` dict. `Direction` type (`Literal["long","short","neutral"]`) and `TradeDirection` type (`Literal["long","short"]`) from `trading_contracts.py` replace loose string direction fields. Schema version constant `SCHEMA_BRAIN_DECISION_PROPOSAL` retained for backward compat. | RC-06 |

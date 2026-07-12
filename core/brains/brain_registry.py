@@ -70,6 +70,20 @@ class BrainRegistry:
             if raw.get("schema_version") != "brain_registry_entry.v1":
                 continue
 
+            # ── FIX-20260712-002 (Phase 1 Layer 1): hard error on missing/invalid status ──
+            _VALID_BRAIN_STATUSES = {"shadow", "candidate", "probation", "live", "frozen", "retired", "archived"}
+            _raw_status = raw.get("status")
+            if not _raw_status:
+                raise ValueError(
+                    f"BrainRegistry: brain config '{path.name}' is missing required 'status' field. "
+                    f"Valid statuses: {sorted(_VALID_BRAIN_STATUSES)}"
+                )
+            if _raw_status not in _VALID_BRAIN_STATUSES:
+                raise ValueError(
+                    f"BrainRegistry: brain config '{path.name}' has invalid status '{_raw_status}'. "
+                    f"Valid statuses: {sorted(_VALID_BRAIN_STATUSES)}"
+                )
+
             entry = BrainEntry(
                 brain_id=raw.get("brain_id", ""),
                 brain_type=raw.get("brain_type", ""),
@@ -79,7 +93,7 @@ class BrainRegistry:
                 feature_schema=raw.get("feature_schema", "v9_40dim"),
                 vote_weight=raw.get("vote_weight", 1.0),
                 magic=raw.get("magic", 0),
-                status=raw.get("status", "shadow"),
+                status=_raw_status,
                 artifact_path=raw.get("artifact_path", ""),
                 hmre_layer=raw.get("hmre_layer", ""),
                 training_params=raw.get("training_params", {}),

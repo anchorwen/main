@@ -179,6 +179,35 @@ Iterability: ↑ (assessment)
 
 ---
 
+## Iron Law #14: Brain Status SSOT Priority (脑状态单一真理源优先级)
+
+**触发**: 任何 brain status 对账、reconciliation、启动验证、每日运维同步。
+
+**绝对优先级** (不可逆、不可调和、不可条件分支):
+
+```
+SSOT Priority: Brain Config JSON > Governance State > live.yaml enabled
+```
+
+| 层级 | 来源 | 角色 | 物理文件 |
+|:---|:---|:---|:---|
+| **L1 — 人类 SSOT** | Brain Config JSON | 人类意图的权威表达 (status, vote_weight, magic) | `configs/brains_btc/*.json`, `configs/brains_xau/*.json` |
+| **L2 — 自动化 SSOT** | Governance State | 运行时生命周期管理 (可向上晋升，不可跌破 L1 floor) | `data_btc/governance_state.json` |
+| **L3 — 接线层** | live.yaml enabled | 运行时接线开关 (technical on/off, 不表达策略意图) | `configs/live_btc.yaml`, `configs/live_xau.yaml` |
+
+**核心约束**:
+1. **Config-as-Floor**: Governance state 的 status 永远不可低于 L1 brain config 的 `status` 字段。STATUS_RANK 定义: `retired(0) < frozen(1) < shadow(2) < candidate(3) < probation(4) < live(5)`.
+2. **Governance-owns-Lifecycle**: Config seeds initial state; governance 有权基于运行时表现自动晋升 (shadow→probation→live) 或在触发条件满足时降级 (live→probation→frozen).
+3. **No Siloed Reconciliation**: 所有 status 对账必须调用单一函数 `resolve_brain_status()` — 禁止多套独立算法竞争.
+4. **Runtime Gate reads Governance**: `StrategyEvaluator` 和 `StrategyLine` 在运行时仅使用 governance state 决定 brain 是否可投票 — 不直接读 config status.
+5. **Startup Reconciliation reads Config Floor**: 启动对账 → config status 为 floor; governance 高于 floor → preserve; governance 低于 floor → 拉回 floor.
+
+**反例**: BTC_Swing_V4 16 次 live↔probation 振荡 (两套对账算法互相覆写), `_institutional_reconcile.py` 独立政策与 `brain_lifecycle_manager.py` 竞争.
+
+**实现位置**: `core/deployment/brain_lifecycle_manager.py:cmd_reconcile()` (单一入口).
+
+---
+
 ## Iron Law #9: Agentic DQAF — 零幻觉双轨诊断协议
 
 **触发**: Bug报告/异常日志/诊断性提问("排查/为什么/是不是/什么原因")/任何基于系统观察提议修改代码或配置。

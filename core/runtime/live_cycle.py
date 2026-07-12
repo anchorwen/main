@@ -224,6 +224,69 @@ class LiveCycleConfig:
                 f"LiveCycleConfig: reentry_sl_penalty must be in [0,1], got {self.reentry_sl_penalty}"
             )
 
+        # ── FIX-20260712-002 (Phase 1 Layer 1): extended field sanity validation ──
+        # Positive fields (must be > 0 when set)
+        _positive_fields: dict[str, float | None] = {
+            "cooldown_seconds": self.cooldown_seconds,
+            "max_positions": self.max_positions,
+            "lot_step": self.lot_step,
+            "volume": self.volume,
+        }
+        for _name, _val in _positive_fields.items():
+            if _val is not None and _val <= 0:
+                raise ValueError(f"LiveCycleConfig.{_name}={_val} must be > 0")
+
+        # Non-negative fields (must be >= 0 when set)
+        _non_negative_fields: dict[str, float | None] = {
+            "risk_budget_usd": self.risk_budget_usd,
+            "equity_risk_pct": self.equity_risk_pct,
+            "min_lot": self.min_lot,
+            "max_lot": self.max_lot,
+            "intraday_drawdown_kill_pct": self.intraday_drawdown_kill_pct,
+            "intraday_dd_force_close_pct": self.intraday_dd_force_close_pct,
+            "reentry_bleed_cooldown": self.reentry_bleed_cooldown,
+            "strategy_stagger_seconds": self.strategy_stagger_seconds,
+        }
+        for _name, _val in _non_negative_fields.items():
+            if _val is not None and _val < 0:
+                raise ValueError(f"LiveCycleConfig.{_name}={_val} must be >= 0")
+
+        # Range [0.0, 1.0] checks
+        if self.confidence_threshold is not None and not (0.0 <= self.confidence_threshold <= 1.0):
+            raise ValueError(f"LiveCycleConfig.confidence_threshold={self.confidence_threshold} must be in [0, 1]")
+        if self.equity_risk_pct is not None and not (0.0 <= self.equity_risk_pct <= 1.0):
+            raise ValueError(f"LiveCycleConfig.equity_risk_pct={self.equity_risk_pct} must be in [0, 1]")
+        if self.intraday_drawdown_kill_pct is not None and not (0.0 <= self.intraday_drawdown_kill_pct <= 1.0):
+            raise ValueError(f"LiveCycleConfig.intraday_drawdown_kill_pct={self.intraday_drawdown_kill_pct} must be in [0, 1]")
+        if self.intraday_dd_force_close_pct is not None and not (0.0 <= self.intraday_dd_force_close_pct <= 1.0):
+            raise ValueError(f"LiveCycleConfig.intraday_dd_force_close_pct={self.intraday_dd_force_close_pct} must be in [0, 1]")
+
+        # Positivity checks for time/distance fields
+        if self.max_data_age_seconds is not None and self.max_data_age_seconds <= 0:
+            raise ValueError(f"LiveCycleConfig.max_data_age_seconds={self.max_data_age_seconds} must be > 0")
+        if self.close_price_max_age_seconds is not None and self.close_price_max_age_seconds <= 0:
+            raise ValueError(f"LiveCycleConfig.close_price_max_age_seconds={self.close_price_max_age_seconds} must be > 0")
+        if self.max_bridge_silence_seconds is not None and self.max_bridge_silence_seconds <= 0:
+            raise ValueError(f"LiveCycleConfig.max_bridge_silence_seconds={self.max_bridge_silence_seconds} must be > 0")
+        if self.circuit_breaker_cooldown_seconds is not None and self.circuit_breaker_cooldown_seconds <= 0:
+            raise ValueError(f"LiveCycleConfig.circuit_breaker_cooldown_seconds={self.circuit_breaker_cooldown_seconds} must be > 0")
+        if self.exit_max_hold_cycles is not None and self.exit_max_hold_cycles <= 0:
+            raise ValueError(f"LiveCycleConfig.exit_max_hold_cycles={self.exit_max_hold_cycles} must be > 0")
+
+        # min_lot < max_lot ordering
+        if self.min_lot is not None and self.max_lot is not None and self.min_lot > self.max_lot:
+            raise ValueError(f"LiveCycleConfig.min_lot={self.min_lot} > max_lot={self.max_lot}")
+
+        # market_type enum validation
+        _valid_market_types = {"forex_24_5", "crypto_24_7"}
+        if self.market_type not in _valid_market_types:
+            raise ValueError(f"LiveCycleConfig.market_type={self.market_type} not in {_valid_market_types}")
+
+        # cross_strategy_mode enum validation
+        _valid_cross_modes = {"block", "warn", "off"}
+        if self.cross_strategy_mode not in _valid_cross_modes:
+            raise ValueError(f"LiveCycleConfig.cross_strategy_mode={self.cross_strategy_mode} not in {_valid_cross_modes}")
+
 
 @dataclass
 class LiveCycleState:

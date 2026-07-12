@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-12T12:02:03Z
+> **自动生成**: 2026-07-12T15:37:13Z
 
 ## Package-Level Dependencies
 
@@ -84,6 +84,7 @@
 ### `core/config/`
 
 - `asset_registry.py` → (无内部依赖)
+- `consistency.py` → (无内部依赖)
 
 ### `core/contracts/`
 
@@ -569,7 +570,6 @@
 - `_fix_shadow_configs.py` → (无内部依赖)
 - `_forensic_orphan_closes.py` → (无内部依赖)
 - `_forensic_tp_profit_giveback.py` → (无内部依赖)
-- `_institutional_reconcile.py` → (无内部依赖)
 - `_surface_scan_horizon4.py` → (无内部依赖)
 - `_verify_btc_analysis_claims.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
