@@ -131,6 +131,7 @@ class DataHealthService(HealthCheckMethods):
                 self._check_live_yaml_enabled_vs_brain_status(),  # FIX-20260712-002 L2
                 self._check_brain_intent_alignment(),  # FIX-20260712-003 L3
                 self._check_brain_config_annotation_freshness(),  # FIX-20260712-003 L3
+                self._check_gate_activity_metrics(),  # FIX-20260713-004 L4
                 self._check_journal_vs_pnl_ledger(),
                 self._check_open_vs_close_convergence(),
             ]

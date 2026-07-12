@@ -7,9 +7,12 @@ Builds StrategyLine objects from brain configs and live.yaml strategy configs.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from core.config.asset_registry import get_asset
+
+logger = logging.getLogger(__name__)
 from core.execution.barrier_strategy import BarrierStrategy
 from core.execution.micro_strategy import MicroStrategy
 from core.execution.rule_engine_strategy import RuleEngineStrategyWrapper
@@ -178,8 +181,24 @@ def build_strategy_lines(
     # actual volatility regime (training contract: 1.5× ATR).
     _ref_atr: float = 100.0 if config.symbol.startswith("BTC") else 5.0
 
+    # ── FIX-20260713-004: Per-strategy missing-key tracker ──
+    # Tracks (name, key) pairs already warned about to avoid log spam.
+    # Reset each build cycle — strategies may be reconfigured between restarts.
+    _warned_missing: set[tuple[str, str]] = set()
+
     def _cfg(name: str, key: str, default: Any) -> Any:
-        return config.strategy_configs.get(name, {}).get(key, default)
+        sc = config.strategy_configs.get(name, {})
+        if key not in sc:
+            _wk = (name, key)
+            if _wk not in _warned_missing:
+                _warned_missing.add(_wk)
+                logger.warning(
+                    "config key '%s.%s' missing in live.yaml, using default=%s",
+                    name,
+                    key,
+                    default,
+                )
+        return sc.get(key, default)
 
     def _vol_cfg(name: str) -> float:
         sc = config.strategy_configs.get(name, {})

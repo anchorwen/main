@@ -3272,3 +3272,124 @@ class HealthCheckMethods:
             metrics={"stale_hints": stale_hints},
             checked_at=_utc_iso(),
         )
+
+    # ── FIX-20260713-004: Gate activity metrics (Phase 3 Layer 4) ─────────
+
+    def _check_gate_activity_metrics(self) -> CrossCheckResult:
+        """Cross-check: dead gate detection from golden_master.jsonl.
+
+        Reads the golden master log and classifies gate reasons to detect
+        gates that never fire (dead gates) or dominate the decision pipeline.
+        Classification mirrors ``scripts/analyze_gate_activity.py`` —
+        canonical implementation for Iron Law #11 compliant audit.
+
+        Returns FAIL when >10% of unique gates are dead (block rate < 0.05%),
+        WARN when dead gates exist, PASS otherwise.
+        """
+        import re as _re
+        from collections import Counter as _Counter
+
+        gm_path = os.path.join(self._base_dir, "golden_master.jsonl")
+        if not os.path.exists(gm_path):
+            return CrossCheckResult(
+                check_name="gate_activity_metrics",
+                status=SourceStatus.SKIPPED,
+                primary_code="GA_NO_DATA",
+                message="golden_master.jsonl not found — gate activity check skipped",
+                checked_at=_utc_iso(),
+            )
+
+        # ── Gate reason classifier (mirrors scripts/analyze_gate_activity.py) ──
+        def _classify(reason: str) -> str:
+            if not reason or not isinstance(reason, str):
+                return "UNKNOWN"
+            cleaned = _re.sub(r"[_\.]\d+\.?\d*(?=_|$)", "", reason)
+            cleaned = _re.sub(r"_remaining_\d+s_gap_\d+s$", "", cleaned)
+            cleaned = _re.sub(r":[^:]+$", "", cleaned)
+            return cleaned
+
+        total_outputs = 0
+        gate_counts: _Counter = _Counter()
+        try:
+            with open(gm_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    outputs = rec.get("outputs", {})
+                    for _strat, output in outputs.items():
+                        if not isinstance(output, dict):
+                            continue
+                        total_outputs += 1
+                        reason = output.get("reason", "MISSING")
+                        gate = _classify(reason)
+                        gate_counts[gate] += 1
+        except OSError:
+            return CrossCheckResult(
+                check_name="gate_activity_metrics",
+                status=SourceStatus.FAIL,
+                primary_code="GA_READ_ERROR",
+                message="Failed to read golden_master.jsonl",
+                checked_at=_utc_iso(),
+            )
+
+        if total_outputs == 0:
+            return CrossCheckResult(
+                check_name="gate_activity_metrics",
+                status=SourceStatus.SKIPPED,
+                primary_code="GA_EMPTY",
+                message="golden_master.jsonl has no outputs — gate activity check skipped",
+                checked_at=_utc_iso(),
+            )
+
+        # Compute block rates and detect dead gates
+        dead_threshold_pct = 0.05
+        dead_gates: list[str] = []
+        dominant_gates: list[str] = []
+        gate_metrics: dict[str, dict[str, float | int]] = {}
+
+        for gate, count in gate_counts.most_common():
+            rate = (count / total_outputs * 100) if total_outputs > 0 else 0.0
+            gate_metrics[gate] = {"blocks": count, "block_rate_pct": round(rate, 3)}
+            if 0 < rate < dead_threshold_pct:
+                dead_gates.append(gate)
+            if rate > 15.0:
+                dominant_gates.append(gate)
+
+        dead_pct = len(dead_gates) / max(len(gate_counts), 1) * 100
+
+        if dead_pct > 10.0:
+            status = SourceStatus.FAIL
+            code = "GA_DEAD_GATES_HIGH"
+            msg = (
+                f"{len(dead_gates)}/{len(gate_counts)} gates dead "
+                f"({dead_pct:.1f}% > 10% threshold): {', '.join(dead_gates[:5])}"
+            )
+        elif dead_gates:
+            status = SourceStatus.WARN
+            code = "GA_DEAD_GATES"
+            msg = f"{len(dead_gates)} dead gates detected: {', '.join(dead_gates[:3])}"
+        else:
+            status = SourceStatus.PASS
+            code = "GA_HEALTHY"
+            msg = f"All {len(gate_counts)} gates active (no dead gates)"
+
+        return CrossCheckResult(
+            check_name="gate_activity_metrics",
+            status=status,
+            primary_code=code,
+            message=msg,
+            metrics={
+                "total_outputs": total_outputs,
+                "unique_gates": len(gate_counts),
+                "dead_gates_count": len(dead_gates),
+                "dead_gates_pct": round(dead_pct, 1),
+                "dominant_gates": dominant_gates[:5],
+                "gate_metrics_json": json.dumps({g: m for g, m in list(gate_metrics.items())[:30]}),
+            },
+            checked_at=_utc_iso(),
+        )

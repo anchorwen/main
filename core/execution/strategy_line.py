@@ -1032,6 +1032,8 @@ class StrategyLine:
             # has alpha.  This gate auto-relaxes as more brains accumulate live
             # labels — the "3" in the DQAF report recommendation is aspirational;
             # 2 is the minimum viable cross-section.
+            # ── FIX-20260713-004: governance-guided exploration deadlock escape ──
+            _governance_guided = False
             if _gov_qualified < 2:
                 logger.info(
                     "[DQAF-066] Cold explore blocked for %s: only %d LIVE brain(s) "
@@ -1041,6 +1043,33 @@ class StrategyLine:
                     _gov_qualified,
                 )
                 _is_cold_explore = False
+                # FIX-20260713-004 (P2): Cold-start deadlock auto-mitigation.
+                # When exactly 1 brain has governance data (gov_qualified==1),
+                # we have partial statistical evidence but DQAF-066 blocks
+                # cold_explore (needs ≥2 for cross-brain confirmation).
+                # Without cold_explore, the p_win floor gate (line ~1324)
+                # compares governance-derived p_win (e.g. 0.50) against the
+                # dynamic breakeven (e.g. 0.541 for min_rr_ratio=0.85) and
+                # blocks ALL trades.  No trades → no new live_labels →
+                # permanent deadlock.
+                #
+                # Escape: governance_guided allows minimum-volume exploration
+                # trades through the p_win floor gate (matching cold_explore
+                # bypass) while keeping all other gates active.  This breaks
+                # the deadlock: 1 qualified brain is enough to prove "not
+                # completely blind."  Risk is bounded by minimum volume.
+                if _gov_qualified == 1:
+                    _governance_guided = True
+                    logger.warning(
+                        "[FIX-20260713-004] Governance-guided exploration "
+                        "activated for %s: only 1 LIVE brain with governance "
+                        "data — allowing minimum-volume trades through p_win "
+                        "floor gate to prevent cold-start deadlock. "
+                        "Will auto-resolve when ≥2 brains qualify.",
+                        name,
+                    )
+        else:
+            _governance_guided = False
         if _is_cold_explore:
             # p_win resolved in resolve_p_win() Step 1 — governance fallback
             # replaces the old hardcoded 0.50 (DQAF-20260623-066 P0-2).
@@ -1321,7 +1350,12 @@ class StrategyLine:
             # formula overestimates required p_win (FIX-20260604-084).
             _breakeven_p_win = sl_dist / (tp_dist + sl_dist)
             _effective_min_p_win = max(self.config.min_p_win, _breakeven_p_win)
-        if _effective_min_p_win > 0 and _p_win < _effective_min_p_win and not _is_cold_explore:
+        if (
+            _effective_min_p_win > 0
+            and _p_win < _effective_min_p_win
+            and not _is_cold_explore
+            and not _governance_guided
+        ):
             return self._make_decision(
                 should_trade=False,
                 direction=direction,
@@ -1398,7 +1432,12 @@ class StrategyLine:
         # exploration trades through even when RR < 1.0, matching the
         # hard p_win gate pattern at line 1395.  Without this, MetaFilter-
         # absent strategies with low RR are permanently blocked.
-        if _is_low_rr and _p_win < _rr_breakeven and not _is_cold_explore:
+        if (
+            _is_low_rr
+            and _p_win < _rr_breakeven
+            and not _is_cold_explore
+            and not _governance_guided
+        ):
             return self._make_decision(
                 should_trade=False,
                 direction="neutral",

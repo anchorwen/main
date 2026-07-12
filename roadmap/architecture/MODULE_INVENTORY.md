@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-12T15:55:13Z
+> **自动生成**: 2026-07-12T16:08:43Z
 > **扫描模块数**: 755
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -274,7 +274,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1906 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1945 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 421 | — | |
@@ -425,15 +425,15 @@
 | `alert_runbook_bridge.py` | ✅ active | RunbookAction, RunbookSOP, AlertRunbookBridge | 10 | 502 | — | |
 | `alert_service.py` | 🧪 stub | AlertRule, AlertChannel, LogAlertChannel, InMemoryAlertChannel, BatchingAlertChannel, SeverityRouter, AlertService | 28 | 479 | — | |
 | `audit_log.py` | ✅ active | StructuredAuditLog | 11 | 180 | — | |
-| `data_health_schema.py` | ✅ active | Tier, SourceStatus, SourceCheckResult, CrossCheckResult, OrphanFinding, BehavioralMetrics, HealthReport, HealthCheckMeta, SourceHealthRecord | 5 | 300 | — | |
-| `data_health_service.py` | ✅ active | DataHealthService | 9 | 319 | — | |
+| `data_health_schema.py` | ✅ active | Tier, SourceStatus, SourceCheckResult, CrossCheckResult, OrphanFinding, BehavioralMetrics, HealthReport, HealthCheckMeta, SourceHealthRecord | 5 | 306 | — | |
+| `data_health_service.py` | ✅ active | DataHealthService | 9 | 320 | — | |
 | `data_loss.py` | ✅ active | — | 1 | 103 | — | |
 | `degradation.py` | ✅ active | DegradationLevel, DegradationConstraints | 4 | 267 | — | |
 | `diagnostics_dashboard.py` | ✅ active | DiagnosticsDashboard | 7 | 149 | — | |
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
 | `event_bus.py` | ✅ active | EventBus | 7 | 65 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | 🧪 stub | HealthCheckMethods | 44 | 3274 | — | |
+| `health_checks.py` | 🧪 stub | HealthCheckMethods | 46 | 3395 | — | |
 | `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
 | `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 927 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
@@ -549,7 +549,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 5 | 986 | — | |
+| `strategy_builder.py` | ✅ active | — | 5 | 1005 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 4 | 1170 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |

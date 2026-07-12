@@ -84,6 +84,12 @@ class BehavioralMetrics:
     """
 
     gate_bypass_count: int = 0
+    gate_blocks: dict[str, int] = field(
+        default_factory=dict
+    )  # FIX-20260713-004: per-gate block counts
+    gate_block_rate: dict[str, float] = field(
+        default_factory=dict
+    )  # FIX-20260713-004: per-gate block rates
     brain_alerts: dict[str, int] = field(default_factory=dict)
     intent_dispatched_count: int = 0
     strategy_rejections: int = 0
