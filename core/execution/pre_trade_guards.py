@@ -822,10 +822,21 @@ class CooldownRegistry:
 # other family members must wait ≥ the shortest timeframe in the family
 # before entering the SAME direction.  This prevents the "collective trapping"
 # where a single large candle triggers all timeframes simultaneously.
-_SWING_FAMILY = frozenset({
-    "m15_swing", "m30_swing", "h1_swing", "h4_swing",    # XAU
-    "btc_swing",                                           # BTC (M5 — same-family with XAU swing for echo-trade prevention)
-})
+_SWING_FAMILY = frozenset(
+    {
+        "m15_swing",
+        "m30_swing",
+        "h1_swing",
+        "h4_swing",  # XAU
+    }
+)
+# ── DQAF-20260712-001: btc_swing REMOVED from _SWING_FAMILY ──────────────────
+# btc_swing (M5, BTC) runs on a different MT5 terminal, different symbol,
+# and different capital pool than the XAU swing strategies.  There is zero
+# cross-symbol echo-trade risk — the original "collective trapping" concern
+# does not apply across isolated execution environments.  btc_swing is now
+# its own standalone family, spaced by its native M5 timeframe (300s)
+# via _STRATEGY_FAMILY_GAP_SEC override below.
 # ── FIX-20260620-004: btc_swing_h1 REMOVED from _SWING_FAMILY ──────────
 # btc_swing (M5, XGBoost) enters every ~15min and perpetually resets the
 # family clock, blocking btc_swing_h1 (H1, LightGBM) from ever entering
@@ -842,7 +853,10 @@ _SWING_FAMILY_MIN_TF_SEC = 900  # M15 = 15 min — the shortest bar in the famil
 # (see CCT_LEDGER: Uncontrolled Risk Exposure Stacking).  Defaults to
 # _SWING_FAMILY_MIN_TF_SEC when no override is defined.
 _STRATEGY_FAMILY_GAP_SEC: dict[str, float] = {
-    "btc_swing_h1": 3600,   # 60 min — one full H1 bar
+    "btc_swing_h1": 3600,  # 60 min — one full H1 bar
+    # DQAF-20260712-001: btc_swing standalone family — 300s = 1× M5 bar
+    # (was previously 900s via _SWING_FAMILY_MIN_TF_SEC shared with XAU M15)
+    "btc_swing": 300,  # 5 min — one full M5 bar
 }
 
 

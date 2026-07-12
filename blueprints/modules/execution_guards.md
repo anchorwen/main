@@ -57,6 +57,14 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 **Files**: `core/execution/dynamic_sl_tp.py` (docstring), `core/execution/strategy_line.py`, `core/execution/rule_engine_strategy.py`, `core/runtime/market_ingress.py`, `core/runtime/strategy_evaluator.py`, `core/runtime/live_cycle.py`
 
+### FIX-20260712-001 — BTC V4 family_spacing Decouple + Confidence Range (2026-07-12)
+
+**Root Cause**: RC-05 (boundary-error) — `btc_swing` (M5, BTC) was grouped with XAU swing strategies in `_SWING_FAMILY`, sharing the 900s `_SWING_FAMILY_MIN_TF_SEC` (M15 clock) despite running on a different MT5 terminal, symbol, and capital pool. Zero cross-symbol echo-trade risk. Additionally, `peak_conf=0.50` compressed post-retrain V4 confidence to a narrow band (0.50-0.61), making reentry gates structurally unreachable (sl_recovery needs 0.65, brain_flip needs 0.82).
+
+**Fix**: (1) Removed `btc_swing` from `_SWING_FAMILY` — now standalone family. (2) Added `"btc_swing": 300` to `_STRATEGY_FAMILY_GAP_SEC` — 1× M5 bar. (3) `BTC_Swing_V4.json`: `peak_conf` 0.50→0.65 for wider confidence dynamic range. DQAF-20260712-001.
+
+**Files**: `core/execution/pre_trade_guards.py`, `configs/brains_btc/BTC_Swing_V4.json`
+
 ### FIX-20260704-007 — RR Guard Floating-Point Boundary (2026-07-04)
 
 **Root Cause**: L2 — FIX-005 spread pre-compensation produces mathematically exact RR == min_rr_ratio (e.g. 0.85), but IEEE 754 floating-point rounding makes `tp_dist/sl_dist ≈ min_rr_ratio - 2.8e-14`, failing the `>=` check. This caused ~100% of low-volatility BTC cycles to be blocked by `rr_below_minimum` despite the math being correct.

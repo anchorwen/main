@@ -103,9 +103,9 @@
   "confidence_params": {
     "method": "quantile_gaussian",
     "p95": 0.14,
-    "peak_conf": 0.50,
+    "peak_conf": 0.65,
     "lambda_decay": 0.10,
-    "_calibration_note": "FIX-20260710-V4-RETRAIN: Calibrated for new M5 model's compressed score range (max |score|≈0.14). p95 set just above max to keep all signals in linear ramp: confidence = (|score|/0.14) * 0.50. |score|=0.05→conf=0.18, |score|=0.10→conf=0.36 (passes threshold=0.35), |score|=0.14→conf=0.50. Isotonic calibration confirms monotonic (not inverted): higher conf → higher actual WR (44%→55%). Full calibration: data_btc/models/btc_swing_v4_3class_v2/calibration.json"
+    "_calibration_note": "FIX-20260710-V4-RETRAIN: Calibrated for new M5 model's compressed score range (max |score|≈0.14). p95 set just above max to keep all signals in linear ramp. DQAF-20260712-001: peak_conf raised 0.50→0.65 to widen dynamic range so reentry gates (sl_recovery needs 0.50+0.15=0.65) and brain_flip (needs 0.82) are reachable. confidence = (|score|/0.14) * 0.65. |score|=0.05→conf=0.23, |score|=0.10→conf=0.46 (passes threshold=0.35), |score|=0.14→conf=0.65. Isotonic calibration confirms monotonic (not inverted): higher conf → higher actual WR (44%→55%). Full calibration: data_btc/models/btc_swing_v4_3class_v2/calibration.json"
   },
   "last_retrained": "2026-07-10T02:24:32Z",
   "label_contract": {

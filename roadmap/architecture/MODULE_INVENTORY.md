@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-10T14:19:29Z
-> **扫描模块数**: 752
+> **自动生成**: 2026-07-12T12:02:03Z
+> **扫描模块数**: 753
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -259,7 +259,7 @@
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
 | `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2251 | — | |
-| `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 941 | — | |
+| `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 514 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
@@ -647,6 +647,7 @@
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
 | `_deep_dive_m15_swing_20260710.py` | ✅ active | — | 3 | 220 | — | |
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
+| `_diagnose_btc_v4_training_live_gap.py` | ✅ active | — | 5 | 403 | — | |
 | `_diagnose_giveback_lifecycle.py` | ✅ active | — | 5 | 247 | — | |
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_tp_giveback_pollution.py` | ✅ active | — | 4 | 164 | — | |
