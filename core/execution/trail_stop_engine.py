@@ -101,6 +101,17 @@ class TrailPolicy:
     ratchet_giveback_r: float = 1.0  # max R surrendered from the peak once armed
     ratchet_breakeven_floor_r: float = 0.1  # min positive lock (covers spread+commission)
 
+    # ── FIX-20260713-008: TP trailing structural parity ──
+    # TP trailing was price-blind (anchored to entry_price, ATR-only trigger)
+    # while SL trailing was price-aware (Chandelier highest_high/lowest_low).
+    # These three fields give the TP trail the same structural protection the
+    # SL trail already has.  Defaults (0.0 / 0.0 / 0.0) = legacy behaviour.
+    tp_proximity_ratio: float = 0.0  # 0=disabled; 0.7=suppress TP tighten when price has covered ≥70% of the entry→TP journey
+    tp_min_distance_atr: float = 0.0  # 0=disabled; 1.5=TP floor in bracket_atr units (TP must stay ≥ this × bracket_atr from anchor)
+    tp_min_step: float = (
+        0.0  # 0=disabled (caller's exit_min_step applies); >0=override min step for TP-only changes
+    )
+
 
 # ── Trail Stop Engine ──────────────────────────────────────────────────────
 

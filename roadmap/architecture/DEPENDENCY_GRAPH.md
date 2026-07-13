@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-13T09:00:26Z
+> **自动生成**: 2026-07-13T11:15:29Z
 
 ## Package-Level Dependencies
 
@@ -551,12 +551,14 @@
 
 ### `scripts/`
 
+- `_analyze_btc_gate_blocks.py` → (无内部依赖)
 - `_analyze_btc_long_losses.py` → (无内部依赖)
 - `_analyze_btc_segmented.py` → (无内部依赖)
 - `_analyze_live_status.py` → (无内部依赖)
 - `_analyze_post_deployment.py` → (无内部依赖)
 - `_analyze_today_btc_entries.py` → (无内部依赖)
 - `_analyze_two_positions_sltp.py` → (无内部依赖)
+- `_analyze_xau_h1_position.py` → (无内部依赖)
 - `_analyze_xau_now.py` → (无内部依赖)
 - `_analyze_xau_today_20260710.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)

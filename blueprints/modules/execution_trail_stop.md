@@ -14,6 +14,8 @@ Physically isolated Risk Exit subsystem. Computes Chandelier trailing stop level
 - `atr_mult`, `trail_activation_atr`, `breakeven_threshold_atr`
 - `graduated_lock_levels`: R-milestone → SL floor
 - `decay_start_r`, `decay_full_r`, `decay_enabled`: nonlinear decay from base→min
+- `ratchet_enabled`, `ratchet_arm_r`, `ratchet_giveback_r`, `ratchet_breakeven_floor_r`: profit ratchet floor (FIX-20260708-004)
+- `tp_proximity_ratio`, `tp_min_distance_atr`, `tp_min_step`: TP trailing structural parity (FIX-20260713-008) — defaults 0.0 = legacy
 
 ### Chandelier Formula
 ```

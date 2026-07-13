@@ -119,7 +119,7 @@ def compute_and_dispatch_trail(
         _be_skipped_price = False
 
     # ── Dynamic trailing TP ──
-    _trail_tp = pm.compute_trail_tp(current_atr, ticket=pos.ticket)
+    _trail_tp = pm.compute_trail_tp(current_atr, ticket=pos.ticket, mid=mid)
     if _trail_tp is not None and abs(_trail_tp - pos.current_tp) >= config.exit_min_step:
         _reasons.append("tp")
         _final_tp = _trail_tp

@@ -1658,91 +1658,139 @@ class ActivePositionManager:
             return True  # unknown → assume aligned
         return pos_side == trend_dir
 
-    def compute_trail_tp(self, current_atr: float, ticket: int | None = None) -> float | None:
+    def compute_trail_tp(
+        self, current_atr: float, ticket: int | None = None, mid: float | None = None
+    ) -> float | None:
         """Return new TP if it should be tightened based on ATR contraction.
 
-        TP only moves INWARD (closer to entry) — never widens.  When ATR
-        contracts significantly vs entry ATR, the original TP becomes
-        unrealistically far, so we tighten it to match current volatility.
+        TP only moves INWARD (closer to entry) — never widens.
 
-        Long:  candidate = mid + tp_atr_mult × current_atr  (but ≤ original TP)
-        Short: candidate = mid - tp_atr_mult × current_atr  (but ≥ original TP)
+        **FIX-20260713-008 (L2): SL-Anchored TP + Proximity Gate + TP Floor + Debounce**
 
-        FIX-20260707-009: Bracket Inversion — Dynamic Anchor Paradigm.
-        When the trailing SL has advanced past the TP zone (or the tightened
-        candidate would fall inside the current SL), the TP becomes a physical
-        hindrance — it blocks SL advancement because MT5 rejects SL ≥ TP for
-        LONG (or SL ≤ TP for SHORT) as "Invalid stops" (retcode 10016).
+        The pre-008 TP trail was price-blind: it anchored solely to
+        ``entry_price`` and had only one trigger (ATR contraction ≤ 0.80).
+        The SL trail (Chandelier) was price-aware (highest_high / lowest_low)
+        with 5 layers of protection, creating a structural asymmetry where
+        SL locked *more* profit while TP surrendered potential profit on the
+        same position.  This fix brings structural parity:
 
-        In this case TP yields to Trailing SL: we return 0.0 to signal
-        "release take-profit" to the execution gateway.  The position is
-        then fully managed by the Chandelier trailing stop, which is
-        independently bounded by max_lock_atr and graduated_lock_levels.
+        1. **Dynamic SL Anchor**: TP anchor follows the current SL — which is
+           already price-aware via Chandelier highest_high/lowest_low.
+           Pre-breakeven (SL ≤ entry): anchor = entry_price (legacy behaviour).
+           Post-breakeven (SL > entry): anchor = current_sl — TP rides the
+           same price-sensing rail as the SL, structurally preventing
+           Bracket Inversion.
+
+        2. **Proximity Gate** (Home-Stretch Guard): when price has covered
+           ≥ ``tp_proximity_ratio`` of the entry→current-TP journey, TP
+           tightening is suppressed — the runner is in the home stretch
+           and the finish line must not move backward.
+
+        3. **TP Floor**: ``tp_min_distance_atr × bracket_atr`` minimum
+           distance from the anchor — the structural counterpart to the
+           SL's ``max_lock_atr`` ceiling.
+
+        4. **Min-step Debounce**: ``tp_min_step`` guards against MT5
+           NO_CHANGES (10025) retries on sub-pip TP adjustments.
+
+        All new parameters default to 0.0 (disabled → legacy behaviour).
+        They are resolved from the position's per-strategy ``TrailPolicy``.
         """
         pos = self._get_pos(ticket)
         if pos is None or pos.entry_atr <= 0 or current_atr <= 0:
             return None
 
         # ── FIX-20260707-009: Bracket inversion pre-check ──
-        # If SL has already overtaken TP (e.g. SL trailed up while TP was
-        # anchored to entry_price), release TP immediately — don't wait for
-        # ATR contraction to fire.
         if pos.current_sl > 0 and pos.current_tp > 0:
             if pos.side == "long" and pos.current_sl >= pos.current_tp:
                 return 0.0  # TP yields to trailing SL
             if pos.side == "short" and pos.current_sl <= pos.current_tp:
                 return 0.0
 
-        # ── FIX-20260710-001 (L3): Profitability Gate — TP tightening only
-        # makes sense when the position has seen favourable price movement.
-        # On a position that has NEVER been profitable, ATR contraction
-        # merely means "the market is calming down while you are wrong";
-        # tightening TP closer to entry makes it HARDER to recover if the
-        # market reverses, not easier.  Mirror the trail_activation_atr
-        # pattern that compute_trail_stop() already enforces (FIX-20260603-064).
-        # DQAF-20260710-001.
+        # ── FIX-20260710-001 (L3): Profitability Gate ──
         if pos.side == "long" and pos.highest_high <= pos.entry_price:
             return None  # never profitable — leave original TP alone
         if pos.side == "short" and pos.lowest_low >= pos.entry_price:
             return None  # never profitable — leave original TP alone
 
         atr_ratio = current_atr / pos.entry_atr
-        # Only tighten when ATR has contracted meaningfully
         if atr_ratio > 0.80:
             return None
 
-        # ── FIX-20260709-004 (L3): scale trail-TP distance to the bracket's ATR ──
-        # The SL/TP bracket was sized with the strategy's own-timeframe ATR
-        # (FIX-20260706-027 via dynamic_sl_tp), but this trailing-TP distance was
-        # computed from the M5-scale `current_atr`, collapsing an H4-scale bracket
-        # to M5 scale (RR 1.66 → 0.08 on h1/h4 swings — DQAF-20260709-003).
-        # `bracket_atr` carries the per-TF ATR that sized the bracket; the ratio
-        # bracket_atr/entry_atr converts the M5-scale distance to the bracket's own
-        # timeframe.  The contraction GATE (atr_ratio) above is deliberately
-        # unchanged — it is scale-invariant (current_atr and entry_atr are both M5).
-        # bracket_atr == 0 (pre-fix state / M5 strategies) → factor 1.0 → identical
-        # legacy behaviour.
+        # ── FIX-20260709-004 (L3): bracket_atr per-TF scaling ──
         _bracket_atr = getattr(pos, "bracket_atr", 0.0) or 0.0
         _tf_scale = (
             (_bracket_atr / pos.entry_atr) if (_bracket_atr > 0 and pos.entry_atr > 0) else 1.0
         )
-        # Compute what the TP would be at current ATR, scaled to the bracket TF
         _trail_mult = getattr(pos, "trail_atr_mult", self.trail_atr_mult)
-        tp_distance = _trail_mult * current_atr * 1.75 * _tf_scale  # 1.75× SL trail mult, TF-scaled
+        tp_distance = _trail_mult * current_atr * 1.75 * _tf_scale
+
+        # ── FIX-20260713-008: resolve per-strategy TP trail policy ──
+        _tp = getattr(pos, "trail_policy", None)
+        _proximity_ratio = getattr(_tp, "tp_proximity_ratio", 0.0) if _tp is not None else 0.0
+        _min_distance_atr = getattr(_tp, "tp_min_distance_atr", 0.0) if _tp is not None else 0.0
+        _min_step = getattr(_tp, "tp_min_step", 0.0) if _tp is not None else 0.0
+
+        # ── FIX-20260713-008 §1: Dynamic SL Anchor ──
+        # Anchor follows the current SL — which already tracks highest_high
+        # (LONG) or lowest_low (SHORT) via the Chandelier trail.  When SL
+        # has not yet advanced past entry (pre-breakeven / pre-trail),
+        # anchor = entry_price = legacy behaviour.
         if pos.side == "long":
-            candidate = pos.entry_price + tp_distance
+            _sl = pos.current_sl if pos.current_sl > 0 else pos.entry_price
+            anchor = max(_sl, pos.entry_price)
+        else:
+            _sl = pos.current_sl if pos.current_sl > 0 else pos.entry_price
+            anchor = min(_sl, pos.entry_price)
+
+        if pos.side == "long":
+            candidate = anchor + tp_distance
+
+            # ── FIX-20260713-008 §2: Proximity Gate (Home-Stretch Guard) ──
+            if _proximity_ratio > 0 and mid is not None and mid > 0:
+                _journey_total = pos.current_tp - pos.entry_price  # entry→TP total distance
+                _journey_covered = mid - pos.entry_price  # how far price has already run
+                if _journey_total > 0 and _journey_covered > 0:
+                    if (_journey_covered / _journey_total) >= _proximity_ratio:
+                        return None  # home stretch — do not move the finish line
+
             # ── FIX-20260707-009: Bracket inversion candidate check ──
-            # If the tightened TP would fall at or inside the current SL,
-            # release TP instead of dispatching an illegal bracket.
             if pos.current_sl > 0 and candidate <= pos.current_sl:
                 return 0.0
+
+            # ── FIX-20260713-008 §3: TP Floor ──
+            if _min_distance_atr > 0 and _bracket_atr > 0:
+                _floor = anchor + _min_distance_atr * _bracket_atr
+                candidate = max(candidate, _floor)
+
             if candidate < pos.current_tp:
+                # ── FIX-20260713-008 §4: Min-step Debounce ──
+                if _min_step > 0 and abs(candidate - pos.current_tp) < _min_step:
+                    return None
                 return round(candidate, 3)
         else:
-            candidate = pos.entry_price - tp_distance
+            candidate = anchor - tp_distance
+
+            # ── FIX-20260713-008 §2: Proximity Gate (short) ──
+            if _proximity_ratio > 0 and mid is not None and mid > 0:
+                _journey_total = pos.entry_price - pos.current_tp
+                _journey_covered = pos.entry_price - mid
+                if _journey_total > 0 and _journey_covered > 0:
+                    if (_journey_covered / _journey_total) >= _proximity_ratio:
+                        return None
+
             if pos.current_sl > 0 and candidate >= pos.current_sl:
                 return 0.0
+
+            # ── FIX-20260713-008 §3: TP Floor (short) ──
+            if _min_distance_atr > 0 and _bracket_atr > 0:
+                _floor = anchor - _min_distance_atr * _bracket_atr
+                candidate = min(candidate, _floor)
+
             if candidate > pos.current_tp:
+                # ── FIX-20260713-008 §4: Min-step Debounce ──
+                if _min_step > 0 and abs(candidate - pos.current_tp) < _min_step:
+                    return None
                 return round(candidate, 3)
         return None
 
