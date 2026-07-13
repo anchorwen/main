@@ -1693,8 +1693,9 @@ class ActivePositionManager:
         4. **Min-step Debounce**: ``tp_min_step`` guards against MT5
            NO_CHANGES (10025) retries on sub-pip TP adjustments.
 
-        All new parameters default to 0.0 (disabled → legacy behaviour).
-        They are resolved from the position's per-strategy ``TrailPolicy``.
+        Active by default (全盤激活 2026-07-13).  Set to 0.0 on the strategy's
+        ``TrailPolicy`` to opt out of individual protections.
+        Resolved from the position's per-strategy ``TrailPolicy``.
         """
         pos = self._get_pos(ticket)
         if pos is None or pos.entry_atr <= 0 or current_atr <= 0:
@@ -1726,10 +1727,14 @@ class ActivePositionManager:
         tp_distance = _trail_mult * current_atr * 1.75 * _tf_scale
 
         # ── FIX-20260713-008: resolve per-strategy TP trail policy ──
+        # Falls back to the engine's default_policy when the position carries
+        # no explicit trail_policy (e.g. legacy positions, direct registrations).
         _tp = getattr(pos, "trail_policy", None)
-        _proximity_ratio = getattr(_tp, "tp_proximity_ratio", 0.0) if _tp is not None else 0.0
-        _min_distance_atr = getattr(_tp, "tp_min_distance_atr", 0.0) if _tp is not None else 0.0
-        _min_step = getattr(_tp, "tp_min_step", 0.0) if _tp is not None else 0.0
+        if _tp is None:
+            _tp = self._trail_engine.default_policy
+        _proximity_ratio = getattr(_tp, "tp_proximity_ratio", 0.0)
+        _min_distance_atr = getattr(_tp, "tp_min_distance_atr", 0.0)
+        _min_step = getattr(_tp, "tp_min_step", 0.0)
 
         # ── FIX-20260713-008 §1: Dynamic SL Anchor ──
         # Anchor follows the current SL — which already tracks highest_high
@@ -1783,9 +1788,13 @@ class ActivePositionManager:
                 return 0.0
 
             # ── FIX-20260713-008 §3: TP Floor (short) ──
+            # SHORT: lower number = further from entry = more aggressive.
+            # The floor anchors a MINIMUM distance from entry — TP must NOT
+            # be more aggressive (lower) than the floor.  max() picks the
+            # more conservative (higher) of the two.
             if _min_distance_atr > 0 and _bracket_atr > 0:
                 _floor = anchor - _min_distance_atr * _bracket_atr
-                candidate = min(candidate, _floor)
+                candidate = max(candidate, _floor)
 
             if candidate > pos.current_tp:
                 # ── FIX-20260713-008 §4: Min-step Debounce ──
