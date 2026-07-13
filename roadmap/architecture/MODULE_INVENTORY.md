@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-12T16:08:43Z
-> **扫描模块数**: 755
+> **自动生成**: 2026-07-13T02:00:55Z
+> **扫描模块数**: 757
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -654,9 +654,11 @@
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_tp_giveback_pollution.py` | ✅ active | — | 4 | 164 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
+| `_export_btc_mt5.py` | 📄 config | — | 0 | 48 | — | |
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
 | `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
 | `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
+| `_generate_btc_brain_configs.py` | ✅ active | — | 1 | 246 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |

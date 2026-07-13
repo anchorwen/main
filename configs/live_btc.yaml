@@ -160,6 +160,17 @@ brains:
   #   Shadow observe — signals recorded, not executed. DQAF-20260706-015.
   - enabled: true
     path: configs/brains_btc/BTC_Swing_M5_Binary.json
+  # ── BTC Multi-TF Tracer Bullet Expansion (2026-07-13) ──
+  # 41-dim V9 schema + DQAF-062 directional labels. All shadow — zero live risk.
+  # Each TF has _intent.trading: shadow_only with dead-man switches.
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_M15.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_M30.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_H1_V2.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_H4.json
   # ── DLR-001 config drift fix (2026-06-17): Retired fleet removed from registry.
   #   Archive brain configs preserved in configs/brains_btc/archive/ for reference.
 capital_allocator:
@@ -404,6 +415,172 @@ strategy_lines:
       partial_tp_enabled: true
       partial_tp_r: 1.0
       partial_tp_ratio: 0.5
+
+  # ── BTC Multi-TF Tracer Bullet Expansion (2026-07-13) ──
+  # All shadow mode — zero live risk. _intent.trading: shadow_only.
+  # Golden master records predictions only. No real orders.
+  # Evaluation: 500 shadow cycles → PF>1.0 + WR>48% → probation → live.
+
+  btc_swing_m15:
+    enabled: true
+    mode: shadow
+    base_volume: 0.01
+    brain_types:
+    - xgboost_v9
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 8
+      cooldown_minutes: 0
+    confidence_threshold: 0.35
+    direction_balance:
+      long_bias_discount: 0.0
+    exit:
+      confidence_decay_exit: true
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      hesitation_cycles: 12
+      time_exit_cycles: 72
+      trail_activation_atr: 0.5
+      trail_atr_mult: 2.0
+      trail_enabled: true
+    magic: 90415
+    max_spread_points: 3000
+    max_volume: 0.05
+    min_p_win: 0.45
+    min_valid_brains: 1
+    sl:
+      base_atr_mult: 2.0
+      dynamic: true
+      hard_sl_ratio: 1.5
+      min_rr_ratio: 0.85
+      min_sl_distance: 100.0
+    spread_points: 200
+    strategy_family: trend_following
+    timeframe: M15
+    tp:
+      base_atr_mult: 2.0
+      partial_tp_enabled: false
+
+  btc_swing_m30:
+    enabled: true
+    mode: shadow
+    base_volume: 0.01
+    brain_types:
+    - xgboost_v9
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 8
+      cooldown_minutes: 0
+    confidence_threshold: 0.35
+    direction_balance:
+      long_bias_discount: 0.0
+    exit:
+      confidence_decay_exit: true
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      hesitation_cycles: 12
+      time_exit_cycles: 72
+      trail_activation_atr: 0.5
+      trail_atr_mult: 2.0
+      trail_enabled: true
+    magic: 90430
+    max_spread_points: 3000
+    max_volume: 0.05
+    min_p_win: 0.45
+    min_valid_brains: 1
+    sl:
+      base_atr_mult: 2.0
+      dynamic: true
+      hard_sl_ratio: 1.5
+      min_rr_ratio: 0.85
+      min_sl_distance: 100.0
+    spread_points: 200
+    strategy_family: trend_following
+    timeframe: M30
+    tp:
+      base_atr_mult: 2.5
+      partial_tp_enabled: false
+
+  btc_swing_h1_v2:
+    enabled: true
+    mode: shadow
+    base_volume: 0.01
+    brain_types:
+    - lightgbm_v1
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 8
+      cooldown_minutes: 0
+    confidence_threshold: 0.35
+    direction_balance:
+      long_bias_discount: 0.0
+    exit:
+      confidence_decay_exit: true
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      hesitation_cycles: 12
+      time_exit_cycles: 72
+      trail_activation_atr: 0.5
+      trail_atr_mult: 2.0
+      trail_enabled: true
+    magic: 90460
+    max_spread_points: 3000
+    max_volume: 0.05
+    min_p_win: 0.45
+    min_valid_brains: 1
+    sl:
+      base_atr_mult: 2.0
+      dynamic: true
+      hard_sl_ratio: 1.5
+      min_rr_ratio: 0.85
+      min_sl_distance: 100.0
+    spread_points: 200
+    strategy_family: trend_following
+    timeframe: H1
+    tp:
+      base_atr_mult: 2.5
+      partial_tp_enabled: false
+
+  btc_swing_h4:
+    enabled: true
+    mode: shadow
+    base_volume: 0.01
+    brain_types:
+    - xgboost_v9
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 8
+      cooldown_minutes: 0
+    confidence_threshold: 0.35
+    direction_balance:
+      long_bias_discount: 0.0
+    exit:
+      confidence_decay_exit: true
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      hesitation_cycles: 12
+      time_exit_cycles: 72
+      trail_activation_atr: 0.5
+      trail_atr_mult: 2.0
+      trail_enabled: true
+    magic: 904240
+    max_spread_points: 3000
+    max_volume: 0.05
+    min_p_win: 0.45
+    min_valid_brains: 1
+    sl:
+      base_atr_mult: 2.5
+      dynamic: true
+      hard_sl_ratio: 1.5
+      min_rr_ratio: 0.85
+      min_sl_distance: 100.0
+    spread_points: 200
+    strategy_family: trend_following
+    timeframe: H4
+    tp:
+      base_atr_mult: 3.0
+      partial_tp_enabled: false
+
 training:
   lanes_config: scripts/training/lane_trainers.json
   plan_generator: scripts/training/generate_batch_plan.py
