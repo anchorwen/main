@@ -202,6 +202,51 @@ BTC_SWING_GROUP: dict[str, Any] = {
     "description": "BTC M30 swing — 12-bar barrier, SL=2.0xATR, TP=2.5xATR",
 }
 
+# Group 5h: BTC swing M15 (24-bar M15, SL=2.0×ATR, TP=2.0×ATR, ~6h)
+# Shadow tracer bullet — zero vote_weight, zero live risk.
+BTC_SWING_M15_GROUP: dict[str, Any] = {
+    "name": "btc_swing_m15",
+    "horizon_cycles": 72,  # 24 M15 bars × 3 M5 cycles/M15
+    "brain_types": {"xgboost_v9"},
+    "contract": "btc_swing_m15_24bar",
+    "voting_mode": "weighted",
+    "description": "BTC M15 swing — 24-bar (~6h) barrier, SL=2.0xATR, TP=2.0xATR, shadow tracer",
+}
+
+# Group 5i: BTC swing M30 (24-bar M30, SL=2.0×ATR, TP=2.5×ATR, ~12h)
+# Shadow tracer bullet — zero vote_weight, zero live risk.
+BTC_SWING_M30_GROUP: dict[str, Any] = {
+    "name": "btc_swing_m30",
+    "horizon_cycles": 144,  # 24 M30 bars × 6 M5 cycles/M30
+    "brain_types": {"xgboost_v9"},
+    "contract": "btc_swing_m30_24bar",
+    "voting_mode": "weighted",
+    "description": "BTC M30 swing — 24-bar (~12h) barrier, SL=2.0xATR, TP=2.5xATR, shadow tracer",
+}
+
+# Group 5j: BTC swing H1 V2 (24-bar H1, SL=2.0×ATR, TP=2.5×ATR, ~1d)
+# 41-dim directional labels — Wasserstein 2.3× improvement over old 48-dim H1.
+# Shadow tracer bullet — zero vote_weight, zero live risk.
+BTC_SWING_H1_V2_GROUP: dict[str, Any] = {
+    "name": "btc_swing_h1_v2",
+    "horizon_cycles": 288,  # 24 H1 bars × 12 M5 cycles/H1
+    "brain_types": {"lightgbm_v1"},
+    "contract": "btc_swing_h1_v2_24bar",
+    "voting_mode": "weighted",
+    "description": "BTC H1 V2 swing — 24-bar (~1d) barrier, SL=2.0xATR, TP=2.5xATR, 41-dim directional, shadow tracer",
+}
+
+# Group 5k: BTC swing H4 (12-bar H4, SL=2.5×ATR, TP=3.0×ATR, ~2d)
+# Shadow tracer bullet — zero vote_weight, zero live risk.
+BTC_SWING_H4_GROUP: dict[str, Any] = {
+    "name": "btc_swing_h4",
+    "horizon_cycles": 576,  # 12 H4 bars × 48 M5 cycles/H4
+    "brain_types": {"xgboost_v9"},
+    "contract": "btc_swing_h4_12bar",
+    "voting_mode": "weighted",
+    "description": "BTC H4 swing — 12-bar (~2d) barrier, SL=2.5xATR, TP=3.0xATR, shadow tracer",
+}
+
 # Group 5g: H1 directional XAU (24-bar H1, 2.0×ATR SL, 3.5×ATR TP, ~1d)
 # Bidirectional XGBoost regression — predicts direction + magnitude on H1 bars.
 # Swing_V10_H1_Directional (PF=81.10, +107.33R) — XAU's highest-performing brain.
@@ -230,6 +275,10 @@ ALL_GROUPS: tuple[dict[str, Any], ...] = (
     H4_SWING_GROUP,
     BTC_SWING_GROUP,
     BTC_SWING_H1_GROUP,
+    BTC_SWING_M15_GROUP,
+    BTC_SWING_M30_GROUP,
+    BTC_SWING_H1_V2_GROUP,
+    BTC_SWING_H4_GROUP,
     H1_DIRECTIONAL_GROUP,
 )
 

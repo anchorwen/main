@@ -217,7 +217,9 @@ class MetaSignalFilter:
             else:
                 import lightgbm as lgb
 
-                self._model = lgb.Booster(model_file=self.model_path)
+                # FIX-20260713-006: LightGBM 4.6.0 model_file= C parser bug → use model_str=
+                with open(self.model_path, encoding="utf-8") as _fh:
+                    self._model = lgb.Booster(model_str=_fh.read())
                 if not self._feature_names:
                     with contextlib.suppress(
                         RuntimeError, ValueError, KeyError, TypeError, OSError
@@ -254,7 +256,7 @@ class MetaSignalFilter:
             import joblib
 
             self._calibrator = joblib.load(self._calibrator_path)
-        except Exception as e:  # BLE001:FOG
+        except Exception as e:  # noqa: BLE001  # BLE001:FOG
             sys.stderr.write(
                 json.dumps(
                     {

@@ -183,10 +183,13 @@ class MetaExitEngine:
 
                 self._feature_names = feature_names
 
-            self._model = lgb.Booster(model_file=self.model_path)
+            # FIX-20260713-006: LightGBM 4.6.0 model_file= C parser bug → use model_str=
+            with open(self.model_path, encoding="utf-8") as _fh:
+                self._model = lgb.Booster(model_str=_fh.read())
             return True
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             return False
+
     # ── Heuristic scoring ──
 
     def _heuristic_evaluate(self, snap: ExitFeatureSnapshot) -> ExitEvaluation:
@@ -391,6 +394,7 @@ class MetaExitEngine:
             )
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             return self._heuristic_evaluate(snap)
+
     def _build_feature_vector(self, snap: ExitFeatureSnapshot) -> list[float]:
         """Build feature vector matching training schema.
 

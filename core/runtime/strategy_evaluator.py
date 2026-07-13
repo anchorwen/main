@@ -275,11 +275,20 @@ def evaluate_strategy_lines(
             continue
 
         # ── M15 bar-boundary gating ──
+        # FIX-20260713-007: Shadow-mode M15 strategies bypass the boundary
+        # gate.  The gate exists to prevent live-trading decisions on
+        # incomplete M15 bars, but shadow strategies only record
+        # golden_master predictions — no risk.  Without this bypass,
+        # btc_swing_m15 (and any other shadow M15) is silently skipped
+        # every cycle when the 5-min cycle offset never lands on a
+        # minute that is divisible by 15 (e.g. 29→34→39→44→...).
         _tf = getattr(getattr(strategy, "config", None), "timeframe", "M5")
         if _tf == "M15" and mtf_price_service is not None:
             _utc_minute = datetime.now(UTC).minute
             if not mtf_price_service.is_m15_boundary(_utc_minute):
-                continue
+                _mode = getattr(getattr(strategy, "config", None), "mode", None)
+                if _mode != "shadow":
+                    continue
         _effective_mid = mid_price
 
         # ── Cut 1: Absolute Refractory Period (cooldown check) ──

@@ -37,6 +37,7 @@ BrainSignal[] → ContractGroupConsensus.compute_all_group_signals()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260713-005 | 2026-07-13 | cursor-agent | (pending) | BTC multi-TF shadow tracer bullets: 4 new contract groups (btc_swing_m15/m30/h1_v2/h4) added to ALL_GROUPS — brains were silently dropped as unknown_contract_group_at_build. | RC-09 |
 | FIX-20260629-179 | 2026-06-29 | cursor-agent | — | **Register h1_directional contract group**: H1_DIRECTIONAL_GROUP added to contract_groups.py + ALL_GROUPS. Fixes Swing_V10_H1_Directional (PF=81.10) being silently skipped every cycle as unknown_contract_group_at_build. h1_directional strategy now has a contract group bucket. | RC-09 |
 | FIX-20260629-174 | 2026-06-29 | cursor-agent | — | **DQAF-174 L2: Unified weighting contract — capacity allocation aligned from bare get_weights() (PnL-only) to base_weight × dynamic_scale.** vote_weight=0 brains now receive 0 capacity allocation. Same contract as contract_groups.py voting path. | RC-06 |
 | FIX-20260607-147 | 2026-06-07 | cursor-agent | — | **Vote weight decoupling**: `contract_groups._compute_weighted()` now uses `base_weight × dynamic_scale` with fail-fast gate at base_weight≤0. Config vote_weight preserved as binary permission, dynamic_scale from PnL performance as multiplier. DQAF-011. | RC-09 |

@@ -49,6 +49,12 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260713-006 — LightGBM 4.6.0 model_str= Workaround (2026-07-06)
+
+**Root Cause**: RC-02 — LightGBM 4.6.0 C library model_file= parser loses sync on large multiclass model text files (1500 trees, 41-dim, 3.7 MB), causing stack buffer overrun (0xC0000409 STATUS_STACK_BUFFER_OVERRUN). Intent subprocess crash during brain init prevented golden_master cycles.
+
+**Fix**: Switched 2 execution call sites (meta_exit_engine.py:186, meta_signal_filter.py:220) from `lgb.Booster(model_file=path)` to `with open(path) as fh: lgb.Booster(model_str=fh.read())`.
+
 ### FIX-20260706-027 — Per-Timeframe ATR Injection (2026-07-06)
 
 **Root Cause**: L3 — `_get_current_atr()` hardcoded `MT5_TIMEFRAME_M5` for ALL strategies regardless of their own timeframe. Non-M5 strategies (M15/M30/H1/H4) received SL/TP barriers 2.5–7× tighter than training labels. Caused btc_swing (M5 SHORT) + btc_swing_h1 (H1 LONG) to produce mirror SL/TP barriers ($4 apart).

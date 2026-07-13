@@ -49,7 +49,14 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
             import lightgbm as lgb
 
             self._lgb = lgb
-            booster = lgb.Booster(model_file=artifact_path)
+            # FIX-20260713-006: LightGBM 4.6.0 C library file-parser bug.
+            # lgb.Booster(model_file=...) loses sync on large model files
+            # (reads tree data as structural markers → stack buffer overrun
+            # 0xC0000409).  model_str= parses from memory and works correctly.
+            # Reproducer: 1500-tree 41-dim multiclass model, 3.7 MB txt file.
+            with open(artifact_path, encoding="utf-8") as _fh:
+                _model_str = _fh.read()
+            booster = lgb.Booster(model_str=_model_str)
             self._booster = booster
             self._num_features = booster.num_feature()
             self._backend = "lightgbm:txt"
