@@ -163,7 +163,7 @@ brains:
   # ── BTC Multi-TF Tracer Bullet Expansion (2026-07-13) ──
   # 41-dim V9 schema + DQAF-062 directional labels. All shadow — zero live risk.
   # Each TF has _intent.trading: shadow_only with dead-man switches.
-  - enabled: true
+  - enabled: false  # RETIRED FIX-20260715-011
     path: configs/brains_btc/BTC_Swing_M15.json
   - enabled: true
     path: configs/brains_btc/BTC_Swing_M30.json
@@ -417,12 +417,12 @@ strategy_lines:
       partial_tp_ratio: 0.5
 
   # ── BTC Multi-TF Probation (2026-07-13) ──
-  # M15/M30/H1_V2 promoted from shadow to probation. H4 remains shadow.
-  # Evaluation: 50 real trades → PF>1.0 + WR>48% → live.
+  # M15 RETIRED 2026-07-15 (FIX-20260715-011): p_win=0.446 below 0.45 floor.
+  # M30/H1_V2: probation. H4: probation. Evaluation: 50 trades → PF>1.0 + WR>48% → live.
 
   btc_swing_m15:
-    enabled: true
-    mode: probation
+    enabled: false
+    mode: retired
     base_volume: 0.01
     brain_types:
     - xgboost_v9

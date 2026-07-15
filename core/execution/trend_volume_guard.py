@@ -265,9 +265,21 @@ def _counter_trend_action(
             "h4_vol_mult": 0.70,
         },
     }
-    t = thresholds.get(
-        strategy_name,
-        {
+    t = thresholds.get(strategy_name)
+    if t is None:
+        # ── FIX-20260715-011: Prefix-match multi-TF variants ──
+        # Strategy names like "btc_swing_m30" / "btc_swing_h4" must resolve
+        # to the "btc_swing" threshold entry.  Without this they fell through
+        # to the lenient default (h4_block=0.70), leaving multi-TF BTC
+        # strategies unprotected.
+        # Sorted by key length descending so more-specific prefixes
+        # (e.g. "btc_swing_h1" if it existed) match before "btc_swing".
+        for prefix in sorted(thresholds.keys(), key=len, reverse=True):
+            if strategy_name.startswith(prefix + "_"):
+                t = thresholds[prefix]
+                break
+    if t is None:
+        t = {
             "block": 0.60,
             "penalise": 0.35,
             "conf_mult": 0.65,
@@ -276,8 +288,7 @@ def _counter_trend_action(
             "h4_penalise": 0.40,
             "h4_conf_mult": 0.65,
             "h4_vol_mult": 0.70,
-        },
-    )
+        }
 
     # H4 gate checked first — higher TF takes priority
     if h4_trend_strength >= t["h4_block"]:
