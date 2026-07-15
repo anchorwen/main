@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-15T09:13:24Z
+> **自动生成**: 2026-07-15T10:19:58Z
 > **扫描模块数**: 767
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -825,7 +825,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 36 | 2136 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 37 | 2165 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |

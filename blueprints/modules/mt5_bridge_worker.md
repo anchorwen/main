@@ -37,6 +37,7 @@ Three-phase fix for the MIA (Missing In Action) root cause — crash window betw
 
 | FIX ID | Date | Description | Root Cause |
 |--------|------|-------------|------------|
+| FIX-20260715-016 | 2026-07-15 | **L3: Inter-request rate limiter for "Too many trade requests" (10022)** — Added `_enforce_trade_rate_limit()` (1.2s min interval) before all `mt5.order_send()` calls for trade-modifying ops. Added 10022 to `_TRANSIENT_RETCODES`. Fixes dual-position SL/TP modify ping-pong failure causing stale SL (excess risk up to ~$470). ReB: `MT5_TOO_MANY_REQUESTS_NO_RATE_LIMIT`. | RC-03 |
 | FIX-20260621-041 | 2026-06-21 | DQAF-034 MIA Root Cause Fix — Bridge Idempotent WAL Gateway (3-Phase) | RC-04 |
 | FIX-20260621-040 | 2026-06-21 | DQAF-033 P0 Addendum — close_accepted detail.reason fix | RC-07 |
 | FIX-20260613-057 | 2026-06-13 | Startup Race Condition — MT5 sync barrier | RC-04 |

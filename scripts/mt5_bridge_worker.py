@@ -444,8 +444,34 @@ _TRANSIENT_RETCODES: set[int] = {
     10016,  # TRADE_RETCODE_PRICE_CHANGED — handled with adaptive widening
     10018,  # TRADE_RETCODE_OFF_QUOTES
     10019,  # TRADE_RETCODE_CONNECTION
+    10022,  # TRADE_RETCODE_TOO_MANY_REQUESTS — FIX-20260715-016: broker rate limit
     10028,  # TRADE_RETCODE_TIMEOUT
 }
+
+# ── FIX-20260715-016: MT5 trade request rate limiter ──────────────────
+# MT5 brokers enforce a per-account rate limit on trade-modifying operations
+# (open, modify_sltp, close).  Consecutive order_send() calls within ~200ms
+# trigger TRADE_RETCODE_TOO_MANY_REQUESTS (10022).  This guard enforces a
+# minimum inter-request interval to avoid broker-side rejection.
+_TRADE_REQUEST_MIN_INTERVAL_S = 1.2  # seconds between consecutive trade requests
+_last_trade_request_at: float = 0.0
+
+
+def _enforce_trade_rate_limit() -> None:
+    """Block until the minimum inter-request interval has elapsed.
+
+    Call BEFORE any ``mt5.order_send()`` for trade-modifying operations
+    (TRADE_ACTION_DEAL, TRADE_ACTION_SLTP, TRADE_ACTION_CLOSE).
+    Read-only operations (positions_get, symbol_info_tick, etc.) are exempt.
+    """
+    global _last_trade_request_at
+    _now = time.time()
+    _elapsed = _now - _last_trade_request_at
+    if _elapsed < _TRADE_REQUEST_MIN_INTERVAL_S:
+        _wait = _TRADE_REQUEST_MIN_INTERVAL_S - _elapsed
+        time.sleep(_wait)
+    _last_trade_request_at = time.time()
+
 
 # Permanent rejection reasons (no retry)
 _PERMANENT_REASONS: set[str] = {
@@ -626,6 +652,7 @@ def _mt5_market_open(
         request["sl"] = stop_loss
     if take_profit is not None:
         request["tp"] = take_profit
+    _enforce_trade_rate_limit()
     result = mt5.order_send(request)
     if result is None:
         return "rejected", {"reason": "order_send_failed", "last_error": mt5.last_error()}
@@ -769,6 +796,7 @@ def _mt5_close_position(
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
+    _enforce_trade_rate_limit()
     result = mt5.order_send(request)
     if result is None:
         return "rejected", {"reason": "order_send_failed", "last_error": mt5.last_error()}
@@ -881,6 +909,7 @@ def _mt5_modify_sltp(
     if tp is not None:
         request["tp"] = tp
 
+    _enforce_trade_rate_limit()
     result = mt5.order_send(request)
     if result is None:
         return "rejected", {"reason": "order_send_failed", "last_error": mt5.last_error()}
