@@ -83,6 +83,11 @@ def apply_trend_isolation_gates(
         _rg_4b = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
         _h4_trend = str(_rg_4b.get("h4_trend_direction") or "neutral")
         _h1_trend = str(_rg_4b.get("h1_trend_direction") or "neutral")
+        # ── FIX-20260715-019: BTC exempt from hard multi-TF trend-direction lock ──
+        # BTC is a 24/7 crypto market — the H4≠H1 direction-divergence filter was
+        # designed for session-based gold.  Blocking all BTC swing trades on pure
+        # TF disagreement is overly restrictive.  BTC direction is already protected
+        # by the counter-trend gate (FIX-017, universal cold_explore application).
         _is_swing = name in (
             "m15_swing",
             "m30_swing",
@@ -90,10 +95,13 @@ def apply_trend_isolation_gates(
             "daily_swing",
             "h1_swing",
             "h4_swing",
-            "btc_swing",
+            # "btc_swing" removed — FIX-019
         )
+        # Multi-TF variants all start with "btc_swing" — exempt them too
+        _is_btc_swing = name.startswith("btc_swing")
         if (
             _is_swing
+            and not _is_btc_swing
             and _h4_trend != "neutral"
             and _h1_trend != "neutral"
             and _h4_trend != _h1_trend

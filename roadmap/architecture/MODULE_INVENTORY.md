@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-15T12:15:48Z
+> **自动生成**: 2026-07-15T13:17:36Z
 > **扫描模块数**: 767
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -279,7 +279,7 @@
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 431 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
-| `trend_isolation_gates.py` | ✅ active | — | 1 | 226 | — | |
+| `trend_isolation_gates.py` | ✅ active | — | 1 | 234 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 345 | — | |
 
 ## core/features
