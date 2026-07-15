@@ -10,10 +10,10 @@
   "artifact_path": "data_btc/models/btc_swing_v9_m30/xgboost_fold0_s42.json",
   "model_version": "btc_swing_m30",
   "artifact_hash": "48e68c63ce142247651766c770cdb1a5ac087fd48a1b21d9241ea0e6afcaea74",
-  "status": "shadow",
-  "vote_weight": 0.0,
+  "status": "probation",
+  "vote_weight": 0.5,
   "magic": 90430,
-  "brain_role": "tracer_candidate",
+  "brain_role": "probation_brain",
   "training_horizon": 24,
   "strategy": "btc_swing_m30",
   "timeframe": "M30",
@@ -31,7 +31,8 @@
     "decay_half_life_days": 110,
     "purge_bars": 24
   },
-  "_retraining_note": "BTC multi-TF expansion 2026-07-13: 41-dim V9 schema + directional labels. EV=+0.80R (highest across all TFs), CV WR=46.7% (below 48% gate but EV compensates). Shadow tracer bullet — zero vote_weight, zero live risk.",
+  "_retraining_note": "BTC multi-TF expansion 2026-07-13: 41-dim V9 schema + directional labels. EV=+0.80R (highest across all TFs), CV WR=46.7% (below 48% gate but EV compensates).",
+  "_promotion_note": "2026-07-13: shadow→probation per IC mandate. 0.80R EV is highest among all BTC brains. vote_weight=0.5 (standard probation penalty). Min 50 real trades to PF evaluation for probation→live.",
   "training_metrics": {
     "cv_mean_val_wr": 0.4669,
     "cv_std_val_wr": 0.0272,
@@ -76,12 +77,12 @@
     "contract_type": "btc_swing_m30"
   },
   "_intent": {
-    "trading": "shadow_only",
+    "trading": "probation_trading",
     "_ic_mandate": {
-      "phase": "tracer_bullet_evaluation",
-      "min_shadow_cycles": 500,
-      "evaluation_criteria": ["PF>1.0", "directional_WR>48%", "Wasserstein<0.05"],
-      "dead_man_switch": "fire_rate > 10x live OR WR < 40% -> auto freeze"
+      "phase": "probation_evaluation",
+      "min_real_trades": 50,
+      "promotion_criteria": ["PF>1.0", "directional_WR>48%", "Wasserstein<0.05"],
+      "dead_man_switch": "WR < 40% OR consecutive_losses >= 8 OR daily_loss > 3% -> auto freeze"
     }
   }
 }

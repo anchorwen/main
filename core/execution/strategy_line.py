@@ -33,7 +33,11 @@ from core.execution.ofi_gate import apply_ofi_toxicity_gate
 from core.execution.pwin_chain import resolve_p_win
 from core.execution.strategy_decision import StrategyDecision
 from core.execution.trend_isolation_gates import apply_trend_isolation_gates
-from core.execution.trend_volume_guard import check_minimum_rr, compute_counter_trend_volume_mult
+from core.execution.trend_volume_guard import (
+    _counter_trend_action,
+    check_minimum_rr,
+    compute_counter_trend_volume_mult,
+)
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.shadow_recorder import record_brain_votes
 
@@ -1208,6 +1212,49 @@ class StrategyLine:
         )
 
         # ── 5. Dynamic SL/TP ──
+
+        # ── FIX-20260715-010: Counter-trend trend_strength gate ──
+        # Wire _counter_trend_action (previously defined but never called for
+        # swing strategies) into the gate chain.  Uses H4/H1 trend_strength
+        # (Kalman velocity) — more responsive than ADX-based Gate 4c.
+        # Per-strategy thresholds in trend_volume_guard.py:_counter_trend_action().
+        # BTC: h4_block=0.60, h4_penalise=0.40 (tightened from 0.80/0.55).
+        # Block: counter-trend trades when H4 trend is unambiguous.
+        # Penalise: half volume counter-trend exploration in moderate trends.
+        if (
+            not _is_cold_explore
+            and not _governance_guided
+            and direction != "neutral"
+            and regime_info is not None
+        ):
+            _rg_ct = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
+            _h4_ts = float(_rg_ct.get("h4_trend_strength") or 0.0)
+            _h1_ts = float(_rg_ct.get("h1_trend_strength") or 0.0)
+            _ct_action = _counter_trend_action(name, _h1_ts, h4_trend_strength=_h4_ts)
+            if _ct_action["action"] == "block":
+                return self._make_decision(
+                    should_trade=False,
+                    direction=direction,
+                    confidence=round(confidence, 4),
+                    volume=0.0,
+                    sl=0.0,
+                    tp=0.0,
+                    hard_sl=0.0,
+                    brain_ids=brain_ids,
+                    supporting_count=support_count,
+                    total_count=total_count,
+                    regime_mode=regime_gate_mode,
+                    venue="live",
+                    reason=(
+                        f"counter_trend_blocked:{direction}_h4ts={_h4_ts:.2f}" f"_h1ts={_h1_ts:.2f}"
+                    ),
+                    entry_z_score=entry_z_score,
+                    entry_half_life=entry_half_life,
+                    p_win=0.0,
+                    kelly_mult=0.0,
+                )
+            if _ct_action["action"] == "penalise":
+                _ct_vol_mult = _ct_action["vol_mult"]
 
         # Dynamic ref ATR: use live EWMA atr_mean when available (Phase 4)
         _dynamic_ref_atr = self.config.ref_atr

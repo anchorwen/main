@@ -29,6 +29,7 @@
   "training_params": {
     "sl_atr_mult": 3.0,
     "tp_atr_mult": 1.5,
+    "_training_serving_divergence": "FIX-20260715-009: served TP=3.0 (symmetrical RR=1.0). Brain trained with TP=1.5 labels — retraining deferred (Phase 5). Serving-side change is correct: asymmetric RR=0.5 is structurally negative EV.",
     "horizon": 24,
     "n_estimators": 300,
     "learning_rate": 0.03,
@@ -88,8 +89,8 @@
   },
   "label_contract": {
     "sl_atr_mult": 3.0,
-    "tp_atr_mult": 1.5,
+    "tp_atr_mult": 3.0,
     "contract_type": "m15_swing",
-    "_note": "DQAF-20260710-001: REVERTED to training_params (SL=3.0/TP=1.5). DQAF-20260630-200 incorrectly aligned label_contract to live.yaml instead of aligning live.yaml to training. Brain model weights trained with SL=3.0/TP=1.5 labels — label_contract must match."
+    "_note": "FIX-20260715-009: TP aligned to serving (1.5→3.0, base RR 0.5→1.0). Brain was trained with TP=1.5 labels — RETRAINING REQUIRED (deferred Phase 5 swing retraining). Until retrained, brain votes at training-serving mismatch risk. The correct fix is to serve the symmetric contract (RR=1.0) rather than preserve the asymmetric training labels that produce structurally negative EV."
   }
 }

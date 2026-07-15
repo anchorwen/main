@@ -275,19 +275,17 @@ def evaluate_strategy_lines(
             continue
 
         # ── M15 bar-boundary gating ──
-        # FIX-20260713-007: Shadow-mode M15 strategies bypass the boundary
-        # gate.  The gate exists to prevent live-trading decisions on
-        # incomplete M15 bars, but shadow strategies only record
-        # golden_master predictions — no risk.  Without this bypass,
-        # btc_swing_m15 (and any other shadow M15) is silently skipped
-        # every cycle when the 5-min cycle offset never lands on a
-        # minute that is divisible by 15 (e.g. 29→34→39→44→...).
+        # FIX-20260714-005: Only live-mode M15 strategies are gated to
+        # M15 bar boundaries (0/15/30/45). Probation and shadow modes
+        # evaluate every cycle — they need golden_master signal recording
+        # for observability.  The original gate (FIX-20260713-007) only
+        # bypassed shadow, which silently killed probation-mode M15.
         _tf = getattr(getattr(strategy, "config", None), "timeframe", "M5")
         if _tf == "M15" and mtf_price_service is not None:
             _utc_minute = datetime.now(UTC).minute
             if not mtf_price_service.is_m15_boundary(_utc_minute):
                 _mode = getattr(getattr(strategy, "config", None), "mode", None)
-                if _mode != "shadow":
+                if _mode == "live":
                     continue
         _effective_mid = mid_price
 
@@ -649,21 +647,17 @@ def evaluate_strategy_lines(
                         ),
                         flush=True,
                     )
-                else:
-                    # ── FIX-20260609-002: intra-cycle optimistic lock ──
-                    # Record the entry immediately so that subsequent
-                    # family members evaluated in the SAME cycle see the
-                    # spacing gap and are blocked.  Without this, all
-                    # family members pass spacing check simultaneously
-                    # (no entries recorded yet) → cluster entry.
-                    # DQAF-20260609-002 diagnosed (3 swing same-second).
-                    import time as _time
-
-                    family_entry_tracker.record_entry(
-                        _fam,
-                        decision.direction,
-                        _time.time(),
-                    )
+                # ── FIX-20260714-006: decision-time family_entry_tracker.record_entry REMOVED ──
+                # The decision-time record_entry (FIX-20260609-002) was called BOTH at
+                # decision time (here) AND at dispatch time (dispatch_post.py:56).
+                # Every trade reset the 900s timer twice, causing ~1800s effective
+                # cooldown instead of 900s.  With 4 XAU swing strategies all predicting
+                # the same direction, this doubled blocking caused 83.3% signal rejection.
+                #
+                # The dispatch-time record_entry (dispatch_post.py:56) is the SSOT —
+                # only a REAL filled order should start the family cooldown clock.
+                # Same-cycle cluster entries remain mitigated by the reentry guard (Cut 3)
+                # and CrossStrategyCoordinator, which operate independently.
 
         # ── Cut 3: Reentry quality guard (FIX-20260606-131, P2.6 front-placement) ──
         if decision.should_trade and reentry_states is not None:

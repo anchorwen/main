@@ -10,10 +10,10 @@
   "artifact_path": "data_btc/models/btc_swing_v9_h4/xgboost_fold0_s42.json",
   "model_version": "btc_swing_h4",
   "artifact_hash": "fa2efc72d0f7675561298c265f82d60bf38f83e74e8d21a2199e3991d344d398",
-  "status": "shadow",
-  "vote_weight": 0.0,
+  "status": "probation",
+  "vote_weight": 0.3,
   "magic": 904240,
-  "brain_role": "tracer_candidate",
+  "brain_role": "probation_brain",
   "training_horizon": 12,
   "strategy": "btc_swing_h4",
   "timeframe": "H4",
@@ -31,7 +31,7 @@
     "decay_half_life_days": 200,
     "purge_bars": 12
   },
-  "_retraining_note": "BTC multi-TF expansion 2026-07-13: 41-dim V9 schema + directional labels. EV=+0.44R, CV WR=49.4% (high variance +/-9%). 8 years of H4 data (2018-2026), but only 8,598 labeled samples. Shadow tracer bullet — zero vote_weight, zero live risk. Note: 60% NEUTRAL labels — H4 bars are slow to hit barriers at 12-bar horizon.",
+  "_retraining_note": "BTC multi-TF expansion 2026-07-13: 41-dim V9 schema + directional labels. EV=+0.44R, CV WR=49.4%. Promoted to probation 2026-07-15 per Investment Committee directive (FIX-20260715-010). H4 p_win=0.703 is strongest BTC signal. Cut-4 micro-volume active.",
   "training_metrics": {
     "cv_mean_val_wr": 0.4936,
     "cv_std_val_wr": 0.0899,
@@ -76,12 +76,14 @@
     "contract_type": "btc_swing_h4"
   },
   "_intent": {
-    "trading": "shadow_only",
+    "trading": "probation_limited",
     "_ic_mandate": {
-      "phase": "tracer_bullet_evaluation",
-      "min_shadow_cycles": 500,
+      "phase": "probation_evaluation",
+      "min_real_trades": 50,
       "evaluation_criteria": ["PF>1.0", "directional_WR>48%", "Wasserstein<0.05"],
-      "dead_man_switch": "fire_rate > 10x live OR WR < 40% -> auto freeze"
+      "promotion_criteria": ["PF>1.0", "directional_WR>48%", "Wasserstein<0.05"],
+      "dead_man_switch": "WR < 40% OR consecutive_losses >= 8 OR daily_loss > 3% -> auto freeze",
+      "_activation_note": "FIX-20260715-010: Promoted from shadow to probation per Investment Committee directive. H4 p_win=0.703 is the strongest BTC signal. Cut-4 micro-volume (0.01 lot, ~$20 max risk)."
     }
   }
 }

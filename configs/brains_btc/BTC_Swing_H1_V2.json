@@ -10,10 +10,10 @@
   "artifact_path": "data_btc/models/btc_swing_v9_h1/lightgbm_fold0_s42.txt",
   "model_version": "btc_swing_h1_v2",
   "artifact_hash": "d054af253e2266d36a2ea1702bb314de5e9da7cc312ee1b877c2899e28efcf6a",
-  "status": "shadow",
-  "vote_weight": 0.0,
+  "status": "probation",
+  "vote_weight": 0.5,
   "magic": 90460,
-  "brain_role": "tracer_candidate",
+  "brain_role": "probation_brain",
   "training_horizon": 24,
   "strategy": "btc_swing_h1_v2",
   "timeframe": "H1",
@@ -31,7 +31,8 @@
     "decay_half_life_days": 150,
     "purge_bars": 24
   },
-  "_retraining_note": "BREAKTHROUGH: Old V12_H1_15 (48-dim) had Wasserstein=0.0084 (zero directional discrimination) → retired. New BTC_Swing_H1_V2: 41-dim V9 schema + directional labels. EV=+0.75R, CV WR=48.1%. 8 years of H1 data (2018-2026). Wasserstein improved 2.3x vs old (0.0196 vs 0.0084). Shadow tracer bullet — zero vote_weight, zero live risk.",
+  "_retraining_note": "BREAKTHROUGH: Old V12_H1_15 (48-dim) had Wasserstein=0.0084 (zero directional discrimination) → retired. New BTC_Swing_H1_V2: 41-dim V9 schema + directional labels. EV=+0.75R, CV WR=48.1%. 8 years of H1 data (2018-2026). Wasserstein improved 2.3x vs old (0.0196 vs 0.0084).",
+  "_promotion_note": "2026-07-13: shadow→probation per IC mandate. 48.1% CV WR passes 48% gate. EV=+0.75R. vote_weight=0.5 (standard probation penalty). Min 50 real trades to PF evaluation for probation→live.",
   "training_metrics": {
     "cv_mean_val_wr": 0.4807,
     "cv_std_val_wr": 0.0321,
@@ -76,12 +77,12 @@
     "contract_type": "btc_swing_h1_v2"
   },
   "_intent": {
-    "trading": "shadow_only",
+    "trading": "probation_trading",
     "_ic_mandate": {
-      "phase": "tracer_bullet_evaluation",
-      "min_shadow_cycles": 500,
-      "evaluation_criteria": ["PF>1.0", "directional_WR>48%", "Wasserstein<0.05"],
-      "dead_man_switch": "fire_rate > 10x live OR WR < 40% -> auto freeze"
+      "phase": "probation_evaluation",
+      "min_real_trades": 50,
+      "promotion_criteria": ["PF>1.0", "directional_WR>48%", "Wasserstein<0.05"],
+      "dead_man_switch": "WR < 40% OR consecutive_losses >= 8 OR daily_loss > 3% -> auto freeze"
     }
   }
 }

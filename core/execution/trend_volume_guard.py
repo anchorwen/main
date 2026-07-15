@@ -246,13 +246,21 @@ def _counter_trend_action(
             "h4_conf_mult": 0.65,
             "h4_vol_mult": 0.70,
         },
+        # ── FIX-20260715-010: BTC counter-trend thresholds tightened ──
+        # Audit (2026-07-15): BTC SHORT trades lost -$51.54 in a confirmed
+        # H4 bull trend (trend_strength≈0.60).  The old H4 block threshold
+        # of 0.80 never fired — counter-trend SHORTs passed freely.
+        # New thresholds: H4 ≥ 0.60 → BLOCK, H4 ≥ 0.40 → PENALISE
+        # (half confidence × half volume).  Still allows counter-trend
+        # exploration in weak trends (H4 < 0.40) but blocks when the
+        # higher-TF trend is unambiguous.
         "btc_swing": {
             "block": 0.85,
             "penalise": 0.55,
             "conf_mult": 0.65,
             "vol_mult": 0.75,
-            "h4_block": 0.80,
-            "h4_penalise": 0.55,
+            "h4_block": 0.60,
+            "h4_penalise": 0.40,
             "h4_conf_mult": 0.65,
             "h4_vol_mult": 0.70,
         },

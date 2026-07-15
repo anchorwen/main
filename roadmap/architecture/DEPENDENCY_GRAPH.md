@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-13T11:47:25Z
+> **自动生成**: 2026-07-15T04:13:52Z
 
 ## Package-Level Dependencies
 
@@ -553,15 +553,20 @@
 
 - `_analyze_btc_gate_blocks.py` → (无内部依赖)
 - `_analyze_btc_long_losses.py` → (无内部依赖)
+- `_analyze_btc_now.py` → (无内部依赖)
 - `_analyze_btc_segmented.py` → (无内部依赖)
 - `_analyze_live_status.py` → (无内部依赖)
 - `_analyze_post_deployment.py` → (无内部依赖)
 - `_analyze_today_btc_entries.py` → (无内部依赖)
 - `_analyze_two_positions_sltp.py` → (无内部依赖)
 - `_analyze_xau_h1_position.py` → (无内部依赖)
+- `_analyze_xau_live_status.py` → (无内部依赖)
 - `_analyze_xau_now.py` → (无内部依赖)
 - `_analyze_xau_today_20260710.py` → (无内部依赖)
+- `_analyze_xau_today_losses.py` → (无内部依赖)
+- `_btc_evolution_audit.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)
+- `_commit_fixes.py` → (无内部依赖)
 - `_deep_dive_btc_source.py` → (无内部依赖)
 - `_deep_dive_m15_swing_20260710.py` → (无内部依赖)
 - `_diagnose_atr_misalignment.py` → (无内部依赖)
@@ -575,8 +580,10 @@
 - `_forensic_orphan_closes.py` → (无内部依赖)
 - `_forensic_tp_profit_giveback.py` → (无内部依赖)
 - `_generate_btc_brain_configs.py` → (无内部依赖)
+- `_monitor_direction_concentration.py` → (无内部依赖)
 - `_surface_scan_horizon4.py` → (无内部依赖)
 - `_verify_btc_analysis_claims.py` → (无内部依赖)
+- `_verify_xau_three_issues.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_btc_deep_diagnosis.py` → (无内部依赖)

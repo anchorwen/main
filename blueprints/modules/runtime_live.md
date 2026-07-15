@@ -83,6 +83,10 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260714-005 | 2026-07-15 | cursor-agent | 8ad64d4f | M15 bar-boundary gate narrowed to live-only, probation evaluates every cycle | state-leak |
+| FIX-20260715-008 | 2026-07-15 | cursor-agent | 8ad64d4f | Trend protection dead code fix + TF-aware bleed_bars scaling | state-leak |
+| FIX-20260715-008 | 2026-07-15 | cursor-agent | (pending) | Trend Protection Umbrella (FIX-20260613-050) was dead code — if/elif block indented inside except. H4/H1 positions had zero protection from M5-noise exits. Also added TF-aware bleed_bars floor using _tf_mult. Evidence: h4_swing killed at -0.32R after 1 H4 bar. | boundary-error |
+| FIX-20260714-007 | 2026-07-14 | cursor-agent | 8ad64d4f | Remove decision-time family_entry_tracker.record_entry in strategy_evaluator.py (FIX-20260609-002). Double-recording (decision+dispatch) caused ~1800s effective cooldown instead of 900s, blocking 83.3% of XAU swing signals. Dispatch-time record_entry (dispatch_post.py:56) is now the SSOT. | contract-violation |
 | FIX-20260713-005 | 2026-07-13 | cursor-agent | (pending) | BTC multi-TF shadow tracer bullets: 4 new contract groups (btc_swing_m15/m30/h1_v2/h4) missing from ALL_GROUPS + strategy_builder — brains silently dropped as unknown_contract_group_at_build | config-drift |
 | FIX-20260713-007 | 2026-07-13 | cursor-agent | (pending) | M15 bar-boundary gate silently skipped shadow-mode M15 strategies when 5-min cycle offset never hits exact 15-min boundaries. Shadow mode now bypasses gate for golden_master data collection. | boundary-error |
 | FIX-20260713-008 | 2026-07-13 | cursor-agent | — | **L2: TP trailing structural parity — trail_dispatch passes mid to compute_trail_tp()**. ``trail_dispatch.py`` call site updated to pass optional ``mid`` parameter through to ``pm.compute_trail_tp()`` for the Proximity Gate (Home-Stretch Guard). Backward compatible: ``mid=None`` → gate skipped. One-line change. | L2 — TP trail was price-blind; mid parameter enables price-aware proximity check |

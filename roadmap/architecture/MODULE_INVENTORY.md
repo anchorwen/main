@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-13T11:47:25Z
-> **扫描模块数**: 759
+> **自动生成**: 2026-07-15T04:13:52Z
+> **扫描模块数**: 766
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -274,13 +274,13 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1945 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 1992 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 431 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 226 | — | |
-| `trend_volume_guard.py` | ✅ active | — | 3 | 293 | — | |
+| `trend_volume_guard.py` | ✅ active | — | 3 | 301 | — | |
 
 ## core/features
 
@@ -526,7 +526,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4473 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2286 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2307 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -551,7 +551,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 1203 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 4 | 1179 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 4 | 1173 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -639,15 +639,20 @@
 |------|------|----|------|------|------|------|
 | `_analyze_btc_gate_blocks.py` | ✅ active | — | 1 | 110 | — | |
 | `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 159 | — | |
+| `_analyze_btc_now.py` | ✅ active | — | 1 | 252 | — | |
 | `_analyze_btc_segmented.py` | ✅ active | — | 4 | 262 | — | |
 | `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
 | `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
 | `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
 | `_analyze_xau_h1_position.py` | ✅ active | — | 1 | 156 | — | |
+| `_analyze_xau_live_status.py` | ✅ active | — | 2 | 229 | — | |
 | `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
 | `_analyze_xau_today_20260710.py` | ✅ active | — | 3 | 302 | — | |
+| `_analyze_xau_today_losses.py` | ✅ active | — | 2 | 169 | — | |
+| `_btc_evolution_audit.py` | ✅ active | — | 4 | 653 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
+| `_commit_fixes.py` | 📄 config | — | 0 | 46 | — | |
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
 | `_deep_dive_m15_swing_20260710.py` | ✅ active | — | 3 | 220 | — | |
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
@@ -661,8 +666,10 @@
 | `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
 | `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
 | `_generate_btc_brain_configs.py` | ✅ active | — | 1 | 246 | — | |
+| `_monitor_direction_concentration.py` | ✅ active | — | 2 | 152 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
+| `_verify_xau_three_issues.py` | ✅ active | — | 2 | 297 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_btc_deep_diagnosis.py` | ✅ active | — | 5 | 830 | — | |

@@ -416,14 +416,13 @@ strategy_lines:
       partial_tp_r: 1.0
       partial_tp_ratio: 0.5
 
-  # ── BTC Multi-TF Tracer Bullet Expansion (2026-07-13) ──
-  # All shadow mode — zero live risk. _intent.trading: shadow_only.
-  # Golden master records predictions only. No real orders.
-  # Evaluation: 500 shadow cycles → PF>1.0 + WR>48% → probation → live.
+  # ── BTC Multi-TF Probation (2026-07-13) ──
+  # M15/M30/H1_V2 promoted from shadow to probation. H4 remains shadow.
+  # Evaluation: 50 real trades → PF>1.0 + WR>48% → live.
 
   btc_swing_m15:
     enabled: true
-    mode: shadow
+    mode: probation
     base_volume: 0.01
     brain_types:
     - xgboost_v9
@@ -463,7 +462,7 @@ strategy_lines:
 
   btc_swing_m30:
     enabled: true
-    mode: shadow
+    mode: probation
     base_volume: 0.01
     brain_types:
     - xgboost_v9
@@ -503,7 +502,7 @@ strategy_lines:
 
   btc_swing_h1_v2:
     enabled: true
-    mode: shadow
+    mode: probation
     base_volume: 0.01
     brain_types:
     - lightgbm_v1
@@ -543,7 +542,7 @@ strategy_lines:
 
   btc_swing_h4:
     enabled: true
-    mode: shadow
+    mode: probation
     base_volume: 0.01
     brain_types:
     - xgboost_v9

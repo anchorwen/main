@@ -666,10 +666,16 @@ def _evaluate_brain_ensemble(
                         _h1_dir = state.regime_gate.h1_trend_direction
                     except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                         pass
-                        if _h4_dir != "neutral" and _h4_dir == pos.side:
-                            _trend_protected = True  # H4 supports position
-                        elif _h4_dir == "neutral" and _h1_dir == pos.side:
-                            _trend_mild_protected = True  # H1 supports, H4 silent
+                    # ── FIX-20260715-008: trend protection was dead code ──
+                    # The if/elif below was accidentally indented INSIDE the except
+                    # block (since FIX-20260613-050).  It only ran when regime_gate
+                    # attribute access threw, which never happens in normal operation.
+                    # Moved to after try/except so H4/H1 macro trend actually shields
+                    # higher-TF positions from M5 noise exits (bleed_stop, etc.).
+                    if _h4_dir != "neutral" and _h4_dir == pos.side:
+                        _trend_protected = True  # H4 supports position
+                    elif _h4_dir == "neutral" and _h1_dir == pos.side:
+                        _trend_mild_protected = True  # H1 supports, H4 silent
 
                 # ── FIX-20260607-144: Override trend protection when losing ──
                 # Trailing SL (Chandelier) only tightens in the PROFIT direction.
@@ -714,7 +720,22 @@ def _evaluate_brain_ensemble(
                     _horizon = int(
                         _strat_cfg.get("horizon_cycles", 0) or _strat_cfg.get("horizon", 0) or 0
                     )
-                    _bleed_bars = max(3, _horizon // 3) if _horizon > 0 else 3
+                    # ── FIX-20260715-008: TF-aware bleed bars floor ──
+                    # Without a configured horizon, bleed_bars defaulted to 3 M5
+                    # bars (15 min) for ALL timeframes.  For H4, 3 M5 bars is
+                    # 1/16th of a single H4 bar — pure noise.  Scale the floor
+                    # by _tf_mult so each TF gets a minimum observation window
+                    # before bleed_stop can fire:
+                    #   M5 (mult=1):  3 bars (15 min)
+                    #   M15 (mult=3): 3 bars (15 min)
+                    #   M30 (mult=6): 6 bars (30 min)
+                    #   H1  (mult=12):12 bars (60 min)
+                    #   H4  (mult=48):48 bars (240 min = 1 H4 bar)
+                    _tf_mult = int((_strat_cfg or {}).get("_tf_mult", 1) or 1)
+                    _tf_bleed_base = max(3, _tf_mult)
+                    _bleed_bars = (
+                        max(_tf_bleed_base, _horizon // 3) if _horizon > 0 else _tf_bleed_base
+                    )
                     # Option B: trend-aligned → 5 bars tolerance (was 3)
                     if _trend_protected:
                         _bleed_bars = max(5, _bleed_bars)
