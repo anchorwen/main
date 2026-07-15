@@ -46,8 +46,10 @@ d² = Σ_i ((x_i - μ_i) / σ_i)²  (normalized Euclidean distance)
 ## Calibrated Schemas
 | Schema | Features | Samples | Block (3σ) | Cautious (2σ) | Covariance |
 |--------|----------|---------|------------|---------------|------------|
-| v9_institutional_40 | 40 | 6,893 | 7.98 | 7.47 | Full (40×40) |
-| v4.3_microstructure_9 | 9 | 4,491 | 4.66 | 4.11 | Full (9×9) |
+| v9_institutional_40 | 40 | 7,126 | 12.64 | 8.82 | Full (40×40) |
+| v4.3_microstructure_9 | 9 | 7,436 | 8.21 | 4.40 | Full (9×9) |
+
+*Threshold method: empirical P95/P99 (DQAF-20260716-001). Chi2 theoretical values replaced due to fat-tail violation in financial data.*
 
 ## Inbound Dependencies
 | Module | What is imported | Why |
@@ -86,4 +88,5 @@ python scripts/export_ood_params.py --data-dir data_btc --dry-run
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260716-001 | 2026-07-16 | cursor-agent | — | **L3: OOD threshold tuning — chi2→empirical percentile**. `calibrate()`: added `threshold_method` parameter (default "empirical"). Uses P95/P99 of calibration distances instead of chi2 theoretical values. Chi2 assumes multivariate normality violated by financial fat tails (54.6% false-positive block). v9_institutional_40: 7.47/7.98→8.82/12.64, recent-1000 block 11.3%→1.2%. DQAF-20260716-001. | L3 — chi2 theoretical thresholds incorrect for fat-tailed financial data |
 | FIX-20260705-065 | 2026-07-05 | cursor-agent | — | **P2: Feature-Space OOD Gateway — Mahalanobis distance regime-shift immunity**. Offline: export_ood_params.py reads 11,384 BTC feature store records, computes centroid + full 40×40 covariance per schema. Online: OODGateway.check() integrated into strategy_evaluator.py Cut 2. 3σ chi2 threshold → REGIME_OOD_BLOCKED. 12/12 TDD tests. See DQAF-20260705-064 for the 7-day directional lock that motivated this defense. | RC-12 — no automated OOD detection |

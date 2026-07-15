@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-15T16:29:26Z
+> **自动生成**: 2026-07-15T17:20:18Z
 
 ## Package-Level Dependencies
 
@@ -573,6 +573,7 @@
 - `_diagnose_btc_v4_training_live_gap.py` → (无内部依赖)
 - `_diagnose_cold_explore_pwin.py` → (无内部依赖)
 - `_diagnose_giveback_lifecycle.py` → (无内部依赖)
+- `_diagnose_mahalanobis_ood.py` → `core.execution.ood_gateway`
 - `_diagnose_model_raw_output.py` → (无内部依赖)
 - `_diagnose_tp_giveback_pollution.py` → (无内部依赖)
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)

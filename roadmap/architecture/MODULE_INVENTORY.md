@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-15T16:29:26Z
-> **扫描模块数**: 768
+> **自动生成**: 2026-07-15T17:20:18Z
+> **扫描模块数**: 769
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -255,7 +255,7 @@
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 406 | — | |
 | `net_out_close_handler.py` | ✅ active | — | 1 | 177 | — | |
 | `ofi_gate.py` | ✅ active | — | 1 | 90 | — | |
-| `ood_gateway.py` | ✅ active | OODVerdict, OODConfig, OODGateway | 10 | 388 | — | |
+| `ood_gateway.py` | ✅ active | OODVerdict, OODConfig, OODGateway | 10 | 414 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
@@ -659,6 +659,7 @@
 | `_diagnose_btc_v4_training_live_gap.py` | ✅ active | — | 5 | 403 | — | |
 | `_diagnose_cold_explore_pwin.py` | ✅ active | — | 2 | 199 | — | |
 | `_diagnose_giveback_lifecycle.py` | ✅ active | — | 5 | 247 | — | |
+| `_diagnose_mahalanobis_ood.py` | ✅ active | — | 1 | 178 | — | |
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_tp_giveback_pollution.py` | ✅ active | — | 4 | 164 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |

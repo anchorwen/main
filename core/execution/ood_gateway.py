@@ -330,6 +330,7 @@ class OODGateway:
         feature_matrix: np.ndarray,
         schema_name: str = "unknown",
         source: str = "feature_store",
+        threshold_method: str = "empirical",
     ) -> OODConfig:
         """Compute OOD parameters from a feature matrix.
 
@@ -337,6 +338,11 @@ class OODGateway:
             feature_matrix: (n_samples, n_features) numpy array.
             schema_name: Schema identifier for the output config.
             source: Provenance label ("feature_store" or "training_data").
+            threshold_method: "empirical" (default) uses P95/P99 of the
+                calibration data as thresholds — correct for financial data
+                with fat-tailed distributions where chi-squared assumptions
+                (multivariate normality) are violated.
+                "chi2" uses the theoretical chi-squared distribution.
 
         Returns:
             OODConfig with centroid, std, thresholds.
@@ -351,7 +357,27 @@ class OODGateway:
         # Clip std to avoid division by zero for constant features
         std = np.maximum(std, 1e-10)
 
-        threshold_block, threshold_cautious = OODGateway.compute_thresholds(n_features)
+        # ── Threshold computation ──────────────────────────────────────
+        # DQAF-20260716-001: Financial features have fat-tailed distributions
+        # that violate chi-squared multivariate normality.  Using chi2
+        # theoretical percentiles (P95/P99) on BTC feature data results in
+        # 54.6% of in-distribution vectors being flagged as OOD — the gate
+        # becomes a noise source rather than defense-in-depth.
+        #
+        # Empirical percentiles match the actual data distribution:
+        #   P95 (cautious): ~5% of in-distribution vectors flagged
+        #   P99 (block):    ~1% of in-distribution vectors flagged
+        if threshold_method == "chi2":
+            threshold_block, threshold_cautious = OODGateway.compute_thresholds(n_features)
+        else:
+            # Compute Mahalanobis distances on the calibration data itself
+            diff = X - centroid
+            safe_std = np.where(std < 1e-10, 1.0, std)
+            z_scores = diff / safe_std
+            d_sq = np.sum(z_scores**2, axis=1)
+            distances = np.sqrt(np.maximum(d_sq, 0.0))
+            threshold_cautious = float(np.percentile(distances, 95.0))
+            threshold_block = float(np.percentile(distances, 99.0))
 
         # Optionally compute full inverse covariance if enough samples
         inv_cov = None

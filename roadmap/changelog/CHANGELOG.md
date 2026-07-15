@@ -8712,3 +8712,34 @@ TWAP/VWAP      ⏸️ deferred
 - active: 728
 - stub: 6
 
+<<<<<<< HEAD
+=======
+
+## 2026-07-15T16:57:39.281119+00:00 — 初始扫描
+
+- 扫描 769 个模块
+- active: 729
+- stub: 6
+
+
+## 2026-07-15T16:59:15.205572+00:00 — 初始扫描
+
+- 扫描 769 个模块
+- active: 729
+- stub: 6
+
+
+## 2026-07-15T17:01:20.311855+00:00 — 初始扫描
+
+- 扫描 769 个模块
+- active: 729
+- stub: 6
+
+>>>>>>> 9b5775d3 ([Ω-Routing: Scene G → #4 → #10 → #1.1] fix(ood): FIX-20260716-001 — Mahalanobis OOD threshold tuning chi2→empirical percentile)
+
+## 2026-07-15T17:20:23.969617+00:00 — 初始扫描
+
+- 扫描 769 个模块
+- active: 729
+- stub: 6
+
