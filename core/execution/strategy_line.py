@@ -1408,11 +1408,19 @@ class StrategyLine:
             # formula overestimates required p_win (FIX-20260604-084).
             _breakeven_p_win = sl_dist / (tp_dist + sl_dist)
             _effective_min_p_win = max(self.config.min_p_win, _breakeven_p_win)
+        # ── FIX-20260715-024: Probation exemption from p_win floor ──
+        # Probation strategies use Cut-4 micro-volume (0.01 lot) and are
+        # protected by dead_man_switch (WR<40%→auto freeze).  Requiring the
+        # same p_win floor as live strategies (0.45) creates a Catch-22:
+        # probation brains need trades to calibrate p_win, but p_win floor
+        # blocks all trades.  Cold_explore already bypasses this gate —
+        # probation deserves the same exploration safety net.
         if (
             _effective_min_p_win > 0
             and _p_win < _effective_min_p_win
             and not _is_cold_explore
             and not _governance_guided
+            and self.config.mode != "probation"
         ):
             return self._make_decision(
                 should_trade=False,
@@ -1460,7 +1468,14 @@ class StrategyLine:
         # negative EV.  DQAF-20260609-002 diagnosed.
         _is_low_rr = _rr_ratio > 0 and _rr_ratio < 1.0
         _rr_breakeven = 1.0 / (1.0 + _rr_ratio) if _rr_ratio > 0 else 0.5
-        if kelly_result.fractional_mult == 0.0 and not _is_low_rr:
+        # ── FIX-20260715-024: Probation exemption from Kelly EV veto ──
+        # Probation strategies explore with Cut-4 micro-volume (0.01 lot,
+        # ~$14-28 risk).  The Kelly veto is correct for live strategies
+        # (full capital at risk) but creates a Catch-22 for probation:
+        # p_win cannot be calibrated without trades, but trades are
+        # blocked because uncalibrated p_win implies negative EV.
+        _probation_skip_kelly = self.config.mode == "probation"
+        if kelly_result.fractional_mult == 0.0 and not _is_low_rr and not _probation_skip_kelly:
             # Hard EV veto — negative expected value trade
             return self._make_decision(
                 should_trade=False,
@@ -1495,6 +1510,7 @@ class StrategyLine:
             and _p_win < _rr_breakeven
             and not _is_cold_explore
             and not _governance_guided
+            and not _probation_skip_kelly  # FIX-20260715-024: probation exemption
         ):
             return self._make_decision(
                 should_trade=False,
