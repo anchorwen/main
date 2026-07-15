@@ -1085,4 +1085,26 @@
 
 **检测方法**: For any strategy, check `SL_distance / config_SL_mult` vs the `entry_atr` used in the R metric; a ~N× gap (N = TF-ATR ratio) flags the mismatch. Symptom: multi-TF (h1/h4) positions showing alarming R (−5R..−9R) while price is well inside the SL. Audit consumers of `unrealized_pnl_r` / `highest_r` in trail/ratchet/time_decay for TF-unit assumptions.
 
+---
+
+## Pattern: `COLD_EXPLORE_GATE_EXEMPTION`
+
+**Sub-signature — `EXPLORATION_OVERRIDES_STRUCTURAL_CONSTRAINT`** (DQAF-20260715-011): A gate that enforces a structural market constraint (trend alignment, minimum RR, maximum drawdown) is conditioned on `not _is_cold_explore`, allowing probation/cold-start strategies to bypass it. The design assumption is that "exploration should be unconstrained to gather data," but this conflates model uncertainty (unknown p_win) with market physics (H4 trend gravity). The exemption is never architecturally justified — the gate protects against a constraint that is independent of model confidence.
+
+**Definition**: A safety or quality gate in the decision pipeline includes `not _is_cold_explore` (or equivalent exploration-state exemption) in its activation condition. When the strategy enters cold_explore mode (MetaFilter vacuum, new probation brain, governance data insufficient), the gate silently deactivates. The strategy then trades without that constraint, accumulating losses that are misattributed to "exploration variance" rather than the missing gate.
+
+**Known occurrence sites** (gate chain audit):
+1. Counter-trend gate (`strategy_line.py:1225`): `not _is_cold_explore` — FIXED (FIX-20260715-011)
+2. p_win floor gate (`strategy_line.py:1403`): `not _is_cold_explore` — DEFERRED (governance_guided escape exists)
+3. RR/breakeven gate (`strategy_line.py:1485`): `not _is_cold_explore` — DEFERRED (negative EV exploration wastes capital)
+4. Cold explore default volume (`strategy_line.py:1197`): `_ct_vol_mult = 0.5` — DEFERRED (half volume is reasonable, but should stack with other penalties)
+
+**Causal mechanism**: MetaFilter vacuum (no MetaFilter routing for swing strategies post DQAF-065) → `_is_cold_explore=True` → gate condition false → gate skipped → counter-trend/bad-RR trade passes → systematic loss accumulation. The cold_explore state can persist for weeks/months if governance data never accumulates (Catch-22: need trades to get p_win, need p_win to pass gates).
+
+**预防策略**: (1) **Never exempt exploration state from structural constraints.** Trend alignment, minimum RR, and maximum risk are market physics — independent of model confidence. Cold exploration should reduce VOLUME (uncertainty penalty), not bypass constraints. (2) When adding a new gate, include the question: "Does this gate protect against model uncertainty or market physics?" If market physics → no cold_explore exemption. (3) Audit all `not _is_cold_explore` conditions in gate chain — each one is a candidate for removal. (4) Multiplicative penalty stacking: cold volume reduction (0.5) × gate penalty (0.70) = 0.35, not 0.70 overriding 0.50.
+
+**检测方法**: `grep "not _is_cold_explore" core/execution/strategy_line.py` — every hit is a gate that silently deactivates during cold exploration. For each hit, ask: "Would I want my capital protected from this even if the model is unproven?" If yes → remove the exemption. Also: `grep "counter_trend" data_btc/golden_master.jsonl` — zero matches over a multi-week window while counter-trend trades are executing → gate is bypassed.
+
+**Cross-References**: DQAF_DOCKET_REGISTRY.md DQAF-20260715-011, CCT_LEDGER.md CCT-20260715-011; Deferred: p_win floor exemption + RR breakeven exemption audit
+
 **Cross-References**: DQAF_DOCKET_REGISTRY.md DQAF-20260709-002, CCT_LEDGER.md CCT-20260709-002; Deferred: R-metric ATR consistency + bars_held restart continuity

@@ -1229,4 +1229,61 @@
 - **是否被推翻**: 是 — 原 Sev 1 前提被 AR 证伪; 降 Sev 4, 撤 Hotfix, 执行死代码删除
 - **关联 ReB Pattern**: `SUPERSEDED_ORPHAN_CODE_WITH_STALE_DOCSTRING` (子签名: `PHANTOM_ATTR_IN_DEAD_BRANCH`)
 - **关联 FIX**: FIX-20260709-005 (446ba31f)
+
+---
+
+## CCT-20260715-011: Counter-Trend Gate cold_explore Exemption → Systematic Counter-Trend Loss
+
+- **Layer 1 — Symptom (Observable)**:
+  BTC SHORT trades systematically lose in confirmed H4 bull trend market.
+  Jul 14 cycle 9: trend_direction=long, trend_strength=0.6, yet btc_swing_h4
+  opens SHORT at confidence=0.7449 (volume=0.01).  $ grep counter_trend in GM
+  returns ZERO matches since 2026-06-09 — the gate has been silent for 5 weeks.
+  Total SHORT loss: -$51.54 (102 trades, 39.2% WR).
+
+- **Layer 2 — Intermediate (Mechanism)**:
+  Two independent bypasses converge:
+  (a) `strategy_line.py:1225`: `not _is_cold_explore` condition excludes all
+      probation strategies (MetaFilter vacuum → `_is_cold_explore=True`).
+      The counter-trend gate was designed to apply universally but the
+      cold_explore exemption was added without architectural review.
+  (b) `trend_volume_guard.py:268`: `thresholds.get(strategy_name)` uses exact
+      match only.  `btc_swing_h4` does not match `btc_swing` → falls through
+      to default (h4_block=0.70), which is above the current trend_strength=0.6.
+  These two failures compound: even if (a) is fixed, (b) would let multi-TF
+      strategies through the lenient default.  Even if (b) is fixed, (a) would
+      skip the gate entirely for cold_explore strategies.
+
+- **Layer 3 — Root Cause (Architectural Design Flaw)**:
+  The design assumption that "cold exploration should be unconstrained" conflates
+  TWO orthogonal dimensions: (1) model uncertainty (p_win unknown) and (2)
+  structural market constraints (H4 trend gravity).  Trend alignment is NOT a
+  statistical confidence problem — it is a physical market law.  A cold model
+  exploring counter-trend is not "gathering data" — it is donating capital to
+  the trend.  The exemption was an architectural error: cold_explore should
+  reduce volume (uncertainty penalty), not bypass structural constraints.
+
+- **AR Adversarial Review**:
+  Hypothesis "trend_strength 0.6 is a false positive" → REFUTED: GM confirms
+  trend_direction=long consistently across cycles 150-155.  Price action
+  confirms bull trend (62k→64.5k).  The Kalman velocity signal is reliable.
+  Hypothesis "cold_explore exemption is intentional for data gathering" →
+  REFUTED: gathering counter-trend data during strong trend produces
+  systematically negative-EV samples.  Trend-aligned exploration gathers
+  equally valid data without structural penalty.
+
+- **ECoL Evidence**:
+  - E1: GM `grep counter_trend` → 124 matches, all before 2026-06-09
+  - E2: Jul 14 cycle 9 GM: H4 SHORT, trend=long/0.6, should_trade=true
+  - E3: `strategy_line.py:1225`: `not _is_cold_explore` condition
+  - E4: `trend_volume_guard.py:268`: exact-match only for strategy_name
+  - E5: Jul 15 restart cycle 4: H4 p_win=0.400 blocked by floor (Catch-22)
+
+- **AR 是否被推翻**: 否 — AR 证伪两个反向假设, 根因确认
+
+- **关联 ReB Pattern**: `COLD_EXPLORE_GATE_EXEMPTION` (子签名: `EXPLORATION_OVERRIDES_STRUCTURAL_CONSTRAINT`)
+
+- **关联 FIX**: FIX-20260715-011 (a1886cfa)
+
+- **状态**: **CLOSED** — 3 代码修复 + M15 退役 + BLE001 fail-open guard committed+pushed
 - **状态**: **CLOSED** — 3 方法删除 + BLE001 noqa 标化 committed+pushed; 构造参数保留 vestigial (hot-path omega 约束, 下次 live_intent_loop.py 变更清理); 零僵尸测试
