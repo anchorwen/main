@@ -298,15 +298,28 @@ def _counter_trend_action(
         }
 
     # Determine if trade direction is counter to higher-TF trend.
-    # statarb strategies are exempt — mean-reversion is counter-trend by design.
+    # statarb strategies are ALWAYS counter-trend — mean-reversion is
+    # counter-trend by design.  Strong trends crush OU mean-reversion so
+    # we always check thresholds for statarb.
+    # When trade_direction is "neutral" (caller doesn't know yet), we are
+    # conservative and check both H4 and H1 blocks — a neutral signal
+    # going counter to a strong trend should still be gated.
     _is_statarb = strategy_name.startswith("statarb")
-    _counter_h4 = not _is_statarb and (
-        (trade_direction == "long" and h4_trend_direction == "short")
-        or (trade_direction == "short" and h4_trend_direction == "long")
+    _counter_h4 = (
+        _is_statarb
+        or trade_direction == "neutral"
+        or (
+            (trade_direction == "long" and h4_trend_direction == "short")
+            or (trade_direction == "short" and h4_trend_direction == "long")
+        )
     )
-    _counter_h1 = not _is_statarb and (
-        (trade_direction == "long" and h1_trend_direction == "short")
-        or (trade_direction == "short" and h1_trend_direction == "long")
+    _counter_h1 = (
+        _is_statarb
+        or trade_direction == "neutral"
+        or (
+            (trade_direction == "long" and h1_trend_direction == "short")
+            or (trade_direction == "short" and h1_trend_direction == "long")
+        )
     )
 
     # H4 gate checked first — higher TF takes priority.
