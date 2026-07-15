@@ -350,6 +350,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/runtime/daily_ops_scheduler.py",
         "scripts/analyze_trail_impact.py",
         "scripts/live_intent_loop.py",
+        "scripts/_monitor_direction_concentration.py",  # P3.1: direction concentration monitor
+        "scripts/_evaluate_probation_m30_h1v2.py",  # P3.3: M30/H1_V2 probation evaluation
         "scripts/backfill_journal_orphans.py",
         "scripts/backfill_fabricated_breakeven.py",  # DQAF-20260708-003 append-only PnL correction
         "scripts/live_launcher.py",

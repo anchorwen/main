@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-15T13:17:36Z
-> **扫描模块数**: 767
+> **自动生成**: 2026-07-15T14:06:56Z
+> **扫描模块数**: 768
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -207,7 +207,7 @@
 | `rollback_drill.py` | ✅ active | RollbackDrillService | 8 | 304 | — | |
 | `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 664 | — | |
 | `scheduled_task_registry.py` | ✅ active | — | 4 | 36 | — | |
-| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 597 | — | |
+| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 20 | 616 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
 | `service_container.py` | ✅ active | ServiceContainer | 41 | 638 | — | |
 | `startup_validator.py` | ✅ active | — | 1 | 113 | — | |
@@ -662,12 +662,13 @@
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_tp_giveback_pollution.py` | ✅ active | — | 4 | 164 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
+| `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_export_btc_mt5.py` | 📄 config | — | 0 | 48 | — | |
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
 | `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
 | `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
 | `_generate_btc_brain_configs.py` | ✅ active | — | 1 | 246 | — | |
-| `_monitor_direction_concentration.py` | ✅ active | — | 2 | 152 | — | |
+| `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
 | `_verify_xau_three_issues.py` | ✅ active | — | 2 | 297 | — | |
@@ -747,7 +748,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 722 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 724 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
@@ -958,7 +959,7 @@
 | `calibrate_labels.py` | ✅ active | — | 4 | 298 | — | |
 | `calibrate_meta_filter.py` | ✅ active | — | 4 | 218 | — | |
 | `calibrate_sl_tp.py` | ✅ active | — | 7 | 461 | — | |
-| `calibrate_v4_isotonic.py` | ✅ active | — | 4 | 365 | — | |
+| `calibrate_v4_isotonic.py` | ✅ active | — | 4 | 391 | — | |
 | `champion_challenger.py` | ✅ active | — | 7 | 307 | — | |
 | `crt_manifest.py` | ✅ active | CRTManifestV1 | 9 | 159 | — | |
 | `dataset_builder.py` | ✅ active | — | 14 | 569 | — | |

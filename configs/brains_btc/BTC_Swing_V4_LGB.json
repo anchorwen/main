@@ -1,0 +1,83 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "BTC_Swing_V4_LGB",
+  "brain_type": "lightgbm_v1",
+  "contract_group": "btc_swing",
+  "training_contract": "btc_swing",
+  "feature_schema": "btc_macro_enhanced_41",
+  "feature_schema_id": "btc_macro_enhanced_41",
+  "model_path": "data_btc/models/btc_swing_v4_41dim_m5/lightgbm_fold0_s42.txt",
+  "artifact_path": "data_btc/models/btc_swing_v4_41dim_m5/lightgbm_fold0_s42.txt",
+  "model_version": "btc_swing_v4_41dim_m5_lgb",
+  "artifact_hash": "",
+  "status": "candidate",
+  "vote_weight": 0.0,
+  "magic": 90414,
+  "brain_role": "alpha_brain",
+  "training_horizon": 12,
+  "strategy": "btc_swing",
+  "timeframe": "M5",
+  "training_params": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 1.5,
+    "horizon": 12,
+    "n_estimators": 500,
+    "learning_rate": 0.02,
+    "max_depth": 5,
+    "num_leaves": 31,
+    "objective": "multiclass",
+    "data_source": "btcusdc_m5_merged.csv (100k bars, 2025-07-30 → 2026-07-13)",
+    "timeframe_minutes": 5,
+    "cross_asset_m5": ["AUDJPYc", "EURUSDc", "USDJPYc", "XAUUSDc"],
+    "curation": "ADX≥20 + exclude weekends + ATR p5-p95",
+    "spread_source": "per-bar real MT5 spread",
+    "label_method": "DQAF-20260703-062 directional profitability",
+    "decay_half_life_days": 90,
+    "purge_bars": 12
+  },
+  "_note": "P3.2: LightGBM companion to BTC_Swing_V4. Trained on same data as XGBoost V4 (Jul 13 snapshot). CV Directional WR=51.71% (vs XGBoost 49.06%). Calibration WR=50.85%. Candidate status (vote_weight=0.0) for shadow evaluation. Strong SHORT bias (78.5% of directional preds) — monitor before promoting.",
+  "training_metrics": {
+    "cv_mean_val_wr": 0.5171,
+    "cv_std_val_wr": 0.0350,
+    "cv_mean_val_acc": 0.4325,
+    "cv_mean_directional_wr": 0.5085,
+    "cv_folds": 5,
+    "ev_r": 0.7282,
+    "calibration_note": "Isotonic calibration at data_btc/models/btc_swing_v4_41dim_m5/calibration_lightgbm.json. Not inverted. Max error=0.34 (high in low-confidence bands — use isotonic in serving)."
+  },
+  "features": [
+    "D1_Ret_1", "D1_Body_Ratio", "D1_ATR_14", "D1_RSI_14",
+    "D1_MACD", "D1_Vol_ZScore", "D1_Bollinger_Width", "D1_ADX_14",
+    "H4_Trend_Strength", "H4_ATR_Ratio", "H4_RSI_Divergence", "H4_vs_D1_Alignment",
+    "XAUUSDc_return", "Cross_DXY_Return", "Cross_EURUSD_Return", "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin", "Derived_Weekday_Cos", "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week", "Derived_Weekend_Gap", "Derived_Vol_Regime",
+    "Derived_Momentum_5D", "Derived_Momentum_20D",
+    "tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM", "tick_velocity",
+    "AUDJPYc_return", "EURUSDc_return", "USDJPYc_return",
+    "TF_OU_Theta", "TF_Hurst", "TF_delta_OU", "TF_delta_Hurst",
+    "TF_OU_x_Hurst", "TF_OU_div_ADX",
+    "Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"
+  ],
+  "n_features": 41,
+  "n_train_samples": 47485,
+  "trained_at": "2026-07-13T01:24:33Z",
+  "governance": {
+    "min_confidence": 0.45,
+    "cooldown_cycles": 3
+  },
+  "confidence_params": {
+    "method": "quantile_gaussian",
+    "p95": 0.4164,
+    "peak_conf": 0.4316,
+    "lambda_decay": 0.21,
+    "_calibration_note": "P3.2: Calibrated 2026-07-15. Model score range wider than XGBoost (p95=0.416 vs 0.14). confidence = (|score|/0.416) * 0.432."
+  },
+  "last_retrained": "2026-07-13T01:24:33Z",
+  "label_contract": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 1.5,
+    "contract_type": "btc_swing",
+    "aligned_with": "configs/live_btc.yaml"
+  }
+}

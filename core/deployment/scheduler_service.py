@@ -594,4 +594,23 @@ class SchedulerService:
 
             svc.add_task("data_quality_report", data_quality_report, interval_seconds=900)
 
+        # ── Direction concentration monitor (P3.1) ──
+        # Runs every 4 hours — detects when all strategies lean same direction,
+        # which signals systematic directional bias risk.  CRITICAL status
+        # emits a DingTalk alert via emit_brain_alert.
+        dir_conc_enabled = getattr(container.config, "direction_concentration_monitor", True)
+        if dir_conc_enabled:
+
+            def direction_concentration_check():
+                run_monitor_fn = get_task("direction_concentration_monitor")
+                if run_monitor_fn is None:
+                    return
+                run_monitor_fn()
+
+            svc.add_task(
+                "direction_concentration_check",
+                direction_concentration_check,
+                interval_seconds=14400,  # every 4 hours
+            )
+
         return svc

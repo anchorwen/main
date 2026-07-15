@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-15T13:17:36Z
+> **自动生成**: 2026-07-15T14:06:56Z
 
 ## Package-Level Dependencies
 
@@ -576,12 +576,13 @@
 - `_diagnose_model_raw_output.py` → (无内部依赖)
 - `_diagnose_tp_giveback_pollution.py` → (无内部依赖)
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
+- `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_export_btc_mt5.py` → (无内部依赖)
 - `_fix_shadow_configs.py` → (无内部依赖)
 - `_forensic_orphan_closes.py` → (无内部依赖)
 - `_forensic_tp_profit_giveback.py` → (无内部依赖)
 - `_generate_btc_brain_configs.py` → (无内部依赖)
-- `_monitor_direction_concentration.py` → (无内部依赖)
+- `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_surface_scan_horizon4.py` → (无内部依赖)
 - `_verify_btc_analysis_claims.py` → (无内部依赖)
 - `_verify_xau_three_issues.py` → (无内部依赖)
