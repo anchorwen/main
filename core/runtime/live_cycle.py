@@ -253,25 +253,50 @@ class LiveCycleConfig:
 
         # Range [0.0, 1.0] checks
         if self.confidence_threshold is not None and not (0.0 <= self.confidence_threshold <= 1.0):
-            raise ValueError(f"LiveCycleConfig.confidence_threshold={self.confidence_threshold} must be in [0, 1]")
+            raise ValueError(
+                f"LiveCycleConfig.confidence_threshold={self.confidence_threshold} must be in [0, 1]"
+            )
         if self.equity_risk_pct is not None and not (0.0 <= self.equity_risk_pct <= 1.0):
-            raise ValueError(f"LiveCycleConfig.equity_risk_pct={self.equity_risk_pct} must be in [0, 1]")
-        if self.intraday_drawdown_kill_pct is not None and not (0.0 <= self.intraday_drawdown_kill_pct <= 1.0):
-            raise ValueError(f"LiveCycleConfig.intraday_drawdown_kill_pct={self.intraday_drawdown_kill_pct} must be in [0, 1]")
-        if self.intraday_dd_force_close_pct is not None and not (0.0 <= self.intraday_dd_force_close_pct <= 1.0):
-            raise ValueError(f"LiveCycleConfig.intraday_dd_force_close_pct={self.intraday_dd_force_close_pct} must be in [0, 1]")
+            raise ValueError(
+                f"LiveCycleConfig.equity_risk_pct={self.equity_risk_pct} must be in [0, 1]"
+            )
+        if self.intraday_drawdown_kill_pct is not None and not (
+            0.0 <= self.intraday_drawdown_kill_pct <= 1.0
+        ):
+            raise ValueError(
+                f"LiveCycleConfig.intraday_drawdown_kill_pct={self.intraday_drawdown_kill_pct} must be in [0, 1]"
+            )
+        if self.intraday_dd_force_close_pct is not None and not (
+            0.0 <= self.intraday_dd_force_close_pct <= 1.0
+        ):
+            raise ValueError(
+                f"LiveCycleConfig.intraday_dd_force_close_pct={self.intraday_dd_force_close_pct} must be in [0, 1]"
+            )
 
         # Positivity checks for time/distance fields
         if self.max_data_age_seconds is not None and self.max_data_age_seconds <= 0:
-            raise ValueError(f"LiveCycleConfig.max_data_age_seconds={self.max_data_age_seconds} must be > 0")
+            raise ValueError(
+                f"LiveCycleConfig.max_data_age_seconds={self.max_data_age_seconds} must be > 0"
+            )
         if self.close_price_max_age_seconds is not None and self.close_price_max_age_seconds <= 0:
-            raise ValueError(f"LiveCycleConfig.close_price_max_age_seconds={self.close_price_max_age_seconds} must be > 0")
+            raise ValueError(
+                f"LiveCycleConfig.close_price_max_age_seconds={self.close_price_max_age_seconds} must be > 0"
+            )
         if self.max_bridge_silence_seconds is not None and self.max_bridge_silence_seconds <= 0:
-            raise ValueError(f"LiveCycleConfig.max_bridge_silence_seconds={self.max_bridge_silence_seconds} must be > 0")
-        if self.circuit_breaker_cooldown_seconds is not None and self.circuit_breaker_cooldown_seconds <= 0:
-            raise ValueError(f"LiveCycleConfig.circuit_breaker_cooldown_seconds={self.circuit_breaker_cooldown_seconds} must be > 0")
+            raise ValueError(
+                f"LiveCycleConfig.max_bridge_silence_seconds={self.max_bridge_silence_seconds} must be > 0"
+            )
+        if (
+            self.circuit_breaker_cooldown_seconds is not None
+            and self.circuit_breaker_cooldown_seconds <= 0
+        ):
+            raise ValueError(
+                f"LiveCycleConfig.circuit_breaker_cooldown_seconds={self.circuit_breaker_cooldown_seconds} must be > 0"
+            )
         if self.exit_max_hold_cycles is not None and self.exit_max_hold_cycles <= 0:
-            raise ValueError(f"LiveCycleConfig.exit_max_hold_cycles={self.exit_max_hold_cycles} must be > 0")
+            raise ValueError(
+                f"LiveCycleConfig.exit_max_hold_cycles={self.exit_max_hold_cycles} must be > 0"
+            )
 
         # min_lot < max_lot ordering
         if self.min_lot is not None and self.max_lot is not None and self.min_lot > self.max_lot:
@@ -280,12 +305,16 @@ class LiveCycleConfig:
         # market_type enum validation
         _valid_market_types = {"forex_24_5", "crypto_24_7"}
         if self.market_type not in _valid_market_types:
-            raise ValueError(f"LiveCycleConfig.market_type={self.market_type} not in {_valid_market_types}")
+            raise ValueError(
+                f"LiveCycleConfig.market_type={self.market_type} not in {_valid_market_types}"
+            )
 
         # cross_strategy_mode enum validation
         _valid_cross_modes = {"block", "warn", "off"}
         if self.cross_strategy_mode not in _valid_cross_modes:
-            raise ValueError(f"LiveCycleConfig.cross_strategy_mode={self.cross_strategy_mode} not in {_valid_cross_modes}")
+            raise ValueError(
+                f"LiveCycleConfig.cross_strategy_mode={self.cross_strategy_mode} not in {_valid_cross_modes}"
+            )
 
 
 @dataclass
@@ -3488,25 +3517,72 @@ def execute_live_cycle(
                     tf_hurst=tf_hurst,
                 )
 
-        # ── FIX-20260609-011: load governance state for degradation gate ──
+        # ── FIX-20260609-011 / FIX-20260715-015: load governance state ──
         # Read once per cycle so the governance degradation gate sees the
         # latest brain status transitions (daily_ops updates this file).
+        #
+        # FIX-20260715-015 (L2-β): The old ``except: pass`` silently swallowed
+        # transient I/O errors (file lock contention during concurrent writes),
+        # dropping _gov_state to None and exiling the system from governance-
+        # protected p_win (0.58) to blind coin-flip (0.50) for 21.3% of cycles.
+        # Replaced with structured retry loop (3 attempts, 50ms backoff).
+        # After exhausting retries, alerts DataHealthService and degrades
+        # gracefully — the system continues with _gov_state=None (fail-open
+        # for cold_explore: falls back to 0.50 ultimate floor).
         _gov_state: dict[str, Any] | None = None
-        try:
-            _gov_path = Path(config.base_dir) / "governance_state.json"
-            if _gov_path.exists():
-                import json as _json_gov
+        _gov_path = Path(config.base_dir) / "governance_state.json"
+        if _gov_path.exists():
+            import json as _json_gov
+            import time as _time_gov
 
-                _gov_raw = _json_gov.loads(_gov_path.read_text(encoding="utf-8"))
-                # DQAF-20260623-074: Pass the FULL governance dict (not just
-                # brain_states) so downstream consumers (strategy_line, pwin_chain)
-                # can access the "brain_states" key themselves.  The old
-                # .get("brain_states",{}) pre-stripping caused a schema mismatch:
-                # strategy_line:543 does governance_state.get("brain_states",{})
-                # which always returned {} because the dict keys were brain IDs.
-                _gov_state = _gov_raw
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
-            pass
+            _gov_last_error: str | None = None
+            for _gov_attempt in range(3):
+                try:
+                    _gov_raw = _json_gov.loads(_gov_path.read_text(encoding="utf-8"))
+                    # DQAF-20260623-074: Pass the FULL governance dict (not just
+                    # brain_states) so downstream consumers (strategy_line, pwin_chain)
+                    # can access the "brain_states" key themselves.
+                    _gov_state = _gov_raw
+                    _gov_last_error = None
+                    break
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _gov_exc:
+                    _gov_last_error = f"{type(_gov_exc).__name__}: {_gov_exc}"
+                    if _gov_attempt < 2:  # don't sleep on last attempt
+                        _time_gov.sleep(0.05)  # 50ms backoff
+
+            if _gov_last_error is not None:
+                logger.warning(
+                    "[FIX-015:L2-β] Governance state load failed after 3 retries: "
+                    "%s (path=%s). System operating without governance prior — "
+                    "cold_explore p_win will fall back to 0.50 ultimate floor.",
+                    _gov_last_error,
+                    _gov_path,
+                )
+                # ── Alert via DataHealthService (non-blocking, best-effort) ──
+                # Uses logger.warning above as the durable alert path.
+                # DataHealthService push is opportunistic — any failure (missing
+                # method, import error, type mismatch) is silently ignored so the
+                # cycle is never blocked by telemetry failures.
+                try:
+                    from core.observability.data_health_service import (
+                        DataHealthService,
+                    )
+
+                    _dh = DataHealthService()
+                    _alert_method = getattr(_dh, "record_incident", None)
+                    if _alert_method is not None:
+                        _alert_method(
+                            "governance_state_load_failure",
+                            severity="warning",
+                            detail={
+                                "error": _gov_last_error,
+                                "path": str(_gov_path),
+                                "retries_exhausted": 3,
+                                "mitigation": "cold_explore p_win defaults to 0.50",
+                            },
+                        )
+                except (RuntimeError, TypeError, ValueError, AttributeError, OSError):
+                    pass  # Telemetry failures must never block the trading cycle
 
         # ── FIX-20260611-022: Evaluate data-health degradation ──
         # Progressive risk reduction based on data quality.

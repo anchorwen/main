@@ -38,6 +38,8 @@ def resolve_p_win_from_brains(
     direction: str = "long",
     live_brain_ids: set[str] | None = None,
     governance_state: dict[str, Any] | None = None,
+    *,
+    prefer_governance: bool = False,
 ) -> float:
     """Resolve dynamic p_win for a strategy that does NOT use MetaFilter.
 
@@ -66,6 +68,15 @@ def resolve_p_win_from_brains(
     If no active brains pass the filter, returns fail-closed 0.40 with a
     clear diagnostic log (governance-gated fallback).
 
+    FIX-20260715-015: **prefer_governance** flag.
+    When True, the PnL store is intentionally bypassed — the function skips
+    directly to the governance cold-start fallback.  This is used during
+    cold_explore when the governance prior (all-time WR from immutable labels
+    ledger, median ~0.58 for BTC) is statistically more reliable than the
+    local PnL store (rolling-window WR, V4 ~0.35 from 238 noisy M5 outcomes).
+    Bayesian priority: prior defense first; posterior correction only after
+    statistical significance is established.
+
     Trap 3 fix: Static historical win rate is a fixed multiplier in disguise.
     Rolling PnL win rate is dynamic and reflects current model performance.
     Alpha decays, regimes shift — all-time WR drags stale history into today.
@@ -79,8 +90,21 @@ def resolve_p_win_from_brains(
         governance_state: Optional governance_state dict with
             ``brain_states[brain_id].performance_metrics.win_rate``.
             Used as cold-start fallback when PnL store has no valid data.
+        prefer_governance: When True, bypass PnL store entirely and use
+            governance performance_metrics directly (FIX-20260715-015).
     """
-    if pnl_store is None:
+    # ── FIX-20260715-015: prefer_governance fast path ──
+    # Skip PnL store entirely — go directly to governance cold-start fallback.
+    # The PnL store holds a statistically noisy rolling-window WR; governance
+    # holds the all-time WR from the immutable labels ledger.  For cold_explore,
+    # the governance prior is the Bayesianly correct basis for p_win.
+    if prefer_governance:
+        logger.debug(
+            "[pwin_chain:FIX-015] prefer_governance=True — bypassing PnL store, "
+            "using governance performance_metrics directly."
+        )
+        # Fall through to governance fallback (skip PnL store path)
+    elif pnl_store is None:
         logger.warning(
             "[pwin_chain:FALLBACK_PATH_1] pnl_store is None — "
             "returning fail-closed 0.40. Brain PnL metrics unavailable; "
@@ -92,37 +116,38 @@ def resolve_p_win_from_brains(
     # ── DQAF-20260622-059 (P0-1): governance-gated brain filter ──
     _filtered_out: int = 0
     valid_rates: list[float] = []
-    for b in brains:
-        brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
-        if not brain_id:
-            continue
-        # ── DQAF-20260622-059: LIVE-only gate ──
-        if live_brain_ids is not None and brain_id not in live_brain_ids:
-            _filtered_out += 1
-            continue
-        try:
-            m = pnl_store.get_metrics(str(brain_id), window=100)
-        except (KeyError, ValueError) as _gm_exc:
-            # DQAF-076/BLE001-P0: get_metrics() can raise KeyError when
-            # brain_id is absent from the PnL store (benign — brain may be
-            # new or have no settled trades yet).  ValueError indicates
-            # invalid parameters.  Skip this brain; unknown exceptions
-            # (e.g. AttributeError, TypeError — code bugs) propagate to
-            # the caller for diagnosis.
-            logger.debug(
-                "PnL store get_metrics skipped brain=%s: %s",
-                brain_id,
-                _gm_exc,
-            )
-            continue
-        if m is None:
-            continue
-        sc = getattr(m, "sample_count", 0)
-        if sc < 10:
-            continue
-        wr = getattr(m, "win_rate", 0.0)
-        if wr > 0:
-            valid_rates.append(float(wr))
+    if not prefer_governance and pnl_store is not None:
+        for b in brains:
+            brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
+            if not brain_id:
+                continue
+            # ── DQAF-20260622-059: LIVE-only gate ──
+            if live_brain_ids is not None and brain_id not in live_brain_ids:
+                _filtered_out += 1
+                continue
+            try:
+                m = pnl_store.get_metrics(str(brain_id), window=100)
+            except (KeyError, ValueError) as _gm_exc:
+                # DQAF-076/BLE001-P0: get_metrics() can raise KeyError when
+                # brain_id is absent from the PnL store (benign — brain may be
+                # new or have no settled trades yet).  ValueError indicates
+                # invalid parameters.  Skip this brain; unknown exceptions
+                # (e.g. AttributeError, TypeError — code bugs) propagate to
+                # the caller for diagnosis.
+                logger.debug(
+                    "PnL store get_metrics skipped brain=%s: %s",
+                    brain_id,
+                    _gm_exc,
+                )
+                continue
+            if m is None:
+                continue
+            sc = getattr(m, "sample_count", 0)
+            if sc < 10:
+                continue
+            wr = getattr(m, "win_rate", 0.0)
+            if wr > 0:
+                valid_rates.append(float(wr))
 
     if live_brain_ids is not None and _filtered_out > 0:
         logger.info(
@@ -407,15 +432,49 @@ def resolve_p_win(
         # DQAF-20260623-066 (P0-2): Cold explore no longer forces blind p_win=0.50
         # when governance state is available.  Try governance fallback first
         # (all-time WR from immutable labels ledger), then 0.50 as ultimate floor.
+        #
+        # FIX-20260715-015: Force governance fallback by passing pnl_store=None.
+        # The PnL store holds a rolling-window WR that is (a) cold after restart,
+        # (b) statistically insignificant (V4 WR=0.35 from 238 noisy M5 outcomes),
+        # and (c) structurally lower than the governance all-time median (0.58).
+        # During cold_explore, the local PnL store MUST NOT preempt the governance
+        # prior — Bayesian priority: prior defense first, posterior correction only
+        # after statistical significance is established.
+        #
+        # Also applies strict asset-class domain isolation: only brain IDs matching
+        # the current symbol's prefix (e.g. "BTC_" for BTC strategies) participate.
+        # This is defense-in-depth — the governance_state file is already per-symbol,
+        # but an explicit prefix gate eliminates any cross-contamination risk.
         _cold_p_win = 0.50
         _cold_source = "cold_explore_neutral"
         if governance_state is not None:
+            # ── Asset-class domain isolation ──
+            _isolated_active_ids: set[str] | None = None
+            if live_brain_ids is not None:
+                _asset_prefix = "BTC_" if strategy_name.startswith("btc_") else None
+                if _asset_prefix is not None:
+                    _isolated_active_ids = {
+                        bid for bid in live_brain_ids if bid.startswith(_asset_prefix)
+                    }
+                    if not _isolated_active_ids:
+                        logger.warning(
+                            "[pwin_chain:FIX-015] Asset-class isolation filtered ALL "
+                            "active brain IDs (prefix=%s, input_count=%d). "
+                            "Falling back to unfiltered set — isolation gate cannot "
+                            "operate with zero brains.",
+                            _asset_prefix,
+                            len(live_brain_ids),
+                        )
+                        _isolated_active_ids = live_brain_ids
+                else:
+                    _isolated_active_ids = live_brain_ids
             _cold_from_gov = resolve_p_win_from_brains(
                 brains,
-                pnl_store,
+                None,  # pnl_store not needed when prefer_governance=True
                 direction,
-                live_brain_ids=live_brain_ids,
+                live_brain_ids=_isolated_active_ids,
                 governance_state=governance_state,
+                prefer_governance=True,  # FIX-20260715-015: force governance prior
             )
             if _cold_from_gov > 0.40:
                 # Governance produced a meaningful estimate — use it

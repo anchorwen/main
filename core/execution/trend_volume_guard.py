@@ -119,6 +119,9 @@ def _counter_trend_action(
     strategy_name: str,
     trend_strength: float,
     h4_trend_strength: float = 0.0,
+    trade_direction: str = "neutral",
+    h4_trend_direction: str = "neutral",
+    h1_trend_direction: str = "neutral",
 ) -> dict[str, Any]:
     """Determine how a strategy reacts to counter-trend signals.
 
@@ -141,6 +144,10 @@ def _counter_trend_action(
     reduced, and a 0.90→0.72 signal still easily cleared the 0.40 threshold.
 
     H4 takes priority — higher-TF block fires before H1 thresholds.
+
+    **Direction-aware (FIX-20260715-011 L3)**: block/penalise ONLY when the
+    trade direction is counter to the higher-TF trend.  Trend-aligned trades
+    (LONG in bull, SHORT in bear) pass through with allow + 1.0 multipliers.
 
     Returns dict with keys: action ("block"|"penalise"|"allow"),
                             confidence_mult, vol_mult (for penalise).
@@ -290,23 +297,36 @@ def _counter_trend_action(
             "h4_vol_mult": 0.70,
         }
 
-    # H4 gate checked first — higher TF takes priority
-    if h4_trend_strength >= t["h4_block"]:
+    # Determine if trade direction is counter to higher-TF trend.
+    # statarb strategies are exempt — mean-reversion is counter-trend by design.
+    _is_statarb = strategy_name.startswith("statarb")
+    _counter_h4 = not _is_statarb and (
+        (trade_direction == "long" and h4_trend_direction == "short")
+        or (trade_direction == "short" and h4_trend_direction == "long")
+    )
+    _counter_h1 = not _is_statarb and (
+        (trade_direction == "long" and h1_trend_direction == "short")
+        or (trade_direction == "short" and h1_trend_direction == "long")
+    )
+
+    # H4 gate checked first — higher TF takes priority.
+    # Only fires when trade is counter to H4 trend.
+    if _counter_h4 and h4_trend_strength >= t["h4_block"]:
         return {
             "action": "block",
             "confidence_mult": t["h4_conf_mult"],
             "vol_mult": t["h4_vol_mult"],
         }
-    if h4_trend_strength >= t["h4_penalise"]:
+    if _counter_h4 and h4_trend_strength >= t["h4_penalise"]:
         return {
             "action": "penalise",
             "confidence_mult": t["h4_conf_mult"],
             "vol_mult": t["h4_vol_mult"],
         }
 
-    # H1 thresholds
-    if trend_strength >= t["block"]:
+    # H1 thresholds — only for counter-H1 trades.
+    if _counter_h1 and trend_strength >= t["block"]:
         return {"action": "block", "confidence_mult": t["conf_mult"], "vol_mult": t["vol_mult"]}
-    if trend_strength >= t["penalise"]:
+    if _counter_h1 and trend_strength >= t["penalise"]:
         return {"action": "penalise", "confidence_mult": t["conf_mult"], "vol_mult": t["vol_mult"]}
     return {"action": "allow", "confidence_mult": 1.0, "vol_mult": 1.0}

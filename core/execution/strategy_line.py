@@ -1222,7 +1222,16 @@ class StrategyLine:
                 _rg_ct = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
                 _h4_ts = float(_rg_ct.get("h4_trend_strength") or 0.0)
                 _h1_ts = float(_rg_ct.get("h1_trend_strength") or 0.0)
-                _ct_action = _counter_trend_action(name, _h1_ts, h4_trend_strength=_h4_ts)
+                _h4_dir = str(_rg_ct.get("h4_trend_direction") or "neutral")
+                _h1_dir = str(_rg_ct.get("h1_trend_direction") or "neutral")
+                _ct_action = _counter_trend_action(
+                    name,
+                    _h1_ts,
+                    h4_trend_strength=_h4_ts,
+                    trade_direction=direction,
+                    h4_trend_direction=_h4_dir,
+                    h1_trend_direction=_h1_dir,
+                )
                 if _ct_action["action"] == "block":
                     return self._make_decision(
                         should_trade=False,

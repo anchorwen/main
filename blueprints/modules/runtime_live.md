@@ -83,6 +83,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260715-015 | 2026-07-15 | cursor-agent | — | **L2-β+L2-γ: Governance state load retry loop + asset-class domain isolation**. `live_cycle.py`: 3-retry governance_state load (50ms backoff, structured alert on exhaustion) replaces `except: pass` that silently dropped 21.3% of governance loads → cold_explore_neutral p_win=0.50. `strategy_line.py`: cold_explore Step 1 applies `BTC_` prefix filter to live_brain_ids before governance call — defense-in-depth against XAU contamination of BTC decisions. | L2 — silent data loss + missing cross-symbol isolation |
 | FIX-20260714-005 | 2026-07-15 | cursor-agent | 8ad64d4f | M15 bar-boundary gate narrowed to live-only, probation evaluates every cycle | state-leak |
 | FIX-20260715-008 | 2026-07-15 | cursor-agent | 8ad64d4f | Trend protection dead code fix + TF-aware bleed_bars scaling | state-leak |
 | FIX-20260715-008 | 2026-07-15 | cursor-agent | (pending) | Trend Protection Umbrella (FIX-20260613-050) was dead code — if/elif block indented inside except. H4/H1 positions had zero protection from M5-noise exits. Also added TF-aware bleed_bars floor using _tf_mult. Evidence: h4_swing killed at -0.32R after 1 H4 bar. | boundary-error |

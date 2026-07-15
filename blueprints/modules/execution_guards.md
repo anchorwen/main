@@ -49,6 +49,16 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260715-015 — Cold-Explore Governance Bypass + Retry Loop + Asset Isolation (2026-07-15)
+
+**Root Cause**: L3 — `resolve_p_win_from_brains()` checks PnL store first (rolling-window WR). When PnL store has valid data (sample_count ≥ 10), returns PnL median immediately — governance fallback (all-time WR from immutable `live_labels.jsonl` ledger) is NEVER reached. BTC PnL median = 0.4244 vs governance median = 0.5784. Additionally, `except: pass` in governance_state load silently dropped 21.3% of cycles to p_win=0.50.
+
+**Fix**: (1) `prefer_governance=True` keyword-only flag bypasses PnL store entirely, routing directly to governance performance_metrics (Bayesian priority: prior defense first). (2) `resolve_p_win()` cold_explore Step 1 uses `prefer_governance=True` with `BTC_` prefix asset-class isolation — prevents XAU contamination of BTC decisions. (3) `live_cycle.py`: 3-retry loop + 50ms backoff replaces `except: pass` for governance_state load. (4) `strategy_line.py`: wires cold_explore → prefer_governance with asset isolation.
+
+**Verified**: Cycle 18 post-restart shows `cold_explore_governance` with p_win=0.667 (M30) and p_win=0.778 (H1_V2), up from 0.50 neutral.
+
+**Files**: `core/execution/pwin_chain.py`, `core/execution/strategy_line.py`, `core/runtime/live_cycle.py`
+
 ### FIX-20260713-006 — LightGBM 4.6.0 model_str= Workaround (2026-07-06)
 
 **Root Cause**: RC-02 — LightGBM 4.6.0 C library model_file= parser loses sync on large multiclass model text files (1500 trees, 41-dim, 3.7 MB), causing stack buffer overrun (0xC0000409 STATUS_STACK_BUFFER_OVERRUN). Intent subprocess crash during brain init prevented golden_master cycles.
