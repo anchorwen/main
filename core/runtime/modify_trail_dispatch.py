@@ -60,7 +60,20 @@ def dispatch_modify_trail(
     }
     if brain_ids:
         payload["brain_ids"] = brain_ids
-    # Resolve magic from strategy name for correct journal attribution
+    # ── DQAF-20260715-022: strategy attribution for modify_sltp journal entries ──
+    # Explicitly pass strategy name in the payload so the bridge can use it
+    # for journal attribution even when magic resolution is unavailable.
+    # The bridge's _build_journal_entry path currently only resolves strategy
+    # from magic (MAGIC_TO_STRATEGY); passing the strategy field enables a
+    # future bridge-side fallback without waiting for bridge redeployment.
+    if strategy_name:
+        payload["strategy"] = strategy_name
+    # Resolve magic from strategy name for correct journal attribution.
+    # When strategy_name is empty, this is skipped → bridge uses its default
+    # magic (90401) → journal shows __UNATTRIBUTED_BRIDGE_DEFAULT__.
+    # The caller (management_phase.py) now has a magic-based fallback
+    # (DQAF-20260715-022) that should prevent empty strategy_name from
+    # reaching this point.
     if strategy_name:
         try:
             from core.contracts.strategy_magic import STRATEGY_TO_MAGIC
@@ -70,6 +83,12 @@ def dispatch_modify_trail(
                 payload["magic"] = _strat_magic
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             pass
+    else:
+        _logger.warning(
+            "Trail dispatch with empty strategy_name — ticket=%s magic will "
+            "default to bridge sentinel (90401).  Journal attribution lost.",
+            pos_ticket,
+        )
     if open_message_id:
         payload["open_message_id"] = open_message_id
 

@@ -1116,6 +1116,16 @@ def process_one(
         _strategy = MAGIC_TO_STRATEGY.get(_magic, "")
     except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
         pass
+    # ── DQAF-20260715-022: Fallback to payload strategy field ──
+    # When magic → strategy resolution fails (magic=90401 sentinel, or
+    # MAGIC_TO_STRATEGY not initialised), use the explicitly-passed strategy
+    # field from the dispatch payload.  This closes the remaining gap where
+    # modify_sltp/close payloads with correct magic but unmapped strategy
+    # still produce UNATTRIBUTED journal entries.
+    if not _strategy or _strategy == "__UNATTRIBUTED_BRIDGE_DEFAULT__":
+        _payload_strategy = msg_payload.get("strategy", "")
+        if _payload_strategy and _payload_strategy != "__UNATTRIBUTED_BRIDGE_DEFAULT__":
+            _strategy = _payload_strategy
     _open_msg_id = msg_payload.get("open_message_id", "")
     position_ticket = detail.get("order") or coerce_position_ticket(msg_payload)
     # ── FIX-20260612-004: Prefer actual fill PnL over mid-price estimate ──
@@ -1526,6 +1536,11 @@ def _write_zmq_journal_entry(
         _strategy = _M2S.get(_magic, "")
     else:
         _strategy = ""
+    # ── DQAF-20260715-022: Fallback to payload strategy field (ZMQ path) ──
+    if not _strategy or _strategy == "__UNATTRIBUTED_BRIDGE_DEFAULT__":
+        _payload_strategy = msg_payload.get("strategy", "")
+        if _payload_strategy and _payload_strategy != "__UNATTRIBUTED_BRIDGE_DEFAULT__":
+            _strategy = _payload_strategy
     # DQAF-20260614-009: For open orders, the ticket is in MT5's response
     # (detail["order"]), NOT in the request (msg_payload).  coerce_position_ticket
     # only checks the request, so open orders always got ticket=None.

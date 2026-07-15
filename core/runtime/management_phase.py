@@ -1165,6 +1165,26 @@ def execute_management_phase(
             if not _sname:
                 _sname = "barrier_12bar"
 
+    # ── DQAF-20260715-022: Magic-based strategy resolution fallback ──
+    # When known_open_tickets lacks a strategy field (e.g. bootstrapped from
+    # journal OPEN entries written before the bridge/journaller consistently
+    # populated ``strategy``), resolve the strategy name from the position's
+    # magic number stored in known_open_tickets.  Without this, modify_sltp
+    # payloads carry magic=0/90401 → bridge writes
+    # ``__UNATTRIBUTED_BRIDGE_DEFAULT__`` → 61.8% of today's journal entries
+    # lose strategy attribution (FIX-20260715-017 only fixed open-path,
+    # not the per-cycle trail dispatch path).
+    if not _sname:
+        _kot_entry = state.known_open_tickets.get(pos.ticket, {})
+        _kot_magic = _kot_entry.get("magic", 0)
+        if _kot_magic and int(_kot_magic) not in (0, 90401):
+            try:
+                from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
+
+                _sname = MAGIC_TO_STRATEGY.get(int(_kot_magic), "")
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass
+
     # ── 1. Fetch current prices & ATR ──
     # FIX-20260522-014: a single price-fetch failure must not skip trail/
     # breakeven/exit management for this position.  Use the position's own
