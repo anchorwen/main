@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-15T11:32:10Z
+> **自动生成**: 2026-07-15T12:15:48Z
 > **扫描模块数**: 767
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -121,7 +121,7 @@
 | `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 938 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 167 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
-| `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 205 | — | |
+| `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 215 | — | |
 | `validators.py` | ✅ active | ContractViolation, ContractValidator | 7 | 123 | — | |
 
 ## core/contracts/domain
@@ -812,7 +812,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2835 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2872 | — | |
 | `live_launcher.py` | ✅ active | — | 15 | 1163 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |

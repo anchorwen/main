@@ -83,6 +83,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260715-018 | 2026-07-15 | cursor-agent | — | **L3: `live_intent_loop` — added `init_magic_mappings(args.config)` at startup**. Main process (intent loop) never called `init_magic_mappings()`, relying on hardcoded fallback only. `STRATEGY_TO_MAGIC.get("btc_swing_h4")` → 0 → modify_sltp/close dispatches used sentinel magic 90401. Fix: explicit `init_magic_mappings(args.config)` after YAML config load. ReB: `STRATEGY_MAGIC_IDEMPOTENCY_OVERBLOCKS_YAML`. | L2 — main process startup missing magic mapping bootstrap |
 | FIX-20260715-015 | 2026-07-15 | cursor-agent | — | **L2-β+L2-γ: Governance state load retry loop + asset-class domain isolation**. `live_cycle.py`: 3-retry governance_state load (50ms backoff, structured alert on exhaustion) replaces `except: pass` that silently dropped 21.3% of governance loads → cold_explore_neutral p_win=0.50. `strategy_line.py`: cold_explore Step 1 applies `BTC_` prefix filter to live_brain_ids before governance call — defense-in-depth against XAU contamination of BTC decisions. | L2 — silent data loss + missing cross-symbol isolation |
 | FIX-20260714-005 | 2026-07-15 | cursor-agent | 8ad64d4f | M15 bar-boundary gate narrowed to live-only, probation evaluates every cycle | state-leak |
 | FIX-20260715-008 | 2026-07-15 | cursor-agent | 8ad64d4f | Trend protection dead code fix + TF-aware bleed_bars scaling | state-leak |

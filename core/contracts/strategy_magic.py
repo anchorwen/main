@@ -157,9 +157,13 @@ def _derive_mappings_from_yaml(config_path: str) -> dict[int, str]:
 def init_magic_mappings(config_path: str | None = None) -> None:
     """Initialise MAGIC_TO_STRATEGY and STRATEGY_TO_MAGIC from a YAML config.
 
-    Idempotent — subsequent calls are no-ops.  Call once at bootstrap from
-    the Bridge Worker ``main()``, the live-cycle entry point, and training
-    pipeline entry points.
+    Idempotent for *implicit* (auto-init) calls.  Explicit calls with a
+    ``config_path`` always reload — they merge YAML entries with the
+    hardcoded fallback so that strategies registered in live config YAML
+    but not in the hardcoded table are properly mapped.
+
+    Call once at bootstrap from the Bridge Worker ``main()``, the
+    live-cycle entry point, and training pipeline entry points.
 
     Args:
         config_path: Path to a live config YAML (e.g. ``configs/live_btc.yaml``).
@@ -167,7 +171,13 @@ def init_magic_mappings(config_path: str | None = None) -> None:
     """
     global _MAPPINGS_INITIALIZED, MAGIC_TO_STRATEGY, STRATEGY_TO_MAGIC  # noqa: PLW0603
 
-    if _MAPPINGS_INITIALIZED:
+    # Auto-init (no config_path) is idempotent — hardcoded fallback is enough.
+    # Explicit init with a config_path MUST NOT be blocked by auto-init because
+    # the module-level auto-init only has hardcoded entries.  Strategies
+    # registered in YAML but not in _HARDCODED_FALLBACK (e.g. btc_swing_h4,
+    # btc_swing_m30) would never get mapped otherwise.
+    # FIX-20260715-018: auto-init idempotency guard over-blocked YAML init.
+    if _MAPPINGS_INITIALIZED and not config_path:
         return
 
     mapping: dict[int, str] = {}
