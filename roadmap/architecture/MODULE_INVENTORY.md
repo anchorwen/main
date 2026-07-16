@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-15T17:20:18Z
-> **扫描模块数**: 769
+> **自动生成**: 2026-07-16T14:54:19Z
+> **扫描模块数**: 771
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -274,7 +274,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2019 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2024 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 431 | — | |
@@ -524,7 +524,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4549 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4819 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2327 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -534,7 +534,7 @@
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 618 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 627 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 327 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
@@ -650,6 +650,7 @@
 | `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
 | `_analyze_xau_today_20260710.py` | ✅ active | — | 3 | 302 | — | |
 | `_analyze_xau_today_losses.py` | ✅ active | — | 2 | 169 | — | |
+| `_audit_zombie_ghost_positions.py` | ✅ active | — | 3 | 460 | — | |
 | `_btc_evolution_audit.py` | ✅ active | — | 4 | 653 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
 | `_commit_fixes.py` | 📄 config | — | 0 | 46 | — | |
@@ -670,6 +671,7 @@
 | `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
 | `_generate_btc_brain_configs.py` | ✅ active | — | 1 | 246 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
+| `_register_h4_governance.py` | 📄 config | — | 0 | 31 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
 | `_verify_xau_three_issues.py` | ✅ active | — | 2 | 297 | — | |
@@ -827,7 +829,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 37 | 2180 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 37 | 2192 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |
@@ -993,7 +995,7 @@
 | `train_btc_binary_directional.py` | ✅ active | — | 5 | 385 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
-| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1849 | — | |
+| `train_btc_swing_v9.py` | ✅ active | — | 16 | 1898 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |

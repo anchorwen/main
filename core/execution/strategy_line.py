@@ -1759,10 +1759,15 @@ class StrategyLine:
                 # Direction balance — counteract systemic LONG bias
                 if direction == "long" and self.config.long_bias_discount > 0:
                     confidence = round(confidence * (1.0 - self.config.long_bias_discount), 4)
+                # FIX-20260716-004: Use brain_ids (all voting brains) not
+                # supporting_brains (only those agreeing with direction).
+                # When all brains vote neutral, supporting_brains=[] but
+                # brain_ids=[all_brain_ids] — the degradation gate in
+                # strategy_evaluator needs the full list to count live brains.
                 return (
                     direction,
                     confidence,
-                    signal.supporting_brains,
+                    signal.brain_ids,
                     signal.supporting_count,
                     signal.total_count,
                 )

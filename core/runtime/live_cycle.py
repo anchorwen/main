@@ -2409,6 +2409,137 @@ def execute_live_cycle(
                 _aug = BTCFeatureAugmenter(feature_service, mt5_worker=mt5_worker)
                 state._btc_augmenter = _aug
 
+        # ── FIX-20260716-005 §1: Pre-management MT5 sync ──
+        # Before running the management phase, verify every managed position
+        # against MT5 ground truth.  Any position in position_manager that is
+        # NOT in the MT5 portfolio is a ghost/zombie — the bridge closed it
+        # (or it was closed externally), and the close entry was written
+        # directly to the journal bypassing PositionCloseAdapter.  Without
+        # this sync, management_phase dispatches modify_sltp/close orders for
+        # dead positions → bridge detects position_already_closed_recovered →
+        # ghost close entries accumulate until the next reconciliation cycle.
+        #
+        # ═══ In-Flight Order Protection (投委会 2026-07-16) ═══
+        # Three safety layers prevent false zombie detection:
+        #   G1. MT5 None/empty guard — skip if MT5 returns None (API error)
+        #       or an empty list while position_manager has positions
+        #       (could be MT5 internal sync gap after restart).
+        #   G2. Position age gate — only clear positions that have survived
+        #       ≥ _MIN_POSITION_AGE_CYCLES (2).  A brand-new position opened
+        #       in the last cycle may not yet appear in positions_get() due
+        #       to MT5 propagation delay — clearing it would kill a live
+        #       in-flight order.
+        #   G3. Young-position deferral — positions below the age threshold
+        #       are logged as "deferred_young" and re-checked next cycle.
+        _MIN_POSITION_AGE_CYCLES = 2
+        if (
+            state.position_manager is not None
+            and state.position_manager.has_position()
+            and not config.no_mt5
+            and state.loop_iteration > 1  # cycle 1 reconciliation handles this
+        ):
+            try:
+                _pm_positions = list(state.position_manager.get_all_positions())
+                _pm_tickets = {p.ticket for p in _pm_positions}
+                if _pm_tickets:
+                    _mt5_positions_raw = mt5_call_with_timeout(
+                        mt5_worker.positions_get, symbol=config.symbol, timeout=5.0
+                    )
+                    # G1: Skip if MT5 is unreachable or returned nothing
+                    if _mt5_positions_raw is None or _mt5_positions_raw is _MT5_TIMEOUT_SENTINEL:
+                        pass  # API error or timeout — skip, can't trust MT5 state
+                    elif not _mt5_positions_raw and _pm_tickets:
+                        # MT5 returned empty list but position_manager has
+                        # positions — could be MT5 internal sync gap.
+                        # Log and skip; §2 periodic check will catch true
+                        # zombies once MT5 stabilizes.
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "pre_mgmt_sync_mt5_empty_skipped",
+                                    "time": _utc_iso(),
+                                    "severity": "INFO",
+                                    "pm_tickets": sorted(_pm_tickets),
+                                    "detail": (
+                                        "MT5 positions_get returned empty list while "
+                                        "position_manager has positions — skipping clear "
+                                        "to avoid false zombie detection (MT5 sync gap?)."
+                                    ),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    else:
+                        _mt5_open_tickets = {p.ticket for p in _mt5_positions_raw}
+                        _zombie_candidates = _pm_tickets - _mt5_open_tickets
+                        if _zombie_candidates:
+                            # G2+G3: Age gate — separate aged zombies from
+                            # young positions that may be in-flight orders
+                            # not yet visible in MT5.
+                            _current_cycle = state.loop_iteration
+                            _aged_zombies: set[int] = set()
+                            _young_positions: set[int] = set()
+                            for _zt in _zombie_candidates:
+                                _pm_pos = next((p for p in _pm_positions if p.ticket == _zt), None)
+                                if (
+                                    _pm_pos is not None
+                                    and (_current_cycle - _pm_pos.entry_cycle)
+                                    >= _MIN_POSITION_AGE_CYCLES
+                                ):
+                                    _aged_zombies.add(_zt)
+                                else:
+                                    _young_positions.add(_zt)
+                            # Defer young positions (may be in-flight)
+                            if _young_positions:
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "pre_mgmt_zombie_deferred_young",
+                                            "time": _utc_iso(),
+                                            "severity": "INFO",
+                                            "young_tickets": sorted(_young_positions),
+                                            "min_age_cycles": _MIN_POSITION_AGE_CYCLES,
+                                            "current_cycle": _current_cycle,
+                                            "detail": (
+                                                "Positions absent from MT5 but below "
+                                                "minimum age threshold — could be "
+                                                "in-flight orders not yet propagated. "
+                                                "Will re-check next cycle."
+                                            ),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                            # Clear confirmed aged zombies
+                            if _aged_zombies:
+                                for _zt in sorted(_aged_zombies):
+                                    state.position_manager.clear_position(ticket=_zt)
+                                    state.known_open_tickets.pop(_zt, None)
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "pre_mgmt_zombie_cleared",
+                                            "time": _utc_iso(),
+                                            "severity": "WARNING",
+                                            "zombie_tickets": sorted(_aged_zombies),
+                                            "min_age_cycles": _MIN_POSITION_AGE_CYCLES,
+                                            "current_cycle": _current_cycle,
+                                            "detail": (
+                                                "Aged positions in position_manager but "
+                                                "NOT in MT5 — cleared before management "
+                                                "phase.  These escaped reconciliation "
+                                                "via bridge-direct journal writes."
+                                            ),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                pass  # Best-effort — management phase has its own guards
+
         # ── Dynamic exit management phase ──
         # Runs whenever positions are registered, regardless of position limit.
         if (
@@ -2658,6 +2789,145 @@ def execute_live_cycle(
                     component="PositionState:save_after_mia_close",
                 ):
                     state.position_manager.save_state(config.position_state_path)
+
+    # ── FIX-20260716-005 §2: Periodic zombie detection loop ──
+    # Every N cycles, verify ALL known_open_tickets against MT5 positions.
+    # This is the safety net that catches zombies that escape both
+    # reconciliation (dedup-blocked adapter writes) and pre-management sync
+    # (management phase guards).  Any ticket in known_open_tickets but NOT
+    # in MT5 is a zombie — the position was closed without proper cleanup.
+    #
+    # ═══ In-Flight Order Protection (投委会 2026-07-16) ═══
+    # Same three safety layers as §1:
+    #   G1. MT5 None/empty guard — skip if MT5 returns None or timeout.
+    #   G2. Position age gate — only clear positions ≥ _MIN_POSITION_AGE_CYCLES
+    #       old, using entry_cycle from position_manager.
+    #   G3. Young-position deferral — logged but not cleared.
+    _ZOMBIE_CHECK_INTERVAL = 10
+    if (
+        state.loop_iteration % _ZOMBIE_CHECK_INTERVAL == 0
+        and state.known_open_tickets
+        and not config.no_mt5
+    ):
+        try:
+            _zk_positions = mt5_call_with_timeout(
+                mt5_worker.positions_get, symbol=config.symbol, timeout=5.0
+            )
+            # G1: Skip if MT5 is unreachable
+            if _zk_positions is None or _zk_positions is _MT5_TIMEOUT_SENTINEL:
+                pass  # API error or timeout — skip, can't trust MT5 state
+            elif not _zk_positions and state.known_open_tickets:
+                # MT5 returned empty but we track positions — suspicious.
+                # Log and skip; §1 pre-management sync will catch true
+                # zombies once MT5 stabilizes.
+                print(
+                    json.dumps(
+                        {
+                            "event": "zombie_detection_mt5_empty_skipped",
+                            "time": _utc_iso(),
+                            "severity": "INFO",
+                            "known_tickets": sorted(state.known_open_tickets.keys()),
+                            "cycle": state.loop_iteration,
+                            "detail": (
+                                "MT5 positions_get returned empty list while "
+                                "known_open_tickets has entries — skipping clear "
+                                "to avoid false zombie detection."
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            else:
+                _zk_mt5_tickets = {p.ticket for p in _zk_positions}
+                _zk_tracked = set(state.known_open_tickets.keys())
+                _zk_zombie_candidates = _zk_tracked - _zk_mt5_tickets
+                if _zk_zombie_candidates:
+                    # G2+G3: Age gate — only clear positions that have
+                    # survived enough cycles to rule out MT5 propagation
+                    # delay.
+                    _zk_current_cycle = state.loop_iteration
+                    _zk_aged_zombies: set[int] = set()
+                    _zk_young_positions: set[int] = set()
+                    for _zt in _zk_zombie_candidates:
+                        _pm = (
+                            state.position_manager.get_position(ticket=_zt)
+                            if state.position_manager is not None
+                            else None
+                        )
+                        if (
+                            _pm is not None
+                            and (_zk_current_cycle - _pm.entry_cycle) >= _MIN_POSITION_AGE_CYCLES
+                        ):
+                            _zk_aged_zombies.add(_zt)
+                        else:
+                            _zk_young_positions.add(_zt)
+                    if _zk_young_positions:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "zombie_detection_deferred_young",
+                                    "time": _utc_iso(),
+                                    "severity": "INFO",
+                                    "young_tickets": sorted(_zk_young_positions),
+                                    "min_age_cycles": _MIN_POSITION_AGE_CYCLES,
+                                    "cycle": state.loop_iteration,
+                                    "detail": (
+                                        "Tickets absent from MT5 but below minimum "
+                                        "age threshold — deferred to next check."
+                                    ),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    if _zk_aged_zombies:
+                        for _zt in sorted(_zk_aged_zombies):
+                            state.known_open_tickets.pop(_zt, None)
+                            if state.position_manager is not None:
+                                state.position_manager.clear_position(ticket=_zt)
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "zombie_detection_cleared",
+                                    "time": _utc_iso(),
+                                    "severity": "WARNING",
+                                    "zombie_tickets": sorted(_zk_aged_zombies),
+                                    "cycle": state.loop_iteration,
+                                    "min_age_cycles": _MIN_POSITION_AGE_CYCLES,
+                                    "detail": (
+                                        "Aged tickets in known_open_tickets but NOT "
+                                        "in MT5 — zombie positions caught by periodic "
+                                        "verification."
+                                    ),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                # Also detect orphan MT5 positions NOT in known_open_tickets
+                _zk_orphans = _zk_mt5_tickets - _zk_tracked
+                if _zk_orphans:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "zombie_detection_orphans_found",
+                                "time": _utc_iso(),
+                                "severity": "INFO",
+                                "orphan_tickets": sorted(_zk_orphans),
+                                "cycle": state.loop_iteration,
+                                "detail": (
+                                    "Positions in MT5 but NOT tracked in "
+                                    "known_open_tickets.  These will be adopted "
+                                    "by the next startup/restart cycle."
+                                ),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass  # Best-effort safety net
 
     # ── Degraded wakeup guard: skip Alpha computation, management only ──
     if degraded_wakeup:

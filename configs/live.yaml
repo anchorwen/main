@@ -29,23 +29,23 @@ brains:
   - path: configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json
     enabled: false
   - path: configs/brains/Swing_V9_M30_V2.json
-    enabled: false  # DQAF-20260630-201 P0: re-enabled — only live XAU brain
+    enabled: false
   - path: configs/brains/XAU_Swing_M30_Sym_A.json
-    enabled: true  # DQAF-20260706-TB001: Tracer Bullet Candidate A (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+    enabled: true
   - path: configs/brains/XAU_Swing_M30_Exec_A.json
-    enabled: true  # DQAF-20260706-002: M30 Exec (SL=2.0/TP=3.0, RR=1.5) — shadow, vote_weight=0.0, execution-aligned
+    enabled: true
   - path: configs/brains/XAU_Swing_M15_Sym_A.json
-    enabled: true  # DQAF-20260706-002: M15 Sym (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+    enabled: true
   - path: configs/brains/XAU_Swing_M15_Exec_A.json
-    enabled: true  # DQAF-20260706-002: M15 Exec (SL=2.0/TP=3.0, RR=1.5) — shadow, vote_weight=0.0, execution-aligned
+    enabled: true
   - path: configs/brains/XAU_Swing_H1_Sym_A.json
-    enabled: true  # DQAF-20260706-002: H1 Sym (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+    enabled: true
   - path: configs/brains/XAU_Swing_H1_Exec_A.json
-    enabled: true  # DQAF-20260706-002: H1 Exec (SL=2.0/TP=3.5, RR=1.75) — shadow, vote_weight=0.0, execution-aligned
+    enabled: true
   - path: configs/brains/XAU_Swing_H4_Sym_A.json
-    enabled: true  # DQAF-20260706-002: H4 Sym (SL=2.5/TP=2.5, RR=1.0) — shadow, vote_weight=0.0
+    enabled: true
   - path: configs/brains/XAU_Swing_H4_Exec_A.json
-    enabled: true  # DQAF-20260706-002: H4 Exec (SL=2.0/TP=3.5, RR=1.75) — shadow, vote_weight=0.0, execution-aligned
+    enabled: true
   - path: configs/brains/Swing_V9_M30_V3.json
     enabled: false
   - path: configs/brains/Swing_V9_M15_V2.json
@@ -113,11 +113,9 @@ live_trading:
   min_lot: 0.01
   max_lot: 0.1
   lot_step: 0.01
-  # ── FIX-20260629-188 (P1-3): Block new entries during loss-making hours ──
-  # 00:00-01:00 UTC: -$44.32 (20 trades, avg -$2.22) — Asian rollover
-  # 20:00-21:00 UTC: -$43.83 (14 trades, avg -$3.13) — Pre-Asian open
-  # These 2 hours = -$88.15 of -$89.03 total XAU swing PnL (n=506)
-  blocked_entry_hours: [0, 20]
+  blocked_entry_hours:
+  - 0
+  - 20
   intraday_drawdown_kill:
     enabled: true
     kill_pct: 0.02
@@ -574,10 +572,8 @@ strategy_lines:
       hard_sl_ratio: 1.5
       dynamic: true
       min_rr_ratio: 0.85
-      # FIX-20260715-009: raised from 0.5 — negative RR protection
     tp:
       base_atr_mult: 3.0
-      # FIX-20260715-009: raised from 1.5 — match SL=3.0 for RR=1.0 base
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 0.8
@@ -619,7 +615,6 @@ strategy_lines:
       hard_sl_ratio: 1.5
       dynamic: true
       min_rr_ratio: 0.85
-      # FIX-20260715-009: raised from 0.5 — negative RR protection
     tp:
       base_atr_mult: 3.0
       partial_tp_enabled: true

@@ -9,7 +9,7 @@
   "model_path": "data_btc/models/btc_swing_v9_h4/xgboost_fold0_s42.json",
   "artifact_path": "data_btc/models/btc_swing_v9_h4/xgboost_fold0_s42.json",
   "model_version": "btc_swing_h4",
-  "artifact_hash": "fa2efc72d0f7675561298c265f82d60bf38f83e74e8d21a2199e3991d344d398",
+  "artifact_hash": "77c5a81d7dbb535c2194fc945ef24953a6df60485ef9a85df7c51122cefdf729",
   "status": "probation",
   "vote_weight": 0.3,
   "magic": 904240,
@@ -31,17 +31,19 @@
     "decay_half_life_days": 200,
     "purge_bars": 12
   },
-  "_retraining_note": "BTC multi-TF expansion 2026-07-13: 41-dim V9 schema + directional labels. EV=+0.44R, CV WR=49.4%. Promoted to probation 2026-07-15 per Investment Committee directive (FIX-20260715-010). H4 p_win=0.703 is strongest BTC signal. Cut-4 micro-volume active.",
+  "_retraining_note": "2026-07-16: NEUTRAL downsampled 60%→40% (5189→2272, --neutral-max-pct 0.40). Model no longer degenerate — produces directional SHORT signals (49% @|raw|>0.1). SHORT bias (raw_score mean=-0.096) — accepted as regime-reflective, counter-trend gate is safety. calibration_offset=0.0 (FIX-20260716-002b: +0.10 killed all signals). 5681 samples. CV: XGBoost WR=47.6%/Acc=30.6%, LightGBM WR=48.1%/Acc=35.3%.",
   "training_metrics": {
-    "cv_mean_val_wr": 0.4936,
-    "cv_std_val_wr": 0.0899,
+    "cv_mean_val_wr": 0.4759,
+    "cv_std_val_wr": 0.0655,
+    "cv_mean_val_acc": 0.3057,
+    "cv_std_val_acc": 0.0231,
     "cv_folds": 5,
     "ev_r": 0.4436,
     "direction_diversity": {
       "n_long": 1700,
       "n_short": 1709,
-      "n_neutral": 5189,
-      "_note": "Training labels distribution — 60% NEUTRAL due to slow H4 bar movement"
+      "n_neutral": 2272,
+      "_note": "Post-downsample: NEUTRAL 40% (was 60%). LONG:SHORT=0.99 (balanced). 5681 total samples."
     }
   },
   "features": [
@@ -56,7 +58,7 @@
     "Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"
   ],
   "n_features": 41,
-  "n_train_samples": 8598,
+  "n_train_samples": 5681,
   "trained_at": "2026-07-13T01:40:00Z",
   "governance": {
     "min_confidence": 0.35,
@@ -67,9 +69,13 @@
     "p95": 0.20,
     "peak_conf": 0.55,
     "lambda_decay": 0.10,
-    "_calibration_note": "Placeholder — needs calibration from live feature store shadow inference"
+    "_calibration_note": "2026-07-16: calibration_offset=0.0 — model SHORT bias accepted, counter-trend gate is safety net. Prior +0.10 killed all signals."
   },
-  "last_retrained": "2026-07-13T01:40:00Z",
+  "calibration_offset": 0.0,
+  "activation_threshold": 0.065,
+  "_calibration_offset_note": "2026-07-16: raw_score mean=-0.096 (SHORT bias). Previously set to +0.10 but this killed ALL SHORT signals (most raw in [-0.10,-0.20] → calibrated > -0.10 → NEUTRAL). Reset to 0.0 — SHORT bias reflects market regime, counter-trend gate provides safety. FIX-20260716-002b.",
+  "_activation_threshold_note": "2026-07-16 (FIX-20260716-003): Runtime feature distribution compressed vs training — raw_score in [-0.067,-0.093] with 17/41 zeros (no MT5 cross-asset). Threshold 0.10 → 100% NEUTRAL. Lowered to 0.065 to restore directionality. Re-evaluate after MT5 cross-asset features are live.",
+  "last_retrained": "2026-07-16T09:23:00Z",
   "label_contract": {
     "sl_atr_mult": 2.5,
     "tp_atr_mult": 3.0,

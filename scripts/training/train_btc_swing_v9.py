@@ -664,6 +664,7 @@ def build_dataset(
     exclude_weekends: bool = False,
     atr_pctile_low: float = 0.0,
     atr_pctile_high: float = 0.0,
+    neutral_max_pct: float | None = None,
 ) -> dict[str, Any]:
     """Full B2 pipeline: CSV → features + labels → weights → CV splits → NPZ.
 
@@ -1138,6 +1139,45 @@ def build_dataset(
         labels = labels_directional
         pnl_r = np.where(labels_directional != 0, pnl_r_directional, np.nan)
         hold_bars = hold_directional
+
+        # ── NEUTRAL downsampling (IC Mandate: prevent model collapse) ──
+        # When neutral_max_pct is set, randomly downsample NEUTRAL-labeled
+        # bars so they don't exceed the target fraction of total samples.
+        # This prevents the multi:softprob model from collapsing to
+        # "always predict NEUTRAL" when training data is dominated by
+        # timeout bars (common in higher timeframes like H4).
+        if neutral_max_pct is not None and neutral_max_pct < 1.0:
+            neutral_mask = labels == 0
+            non_neutral_mask = ~neutral_mask
+            n_neutral = int(neutral_mask.sum())
+            n_non_neutral = int(non_neutral_mask.sum())
+
+            if n_neutral > 0 and n_non_neutral > 0:
+                # Target: neutral / (neutral + non_neutral) ≤ neutral_max_pct
+                max_neutral = int(neutral_max_pct * n_non_neutral / (1.0 - neutral_max_pct))
+
+                if n_neutral > max_neutral:
+                    rng = np.random.RandomState(42)
+                    neutral_idx = np.where(neutral_mask)[0]
+                    keep_n = max(
+                        max_neutral, n_non_neutral // 2
+                    )  # floor: keep at least half of non-neutral count
+                    keep_neutral_idx = rng.choice(neutral_idx, size=keep_n, replace=False)
+                    keep_mask = np.zeros(len(labels), dtype=bool)
+                    keep_mask[keep_neutral_idx] = True
+                    keep_mask[non_neutral_mask] = True
+                    keep_mask_sorted = np.sort(np.where(keep_mask)[0])
+
+                    labels = labels[keep_mask_sorted]
+                    pnl_r = pnl_r[keep_mask_sorted]
+                    hold_bars = hold_bars[keep_mask_sorted]
+                    ts_valid = ts_valid[keep_mask_sorted]
+                    features = features[keep_mask_sorted]
+                    print(
+                        f"[B2] NEUTRAL downsampling: {n_neutral:,} → {keep_n:,} "
+                        f"({100*keep_n/(keep_n+n_non_neutral):.0f}% of {keep_n+n_non_neutral:,} total, "
+                        f"target ≤{neutral_max_pct:.0%})"
+                    )
 
         labels_out = labels + 1  # [-1,0,1] → [0,1,2] for multi:softprob
         pnl_r_out = np.nan_to_num(pnl_r, nan=0.0)
@@ -1803,6 +1843,14 @@ def main():
         default=0.0,
         help="Exclude bars above this ATR percentile (0=disabled). Recommended: 95 for crash-spike removal.",
     )
+    parser.add_argument(
+        "--neutral-max-pct",
+        type=float,
+        default=None,
+        help="Maximum fraction of NEUTRAL labels in training data (None=no downsampling). "
+        "Recommended: 0.40 for high-timeframe models where timeout bars dominate. "
+        "Prevents model collapse to 'always predict NEUTRAL'.",
+    )
     args = parser.parse_args()
 
     do_build = args.full or args.build_only
@@ -1831,6 +1879,7 @@ def main():
             exclude_weekends=args.exclude_weekends,
             atr_pctile_low=args.atr_pctile_low,
             atr_pctile_high=args.atr_pctile_high,
+            neutral_max_pct=args.neutral_max_pct,
         )
 
     if do_train:

@@ -1134,6 +1134,17 @@ def process_one(
     _pnl_status = (
         "verified_from_mt5_deal" if _actual_profit is not None else "pending_mt5_confirmation"
     )
+    # ── FIX-20260716-005 §3: Bridge journal hardening ──
+    # Tag every bridge-written journal entry with _source for audit trail.
+    # Previously bridge entries had no _source field, making it impossible
+    # to distinguish bridge-direct writes from adapter-mediated writes.
+    # For position_already_closed_recovered, use a specific tag so
+    # downstream consumers can identify ghost-close recovery events.
+    _bridge_source = "bridge"
+    if ack_status == "closed" and isinstance(detail, dict):
+        _detail_reason = detail.get("reason", "")
+        if _detail_reason == "position_already_closed_recovered":
+            _bridge_source = "bridge_position_already_closed_recovered"
     journal_record = {
         "schema_version": "live_trade_journal.v2",
         "recorded_at": _utc_now(),
@@ -1170,6 +1181,7 @@ def process_one(
         "p_win_degraded": msg_payload.get("p_win_degraded", False),
         "kelly_mult": msg_payload.get("kelly_mult"),
         "entry_context": msg_payload.get("entry_context"),
+        "_source": _bridge_source,
     }
     if _open_msg_id:
         journal_record["open_message_id"] = _open_msg_id

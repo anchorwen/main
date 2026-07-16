@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-15T17:20:18Z
+> **自动生成**: 2026-07-16T14:54:19Z
 
 ## Package-Level Dependencies
 
@@ -564,6 +564,7 @@
 - `_analyze_xau_now.py` → (无内部依赖)
 - `_analyze_xau_today_20260710.py` → (无内部依赖)
 - `_analyze_xau_today_losses.py` → (无内部依赖)
+- `_audit_zombie_ghost_positions.py` → (无内部依赖)
 - `_btc_evolution_audit.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)
 - `_commit_fixes.py` → (无内部依赖)
@@ -584,6 +585,7 @@
 - `_forensic_tp_profit_giveback.py` → (无内部依赖)
 - `_generate_btc_brain_configs.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
+- `_register_h4_governance.py` → `core.deployment.brain_lifecycle_manager`
 - `_surface_scan_horizon4.py` → (无内部依赖)
 - `_verify_btc_analysis_claims.py` → (无内部依赖)
 - `_verify_xau_three_issues.py` → (无内部依赖)

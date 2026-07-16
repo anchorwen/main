@@ -279,6 +279,15 @@ class PositionCloseAdapter:
         _entry["message_id"] = (
             _entry["message_id"] or f"close_{event.position_ticket}_{event.deal_id}"
         )
+        # ── FIX-20260716-005 §4: Provenance tagging ──
+        # Mark adapter-mediated entries with _source so the journal dedup
+        # can correctly supersede bridge-direct writes (which have
+        # _source="bridge_position_already_closed_recovered") with more
+        # accurate reconciliation data.  Without this tag, the dedup
+        # returned True for all same-ticket close entries, blocking the
+        # adapter from writing corrected data and from notifying downstream
+        # consumers (position_manager, reentry_guard, pnl_ledger).
+        _entry["_source"] = "mt5_reconciliation"
 
         _path = Path(journal_path)
         _lock_dir = _path.parent / "locks"
