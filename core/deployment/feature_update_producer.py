@@ -32,6 +32,16 @@ def produce_from_live_computer(
     the most recent M15/M30/H1 slice.  No timeframe splitting is needed.
     """
     features = computer.compute_all()
+    # ── FIX-20260717-018: All-zero guard ──
+    # When MT5 data is unavailable (bridge restart, symbol not in Market Watch),
+    # V9LiveFeatureComputer.compute_all() returns 40 zeros via _fill_zeros().
+    # Writing all-zero records to the feature store pollutes offline training and
+    # OOD calibration datasets.  micro_persist.py L34-38 has the same guard.
+    _all_zero = all(
+        abs(float(features.get(name, 0.0))) < 1e-15 for name in V9_INSTITUTIONAL_40_FEATURES
+    )
+    if _all_zero:
+        return
     event_time = datetime.now(UTC).replace(tzinfo=None)
     yield FeatureRecord(
         schema_name=schema.name,

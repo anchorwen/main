@@ -1185,6 +1185,51 @@ def execute_management_phase(
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                 pass
 
+    # ── FIX-20260717-019: Journal OPEN fallback (in-memory cached) ──
+    # When all prior fallbacks fail — known_open_tickets lacks "strategy" AND
+    # magic is the bridge sentinel (90401), making MAGIC_TO_STRATEGY useless —
+    # recover the strategy name from the trade journal's OPEN entry.
+    #
+    # ⛔ HOT-PATH CONSTRAINT: Disk I/O is FORBIDDEN in the per-cycle management
+    #    heartbeat.  Every open()→read()→json.loads() scan costs ~50-200µs per
+    #    cycle × N uncached positions.  Solution: cache the recovered name on
+    #    the pos object so I/O happens EXACTLY ONCE per ticket lifetime.
+    #    A sentinel value ("UNKNOWN_ORPHAN") on I/O failure prevents infinite
+    #    retries for positions whose OPEN entry was never written.
+    if not _sname and pos.ticket:
+        _cached = getattr(pos, "_recovered_strategy_name", None)
+        if _cached:
+            _sname = _cached
+        else:
+            try:
+                _jpath = Path(config.base_dir) / "live_trade_journal.jsonl"
+                if _jpath.exists():
+                    with open(_jpath, encoding="utf-8") as _jf:
+                        _jlines = _jf.readlines()
+                    # Scan recent entries first (newest → oldest); bound to 500
+                    # lines to avoid O(N) on large journals.  Positions that are
+                    # now in management phase were opened within the last few
+                    # hundred journal entries.
+                    for _line in reversed(_jlines[-500:]):
+                        try:
+                            _je = json.loads(_line.strip())
+                            if (
+                                _je.get("position_ticket") == pos.ticket
+                                and _je.get("action") == "open"
+                                and _je.get("strategy")
+                            ):
+                                _sname = _je["strategy"]
+                                pos._recovered_strategy_name = _sname
+                                break
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+                    else:
+                        # Exhausted scan → no match.  Mark to prevent retries.
+                        pos._recovered_strategy_name = ""
+            except (OSError, ValueError, RuntimeError):
+                # I/O failure → sentinel prevents infinite retries.
+                pos._recovered_strategy_name = ""
+
     # ── 1. Fetch current prices & ATR ──
     # FIX-20260522-014: a single price-fetch failure must not skip trail/
     # breakeven/exit management for this position.  Use the position's own

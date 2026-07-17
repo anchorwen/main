@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-17T05:53:06Z
-> **扫描模块数**: 771
+> **自动生成**: 2026-07-17T07:59:46Z
+> **扫描模块数**: 774
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -187,7 +187,7 @@
 | `domain_keys.py` | ⬜ empty | — | 0 | 7 | — | |
 | `environment_config.py` | ✅ active | Environment, EnvironmentConfig | 7 | 126 | — | |
 | `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 288 | — | |
-| `feature_update_producer.py` | ✅ active | — | 2 | 57 | — | |
+| `feature_update_producer.py` | ✅ active | — | 2 | 67 | — | |
 | `final_audit.py` | ✅ active | FinalAuditService | 5 | 211 | — | |
 | `governance_summary.py` | ✅ active | — | 4 | 56 | — | |
 | `health_check.py` | ✅ active | HealthCheckService | 9 | 117 | — | |
@@ -526,7 +526,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4819 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2327 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2372 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -652,8 +652,10 @@
 | `_analyze_xau_today_losses.py` | ✅ active | — | 2 | 169 | — | |
 | `_audit_zombie_ghost_positions.py` | ✅ active | — | 3 | 460 | — | |
 | `_btc_evolution_audit.py` | ✅ active | — | 4 | 653 | — | |
+| `_btc_governance_reconcile.py` | ✅ active | — | 2 | 126 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
 | `_commit_fixes.py` | 📄 config | — | 0 | 46 | — | |
+| `_comprehensive_live_check_20260717.py` | ✅ active | — | 2 | 327 | — | |
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
 | `_deep_dive_m15_swing_20260710.py` | ✅ active | — | 3 | 220 | — | |
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
@@ -673,6 +675,7 @@
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_register_h4_governance.py` | 📄 config | — | 0 | 31 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
+| `_v4_binary_diagnostic.py` | 📄 config | — | 0 | 135 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
 | `_verify_xau_three_issues.py` | ✅ active | — | 2 | 297 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
