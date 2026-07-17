@@ -6,10 +6,10 @@
   "training_contract": "btc_swing",
   "feature_schema": "btc_macro_enhanced_41",
   "feature_schema_id": "btc_macro_enhanced_41",
-  "model_path": "data_btc/models/btc_swing_v4_3class_v2/xgboost_fold0_s42.json",
-  "artifact_path": "data_btc/models/btc_swing_v4_3class_v2/xgboost_fold0_s42.json",
-  "model_version": "btc_swing_v4_3class_v2",
-  "artifact_hash": "b14a3c72440bd2352e3d7a7018df1d423151d142d13a25204539e575b827d77a",
+  "model_path": "data_btc/models/btc_swing_v4_binary/xgboost_fold0_s42.json",
+  "artifact_path": "data_btc/models/btc_swing_v4_binary/xgboost_fold0_s42.json",
+  "model_version": "btc_swing_v4_binary",
+  "artifact_hash": "3c511ddd42c629fd76fe9d1f54a3a4b70090175b38790d66271872a14f18bf19",
   "status": "live",
   "vote_weight": 1.0,
   "magic": 90410,
@@ -17,6 +17,7 @@
   "training_horizon": 12,
   "strategy": "btc_swing",
   "timeframe": "M5",
+  "activation_threshold": 0.05,
   "training_params": {
     "sl_atr_mult": 1.5,
     "tp_atr_mult": 1.5,
@@ -24,30 +25,39 @@
     "n_estimators": 500,
     "learning_rate": 0.02,
     "max_depth": 5,
-    "objective": "multi:softprob",
-    "data_source": "btcusdc_m5_merged.csv (100k bars, 2025-06-25 → 2026-06-07)",
+    "objective": "binary_directional",
+    "data_source": "btcusdc_m5_merged.csv (100k bars, 2025-06-25 → 2026-06-07), NEUTRAL filtered → binary LONG/SHORT",
     "timeframe_minutes": 5,
     "cross_asset_m5": ["AUDJPYc", "EURUSDc", "USDJPYc", "XAUUSDc"],
     "curation": "ADX≥20 + exclude weekends + ATR p5-p95",
     "spread_source": "per-bar real MT5 spread (median $18, range $10-$160)",
-    "label_method": "DQAF-20260703-062 directional profitability (independent LONG/SHORT outcome merge)",
+    "label_method": "DQAF-20260703-062 directional labels → NEUTRAL filtered → binary LONG(1)/SHORT(0). Deadzone θ=0.05 restores NEUTRAL at inference via Path 2.",
     "decay_half_life_days": 90,
     "purge_bars": 12
   },
-  "_retraining_note": "FIX-20260710-V4-RETRAIN: Old V4 trained on H1 CSV with 4,950 samples → live M5 WR=27.6% (confidence inverted, HIGH conf=LOW WR). New V4: M5 CSV, 48,897 samples (10x), per-bar real spread, curation, real cross-asset M5 alignment, DQAF-062 directional labels. EV=+0.73R, calibration NOT inverted (higher conf→higher WR). Directional WR=50.05%, NEUTRAL gate reduces frequency naturally.",
+  "_retraining_note": "FIX-20260717-V4-BINARY: L3 architecture fix — retrained V4 from 3-class (multi:softprob) to binary_directional (binary:logistic). Old V4 (Jul 10): |score|≈0.03, 0% directional, 100% NEUTRAL deadzone. Root cause: 3-class softmax compresses XGBoost directional scores — P(LONG)−P(SHORT) never exceeds 0.1 threshold. New V4: binary P(LONG)∈[0,1], |P−0.5| mean=0.058, 52.5% directional (θ=0.05), LONG acc=54.6%, SHORT acc=55.0%. Deadzone [0.45,0.55] filters 47.5% NEUTRAL. DQAF-20260717-004, Plan C. Reference: BTC_Swing_M5_Binary (FIX-20260706-015 Path 2).",
   "training_metrics": {
-    "cv_mean_val_wr": 0.4906,
-    "cv_std_val_wr": 0.0178,
-    "cv_mean_val_acc": 0.3779,
-    "cv_mean_directional_wr": 0.5005,
+    "cv_mean_val_wr": 0.498,
+    "cv_std_val_wr": 0.018,
+    "cv_mean_val_acc": 0.501,
+    "cv_std_val_acc": 0.017,
     "cv_folds": 5,
-    "ev_r": 0.7314,
+    "n_train_samples": 44042,
+    "n_short": 22385,
+    "n_long": 21657,
+    "label_long_ratio": 0.492,
     "direction_diversity": {
-      "n_long": 21657,
-      "n_short": 22385,
-      "n_neutral": 4855,
-      "short_ratio": 0.508,
-      "_note": "Training labels near-balanced. Post-argmax: SHORT=24533, NEUTRAL=9115, LONG=15249 (SHORT=61.6% of directional). Wasserstein=0.0034 — raw P(LONG)/P(SHORT) distributions near-identical; argmax forces choice. Per-fold range: Fold0=90.9%→Fold4=37.8% (regime-driven)."
+      "n_long_pred": 18411,
+      "n_short_pred": 25631,
+      "long_ratio": 0.418,
+      "note": "41.8% LONG predictions (all-data inference). Direction-balanced gate PASSED. Deadzone θ=0.05: 52.5% directional (23.7% LONG, 28.8% SHORT), 47.5% NEUTRAL. LONG acc=54.6%, SHORT acc=55.0% — modest but real edge (+4-5pp above chance). Honest probabilities via Path 2 direct output."
+    },
+    "calibration_bias": {
+      "[0.3-0.4]": "+0.037",
+      "[0.4-0.5]": "+0.015",
+      "[0.5-0.6]": "-0.023",
+      "[0.6-0.7]": "-0.068",
+      "note": "Well-calibrated in [0.4-0.6] bulk range. Overestimates at tails (P>0.6 predicts 0.63, actual 0.56). Tail samples sparse (N<4000)."
     }
   },
   "features": [
@@ -94,20 +104,17 @@
     "Cross_BTC_Gold_Ratio_ROC"
   ],
   "n_features": 41,
-  "n_train_samples": 48897,
-  "trained_at": "2026-07-10T02:24:32Z",
+  "n_train_samples": 44042,
+  "trained_at": "2026-07-17T05:17:00Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
   "confidence_params": {
-    "method": "quantile_gaussian",
-    "p95": 0.14,
-    "peak_conf": 0.65,
-    "lambda_decay": 0.10,
-    "_calibration_note": "FIX-20260710-V4-RETRAIN: Calibrated for new M5 model's compressed score range (max |score|≈0.14). p95 set just above max to keep all signals in linear ramp. DQAF-20260712-001: peak_conf raised 0.50→0.65 to widen dynamic range so reentry gates (sl_recovery needs 0.50+0.15=0.65) and brain_flip (needs 0.82) are reachable. confidence = (|score|/0.14) * 0.65. |score|=0.05→conf=0.23, |score|=0.10→conf=0.46 (passes threshold=0.35), |score|=0.14→conf=0.65. Isotonic calibration confirms monotonic (not inverted): higher conf → higher actual WR (44%→55%). Full calibration: data_btc/models/btc_swing_v4_3class_v2/calibration.json"
+    "method": "binary_directional_path2",
+    "_note": "Path 2 (binary_directional): confidence = max(P(LONG), 1−P(LONG)) — direct probability. Deadzone θ=activation_threshold=0.05 restores NEUTRAL state. _compute_confidence() NOT called for this path. confidence_params retained for backward-compat diagnostics only."
   },
-  "last_retrained": "2026-07-10T02:24:32Z",
+  "last_retrained": "2026-07-17T05:17:00Z",
   "label_contract": {
     "sl_atr_mult": 1.5,
     "tp_atr_mult": 1.5,
