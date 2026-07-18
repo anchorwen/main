@@ -3145,12 +3145,26 @@ def run_daily_ops(
 
     # ── SSOT reconciliation + PnL ledger retention ──
     # FIX-081: Runs first so all downstream steps see consistent config and clean data.
+    # FIX-20260718-002 (DQAF-20260718-002 L3): Derive asset-specific paths from
+    # base_dir contract so reconcile targets the correct data/config directory
+    # (data/→XAU brains+live.yaml, data_btc/→BTC brains_btc+live_btc.yaml).
     try:
         from scripts.brain import cmd_reconcile
 
+        _base_name = Path(base_dir).name  # "data" or "data_btc"
+        _brains_subdir = "brains_btc" if _base_name == "data_btc" else "brains"
+        _live_config = "live_btc.yaml" if _base_name == "data_btc" else "live.yaml"
+        _data_subdir = _base_name  # "data" or "data_btc"
+
         _rec_steps: list[dict[str, Any]] = []
         _rec_steps.append({"step": "reconcile", "action": "ssot_alignment"})
-        cmd_reconcile(auto_fix=True, cleanup_ledger=True)
+        cmd_reconcile(
+            auto_fix=True,
+            cleanup_ledger=True,
+            data_dir=_data_subdir,
+            brains_subdir=_brains_subdir,
+            live_config_name=_live_config,
+        )
         _rec_steps.append({"step": "reconcile", "action": "ssot_alignment", "status": "ok"})
 
         # PnL ledger retention: prune entries older than 90 days

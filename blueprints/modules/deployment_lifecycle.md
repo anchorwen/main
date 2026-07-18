@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260718-002 | 2026-07-18 | cursor-agent | — | **L3: Dual-asset governance reconciliation (DQAF-20260718-002)**. `cmd_reconcile()` hardcoded all paths to XAU (`data/`, `configs/brains/`, `configs/live.yaml`) — BTC reconciliation required manual path edits. Added `data_dir`, `brains_subdir`, `live_config_name` parameters (default XAU). CLI: `brain.py reconcile --data-dir data_btc --brains-subdir brains_btc --live-config live_btc.yaml --auto-fix`. Backward-compatible — all defaults preserve existing XAU behavior. | L3 — hardcoded single-asset paths; no dual-asset reconcile capability |
 | FIX-20260715-020 | 2026-07-15 | cursor-agent | — | **MODULE_SOURCE_MAP: add `_monitor_direction_concentration.py` + `_evaluate_probation_m30_h1v2.py` → runtime_live**. P3.1/P3.3 operational scripts for direction concentration monitoring and probation evaluation. | RC-12 — new module registration |
 | FIX-20260715-009 | 2026-07-15 | cursor-agent | 8ad64d4f | XAU swing min_rr_ratio 0.5 to 0.85, m15_swing TP 1.5 to 3.0 | state-leak |
 | FIX-20260715-009 | 2026-07-15 | cursor-agent | (pending) | Raise all XAU swing min_rr_ratio 0.5→0.85. m15_swing tp.base_atr_mult 1.5→3.0. Negative RR (0.44) passed old gate. | config-drift |

@@ -49,6 +49,14 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260718-003 — ConformalOUGate Passthrough Diagnostics (DQAF-20260718-003 L3) (2026-07-18)
+
+**Root Cause**: L3 — ConformalOUGate silently passes all statarb signals through when no OU brain configs are loaded (XAU has two OU configs archived in `archive_deprecated/`). Zero observability into the architectural gap — no logging, no monitoring, no diagnostics surfaced. The ops team cannot distinguish "gate is filtering" from "gate is bypassed."
+
+**Fix**: Added diagnostic counters (`_passthrough_count`, `_diag_cycle_count`) with throttled WARNING logging every `_OU_PASSTHROUGH_DIAG_INTERVAL` (100) cycles. New `passthrough_diagnostics` section in `describe()` exposes counts by reason for monitoring integration. This turns a silent architectural bypass into an observable, actionable condition without changing filtering behavior.
+
+**Files**: `core/execution/conformal_ou_gate.py` (init + filter + describe)
+
 ### FIX-20260715-015 — Cold-Explore Governance Bypass + Retry Loop + Asset Isolation (2026-07-15)
 
 **Root Cause**: L3 — `resolve_p_win_from_brains()` checks PnL store first (rolling-window WR). When PnL store has valid data (sample_count ≥ 10), returns PnL median immediately — governance fallback (all-time WR from immutable `live_labels.jsonl` ledger) is NEVER reached. BTC PnL median = 0.4244 vs governance median = 0.5784. Additionally, `except: pass` in governance_state load silently dropped 21.3% of cycles to p_win=0.50.

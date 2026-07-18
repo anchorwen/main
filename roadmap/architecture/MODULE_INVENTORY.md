@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-17T07:59:46Z
-> **扫描模块数**: 774
+> **自动生成**: 2026-07-18T01:52:02Z
+> **扫描模块数**: 776
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -223,7 +223,7 @@
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 468 | — | |
 | `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 11 | 460 | — | |
-| `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 822 | — | |
+| `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 868 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 279 | — | |
@@ -645,6 +645,7 @@
 | `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
 | `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
+| `_analyze_xau_comprehensive.py` | ✅ active | — | 8 | 855 | — | |
 | `_analyze_xau_h1_position.py` | ✅ active | — | 1 | 156 | — | |
 | `_analyze_xau_live_status.py` | ✅ active | — | 2 | 229 | — | |
 | `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
@@ -666,6 +667,7 @@
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_tp_giveback_pollution.py` | ✅ active | — | 4 | 164 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
+| `_diagnose_xau_gates.py` | ✅ active | — | 3 | 411 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_export_btc_mt5.py` | 📄 config | — | 0 | 48 | — | |
 | `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
@@ -748,7 +750,7 @@
 | `ble001_phase3c_fog_wrap.py` | ✅ active | — | 4 | 159 | — | |
 | `ble001_phase3d_coldpath_fog_wrap.py` | ✅ active | — | 5 | 227 | — | |
 | `ble001_phase3e_deferred_fog_wrap.py` | ✅ active | — | 4 | 231 | — | |
-| `brain.py` | ✅ active | — | 13 | 806 | — | |
+| `brain.py` | ✅ active | — | 13 | 841 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 121 | — | |
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
@@ -774,7 +776,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 41 | 3532 | — | |
+| `daily_ops.py` | ✅ active | — | 41 | 3546 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |

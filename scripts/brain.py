@@ -464,16 +464,26 @@ def cmd_reconcile(
     auto_fix: bool = False,
     cleanup_ledger: bool = False,
     project_root: Path = PROJECT_ROOT,
+    data_dir: str = "data",
+    brains_subdir: str = "brains",
+    live_config_name: str = "live.yaml",
 ) -> int:
-    """One-click SSOT reconciliation: align governance + live.yaml + ledger with configs."""
+    """One-click SSOT reconciliation: align governance + live.yaml + ledger with configs.
+
+    FIX-20260718-002 (DQAF-20260718-002 L3): Added ``data_dir``, ``brains_subdir``,
+    and ``live_config_name`` parameters to support dual-asset (XAU/BTC) governance.
+    Previously all paths were hardcoded to XAU (``data/``, ``configs/brains/``,
+    ``configs/live.yaml``); BTC reconciliation required manual path edits.
+    """
     import json
     import os
 
-    brains_dir = project_root / "configs" / "brains"
-    gov_path = project_root / "data" / "governance_state.json"
-    live_path = project_root / "configs" / "live.yaml"
-    ledger_path = project_root / "data" / "brain_pnl_ledger.json"
-    perf_path = project_root / "data" / "brain_performance.json"
+    brains_dir = project_root / "configs" / brains_subdir
+    data_path = project_root / data_dir
+    gov_path = data_path / "governance_state.json"
+    live_path = project_root / "configs" / live_config_name
+    ledger_path = data_path / "brain_pnl_ledger.json"
+    perf_path = data_path / "brain_performance.json"
 
     mode = "AUTO-FIX" if auto_fix else "DRY-RUN"
     print(f"[reconcile] Mode: {mode} (config is SSOT)")
@@ -578,21 +588,22 @@ def cmd_reconcile(
 
     # ── 2. Frozen/retired brains → disable in live.yaml ──
     print("\n── 2. live.yaml enabled status ──")
+    _brains_config_prefix = f"configs/{brains_subdir}/"
     for bid, info in brain_configs.items():
         cfg_status = info["config"].get("status", "")
         fname = info["fname"]
         if cfg_status in ("frozen", "retired"):
             is_enabled = (
-                f"configs/brains/{fname}" in live_yaml
-                and "enabled: true" in live_yaml.split(f"configs/brains/{fname}")[1][:30]
-                if f"configs/brains/{fname}" in live_yaml
+                _brains_config_prefix + fname in live_yaml
+                and "enabled: true" in live_yaml.split(_brains_config_prefix + fname)[1][:30]
+                if _brains_config_prefix + fname in live_yaml
                 else False
             )
             should_be = "enabled: false"
             if auto_fix and is_enabled:
                 print(f"  FIX: {bid} ({cfg_status}) → setting enabled: false")
-                old_entry = f"  - path: configs/brains/{fname}\n    enabled: true"
-                new_entry = f"  - path: configs/brains/{fname}\n    enabled: false"
+                old_entry = f"  - path: {_brains_config_prefix}{fname}\n    enabled: true"
+                new_entry = f"  - path: {_brains_config_prefix}{fname}\n    enabled: false"
                 live_yaml = live_yaml.replace(old_entry, new_entry)
                 issues_fixed += 1
 
@@ -768,6 +779,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also remove zombie brain PnL records from ledger",
     )
+    rec.add_argument(
+        "--data-dir",
+        type=str,
+        default="data",
+        help="Data directory name under project root (default: data for XAU; use data_btc for BTC)",
+    )
+    rec.add_argument(
+        "--brains-subdir",
+        type=str,
+        default="brains",
+        help="Brain configs subdirectory under configs/ (default: brains for XAU; use brains_btc for BTC)",
+    )
+    rec.add_argument(
+        "--live-config",
+        type=str,
+        default="live.yaml",
+        help="Live config YAML filename under configs/ (default: live.yaml; use live_btc.yaml for BTC)",
+    )
 
     return p
 
@@ -796,7 +825,13 @@ def main(argv: list[str] | None = None) -> int:
             archive_artifacts=args.archive_artifacts,
         )
     elif args.command == "reconcile":
-        return cmd_reconcile(auto_fix=args.auto_fix, cleanup_ledger=args.cleanup_ledger)
+        return cmd_reconcile(
+            auto_fix=args.auto_fix,
+            cleanup_ledger=args.cleanup_ledger,
+            data_dir=args.data_dir,
+            brains_subdir=args.brains_subdir,
+            live_config_name=args.live_config,
+        )
     else:
         print(f"[ERROR] Unknown command: {args.command}", file=sys.stderr)
         return 2

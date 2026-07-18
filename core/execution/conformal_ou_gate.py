@@ -54,6 +54,12 @@ DEFAULT_OU_CONFIGS_PATH = "configs/brains/"
 # Scoring mode
 DEFAULT_SCORING_MODE = "geometric_mean"  # "geometric_mean" | "product"
 
+# FIX-20260718-003 (DQAF-20260718-003 L3): Diagnostic logging interval for
+# gate-disabled passthrough — surfaces when statarb strategies run without
+# OU physics filtering.  Logged every N filter() invocations to avoid
+# flooding the log stream while remaining observable.
+_OU_PASSTHROUGH_DIAG_INTERVAL = 100
+
 # Warmup-driven threshold schedule (Explore-then-Commit)
 COLD_PHASE_THRESHOLD = 0.20  # lenient fixed threshold for sample collection
 COLD_PHASE_MAX_SAMPLES = 50  # calibrator warmup boundary
@@ -297,6 +303,12 @@ class ConformalOUGate:
 
         self._loaded = False
 
+        # ── FIX-20260718-003 (DQAF-20260718-003 L3): Diagnostic counters ──
+        # Track passthrough invocations so the ops team can see when statarb
+        # strategies are running without OU physics filtering.
+        self._passthrough_count: dict[str, int] = {}  # reason → count
+        self._diag_cycle_count: int = 0
+
     # ------------------------------------------------------------------
     # Initialisation
     # ------------------------------------------------------------------
@@ -399,7 +411,26 @@ class ConformalOUGate:
             Dict with ``passed``, ``score``, ``threshold``, ``threshold_source``,
             ``features`` (physics diagnostics dict), and ``reason``.
         """
+        # ── FIX-20260718-003 (DQAF-20260718-003 L3): Diagnostic passthrough ──
+        # When the gate is disabled (no OU configs loaded or no config for this
+        # strategy), track and periodically log so the ops team sees the gap.
+        # Previously these passthrough paths were silent — no visibility into
+        # statarb strategies running without physics-based filtering.
+        self._diag_cycle_count += 1
+        _should_log = self._diag_cycle_count % _OU_PASSTHROUGH_DIAG_INTERVAL == 0
+
         if not self._loaded:
+            self._passthrough_count["gate_not_loaded"] = (
+                self._passthrough_count.get("gate_not_loaded", 0) + 1
+            )
+            if _should_log:
+                logger.warning(
+                    "ConformalOUGate: GATE NOT LOADED — %d passthrough calls for "
+                    "strategies including '%s'. No OU physics filtering active. "
+                    "Create OU brain configs in configs/brains/ to enable the gate.",
+                    self._passthrough_count["gate_not_loaded"],
+                    strategy_name,
+                )
             return {
                 "passed": True,
                 "score": 0.0,
@@ -411,6 +442,18 @@ class ConformalOUGate:
 
         ou_params = self._ou_configs.get(strategy_name)
         if ou_params is None:
+            _key = f"no_ou_config:{strategy_name}"
+            self._passthrough_count[_key] = self._passthrough_count.get(_key, 0) + 1
+            if _should_log:
+                _total_passthrough = sum(self._passthrough_count.values())
+                logger.warning(
+                    "ConformalOUGate: NO OU CONFIG for '%s' — %d total passthrough "
+                    "calls (all reasons). Strategies without OU configs bypass "
+                    "physics filtering. Available configs: %s",
+                    strategy_name,
+                    _total_passthrough,
+                    list(self._ou_configs.keys()) or "(none)",
+                )
             return {
                 "passed": True,
                 "score": 0.0,
@@ -633,6 +676,13 @@ class ConformalOUGate:
                 for k, v in self._ou_configs.items()
             },
             "calibrator": self._calibrator.describe() if self._calibrator is not None else None,
+            # FIX-20260718-003 (DQAF-20260718-003 L3): Expose passthrough
+            # diagnostics so monitoring can detect when statarb strategies
+            # run without OU physics filtering.
+            "passthrough_diagnostics": {
+                "total_cycles": self._diag_cycle_count,
+                "by_reason": dict(self._passthrough_count),
+            },
         }
 
 
@@ -769,11 +819,7 @@ def apply_conformal_ou_gate(
             return (blocked, None)
 
     # ── MetaFilter fallback ──
-    if (
-        meta_filter_gate is not None
-        and meta_filter_gate.is_loaded
-        and feature_vector is not None
-    ):
+    if meta_filter_gate is not None and meta_filter_gate.is_loaded and feature_vector is not None:
         try:
             mf_result = meta_filter_gate.filter(
                 feature_vector=feature_vector,

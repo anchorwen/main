@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-17T07:59:46Z
+> **自动生成**: 2026-07-18T01:52:02Z
 
 ## Package-Level Dependencies
 
@@ -559,6 +559,7 @@
 - `_analyze_post_deployment.py` → (无内部依赖)
 - `_analyze_today_btc_entries.py` → (无内部依赖)
 - `_analyze_two_positions_sltp.py` → (无内部依赖)
+- `_analyze_xau_comprehensive.py` → (无内部依赖)
 - `_analyze_xau_h1_position.py` → (无内部依赖)
 - `_analyze_xau_live_status.py` → (无内部依赖)
 - `_analyze_xau_now.py` → (无内部依赖)
@@ -580,6 +581,7 @@
 - `_diagnose_model_raw_output.py` → (无内部依赖)
 - `_diagnose_tp_giveback_pollution.py` → (无内部依赖)
 - `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
+- `_diagnose_xau_gates.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_export_btc_mt5.py` → (无内部依赖)
 - `_fix_shadow_configs.py` → (无内部依赖)
