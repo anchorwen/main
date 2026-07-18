@@ -21,7 +21,10 @@ from typing import TYPE_CHECKING
 
 from core.features.computers.microstructure_computer import MicrostructureFeatureComputer
 from core.features.computers.v9_live_computer import V9LiveFeatureComputer
-from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+from core.features.schemas.microstructure_schema import (
+    GATE_ONLY_MICRO_FEATURES,
+    MICROSTRUCTURE_9_FEATURES,
+)
 
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
@@ -83,9 +86,19 @@ class V9MicroComputer:
                 self.last_micro_ok = True
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             logging.exception("V9MicroComputer: micro compute failed for %s", self._symbol)
-        # Fill micro slots — use 0.0 when unavailable (NaN propagates through
+        # Fill ML micro slots — use 0.0 when unavailable (NaN propagates through
         # feature vectors into model inference → NaN predictions → silent rejection)
+        # FIX-20260718-004: ML vector stays at 9 dims (FROZEN).  Gate-only
+        # features are filled separately below and are NOT assembled into the
+        # ML feature vector — strict domain isolation prevents dimensionality crash.
         for name in MICROSTRUCTURE_9_FEATURES:
+            val = micro_features.get(name) if self.last_micro_ok else 0.0
+            result[name] = float(val) if val is not None else 0.0
+
+        # ── FIX-20260718-004: Gate-only micro features ──────────────────
+        # These 4 features exist ONLY in micro_feature_dict, NEVER in the ML
+        # feature vector.  They flow through strategy_line to MicrostructureGate.
+        for name in GATE_ONLY_MICRO_FEATURES:
             val = micro_features.get(name) if self.last_micro_ok else 0.0
             result[name] = float(val) if val is not None else 0.0
 

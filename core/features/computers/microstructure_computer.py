@@ -13,6 +13,7 @@ Features computed per bar:
 from __future__ import annotations
 
 import math
+import statistics
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -108,6 +109,12 @@ class MicrostructureFeatureComputer:
         self._symbol = symbol
         self._worker = mt5_worker
         self._ofi_buffer: deque[float] = deque(maxlen=100)  # 100 bars × 5min ≈ 8.3h OFI context
+        # ── FIX-20260718-004: Microstructure Gate rolling buffers ──────────
+        # Stateful deques — each live cycle computes current bar's value from
+        # the existing MT5 tick snapshot and pushes it.  No historical tick
+        # queries (I/O death trap avoidance).  Cold start: len < 20 → zscore=0.0.
+        self._arrival_buffer: deque[float] = deque(maxlen=100)  # tick arrival rate per bar
+        self._spread_buffer: deque[float] = deque(maxlen=100)  # avg spread per bar
 
     # ── Backward-compatible single-bar API ──────────────────────────────
 
@@ -530,6 +537,59 @@ class MicrostructureFeatureComputer:
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             result["OFI"] = 0.0
             result["OFI_Real"] = 0.0
+
+        # ── FIX-20260718-004: Microstructure Gate features ──────────────
+        # Computed from the SAME tick snapshot (zero additional MT5 calls).
+        # All use stateful rolling buffers for baseline — cold start returns
+        # neutral values (zscore=0.0, toxicity=1.0, pressure=0.5).
+        # These are NOT part of the ML feature vector — consumed only by
+        # MicrostructureGate via micro_feature_dict.
+        try:  # BLE001:FOG — fail_open_guard: any failure → neutral gate pass
+            # 1. arrival_rate_5s — ticks per second in current 5-min window
+            _arrival_rate = float(len(ticks) / duration) if duration > 0 else 0.0
+            self._arrival_buffer.append(_arrival_rate)
+            result["arrival_rate_5s"] = _arrival_rate
+
+            # 2. quote_intensity_zscore — rolling z-score of arrival rate
+            if len(self._arrival_buffer) >= 20:
+                _arr_mu = statistics.mean(self._arrival_buffer)
+                _arr_std = (
+                    statistics.stdev(self._arrival_buffer)
+                    if len(self._arrival_buffer) > 1
+                    else 1e-8
+                )
+                result["quote_intensity_zscore"] = (
+                    float((_arrival_rate - _arr_mu) / _arr_std) if _arr_std > 1e-8 else 0.0
+                )
+            else:
+                result["quote_intensity_zscore"] = 0.0  # cold start: safe pass
+
+            # 3. buy_pressure_20 — fraction of BUY ticks among last 20
+            #    Uses instantaneous last-20 snapshot (not rolling buffer).
+            #    BUY=32 (0x20), SELL=64 (0x40) — leveraging existing bitmask.
+            _TICK_FLAG_BUY = 32
+            _TICK_FLAG_SELL = 64
+            _recent = ticks[-20:] if len(ticks) >= 20 else ticks
+            _buy_count = sum(1 for t in _recent if len(t) > 6 and (int(t[6]) & _TICK_FLAG_BUY))
+            _sell_count = sum(1 for t in _recent if len(t) > 6 and (int(t[6]) & _TICK_FLAG_SELL))
+            _total_dir = _buy_count + _sell_count
+            result["buy_pressure_20"] = float(_buy_count / _total_dir) if _total_dir > 0 else 0.5
+
+            # 4. spread_toxicity — ratio of current spread to rolling median
+            _curr_spread = float(result.get("avg_spread", 0.0))
+            self._spread_buffer.append(_curr_spread)
+            if len(self._spread_buffer) >= 20:
+                _sorted = sorted(self._spread_buffer)
+                _mid = len(_sorted) // 2
+                _median = _sorted[_mid]
+                result["spread_toxicity"] = float(_curr_spread / _median) if _median > 1e-8 else 1.0
+            else:
+                result["spread_toxicity"] = 1.0  # cold start: neutral
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            result["arrival_rate_5s"] = 0.0
+            result["quote_intensity_zscore"] = 0.0
+            result["buy_pressure_20"] = 0.5
+            result["spread_toxicity"] = 1.0
 
     def _compute_tick_features_dict(
         self, *, reference_time: datetime | None = None

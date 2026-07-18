@@ -380,6 +380,9 @@ class LiveCycleState:
     _strategies: dict[str, Any] | None = None  # FIX-072: cached strategy_lines for persistence
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
     _conformal_ou_gate: Any = None  # ConformalOUGate (physics-based OU signal quality gate)
+    _microstructure_gate: Any = (
+        None  # MicrostructureGate (FIX-20260718-004: tick liquidity defence)
+    )
     _conformal_calibrator: Any = None  # FIX-20260611-022: shared calibrator for live updates
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
     _last_ou_params: dict[str, float] | None = None  # {z_score, half_life, theta} for meta labeler
@@ -934,6 +937,7 @@ def _evaluate_strategy_lines(
     kalman_velocity_bps: float | None = None,
     meta_filter_gate: Any = None,
     conformal_ou_gate: Any = None,
+    microstructure_gate: Any = None,
     micro_feature_dict: dict[str, float] | None = None,
     cooldown_registry: Any = None,
     family_entry_tracker: Any = None,
@@ -993,6 +997,7 @@ def _evaluate_strategy_lines(
         meta_signal_filter=meta_signal_filter,
         meta_filter_gate=meta_filter_gate,
         conformal_ou_gate=conformal_ou_gate,
+        microstructure_gate=microstructure_gate,
         micro_feature_dict=micro_feature_dict,
         cooldown_registry=cooldown_registry,
         family_entry_tracker=family_entry_tracker,
@@ -3103,6 +3108,31 @@ def execute_live_cycle(
             # ImportError (module missing), ValueError/TypeError (bad
             # config), OSError (config file read), RuntimeError (logic).
             pass
+
+        # ── FIX-20260718-004: Microstructure Gate (tick liquidity defence) ──
+        try:
+            from core.execution.microstructure_gate import MicrostructureGate
+
+            _ms_gate = MicrostructureGate()
+            state._microstructure_gate = _ms_gate
+            print(
+                json.dumps(
+                    {
+                        "event": "microstructure_gate_init",
+                        "time": _utc_iso(),
+                        "qz_block": _ms_gate.qz_block,
+                        "qz_penalise": _ms_gate.qz_penalise,
+                        "bp_long_floor": _ms_gate.bp_long_floor,
+                        "bp_short_ceil": _ms_gate.bp_short_ceil,
+                        "spread_tox_threshold": _ms_gate.spread_tox_threshold,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except (ImportError, ValueError, TypeError, OSError, RuntimeError):
+            pass
+
     # ── Daily D1 features for swing brains ──
     daily_feature_vector: Any = None  # pre-initialised for DEGRADE
     if daily_feature_provider is not None:
@@ -3942,6 +3972,7 @@ def execute_live_cycle(
             if hasattr(state, "_meta_filter_gate")
             else None,
             conformal_ou_gate=getattr(state, "_conformal_ou_gate", None),
+            microstructure_gate=getattr(state, "_microstructure_gate", None),
             micro_feature_dict=micro_feature_dict,
             cooldown_registry=state._cooldown_registry,
             family_entry_tracker=state._family_entry_tracker,

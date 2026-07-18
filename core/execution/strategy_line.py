@@ -29,6 +29,7 @@ from core.execution.brain_gates import check_min_valid_brains, extract_entry_z_s
 from core.execution.conformal_ou_gate import apply_conformal_ou_gate
 from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
 from core.execution.meta_filter_routing import apply_meta_filter_gate
+from core.execution.microstructure_gate import MicrostructureGate
 from core.execution.ofi_gate import apply_ofi_toxicity_gate
 from core.execution.pwin_chain import resolve_p_win
 from core.execution.strategy_decision import StrategyDecision
@@ -534,6 +535,7 @@ class StrategyLine:
         meta_filter: Any = None,
         meta_filter_gate: Any = None,
         conformal_ou_gate: Any = None,
+        microstructure_gate: MicrostructureGate | None = None,
         micro_feature_dict: dict[str, float] | None = None,
         btc_augment: Any = None,  # FIX-20260613-046: pre-computed 37-dim BTC vector
         governance_state: dict[str, Any] | None = None,  # DQAF-20260622-059: LIVE-brain filter
@@ -1197,6 +1199,41 @@ class StrategyLine:
             _ct_vol_mult = 0.5  # half volume for counter-trend explore
         if "statarb" in name and entry_z_score != 0.0:
             self._last_entry_z = entry_z_score
+
+        # ── FIX-20260718-004: Microstructure quality gate ──────────────────
+        # Consumes gate-only micro features (quote_intensity_zscore,
+        # buy_pressure_20, arrival_rate_5s, spread_toxicity) computed from
+        # the same MT5 tick snapshot as the 9 ML micro features.
+        # Fail-open: gate passes when micro_feature_dict is None.
+        # I/O budget: zero additional MT5 calls — features are in-memory.
+        if microstructure_gate is not None and micro_feature_dict:
+            _micro_result = microstructure_gate.evaluate(
+                micro_feature_dict=micro_feature_dict,
+                direction=direction,
+                confidence=confidence,
+            )
+            if _micro_result.blocked:
+                return self._make_decision(
+                    should_trade=False,
+                    direction=direction,
+                    confidence=round(confidence, 4),
+                    volume=0.0,
+                    sl=0.0,
+                    tp=0.0,
+                    hard_sl=0.0,
+                    brain_ids=brain_ids,
+                    supporting_count=support_count,
+                    total_count=total_count,
+                    regime_mode=regime_gate_mode,
+                    venue="live",
+                    reason=_micro_result.reason,
+                    entry_z_score=entry_z_score,
+                    entry_half_life=entry_half_life,
+                    p_win=0.0,
+                    kelly_mult=0.0,
+                )
+            if _micro_result.conf_mult < 1.0:
+                confidence = confidence * _micro_result.conf_mult
 
         # ── Counter-trend volume penalty ──
         # Strangler Fig #16: extracted to core/execution/trend_volume_guard.py

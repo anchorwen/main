@@ -50,6 +50,20 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+### FIX-20260718-004 — Microstructure Gate: 4 gate-only tick features (DQAF-20260718-004 L3) (2026-07-18)
+
+**Root Cause**: L3 — No microstructure-quality metrics computed for live gate chain. The existing 9 ML-consumed micro features capture sub-bar return dynamics but none measure adverse selection, liquidity shock, or directional order-flow pressure.
+
+**Change**: Three files extended:
+1. `core/features/schemas/microstructure_schema.py` — `GATE_ONLY_MICRO_FEATURES` (4 features: `quote_intensity_zscore`, `buy_pressure_20`, `arrival_rate_5s`, `spread_toxicity`) + `ALL_MICRO_FEATURES` (13 = 9 ML + 4 gate-only). Strict domain isolation: `MICROSTRUCTURE_9_FEATURES` is FROZEN.
+2. `core/features/computers/microstructure_computer.py` — Two new stateful rolling deques (`_arrival_buffer`, `_spread_buffer`, maxlen=100) following existing `_ofi_buffer` pattern. Four feature computations from existing MT5 tick snapshot (zero additional I/O). Cold start returns neutral values.
+3. `core/features/computers/v9_micro_computer.py` — Gate feature pass-through in result dict (separate from ML vector assembly). Imports `GATE_ONLY_MICRO_FEATURES`.
+
+**Files**:
+- `core/features/schemas/microstructure_schema.py`
+- `core/features/computers/microstructure_computer.py`
+- `core/features/computers/v9_micro_computer.py`
+
 | FIX-20260717-018 | 2026-07-17 | cursor-agent | 70956949 | All-zero guard in produce_from_live_computer: skip FeatureRecord when all 40 V9 features are zero (MT5 data unavailable). Mirrors micro_persist.py L34-38 guard. Prevents pollution of offline training/OOD calibration datasets. | missing-validation |
 | FIX-20260707-006 | 2026-07-07 | cursor-agent | a4ba2039 | OFI monitor dual-count gates — raw settle (Gate 1 Wasserstein) vs distinct H1 window (Gate 2 retrain); prevents mis-gating retrain on ~42 H1 windows | boundary-error |
 | FIX-20260707-005 | 2026-07-07 | cursor-agent | — | **Phase 2 Flow Features — OFI history time-series recorder** (DQAF-20260707-005). `ofi_snapshot.json` overwrite-only → 46-dim training needs aligned OFI time series. `_append_ofi_history()` in mt5_bridge_worker.py appends each settled OFI bar to `ofi_history.jsonl` with bridge-injected UTC timestamp (OFICollector stays pure). New `scripts/inspect_ofi_history.py` accumulation monitor (per-feature coverage, divergence rate, real_volume availability, readiness verdict). Recorder unit tests added. Full 46-dim NPZ builder deferred until ≥2,000 bars (OFI is forward-only, no historical backfill). | RC-12 — no persisted OFI time series for training alignment |

@@ -59,6 +59,29 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+### FIX-20260719-001 — Vol_ZScore hard gate + TF hierarchy + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19)
+
+**Root Cause**: L3 — Four defense gaps identified by Investment Committee directive: (1) No dead-market circuit breaker — when M5 volatility collapses below -3σ, model predictions become random noise regardless of OOD Mahalanobis distance; (2) OOD diagnostic events didn't carry volatility context — impossible to correlate OOD blocks with market breathing; (3) Cross-strategy coordinator treated all timeframes equally — H4 macro signals blocked by M5/M15 noise positions; (4) 10006 "no such position" trail rejections were treated as transient — ghost positions survived 103+ retry cycles.
+
+**Change**:
+1. `strategy_evaluator.py`: Vol_ZScore hard gate (`_V9_M5_VOL_ZSCORE_IDX=5`, `_VOL_ZSCORE_HARD_BLOCK=-3.0`) — blocks swing/trend entries when M5_Vol_ZScore < -3.0. Micro strategies exempt. OOD block/cautious events now carry `m5_vol_zscore` field.
+2. `cross_strategy_coordinator.py`: TF hierarchy (`TIMEFRAME_RANK` dict) — higher-TF pending entries NOT blocked by lower-TF opposing positions. `_resolve_timeframe()` extracts TF from strategy name. `respect_timeframe_hierarchy=True` by default.
+3. `management_phase.py`: 10006 atomic cleanup — 3+ consecutive retcode 10006 rejections emit `ghost_position_10006_detected` event and let Guard 2 MIA path handle cleanup instead of sending DingTalk alert and resetting.
+
+**Files**:
+- `core/runtime/strategy_evaluator.py` — Vol_ZScore gate + OOD diagnostics (~60 lines)
+- `core/execution/cross_strategy_coordinator.py` — TF hierarchy + resolve_timeframe (~80 lines)
+- `core/runtime/management_phase.py` — 10006 atomic cleanup (~25 lines)
+
+### FIX-20260718-004 — MicrostructureGate wiring in StrategyLine (DQAF-20260718-004 L3) (2026-07-18)
+
+**Root Cause**: L3 — No microstructure-quality gate existed in the pre-trade evaluation chain. Tick-level adverse selection signals were available from `MicrostructureFeatureComputer` but never consumed by any execution guard.
+
+**Change**: `StrategyLine.evaluate()` now accepts optional `microstructure_gate: MicrostructureGate | None` and `micro_feature_dict: dict[str, float] | None` parameters. After trend isolation but before counter-trend volume checks, the gate evaluates 4 tick-quality features: block/penalise/direction-check/spread-check. Blocked decisions return `should_trade=False` with the gate's reason; penalised decisions have their confidence multiplied down. Gate passes silently when feature dict is empty or missing (fail-open).
+
+**Files**:
+- `core/execution/strategy_line.py` — gate import + evaluate() integration (~40 lines)
+
 | FIX-20260716-005 | 2026-07-16 | cursor-agent | — | **L3: Permanent zombie/ghost position fix — Bridge journal _source provenance (§3). `mt5_bridge_worker.py`: all bridge-written journal entries tagged with `_source` field — `bridge` for normal writes, `bridge_position_already_closed_recovered` for ghost-close recovery. Enables audit trail of all bridge-direct writes and allows adapter _source="mt5_reconciliation" dedup supersede chain. See runtime_live.md FIX-20260716-005 for full 军令状 details.** | L3 — bridge journal entries had no provenance, dedup chain broken |
 | FIX-20260715-015 | 2026-07-15 | cursor-agent | — | **L3: Cold-Explore Governance Bypass — prefer_governance flag + BTC_ asset isolation + governance retry loop**. `resolve_p_win()` cold_explore Step 1 now uses `prefer_governance=True` with `BTC_` prefix filter to bypass noisy PnL store (BTC median=0.4244) and use governance all-time WR (median=0.5784). `live_cycle.py`: 3-retry governance load replaces `except: pass`. Verified: p_win 0.50→0.667 (M30)/0.778 (H1_V2). | L3 — Bayesian priority inverted: posterior (PnL store) dominated prior (governance) |
 | FIX-20260715-016 | 2026-07-15 | cursor-agent | — | **L3: Bridge inter-request rate limiter — `_enforce_trade_rate_limit()` (1.2s) + 10022 retry**. `mt5_bridge_worker.py`: Added rate limiter before all `mt5.order_send()` calls for trade-modifying ops (open/modify_sltp/close). Added retcode 10022 (TOO_MANY_REQUESTS) to `_TRANSIENT_RETCODES`. Fixes dual-position SL/TP modify ping-pong failure — ticket #4169433993 SL stuck at 3981.912 vs target 4029.445 (excess risk ~$470). ReB: `MT5_TOO_MANY_REQUESTS_NO_RATE_LIMIT`. | L3 — no inter-request delay between consecutive order_send calls; L2 — 10022 not in transient retry set |

@@ -91,6 +91,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/kelly_sizer.py",
         "core/execution/pwin_chain.py",
         "core/execution/gate_reachability.py",  # FIX-20260712-003: Layer 4 gate reachability analyzer
+        "core/execution/microstructure_gate.py",  # FIX-20260718-004: tick liquidity defence
         "core/alpha/contracts.py",
         "core/alpha/registry.py",
         "core/alpha/ou_optimizer.py",
@@ -284,6 +285,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/features/adapters/microstructure_feature_adapter.py",
         "core/features/computers/daily_computer.py",
         "core/features/computers/live_daily_provider.py",
+        "core/features/schemas/microstructure_schema.py",  # FIX-20260718-004: gate-only micro features
         "core/features/schemas/v9_micro_schema.py",
         "core/features/schemas/v9_institutional_schema.py",
         "core/features/schemas/swing_enhanced_schema.py",

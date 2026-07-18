@@ -83,6 +83,35 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+### FIX-20260719-001 — Vol_ZScore hard gate + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19)
+
+**Root Cause**: L3 — Three defense gaps: (1) No dead-market circuit breaker — M5_Vol_ZScore < -3σ produces random model predictions; (2) OOD diagnostics lacked volatility context for root-cause correlation; (3) 10006 ghost positions retried 103+ times instead of being atomically cleaned up.
+
+**Change**:
+1. `strategy_evaluator.py`: Vol_ZScore hard gate blocks swing/trend entries when M5_Vol_ZScore < -3.0. OOD block/cautious events carry `m5_vol_zscore`. Module-level constants: `_V9_M5_VOL_ZSCORE_IDX=5`, `_VOL_ZSCORE_HARD_BLOCK=-3.0`.
+2. `management_phase.py`: 10006 atomic cleanup — 3+ consecutive "no such position" rejections emit `ghost_position_10006_detected`, skip DingTalk alert, let Guard 2 MIA handle full cleanup.
+
+See `execution_orders.md` FIX-20260719-001 for cross_strategy_coordinator TF hierarchy changes.
+
+**Files**:
+- `core/runtime/strategy_evaluator.py` — Vol_ZScore gate + OOD diagnostics (~60 lines)
+- `core/runtime/management_phase.py` — 10006 atomic cleanup (~25 lines)
+
+### FIX-20260718-004 — MicrostructureGate lazy init + parameter passthrough (DQAF-20260718-004 L3) (2026-07-18)
+
+**Root Cause**: L3 — New `MicrostructureGate` class needed wiring into the live cycle execution pipeline.
+
+**Change**: Three integration points:
+1. `LiveCycleState`: new `_microstructure_gate: Any = None` field.
+2. `execute_live_cycle()`: lazy-init block (after ConformalOUGate) instantiates `MicrostructureGate()` with try/except for ImportError; logs init diagnostics (qz thresholds, buy_pressure floors, spread_toxicity threshold).
+3. `execute_live_cycle()` → `_evaluate_strategy_lines()`: passes `microstructure_gate` via `getattr(state, "_microstructure_gate", None)`.
+4. `_evaluate_strategy_lines()`: new `microstructure_gate: Any = None` parameter, forwarded to `StrategyLine.evaluate()`.
+5. `strategy_evaluator.py:evaluate_strategy_lines()`: same parameter passthrough pattern.
+
+**Files**:
+- `core/runtime/live_cycle.py`
+- `core/runtime/strategy_evaluator.py`
+
 | FIX-20260718-002 | 2026-07-18 | cursor-agent | — | **L3: Daily ops SSOT reconcile — dual-asset path derivation (DQAF-20260718-002)**. `daily_ops.py` called `cmd_reconcile()` with hardcoded XAU defaults — BTC daily ops could not reconcile governance. Now derives `brains_subdir`, `live_config`, `data_dir` from `base_dir` contract (`data/`→XAU brains+live.yaml, `data_btc/`→brains_btc+live_btc.yaml). Same contract as `_resolve_brains_dir()`. | L3 — single-asset hardcoded reconcile in scheduled daily ops |
 | FIX-20260717-019 | 2026-07-17 | cursor-agent | 70956949 | Journal OPEN fallback for modify_sltp strategy attribution: when known_open_tickets lacks strategy AND magic is bridge sentinel (90401), recover strategy_name from trade journal OPEN entry. In-memory caching (pos._recovered_strategy_name) prevents hot-path disk I/O — I/O occurs exactly once per ticket lifetime. | missing-null-check |
 | FIX-20260716-005 | 2026-07-16 | cursor-agent | — | **L3: Permanent zombie/ghost position fix — 军令状 (投委会 approved). Four-layer defense with in-flight order protection: §1 Pre-management MT5 sync (every cycle, age-gated), §2 Periodic zombie detection (every 10 cycles, age-gated), §3 Bridge _source provenance, §4 Adapter _source tagging. G1 MT5 None/empty guard, G2 Position age gate (≥2 cycles), G3 Young-position deferral. Closes race window where bridge-direct journal writes bypass adapter notification → ghost closes accumulate.** | L3 — three independent position data structures with no cross-cycle sync; L2 — bridge journal bypass of adapter notification chain |

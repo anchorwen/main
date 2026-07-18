@@ -1494,16 +1494,44 @@ def execute_management_phase(
 
         # ── Alert on 3+ consecutive rejections ──
         if pos.trail_rejection_streak >= 3:
-            _send_trail_rejection_alert(
-                config=config,
-                state=state,
-                ticket=pos.ticket,
-                streak=pos.trail_rejection_streak,
-                last_retcode=pos.trail_last_rejection_code,
-                strategy_name=_sname,
-            )
-            # Reset after alert so the next cycle can retry
-            pos.trail_rejection_streak = 0
+            # ── FIX-20260719-001 (P0-4): 10006 atomic cleanup ────────────
+            # retcode 10006 = "No such position" — the ticket no longer
+            # exists in MT5.  This is NOT a transient rejection; the position
+            # has been closed externally (SL hit, manual close, bridge ghost).
+            # Continuing to retry modify_sltp is wasteful and pollutes the
+            # journal with 103+ rejected entries.
+            #
+            # Action: immediately mark the position as stale, skip the alert
+            # (it's not actionable — the position is already gone), and let
+            # Guard 2 (MIA check) handle the cleanup with full journal/state/
+            # reentry-guard reconciliation.
+            if pos.trail_last_rejection_code == 10006:
+                _emit(
+                    "ghost_position_10006_detected",
+                    ticket=pos.ticket,
+                    streak=pos.trail_rejection_streak,
+                    last_retcode=10006,
+                    strategy=_sname,
+                    reason="position_removed_externally_no_such_position",
+                )
+                # Clear the rejection streak so downstream trail dispatch
+                # suppression (DQAF-064 §2) is released for the close order.
+                pos.trail_rejection_streak = 0
+                pos.trail_last_rejection_code = 0
+                # Skip the normal alert — this is a ghost, not a recoverable
+                # rejection.  The MIA guard (below, §Guard 2) will confirm
+                # the position is gone and handle full cleanup.
+            else:
+                _send_trail_rejection_alert(
+                    config=config,
+                    state=state,
+                    ticket=pos.ticket,
+                    streak=pos.trail_rejection_streak,
+                    last_retcode=pos.trail_last_rejection_code,
+                    strategy_name=_sname,
+                )
+                # Reset after alert so the next cycle can retry
+                pos.trail_rejection_streak = 0
 
     # ── 5.5 Partial take-profit ──
     if not pos.partial_tp_triggered and pos.partial_tp_r > 0:

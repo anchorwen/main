@@ -48,6 +48,15 @@ def _get_ood_gateway() -> Any:
     return _ood_gateway
 
 
+# ── FIX-20260719-001: Vol_ZScore hard gate ──────────────────────────────────
+# M5_Vol_ZScore index in the V9 Institutional 40-dim feature vector.
+# When volatility collapses below -3.0 z-score, model predictions become
+# random noise — all swing/trend entries must be blocked regardless of
+# what the OOD gateway says.  This is the "dead market" circuit breaker.
+_V9_M5_VOL_ZSCORE_IDX: int = 5  # 0-indexed position in V9_INSTITUTIONAL_40_FEATURES
+_VOL_ZSCORE_HARD_BLOCK: float = -3.0  # block entries when M5_Vol_ZScore < this value
+
+
 def _resolve_ood_schema(strategy_name: str, strategy: Any) -> str:
     """Resolve the OOD schema name for a given strategy.
 
@@ -133,6 +142,7 @@ def evaluate_strategy_lines(
     meta_signal_filter: Any = None,
     meta_filter_gate: Any = None,
     conformal_ou_gate: Any = None,
+    microstructure_gate: Any = None,
     micro_feature_dict: dict[str, float] | None = None,
     cooldown_registry: Any = None,
     family_entry_tracker: Any = None,
@@ -409,6 +419,14 @@ def evaluate_strategy_lines(
                     np.asarray(_fv, dtype=np.float64).ravel(),
                     schema_name=_schema,
                 )
+                # ── FIX-20260719-001: extract diagnostic features for OOD events ──
+                _fv_arr = np.asarray(_fv, dtype=np.float64).ravel()
+                _m5_vol_z = (
+                    float(_fv_arr[_V9_M5_VOL_ZSCORE_IDX])
+                    if len(_fv_arr) > _V9_M5_VOL_ZSCORE_IDX
+                    else None
+                )
+
                 if _ood_verdict.status == "blocked":
                     print(
                         json.dumps(
@@ -419,6 +437,9 @@ def evaluate_strategy_lines(
                                 "schema": _schema,
                                 "distance": round(_ood_verdict.distance, 2),
                                 "threshold_block": round(_ood_verdict.threshold_block, 2),
+                                "m5_vol_zscore": round(_m5_vol_z, 4)
+                                if _m5_vol_z is not None
+                                else None,
                                 "reason": _ood_verdict.reason,
                             },
                             ensure_ascii=False,
@@ -445,6 +466,9 @@ def evaluate_strategy_lines(
                                 "schema": _schema,
                                 "distance": round(_ood_verdict.distance, 2),
                                 "threshold_cautious": round(_ood_verdict.threshold_cautious, 2),
+                                "m5_vol_zscore": round(_m5_vol_z, 4)
+                                if _m5_vol_z is not None
+                                else None,
                             },
                             ensure_ascii=False,
                         ),
@@ -455,6 +479,51 @@ def evaluate_strategy_lines(
             except (RuntimeError, ValueError, ImportError, OSError) as _ood_exc:
                 # OOD is defense-in-depth — fail-open on gateway errors
                 pass
+
+        # ── FIX-20260719-001: Vol_ZScore Hard Gate (dead-market circuit breaker) ──
+        # When M5 tick volume collapses below -3.0 z-score, the market is
+        # effectively dead — model predictions become random noise regardless
+        # of what the OOD Mahalanobis distance says.  This gate blocks ALL
+        # swing/trend entries when volatility is pathologically low.
+        # Microstructure strategies (micro_*) are exempt — they have their
+        # own MicrostructureGate for tick-quality assessment.
+        #
+        # This gate and the OOD gateway form a TWO-LAYER defense:
+        #   Layer 1 (OOD):  Mahalanobis distance — "is the feature space normal?"
+        #   Layer 2 (Vol):  M5_Vol_ZScore   — "is the market breathing?"
+        # Both must pass for a trade to proceed.
+        if not sname.startswith("micro_"):
+            _fv_arr_vg = np.asarray(_fv, dtype=np.float64).ravel()
+            if len(_fv_arr_vg) > _V9_M5_VOL_ZSCORE_IDX:
+                _m5_vol_z_gate = float(_fv_arr_vg[_V9_M5_VOL_ZSCORE_IDX])
+                if _m5_vol_z_gate < _VOL_ZSCORE_HARD_BLOCK:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "vol_zscore_blocked",
+                                "time": _utc_iso(),
+                                "strategy": sname,
+                                "m5_vol_zscore": round(_m5_vol_z_gate, 4),
+                                "threshold": _VOL_ZSCORE_HARD_BLOCK,
+                                "reason": "dead_market_vol_collapse",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    strategy_results.append(
+                        {
+                            "strategy": sname,
+                            "should_trade": False,
+                            "direction": "neutral",
+                            "confidence": 0.0,
+                            "reason": (
+                                f"vol_zscore_hard_block:"
+                                f"m5_vol_zscore_{_m5_vol_z_gate:.2f}_lt_{_VOL_ZSCORE_HARD_BLOCK}"
+                            ),
+                        }
+                    )
+                    continue
 
         # ── FIX-20260629-171: Strategy mode enforcement ──
         # When mode=probation, the strategy MUST have ≥1 brain with governance
@@ -535,6 +604,7 @@ def evaluate_strategy_lines(
             meta_filter=meta_signal_filter,
             meta_filter_gate=meta_filter_gate,
             conformal_ou_gate=conformal_ou_gate,
+            microstructure_gate=microstructure_gate,
             micro_feature_dict=micro_feature_dict,
             btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
             governance_state=governance_state,  # DQAF-20260622-059: LIVE-brain filter

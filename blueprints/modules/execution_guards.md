@@ -49,6 +49,31 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260718-004 — Microstructure Gate: Tick Liquidity Defence (DQAF-20260718-004 L3) (2026-07-18)
+
+**Root Cause**: L3 — No microstructure-quality gate exists in the pre-trade chain. The system's existing `MicrostructureFeatureComputer` computes 9 ML-consumed features from MT5 ticks, but none measure adverse selection (spread toxicity), liquidity shock (quote intensity anomaly), or directional order-flow pressure (buy/sell imbalance at tick level). These signals exist in the 42-day `E:/ai/tick/` XAU dataset but were never wired into live trading.
+
+**Architecture (投委会审定)**:
+1. **Strict Domain Isolation**: `MICROSTRUCTURE_9_FEATURES` is FROZEN — the 49-dim ML vector never changes. Four new gate-only features (`quote_intensity_zscore`, `buy_pressure_20`, `arrival_rate_5s`, `spread_toxicity`) flow through `micro_feature_dict` exclusively to `MicrostructureGate`. Existing XGBoost/LightGBM models are unaffected.
+2. **Stateful Rolling Buffer**: All baseline computations use memory-resident `deque(maxlen=100)` buffers (following existing `_ofi_buffer` pattern). Cold start returns neutral values (zscore=0.0). Zero additional MT5 I/O — features computed from the same tick snapshot as existing 9 ML features.
+3. **Fail-Open**: Empty dict or missing keys → gate passes. Micro features are best-effort.
+
+**Gate Logic**:
+- Tier 1: `|quote_intensity_zscore| > 3.5` → HARD BLOCK (extreme liquidity shock)
+- Tier 2: `|quote_intensity_zscore| > 2.5` → conf × 0.75 (elevated intensity)
+- Tier 3: `buy_pressure_20` opposite to direction → conf × 0.85 (adverse order flow)
+- Tier 4: `spread_toxicity > 1.05` → conf × 0.90 (spread widening)
+
+**Files**:
+- `core/features/schemas/microstructure_schema.py` — `GATE_ONLY_MICRO_FEATURES`, `ALL_MICRO_FEATURES` constants
+- `core/features/computers/microstructure_computer.py` — `_arrival_buffer`, `_spread_buffer` deques + 4 feature computations
+- `core/features/computers/v9_micro_computer.py` — gate feature pass-through in result dict
+- `core/execution/microstructure_gate.py` — **NEW** `MicrostructureGate` class + `MicrostructureResult`
+- `core/execution/strategy_line.py` — gate wired into evaluate() chain (after trend isolation)
+- `core/runtime/strategy_evaluator.py` — `microstructure_gate` parameter
+- `core/runtime/live_cycle.py` — lazy init + parameter passthrough
+- `scripts/calibrate_microstructure_gates.py` — threshold calibration from 42-day dataset
+
 ### FIX-20260718-003 — ConformalOUGate Passthrough Diagnostics (DQAF-20260718-003 L3) (2026-07-18)
 
 **Root Cause**: L3 — ConformalOUGate silently passes all statarb signals through when no OU brain configs are loaded (XAU has two OU configs archived in `archive_deprecated/`). Zero observability into the architectural gap — no logging, no monitoring, no diagnostics surfaced. The ops team cannot distinguish "gate is filtering" from "gate is bypassed."

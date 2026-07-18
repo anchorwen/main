@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-18T02:56:16Z
-> **扫描模块数**: 776
+> **自动生成**: 2026-07-19T06:11:28Z
+> **扫描模块数**: 779
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -225,7 +225,7 @@
 | `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 11 | 460 | — | |
 | `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 17 | 868 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 117 | — | |
-| `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 3 | 138 | — | |
+| `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 4 | 228 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 279 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
@@ -251,6 +251,7 @@
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 494 | — | |
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 980 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 86 | — | |
+| `microstructure_gate.py` | ✅ active | MicrostructureResult, MicrostructureGate | 3 | 184 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 12 | 159 | — | |
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 406 | — | |
 | `net_out_close_handler.py` | ✅ active | — | 1 | 177 | — | |
@@ -274,7 +275,7 @@
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2024 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2061 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 431 | — | |
@@ -312,9 +313,9 @@
 | `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 429 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 223 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 627 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 687 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 339 | — | |
-| `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 97 | — | |
+| `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 110 | — | |
 
 ## core/features/schemas
 
@@ -322,7 +323,7 @@
 |------|------|----|------|------|------|------|
 | `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 156 | — | |
 | `daily_swing_schema.py` | 📄 config | — | 0 | 44 | — | |
-| `microstructure_schema.py` | ✅ active | — | 1 | 32 | — | |
+| `microstructure_schema.py` | ✅ active | — | 1 | 57 | — | |
 | `registry.py` | ✅ active | — | 4 | 246 | — | |
 | `swing_enhanced_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `v9_institutional_schema.py` | 📄 config | — | 0 | 42 | — | |
@@ -524,9 +525,9 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4819 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4850 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2372 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2400 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -551,7 +552,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 1203 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 4 | 1173 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 4 | 1243 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -643,6 +644,7 @@
 | `_analyze_btc_segmented.py` | ✅ active | — | 4 | 262 | — | |
 | `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
 | `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
+| `_analyze_tick_dataset.py` | ✅ active | — | 8 | 515 | — | |
 | `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
 | `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
 | `_analyze_xau_comprehensive.py` | ✅ active | — | 8 | 855 | — | |
@@ -756,7 +758,8 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 724 | — | |
+| `calibrate_microstructure_gates.py` | ✅ active | — | 3 | 220 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 726 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
