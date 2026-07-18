@@ -27,6 +27,54 @@
 
 ---
 
+### CCT-20260718-001
+- **Docket ID**: DQAF-20260718-001
+- **日期**: 2026-07-18
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `cleanup_orphan_opens()` 写入 `label="auto_orphan_*"` 合成 close 条目以配平无 close 的孤儿 open。当 `compact_journal()` 按 age 剪枝旧的 rejected open 时，配对的合成 close 未被级联删除 → 孤儿 close 永久残留在 journal 中。
+  - [Layer 2 — 中间异常]: `compact_journal()` 单条目压缩逻辑逐行扫描 journal，仅根据单条记录自身的 age 决定保留/剪枝 — 无跨条目关联感知。
+  - [Layer 3 — 根因]: L3 架构缺陷 — journal compaction 缺少级联删除语义。合成 close 通过 `open_message_id` 外键关联父 open，但 compact 无级联逻辑。
+- **证据引用**:
+  - Source 1: `core/ledger/services/journal_cleanup.py:compact_journal()` — 单 pass 剪枝逻辑
+  - Source 2: `core/ledger/services/journal_cleanup.py:cleanup_orphan_opens()` — auto_orphan_* 合成 close 写入
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260718-ORPHAN_CASCADE_DELETE_MISSING
+- **关联 FIX**: FIX-20260718-001
+- **状态**: **CLOSED** — two-pass cascade: Pass 1 收集 pruned open IDs → Pass 2 级联删除匹配的 auto_orphan_* close
+
+### CCT-20260718-002
+- **Docket ID**: DQAF-20260718-002
+- **日期**: 2026-07-18
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: BTC governance 定时对账不工作。`daily_ops.py` 每夜调用 `cmd_reconcile()` 但路径全部硬编码为 XAU (`data/brains`, `live.yaml`) → BTC governance_state 漂移未被 cron 检测。
+  - [Layer 2 — 中间异常]: `brain.py:cmd_reconcile()` 所有路径推导硬编码 — `brains_dir = project_root / "configs" / "brains"`, `data_path = project_root / "data"` 等 — 无资产参数化。
+  - [Layer 3 — 根因]: L3 架构缺陷 — 单资产硬编码架构。`daily_ops.py` 调用 `cmd_reconcile()` 时未传递资产上下文（`base_dir` 已有资产信息但未利用）。
+- **证据引用**:
+  - Source 1: `scripts/brain.py:cmd_reconcile()` — hardcoded path derivation
+  - Source 2: `scripts/daily_ops.py` — reconcile call site without --data-dir
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260718-SINGLE_ASSET_HARDCODED_PATHS
+- **关联 FIX**: FIX-20260718-002
+- **状态**: **CLOSED** — cmd_reconcile() 参数化 + daily_ops.py 从 base_dir 契约派生双资产路径
+
+### CCT-20260718-003
+- **Docket ID**: DQAF-20260718-003
+- **日期**: 2026-07-18
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU statarb 策略不受 ConformalOUGate 约束。OU gate 查找不到已归档的 OU brain 配置 → 静默 passthrough，无任何日志或指标。
+  - [Layer 2 — 中间异常]: XAU OU_Params_V6_Sniper 和 OU_Params_V7_M15 均已被 FIX-20260625-136 退役（统计显著亏损）。ConformalOUGate 加载时找不到任何 XAU OU 配置 → `_ou_configs_by_strategy` 为空 → `filter()` 走 passthrough 路径。
+  - [Layer 3 — 根因]: L3 架构缺陷 — gate bypass 路径零可观测性。passthrough 分支无 logging、无 metrics、无 describe() 暴露 → 无法感知 statarb 信号未受门禁约束。
+- **证据引用**:
+  - Source 1: `core/execution/conformal_ou_gate.py:filter()` — passthrough path with no logging
+  - Source 2: `configs/brains/archive_deprecated/OU_Params_V6_Sniper.json` — retired OU config
+- **是否被推翻**: 否 (AR 拒绝恢复已归档配置 — 统计显著亏损)
+- **关联 ReB Pattern**: ReB-20260718-SILENT_GATE_BYPASS_ZERO_OBSERVABILITY
+- **关联 FIX**: FIX-20260718-003
+- **状态**: **CLOSED** — 节流 WARNING + passthrough 计数器 + describe() 诊断
+
 ### CCT-20260710-001
 - **Docket ID**: DQAF-20260710-001
 - **日期**: 2026-07-10

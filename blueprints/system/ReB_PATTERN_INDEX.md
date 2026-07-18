@@ -20,6 +20,44 @@
 
 ---
 
+### ReB-20260718-ORPHAN_CASCADE_DELETE_MISSING
+- **Pattern Signature**: `ORPHAN_CASCADE_DELETE_MISSING`
+- **Date Cataloged**: 2026-07-18
+- **Source Docket**: DQAF-20260718-001
+- **Related**: FIX-20260718-001
+
+**Definition**: A journal compaction/pruning operation removes parent records (orphan opens) but does not cascade-delete child records (synthetic closes). The synthetic closes, created by an earlier cleanup step (`cleanup_orphan_opens()`), reference the parent open via a foreign key (`open_message_id`). When compaction prunes the parent open by age, the child close survives — leaving orphaned synthetic entries that pollute the journal indefinitely. The signature: synthetic entries with `label` starting with `auto_orphan_*` whose `open_message_id` no longer exists in the journal.
+
+**Prevention**: Any compaction operation that removes records must identify and cascade-delete child records in a second pass. The child records reference their parent via a foreign key field (`open_message_id`). The first pass collects pruned parent IDs; the second pass filters out children matching those IDs.
+
+**Detection**: Count `auto_orphan_*` labeled entries whose `open_message_id` is not found in the journal — these are orphaned synthetic closes. The `compact_journal()` function now returns `cascade_removed` in its result dict for monitoring.
+
+### ReB-20260718-SINGLE_ASSET_HARDCODED_PATHS
+- **Pattern Signature**: `SINGLE_ASSET_HARDCODED_PATHS`
+- **Date Cataloged**: 2026-07-18
+- **Source Docket**: DQAF-20260718-002
+- **Related**: FIX-20260718-002, Iron Law #14 (Brain Status SSOT Priority)
+
+**Definition**: A cross-asset operation (reconciliation, governance, health checks) hardcodes paths for a single asset, silently excluding other assets. The caller (timed cron job) invokes the operation without passing asset context, even though the caller already has the asset context in scope (`base_dir` contract). The result: the operation works for one asset and silently no-ops for others — no error, no log, just silent exclusion.
+
+**Prevention**: Any operation that touches asset-specific data paths must be parameterized by asset context (`data_dir`, `brains_subdir`, `live_config_name`). Callers MUST derive these from the existing `base_dir` contract rather than hardcoding. The `base_dir` naming convention (`data` → XAU, `data_btc` → BTC) is the SSOT for asset routing.
+
+**Detection**: Verify that `daily_ops.py` SSOT reconciliation call site passes asset-derived parameters. Cross-check: run `brain.py reconcile --data-dir data_btc --brains-subdir brains_btc --live-config live_btc.yaml` and confirm BTC governance states are reconciled.
+
+### ReB-20260718-SILENT_GATE_BYPASS_ZERO_OBSERVABILITY
+- **Pattern Signature**: `SILENT_GATE_BYPASS_ZERO_OBSERVABILITY`
+- **Date Cataloged**: 2026-07-18
+- **Source Docket**: DQAF-20260718-003
+- **Related**: FIX-20260718-003, FIX-20260625-136 (OU config archival)
+
+**Definition**: A quality gate has a bypass/passthrough path that is taken when its configuration source is absent (e.g., all brain configs for the gate type are archived). The passthrough path has zero logging, zero metrics, and zero diagnostic exposure — making it impossible to detect that a class of signals is ungoverned. The telltale: a gate's `describe()` method reports empty configuration arrays, but no warning is emitted at runtime.
+
+**Prevention**: Every gate bypass path must include: (1) throttled WARNING logging with the reason for bypass, (2) a counter tracking bypass events by reason, and (3) a `describe()` or status method that exposes bypass statistics for monitoring integration. The logging must be throttled (e.g., every N cycles) to avoid log flooding.
+
+**Detection**: Check gate `describe()` output for `passthrough_diagnostics` section. If `total_cycles > 0` but no WARNING log lines appear in the application log, the bypass is unobservable. Monitor `_passthrough_count` by reason to detect configuration gaps.
+
+---
+
 ### ReB-20260710-TP_TRAIL_NO_PROFITABILITY_GATE
 - **Pattern Signature**: `TP_TRAIL_NO_PROFITABILITY_GATE`
 - **Date Cataloged**: 2026-07-10
