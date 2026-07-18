@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-18T01:52:02Z
+> **自动生成**: 2026-07-18T02:56:16Z
 > **扫描模块数**: 776
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -383,7 +383,7 @@
 | `execution_event_writer.py` | ✅ active | ExecutionEventWriter | 3 | 47 | — | |
 | `execution_reconciliation_service.py` | ✅ active | ExecutionReconciliationService | 9 | 264 | — | |
 | `gate_decision_refs.py` | ✅ active | — | 4 | 30 | — | |
-| `journal_cleanup.py` | ✅ active | — | 13 | 857 | — | |
+| `journal_cleanup.py` | ✅ active | — | 13 | 922 | — | |
 | `journal_gate.py` | ✅ active | JournalGate | 13 | 248 | — | |
 | `pnl_guard.py` | ✅ active | PnlGuard | 2 | 138 | — | |
 | `replay_execution_reader.py` | ✅ active | ReplayExecutionReader | 5 | 35 | — | |

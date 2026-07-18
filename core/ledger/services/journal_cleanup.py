@@ -711,12 +711,21 @@ def compact_journal(
     dry_run: bool = False,
     lock_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Remove old rejected entries from the journal with atomic swap.
+    """Remove old rejected entries and their paired orphan closes.
 
     FIX-20260607-144: Journal compaction for rejected retry entries.
     Rejected entries (ack_status="rejected") are ephemeral noise — failed
     dispatch attempts that carry no durable trade outcome.  They are retained
     for *retention_days* for post-mortem analysis, then pruned.
+
+    FIX-20260718-001 (DQAF-20260718-001 L3): Cascade-delete synthetic orphan
+    close entries when their parent rejected open is pruned.  Previously,
+    ``cleanup_orphan_opens()`` wrote synthetic close entries (label prefix
+    ``auto_orphan_``) that became permanently orphaned when the parent
+    rejected open was compacted — the close had no matching open and
+    accumulated indefinitely.  Now, when a rejected open is pruned, any
+    synthetic close whose ``open_message_id`` matches the pruned open is
+    also removed.
 
     Uses atomic ``os.replace()`` so a crash during compaction cannot corrupt
     the journal.  Acquires the same ``FileLock`` as ``_append_journal()``
@@ -736,7 +745,7 @@ def compact_journal(
         lock_dir: Directory for FileLock (same as append path).
 
     Returns:
-        Dict with ``retained``, ``removed``, ``dry_run`` counts.
+        Dict with ``retained``, ``removed``, ``cascade_removed``, ``dry_run`` counts.
     """
     import logging
     import os as _os
@@ -745,12 +754,13 @@ def compact_journal(
     _log = logging.getLogger(__name__)
 
     if not journal_path.exists():
-        return {"status": "empty", "retained": 0, "removed": 0}
+        return {"status": "empty", "retained": 0, "removed": 0, "cascade_removed": 0}
 
     cutoff = _time.time() - (retention_days * 24 * 3600)
     temp_path = journal_path.with_suffix(".jsonl.tmp")
     retained = 0
     removed = 0
+    cascade_removed = 0
     corrupted = 0
 
     # ── Acquire FileLock (same lock as _append_journal) ──
@@ -764,7 +774,12 @@ def compact_journal(
         _lock_acquired = _acquired.acquired if _acquired else False
 
     try:
-        # ── Pass 1: filter → temp file ──
+        # ── Pass 1: filter rejected opens → temp file ──
+        # FIX-20260718-001 (DQAF-20260718-001 L3): Collect message_ids of
+        # pruned rejected opens so Pass 2 can cascade-delete their paired
+        # synthetic orphan close entries (written by cleanup_orphan_opens()).
+        pruned_open_ids: set[str] = set()
+
         with (
             open(journal_path, encoding="utf-8") as f_in,
             open(temp_path, "w", encoding="utf-8") as f_out,
@@ -808,22 +823,71 @@ def compact_journal(
                     retained += 1
                 else:
                     # Outside retention window — prune
+                    # FIX-20260718-001: Track pruned open message_ids for
+                    # cascade-delete of paired synthetic orphan close entries.
+                    if record.get("action") == "open":
+                        _msg_id = record.get("message_id", "")
+                        if _msg_id:
+                            pruned_open_ids.add(_msg_id)
                     removed += 1
 
-        # ── Pass 2: atomic swap ──
-        if not dry_run and removed > 0:
+        # ── Pass 2: cascade-delete orphan synthetic closes ──
+        # FIX-20260718-001 (DQAF-20260718-001 L3): When a rejected open is
+        # pruned, its paired synthetic close (written by cleanup_orphan_opens
+        # with label="auto_orphan_*") becomes permanently orphaned because
+        # compact_journal only pruned the open side.  Scan the temp file and
+        # remove any close entry whose open_message_id matches a pruned open
+        # AND whose label starts with "auto_orphan_" (the marker set by
+        # cleanup_orphan_opens at line 404).
+        if pruned_open_ids:
+            _cascade_temp = journal_path.with_suffix(".jsonl.cascade_tmp")
+            with (
+                open(temp_path, encoding="utf-8") as f_in,
+                open(_cascade_temp, "w", encoding="utf-8") as f_out,
+            ):
+                for line in f_in:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    try:
+                        record = json.loads(stripped)
+                    except json.JSONDecodeError:
+                        f_out.write(line)
+                        continue
+                    if record.get("action") == "close":
+                        _label = str(record.get("label", ""))
+                        _open_msg_id = str(record.get("open_message_id", ""))
+                        if _label.startswith("auto_orphan_") and _open_msg_id in pruned_open_ids:
+                            cascade_removed += 1
+                            continue  # Cascade-delete: prune orphan synthetic close
+                    f_out.write(line)
+            _os.replace(_cascade_temp, temp_path)
+            # Clean up cascade temp if still present
+            if _cascade_temp.exists():
+                import contextlib
+
+                with contextlib.suppress(OSError):
+                    _cascade_temp.unlink()
+
+        # ── Pass 3: atomic swap ──
+        _total_removed = removed + cascade_removed
+        if not dry_run and _total_removed > 0:
             _os.replace(temp_path, journal_path)
             _log.info(
-                "Journal compaction complete: retained=%d removed=%d (old rejected, >%dd)",
+                "Journal compaction complete: retained=%d removed=%d cascade_removed=%d "
+                "(old rejected + orphan closes, >%dd)",
                 retained,
                 removed,
+                cascade_removed,
                 retention_days,
             )
-        elif dry_run and removed > 0:
+        elif dry_run and _total_removed > 0:
             _log.info(
-                "Journal compaction DRY-RUN: would retain=%d remove=%d (old rejected, >%dd)",
+                "Journal compaction DRY-RUN: would retain=%d remove=%d cascade_removed=%d "
+                "(old rejected + orphan closes, >%dd)",
                 retained,
                 removed,
+                cascade_removed,
                 retention_days,
             )
         else:
@@ -845,13 +909,14 @@ def compact_journal(
         import contextlib
 
         with contextlib.suppress(OSError):
-            if temp_path.exists() and (dry_run or removed == 0):
+            if temp_path.exists() and (dry_run or (removed == 0 and cascade_removed == 0)):
                 temp_path.unlink()
 
     return {
         "status": "ok",
         "retained": retained,
         "removed": removed,
+        "cascade_removed": cascade_removed,
         "corrupted_lines": corrupted,
         "dry_run": dry_run,
     }
