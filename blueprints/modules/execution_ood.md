@@ -44,12 +44,12 @@ For the diagonal covariance fallback (insufficient samples for full matrix):
 d² = Σ_i ((x_i - μ_i) / σ_i)²  (normalized Euclidean distance)
 
 ## Calibrated Schemas
-| Schema | Features | Samples | Block (3σ) | Cautious (2σ) | Covariance |
-|--------|----------|---------|------------|---------------|------------|
-| v9_institutional_40 | 40 | 7,126 | 12.64 | 8.82 | Full (40×40) |
-| v4.3_microstructure_9 | 9 | 7,436 | 8.21 | 4.40 | Full (9×9) |
+| Schema | Features | Samples | Block (P99) | Cautious (P95) | Covariance | Window |
+|--------|----------|---------|-------------|----------------|------------|--------|
+| v9_institutional_40 | 40 | 870 | 15.07 | 9.63 | Full (40×40) | 30-day rolling |
+| v4.3_microstructure_9 | 9 | 8,052 | 8.20 | 4.47 | Full (9×9) | 30-day rolling |
 
-*Threshold method: empirical P95/P99 (DQAF-20260716-001). Chi2 theoretical values replaced due to fat-tail violation in financial data.*
+*Threshold method: empirical P95/P99 (DQAF-20260716-001). Chi2 theoretical values replaced due to fat-tail violation in financial data. FIX-20260720-001: rolling-window recalibration replaces static full-history calibration — gate adapts to secular regime shifts while still catching sudden anomalies.*
 
 ## Inbound Dependencies
 | Module | What is imported | Why |
@@ -88,5 +88,6 @@ python scripts/export_ood_params.py --data-dir data_btc --dry-run
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260720-001 | 2026-07-20 | cursor-agent | bd8c3244 | L2: Rolling-window OOD recalibration. export_ood_params.py: added --max-age-days for rolling-window calibration. OODGateway: added invalidate_cache() + mtime-based auto-invalidation. Recalibrated v9_institutional_40 with 30-day window (870 samples, block=15.07). Static full-history calibration caused permanent block when BTC entered low-vol regime (ATR 45 vs centroid 145). | config-drift |
 | FIX-20260716-001 | 2026-07-16 | cursor-agent | — | **L3: OOD threshold tuning — chi2→empirical percentile**. `calibrate()`: added `threshold_method` parameter (default "empirical"). Uses P95/P99 of calibration distances instead of chi2 theoretical values. Chi2 assumes multivariate normality violated by financial fat tails (54.6% false-positive block). v9_institutional_40: 7.47/7.98→8.82/12.64, recent-1000 block 11.3%→1.2%. DQAF-20260716-001. | L3 — chi2 theoretical thresholds incorrect for fat-tailed financial data |
 | FIX-20260705-065 | 2026-07-05 | cursor-agent | — | **P2: Feature-Space OOD Gateway — Mahalanobis distance regime-shift immunity**. Offline: export_ood_params.py reads 11,384 BTC feature store records, computes centroid + full 40×40 covariance per schema. Online: OODGateway.check() integrated into strategy_evaluator.py Cut 2. 3σ chi2 threshold → REGIME_OOD_BLOCKED. 12/12 TDD tests. See DQAF-20260705-064 for the 7-day directional lock that motivated this defense. | RC-12 — no automated OOD detection |

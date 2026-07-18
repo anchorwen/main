@@ -164,6 +164,7 @@ class OODGateway:
     def __init__(self, data_dir: str = "data_btc") -> None:
         self._data_dir = Path(data_dir)
         self._cache: dict[str, OODConfig | None] = {}  # schema_name → config or None (not found)
+        self._cache_mtime: dict[str, float] = {}  # schema_name → file mtime at load
         self._enabled: bool = True
 
     # ── Public API ──────────────────────────────────────────────────────
@@ -175,6 +176,24 @@ class OODGateway:
     @enabled.setter
     def enabled(self, value: bool) -> None:
         self._enabled = value
+
+    def invalidate_cache(self, schema_name: str | None = None) -> int:
+        """Clear cached OOD configs so they are reloaded from disk on next check.
+
+        Args:
+            schema_name: Specific schema to invalidate, or None to invalidate all.
+
+        Returns:
+            Number of cache entries cleared.
+        """
+        if schema_name is not None:
+            removed = 1 if self._cache.pop(schema_name, None) is not None else 0
+            self._cache_mtime.pop(schema_name, None)
+            return removed
+        removed = len(self._cache)
+        self._cache.clear()
+        self._cache_mtime.clear()
+        return removed
 
     def check(
         self,
@@ -269,21 +288,43 @@ class OODGateway:
     # ── Internal ────────────────────────────────────────────────────────
 
     def _load_config(self, schema_name: str) -> OODConfig | None:
-        """Load OOD config from disk, caching the result."""
+        """Load OOD config from disk, caching the result.
+
+        Auto-detects stale cache entries by comparing file mtime.
+        """
+        config_path = self._data_dir / "models" / f"ood_{schema_name}.json"
+
+        # ── Auto-invalidate on file change ──
+        try:
+            current_mtime = config_path.stat().st_mtime if config_path.exists() else 0.0
+        except OSError:
+            current_mtime = 0.0
+
+        if schema_name in self._cache and current_mtime > 0:
+            cached_mtime = self._cache_mtime.get(schema_name, 0.0)
+            if current_mtime > cached_mtime + 1.0:  # 1s tolerance for FS timestamp granularity
+                logger.info(
+                    "OODGateway: config file changed for schema=%s — invalidating cache",
+                    schema_name,
+                )
+                del self._cache[schema_name]
+                self._cache_mtime.pop(schema_name, None)
+
         if schema_name in self._cache:
             return self._cache[schema_name]
 
-        config_path = self._data_dir / "models" / f"ood_{schema_name}.json"
         try:
             if not config_path.exists():
                 logger.info("OODGateway: no config for schema=%s at %s", schema_name, config_path)
                 self._cache[schema_name] = None
+                self._cache_mtime[schema_name] = 0.0
                 return None
 
             with open(config_path, encoding="utf-8") as f:
                 data = json.load(f)
             config = OODConfig.from_dict(data)
             self._cache[schema_name] = config
+            self._cache_mtime[schema_name] = current_mtime
             logger.info(
                 "OODGateway: loaded schema=%s n_features=%d n_samples=%d "
                 "threshold_block=%.1f threshold_cautious=%.1f",
@@ -297,6 +338,7 @@ class OODGateway:
         except (json.JSONDecodeError, KeyError, ValueError, OSError) as exc:
             logger.warning("OODGateway: failed to load config for schema=%s: %s", schema_name, exc)
             self._cache[schema_name] = None
+            self._cache_mtime[schema_name] = 0.0
             return None
 
     # ── Static helpers for offline calibration ──────────────────────────

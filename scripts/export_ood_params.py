@@ -7,6 +7,7 @@ Usage::
 
     python scripts/export_ood_params.py --data-dir data_btc
     python scripts/export_ood_params.py --data-dir data_btc --min-samples 500
+    python scripts/export_ood_params.py --data-dir data_btc --max-age-days 30
 
 Architecture
 ------------
@@ -19,6 +20,17 @@ Architecture
 
 The resulting OOD config file is consumed by ``OODGateway`` at inference time
 for Mahalanobis distance regime-shift detection.
+
+Rolling-window calibration
+--------------------------
+Pass ``--max-age-days N`` to use only records whose ``event_time`` is within
+the last N days.  This keeps the OOD centroid and thresholds anchored to the
+recent market regime so the gate adapts to secular shifts (e.g. a multi-week
+low-volatility period) while still catching sudden anomalies relative to that
+regime.
+
+Without ``--max-age-days`` the entire feature store is used (legacy behaviour,
+suitable for initial calibration from a representative historical sample).
 """
 
 from __future__ import annotations
@@ -27,6 +39,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -51,6 +64,13 @@ def main() -> None:
         help="Symbol to calibrate (default: BTCUSDc)",
     )
     parser.add_argument(
+        "--max-age-days",
+        type=float,
+        default=None,
+        help="Only use records with event_time within the last N days "
+        "(rolling window). If not set, all records are used.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print statistics without writing files",
@@ -72,6 +92,13 @@ def main() -> None:
         print("Run the live system first to populate the feature store, or use --data-dir.")
         sys.exit(1)
 
+    # ── Date filtering ──
+    cutoff_utc: str | None = None
+    if args.max_age_days is not None:
+        cutoff_dt = datetime.now(UTC) - timedelta(days=args.max_age_days)
+        cutoff_utc = cutoff_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        print(f"Date filter: max-age={args.max_age_days} days, cutoff={cutoff_utc}")
+
     print(f"Reading feature store: {feature_path}")
 
     # ── Read and group by schema ──
@@ -79,6 +106,7 @@ def main() -> None:
     schema_feature_names: dict[str, list[str]] = {}
     line_count = 0
     parse_errors = 0
+    skipped_age = 0
 
     with open(feature_path, encoding="utf-8") as f:
         for line in f:
@@ -91,6 +119,13 @@ def main() -> None:
             except json.JSONDecodeError:
                 parse_errors += 1
                 continue
+
+            # ── Date filter ──
+            if cutoff_utc is not None:
+                event_time = record.get("event_time", "")
+                if event_time < cutoff_utc:
+                    skipped_age += 1
+                    continue
 
             schema_name = record.get("schema_name", "unknown")
             values = record.get("values")
@@ -112,6 +147,8 @@ def main() -> None:
 
     print(f"  Lines read: {line_count}")
     print(f"  Parse errors: {parse_errors}")
+    if cutoff_utc is not None:
+        print(f"  Skipped (age > {args.max_age_days}d): {skipped_age}")
     print(f"  Schemas found: {len(schema_values)}")
     for schema, vecs in sorted(schema_values.items()):
         print(f"    {schema}: {len(vecs)} samples, {len(schema_feature_names[schema])} features")

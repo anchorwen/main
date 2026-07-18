@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-19T06:11:28Z
+> **自动生成**: 2026-07-20T06:40:10Z
 > **扫描模块数**: 779
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -256,7 +256,7 @@
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 406 | — | |
 | `net_out_close_handler.py` | ✅ active | — | 1 | 177 | — | |
 | `ofi_gate.py` | ✅ active | — | 1 | 90 | — | |
-| `ood_gateway.py` | ✅ active | OODVerdict, OODConfig, OODGateway | 10 | 414 | — | |
+| `ood_gateway.py` | ✅ active | OODVerdict, OODConfig, OODGateway | 11 | 456 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
@@ -798,7 +798,7 @@
 | `dqaf053_phase1_sanitize.py` | ✅ active | — | 8 | 368 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 564 | — | |
 | `eval_tracer_candidates.py` | ✅ active | — | 3 | 184 | — | |
-| `export_ood_params.py` | ✅ active | — | 1 | 213 | — | |
+| `export_ood_params.py` | ✅ active | — | 1 | 250 | — | |
 | `extract_health_checks.py` | 📄 config | — | 0 | 179 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
