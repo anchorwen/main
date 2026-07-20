@@ -17,7 +17,7 @@ from tests.execution.conftest import (
     generate_trending_bars,
     make_proposal,
 )
-from tests.execution.test_strategy_line import _make_strategy
+from tests.execution.test_strategy_line import _ctx, _make_strategy
 
 # ── Helper ────────────────────────────────────────────────────────────────
 
@@ -44,11 +44,7 @@ class TestStrategyLineToRiskPipeline:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is True
 
         # Feed into risk controller
@@ -69,11 +65,7 @@ class TestStrategyLineToRiskPipeline:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is True
 
         # Simulate existing positions that breach limits
@@ -107,11 +99,7 @@ class TestStrategyLineToRiskPipeline:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is True
 
         positions = {
@@ -145,11 +133,7 @@ class TestRiskToQueuePipeline:
                 ),
             ]
         )
-        decision = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        decision = line.evaluate(context=_ctx())
         assert decision.should_trade is True
 
         risk_ctrl = PortfolioRiskController()
@@ -232,21 +216,9 @@ class TestMultiStrategyPipeline:
             ],
         )
 
-        b_decision = barrier.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
-        m_decision = micro.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
-        s_decision = statarb.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        b_decision = barrier.evaluate(context=_ctx())
+        m_decision = micro.evaluate(context=_ctx())
+        s_decision = statarb.evaluate(context=_ctx())
 
         assert b_decision.should_trade is True and b_decision.direction == "long"
         assert m_decision.should_trade is True and m_decision.direction == "short"

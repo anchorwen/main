@@ -117,6 +117,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/mt5_worker.py",
         "core/execution/execution_queue.py",
         "core/execution/rule_engine_strategy.py",
+        "core/execution/strategy_context.py",
+        "core/execution/strategy_protocol.py",
         "core/execution/meta_filter_routing.py",
         "core/execution/managed_close.py",
         "core/execution/trend_isolation_gates.py",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from core.execution.strategy_line import StrategyLineConfig
 from tests.execution.conftest import make_proposal
-from tests.execution.test_strategy_line import _make_strategy
+from tests.execution.test_strategy_line import _ctx, _make_strategy
 
 
 class TestSignalDeterminism:
@@ -25,11 +25,7 @@ class TestSignalDeterminism:
         decisions = []
         for _ in range(3):
             line = _make_strategy(config=config, proposals=proposals)
-            result = line.evaluate(
-                feature_vector=None,
-                micro_feature_vector=None,
-                mid_price=2000.0,
-            )
+            result = line.evaluate(context=_ctx())
             decisions.append(result)
 
         # All runs should be identical
@@ -52,12 +48,7 @@ class TestSignalDeterminism:
         tp_values = []
         for _ in range(5):
             line = _make_strategy(config=config, proposals=proposals)
-            result = line.evaluate(
-                feature_vector=None,
-                micro_feature_vector=None,
-                mid_price=2000.0,
-                current_atr=5.0,
-            )
+            result = line.evaluate(context=_ctx(current_atr=5.0))
             sl_values.append(result.sl)
             tp_values.append(result.tp)
 

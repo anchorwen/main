@@ -24,6 +24,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from core.execution.rule_engine_strategy import RuleEngineStrategyWrapper
+from core.execution.strategy_context import StrategyEvaluationContext
 
 
 def make_wrapper() -> RuleEngineStrategyWrapper:
@@ -68,11 +69,13 @@ def test_wrapper_evaluate_still_works():
     """Sanity check: the wrapper's evaluate() still functions after the fix."""
     wrapper = make_wrapper()
     result = wrapper.evaluate(
-        mid_price=4320.0,
-        bid=4319.9,
-        ask=4320.1,
-        current_atr=5.0,
-        trend_direction="long",
+        context=StrategyEvaluationContext(
+            mid_price=4320.0,
+            bid=4319.9,
+            ask=4320.1,
+            current_atr=5.0,
+            trend_direction="long",
+        ),
     )
     assert result.strategy_name == "structural_swing_v1"
     assert result.magic == 90501
@@ -94,7 +97,7 @@ def test_strategy_dict_with_budget_check():
 
     # The fixed pattern from live_cycle.py
     if _strat is not None and getattr(_strat, "budget", None) is not None:
-        _strat.budget.record_trade(0.0, False)  # should NOT be reached
+        _strat.budget.record_trade(0.0, False)  # type: ignore[attr-defined]  # should NOT be reached
 
     # Verify we passed the check without error
     assert _strat is not None

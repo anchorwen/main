@@ -29,10 +29,11 @@ from core.execution.brain_gates import check_min_valid_brains, extract_entry_z_s
 from core.execution.conformal_ou_gate import apply_conformal_ou_gate
 from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
 from core.execution.meta_filter_routing import apply_meta_filter_gate
-from core.execution.microstructure_gate import MicrostructureGate
 from core.execution.ofi_gate import apply_ofi_toxicity_gate
 from core.execution.pwin_chain import resolve_p_win
+from core.execution.strategy_context import StrategyEvaluationContext
 from core.execution.strategy_decision import StrategyDecision
+from core.execution.strategy_protocol import StrategyEvaluateProtocol
 from core.execution.trend_isolation_gates import apply_trend_isolation_gates
 from core.execution.trend_volume_guard import (
     _counter_trend_action,
@@ -309,7 +310,7 @@ class StrategyLineConfig:
 # ── Strategy line base class ────────────────────────────────────────────
 
 
-class StrategyLine:
+class StrategyLine(StrategyEvaluateProtocol):
     """Base class for contract-group strategy lines.
 
     Subclasses implement ``_run_inference()`` to produce a list of proposals
@@ -510,52 +511,55 @@ class StrategyLine:
 
     def evaluate(
         self,
-        *,
-        feature_vector: Any,
-        micro_feature_vector: Any,
-        mid_price: float | None,
-        bid: float | None = None,
-        ask: float | None = None,
-        current_atr: float = 5.0,
-        strategy_atr: float | None = None,  # FIX-20260706-027: per-TF ATR for SL/TP
-        regime_info: dict[str, Any] | None = None,
-        regime_gate_mode: str = "full",
-        trend_direction: str = "neutral",
-        trend_strength: float = 0.0,
-        h4_trend_strength: float = 0.0,
-        hurst: float | None = None,  # FIX-20260607-007: M5 Hurst for trend maturity
-        kalman_velocity_bps: float | None = None,  # FIX-20260607-007: H1 Kalman velocity (bps)
-        macro_regime: str = "mixed",
-        risk_budget_usd: float = 0.0,
-        tracker: Any = None,
-        pnl_ledger: Any = None,
-        pnl_store: Any = None,
-        micro_sequences: dict[str, Any] | None = None,
-        daily_feature_vector: Any = None,
-        meta_filter: Any = None,
-        meta_filter_gate: Any = None,
-        conformal_ou_gate: Any = None,
-        microstructure_gate: MicrostructureGate | None = None,
-        micro_feature_dict: dict[str, float] | None = None,
-        btc_augment: Any = None,  # FIX-20260613-046: pre-computed 37-dim BTC vector
-        governance_state: dict[str, Any] | None = None,  # DQAF-20260622-059: LIVE-brain filter
+        context: StrategyEvaluationContext,
     ) -> StrategyDecision:
         """Run the full strategy evaluation for one cycle.
 
         Args:
-            trend_direction: Primary trend from multi-timeframe analysis
-                             ("long"/"short"/"neutral").  Counter-trend trades
-                             are blocked or penalised depending on strength.
-            trend_strength: [0, 1] H1 trend strength.
-            h4_trend_strength: [0, 1] H4 trend strength (gates barrier).
-            macro_regime: "risk_on" | "risk_off" | "mixed" (from D1×H4).
-            risk_budget_usd: Per-trade risk budget for vol-targeted sizing.
-                             0 = use fixed base_volume.
-            micro_sequences: optional dict TF → (32,9) ndarray for HMRE brains.
-            meta_filter: Optional :class:`MetaSignalFilter` for Gate 4d ML check.
+            context: StrategyEvaluationContext — all input state for this cycle
+                     (prices, ATR, regime, gates, feature vectors, governance).
+                     Frozen (immutable) — local overrides use variable shadowing.
 
         Returns a StrategyDecision — may have should_trade=False.
         """
+        # ── L3 Interface Consolidation: local unpacking ──────────────────────
+        # Extract all 28 context fields into local variables.  This preserves
+        # backward compatibility for the 170+ internal references while keeping
+        # the Protocol boundary clean (single-parameter contract).
+        #
+        # Context is frozen (immutable) — conditional overrides (e.g.
+        # regime_gate_mode → "shadow" at L612/L625) shadow the local variable,
+        # not the context field.  This is correct: the override is a local
+        # policy decision, not a mutation of shared state.
+        feature_vector = context.feature_vector
+        micro_feature_vector = context.micro_feature_vector
+        mid_price = context.mid_price
+        bid = context.bid
+        ask = context.ask
+        current_atr = context.current_atr
+        strategy_atr = context.strategy_atr
+        regime_info = context.regime_info
+        regime_gate_mode = context.regime_gate_mode
+        trend_direction = context.trend_direction
+        trend_strength = context.trend_strength
+        h4_trend_strength = context.h4_trend_strength
+        hurst = context.hurst
+        kalman_velocity_bps = context.kalman_velocity_bps
+        macro_regime = context.macro_regime
+        risk_budget_usd = context.risk_budget_usd
+        tracker = context.tracker
+        pnl_ledger = context.pnl_ledger
+        pnl_store = context.pnl_store
+        micro_sequences = context.micro_sequences
+        daily_feature_vector = context.daily_feature_vector
+        meta_filter = context.meta_filter
+        meta_filter_gate = context.meta_filter_gate
+        conformal_ou_gate = context.conformal_ou_gate
+        microstructure_gate = context.microstructure_gate
+        micro_feature_dict = context.micro_feature_dict
+        btc_augment = context.btc_augment
+        governance_state = context.governance_state
+
         name = self.config.name
         _meta_p_win: float | None = None  # P(TP|signal) — resolved by MetaFilter or downstream
 

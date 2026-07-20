@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from core.execution.strategy_context import StrategyEvaluationContext
 from core.execution.strategy_line import (
     StrategyDecision,
     StrategyLine,
@@ -11,6 +12,17 @@ from core.execution.strategy_line import (
 )
 from core.execution.trend_volume_guard import _counter_trend_action
 from tests.execution.conftest import make_proposal
+
+# ── Test helpers ────────────────────────────────────────────────────────────
+
+
+def _ctx(**overrides: object) -> StrategyEvaluationContext:
+    """Build a minimal StrategyEvaluationContext for testing."""
+    kwargs: dict[str, object] = dict(
+        feature_vector=None, micro_feature_vector=None, mid_price=2000.0
+    )
+    kwargs.update(overrides)
+    return StrategyEvaluationContext(**kwargs)  # type: ignore[arg-type]
 
 
 # ── Concrete test double ──────────────────────────────────────────────────
@@ -121,12 +133,7 @@ class TestStrategyDecision:
 class TestEvaluateGates:
     def test_regime_gate_off_blocks_trade(self):
         line = _make_strategy()
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-            regime_gate_mode="off",
-        )
+        result = line.evaluate(context=_ctx(regime_gate_mode="off"))
         assert result.should_trade is False
         assert result.reason == "regime_gate_off"
         assert result.regime_mode == "off"
@@ -135,11 +142,7 @@ class TestEvaluateGates:
         budget = MagicMock()
         budget.check_pause.return_value = True
         line = _make_strategy(budget=budget)
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is False
         assert result.reason == "budget_paused"
 
@@ -151,11 +154,7 @@ class TestEvaluateGates:
             budget=budget,
             proposals=[make_proposal()],
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         # Not blocked by budget; proposal has direction="long" with confidence 0.80
         assert result.reason != "budget_paused"
 
@@ -169,21 +168,13 @@ class TestEvaluateInference:
             raise RuntimeError("brain connection lost")
 
         line = _make_strategy(infer_fn=_fail)
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is False
         assert result.reason == "inference_error"
 
     def test_no_proposals_returns_no_trade(self):
         line = _make_strategy(proposals=[])
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is False
         assert result.reason == "no_proposals"
 
@@ -193,11 +184,7 @@ class TestEvaluateInference:
                 make_proposal(vote_weight=0.0, confidence=0.0),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is False
         assert "p_win_below" in result.reason or result.reason == "neutral_consensus"
 
@@ -212,11 +199,7 @@ class TestEvaluateInference:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         # equal up/down + neutral → "neutral" consensus (no directional edge)
         assert result.should_trade is False
         assert "p_win_below" in result.reason or result.reason == "neutral_consensus"
@@ -245,11 +228,7 @@ class TestEvaluateSuccess:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is True
         assert result.direction == "long"
         assert result.confidence > 0.40
@@ -271,11 +250,7 @@ class TestEvaluateSuccess:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is True
         assert result.direction == "short"
         assert result.sl > 2000.0  # short SL above entry
@@ -301,13 +276,7 @@ class TestCounterTrendGate:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-            trend_direction="short",
-            trend_strength=0.7,
-        )
+        result = line.evaluate(context=_ctx(trend_direction="short", trend_strength=0.7))
         # Counter-trend handled upstream — evaluate() still processes trade
         assert result.should_trade is True
 
@@ -323,13 +292,7 @@ class TestCounterTrendGate:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-            trend_direction="long",
-            trend_strength=0.7,
-        )
+        result = line.evaluate(context=_ctx(trend_direction="long", trend_strength=0.7))
         assert result.should_trade is True
 
     def test_counter_trend_not_applied_when_trend_neutral(self):
@@ -344,13 +307,7 @@ class TestCounterTrendGate:
                 ),
             ]
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-            trend_direction="neutral",
-            trend_strength=0.0,
-        )
+        result = line.evaluate(context=_ctx(trend_direction="neutral", trend_strength=0.0))
         assert result.should_trade is True
 
     def test_counter_trend_penalise_lowers_confidence(self):
@@ -371,13 +328,7 @@ class TestCounterTrendGate:
                 ),
             ],
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-            trend_direction="long",
-            trend_strength=0.30,
-        )
+        result = line.evaluate(context=_ctx(trend_direction="long", trend_strength=0.30))
         # Counter-trend is handled upstream — evaluate() should still process the trade
         assert result.should_trade is True
 
@@ -667,10 +618,6 @@ class TestMinRRGuard:
                 ),
             ],
         )
-        result = line.evaluate(
-            feature_vector=None,
-            micro_feature_vector=None,
-            mid_price=2000.0,
-        )
+        result = line.evaluate(context=_ctx())
         assert result.should_trade is False
         assert result.reason == "rr_below_minimum"

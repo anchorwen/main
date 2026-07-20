@@ -21,11 +21,13 @@ from typing import Any
 
 import numpy as np
 
+from core.execution.strategy_context import StrategyEvaluationContext
 from core.execution.strategy_decision import StrategyDecision
+from core.execution.strategy_protocol import StrategyEvaluateProtocol
 from core.strategies.structural_swing_v1 import StructuralSwingV1
 
 
-class RuleEngineStrategyWrapper:
+class RuleEngineStrategyWrapper(StrategyEvaluateProtocol):
     """Adapts a pure-rule strategy to the StrategyLine.evaluate() interface.
 
     Unlike ML strategies (Barrier/Micro/StatArb/Swing), rule-based strategies
@@ -73,36 +75,7 @@ class RuleEngineStrategyWrapper:
 
     def evaluate(
         self,
-        feature_vector: Any = None,
-        micro_feature_vector: Any = None,
-        mid_price: float | None = None,
-        bid: float | None = None,
-        ask: float | None = None,
-        current_atr: float | None = None,
-        strategy_atr: float
-        | None = None,  # FIX-20260706-027: accepted for interface uniformity; M5-only rule engines ignore it
-        regime_info: dict[str, Any] | None = None,
-        regime_gate_mode: str = "full",
-        trend_direction: str = "neutral",
-        trend_strength: float = 0.0,
-        h4_trend_strength: float = 0.0,
-        hurst: float | None = None,
-        kalman_velocity_bps: float | None = None,
-        macro_regime: str = "mixed",
-        risk_budget_usd: float = 0.0,
-        tracker: Any = None,
-        pnl_ledger: Any = None,
-        pnl_store: Any = None,
-        micro_sequences: dict[str, Any] | None = None,
-        daily_feature_vector: Any = None,
-        meta_filter: Any = None,
-        meta_filter_gate: Any = None,
-        conformal_ou_gate: Any = None,
-        microstructure_gate: Any = None,  # FIX-20260720-002: accepted for interface uniformity; rule engines use no ML gates
-        micro_feature_dict: dict[str, float] | None = None,
-        btc_augment: Any = None,
-        governance_state: dict[str, Any]
-        | None = None,  # DQAF-20260622-064c: accepted for interface uniformity; rule engines use no brains
+        context: StrategyEvaluationContext,
     ) -> StrategyDecision:
         """Evaluate one cycle. Returns StrategyDecision with should_trade flag.
 
@@ -110,7 +83,44 @@ class RuleEngineStrategyWrapper:
           - No H1 EMA trend filter (cooldown_bars handles frequency)
           - Bid/Ask-aware barriers from current price + ATR
           - Hard SL=3.0/TP=1.5, 12-bar time horizon
+
+        Args:
+            context: StrategyEvaluationContext — all input state for this cycle.
+                     Frozen (immutable).  Rule engines ignore ML-specific fields
+                     (feature_vector, brains, gates) and use only price/ATR/regime.
         """
+        # ── L3 Interface Consolidation: local unpacking ──────────────────────
+        # Extract context fields into local variables for backward-compatible
+        # internal references.  Context is frozen — local shadowing is safe.
+        feature_vector = context.feature_vector  # unused — rule engines have no ML
+        micro_feature_vector = context.micro_feature_vector
+        mid_price = context.mid_price
+        bid = context.bid
+        ask = context.ask
+        current_atr = context.current_atr
+        strategy_atr = context.strategy_atr
+        regime_info = context.regime_info
+        regime_gate_mode = context.regime_gate_mode
+        trend_direction = context.trend_direction
+        trend_strength = context.trend_strength
+        h4_trend_strength = context.h4_trend_strength
+        hurst = context.hurst
+        kalman_velocity_bps = context.kalman_velocity_bps
+        macro_regime = context.macro_regime
+        risk_budget_usd = context.risk_budget_usd
+        tracker = context.tracker
+        pnl_ledger = context.pnl_ledger
+        pnl_store = context.pnl_store
+        micro_sequences = context.micro_sequences
+        daily_feature_vector = context.daily_feature_vector
+        meta_filter = context.meta_filter
+        meta_filter_gate = context.meta_filter_gate
+        conformal_ou_gate = context.conformal_ou_gate
+        microstructure_gate = context.microstructure_gate
+        micro_feature_dict = context.micro_feature_dict
+        btc_augment = context.btc_augment
+        governance_state = context.governance_state
+
         # ── Cooldown ──
         if self._bars_since_last_signal < self._cooldown_bars:
             self._bars_since_last_signal += 1

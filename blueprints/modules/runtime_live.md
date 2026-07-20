@@ -83,6 +83,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260720-003 | 2026-07-20 | cursor-agent | — | **L3: Interface Contract Consolidation**. strategy_evaluator.py call site updated to construct StrategyEvaluationContext and pass single `context=` parameter. Part of the L3 fix eliminating signature-drift TypeError across all strategy implementations. | L3 — no canonical interface contract |
 ### FIX-20260719-001 — Vol_ZScore hard gate + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19)
 
 **Root Cause**: L3 — Three defense gaps: (1) No dead-market circuit breaker — M5_Vol_ZScore < -3σ produces random model predictions; (2) OOD diagnostics lacked volatility context for root-cause correlation; (3) 10006 ghost positions retried 103+ times instead of being atomically cleaned up.

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-20T07:35:59Z
+> **自动生成**: 2026-07-20T08:48:36Z
 
 ## Package-Level Dependencies
 
@@ -237,13 +237,15 @@
 - `reentry_guard.py` → `core.execution.exit_reason`
 - `regime_direction_gate.py` → (无内部依赖)
 - `regime_gate.py` → `core.execution.trend_detector`
-- `rule_engine_strategy.py` → `core.execution.strategy_decision`, `core.strategies.structural_swing_v1`
+- `rule_engine_strategy.py` → `core.execution.strategy_context`, `core.execution.strategy_decision`, `core.execution.strategy_protocol`, `core.strategies.structural_swing_v1`
 - `schema_versions.py` → (无内部依赖)
 - `session_detector.py` → (无内部依赖)
 - `statarb_strategy.py` → `core.execution.strategy_line`
 - `strategy_budget.py` → `core.contracts.cap_result`
+- `strategy_context.py` → (无内部依赖)
 - `strategy_decision.py` → (无内部依赖)
-- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.config.asset_registry`, `core.execution.brain_gates`, `core.execution.conformal_ou_gate`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_filter_routing`, `core.execution.meta_pipeline`, `core.execution.microstructure_gate`, `core.execution.ofi_gate`, `core.execution.pre_trade_guards`, `core.execution.pwin_chain`, `core.execution.strategy_decision`, `core.execution.trend_isolation_gates`, `core.execution.trend_volume_guard`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.shadow_recorder`
+- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.config.asset_registry`, `core.execution.brain_gates`, `core.execution.conformal_ou_gate`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_filter_routing`, `core.execution.meta_pipeline`, `core.execution.ofi_gate`, `core.execution.pre_trade_guards`, `core.execution.pwin_chain`, `core.execution.strategy_context`, `core.execution.strategy_decision`, `core.execution.strategy_protocol`, `core.execution.trend_isolation_gates`, `core.execution.trend_volume_guard`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.shadow_recorder`
+- `strategy_protocol.py` → `core.execution.strategy_context`, `core.execution.strategy_decision`
 - `strategy_type.py` → (无内部依赖)
 - `swing_strategy.py` → `core.execution.strategy_line`, `core.features.feature_assembler`, `core.runtime.h1_features`
 - `trail_stop_engine.py` → `core.execution.position_manager`
@@ -484,7 +486,7 @@
 - `signal_settlement.py` → `core.contracts.events`, `core.data.event_writer`, `core.runtime.reconciliation`
 - `strategy_builder.py` → `core.config.asset_registry`, `core.execution.barrier_strategy`, `core.execution.meta_pipeline`, `core.execution.micro_strategy`, `core.execution.rule_engine_strategy`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.parliament.contract_groups`, `core.runtime.time_utils`, `core.strategies.structural_swing_v1`
 - `strategy_config_validator.py` → (无内部依赖)
-- `strategy_evaluator.py` → `core.execution.correlation_sizer`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.ood_gateway`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_direction_gate`, `core.execution.regime_gate`, `core.observability.degradation`, `core.runtime.gate_audit_recorder`, `core.runtime.time_utils`
+- `strategy_evaluator.py` → `core.execution.correlation_sizer`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.ood_gateway`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_direction_gate`, `core.execution.regime_gate`, `core.execution.strategy_context`, `core.observability.degradation`, `core.runtime.gate_audit_recorder`, `core.runtime.time_utils`
 - `summary_service.py` → `core.runtime.evidence_reader`, `core.runtime.schema_versions`
 - `supervised_scheduler.py` → (无内部依赖)
 - `time_utils.py` → (无内部依赖)

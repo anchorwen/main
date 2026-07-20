@@ -19,6 +19,7 @@ from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController, RiskVerdict
 from core.execution.pre_trade_guards import check_feature_vector, repair_feature_vector
 from core.execution.regime_gate import RegimeGate
+from core.execution.strategy_context import StrategyEvaluationContext
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 # ── R1 Gate silence protection state (FIX-20260613-083) ──
@@ -580,13 +581,18 @@ def evaluate_strategy_lines(
         if tf_atr_map and _strategy_tf in tf_atr_map:
             _strategy_atr = tf_atr_map[_strategy_tf]
 
-        decision = strategy.evaluate(
+        # ── L3 Interface Consolidation: StrategyEvaluationContext ──────────
+        # Construct the frozen context once per strategy evaluation cycle.
+        # Single-parameter contract — adding a field here never changes any
+        # evaluate() signature downstream.
+        _eval_ctx = StrategyEvaluationContext(
             feature_vector=_fv,
             micro_feature_vector=micro_feature_vector,
             mid_price=_effective_mid,
             bid=bid,
             ask=ask,
             current_atr=_strategy_atr if _strategy_atr is not None else current_atr,
+            strategy_atr=_strategy_atr,
             regime_info=regime_info,
             regime_gate_mode=gate_mode,
             trend_direction=trend_direction,
@@ -609,6 +615,7 @@ def evaluate_strategy_lines(
             btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
             governance_state=governance_state,  # DQAF-20260622-059: LIVE-brain filter
         )
+        decision = strategy.evaluate(context=_eval_ctx)
 
         # ── Cut 1a: Regime Direction Gate (FIX-20260613-079 + FIX-20260613-083) ──
         # Counter-trend trades are penalised when trend is confirmed.

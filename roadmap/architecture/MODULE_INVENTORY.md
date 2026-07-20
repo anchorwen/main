@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-20T07:35:59Z
-> **扫描模块数**: 779
+> **自动生成**: 2026-07-20T08:48:36Z
+> **扫描模块数**: 781
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -269,13 +269,15 @@
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 589 | — | |
 | `regime_direction_gate.py` | ✅ active | RegimeDirectionGate | 4 | 220 | — | |
 | `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 841 | — | |
-| `rule_engine_strategy.py` | ✅ active | RuleEngineStrategyWrapper | 5 | 252 | — | |
+| `rule_engine_strategy.py` | ✅ active | RuleEngineStrategyWrapper | 5 | 262 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `session_detector.py` | ✅ active | SessionDetector | 3 | 182 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
+| `strategy_context.py` | ✅ active | StrategyEvaluationContext | 0 | 85 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2061 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2065 | — | |
+| `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 431 | — | |
@@ -552,7 +554,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 1203 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 4 | 1243 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 4 | 1250 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -759,7 +761,7 @@
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
 | `calibrate_microstructure_gates.py` | ✅ active | — | 3 | 220 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 726 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 728 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_live_status.py` | ✅ active | — | 3 | 355 | — | |
