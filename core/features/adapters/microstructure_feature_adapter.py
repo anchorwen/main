@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -252,10 +253,12 @@ class MicrostructureFeatureAdapter:
     def normalize(self, raw_vector: np.ndarray) -> np.ndarray:
         """Apply StandardScaler to a 1-D vector, or return raw."""
         if self._scaler is not None:
-            return np.asarray(
-                self._scaler.transform(raw_vector.reshape(1, -1)).ravel(),
-                dtype=np.float32,
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="X does not have valid feature names")
+                return np.asarray(
+                    self._scaler.transform(raw_vector.reshape(1, -1)).ravel(),
+                    dtype=np.float32,
+                )
         if not self._scaler_warned:
             _logger.warning(
                 "MicrostructureFeatureAdapter: no scaler loaded — returning raw features"
@@ -266,7 +269,9 @@ class MicrostructureFeatureAdapter:
     def _normalize_2d(self, arr: np.ndarray) -> np.ndarray:
         """Apply StandardScaler per-row, or return raw if no scaler."""
         if self._scaler is not None:
-            return np.asarray(self._scaler.transform(arr), dtype=np.float32)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="X does not have valid feature names")
+                return np.asarray(self._scaler.transform(arr), dtype=np.float32)
         if not self._scaler_warned:
             _logger.warning(
                 "MicrostructureFeatureAdapter: no scaler loaded — returning raw features"

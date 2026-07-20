@@ -65,6 +65,15 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 - `core/features/computers/v9_micro_computer.py`
 
 | FIX-20260717-018 | 2026-07-17 | cursor-agent | 70956949 | All-zero guard in produce_from_live_computer: skip FeatureRecord when all 40 V9 features are zero (MT5 data unavailable). Mirrors micro_persist.py L34-38 guard. Prevents pollution of offline training/OOD calibration datasets. | missing-validation |
+
+### FIX-20260720-004 — sklearn feature_names warning suppression in MicrostructureFeatureAdapter (2026-07-20)
+
+**Root Cause**: L2 — `MicrostructureFeatureAdapter.normalize()` and `_normalize_2d()` called `scaler.transform()` with bare numpy arrays while the scaler was loaded with `feature_names_in_` set. sklearn emitted `UserWarning: X does not have valid feature names` to stderr → `daily_ops` subprocess saw non-empty stderr → returned rc=2 false positive.
+
+**Fix**: Wrapped both `scaler.transform()` calls in `warnings.catch_warnings()` + `filterwarnings("ignore")` context. Pattern already established in `meta_filter_adapter.py:120-121`.
+
+**Files**:
+- `core/features/adapters/microstructure_feature_adapter.py`
 | FIX-20260707-006 | 2026-07-07 | cursor-agent | a4ba2039 | OFI monitor dual-count gates — raw settle (Gate 1 Wasserstein) vs distinct H1 window (Gate 2 retrain); prevents mis-gating retrain on ~42 H1 windows | boundary-error |
 | FIX-20260707-005 | 2026-07-07 | cursor-agent | — | **Phase 2 Flow Features — OFI history time-series recorder** (DQAF-20260707-005). `ofi_snapshot.json` overwrite-only → 46-dim training needs aligned OFI time series. `_append_ofi_history()` in mt5_bridge_worker.py appends each settled OFI bar to `ofi_history.jsonl` with bridge-injected UTC timestamp (OFICollector stays pure). New `scripts/inspect_ofi_history.py` accumulation monitor (per-feature coverage, divergence rate, real_volume availability, readiness verdict). Recorder unit tests added. Full 46-dim NPZ builder deferred until ≥2,000 bars (OFI is forward-only, no historical backfill). | RC-12 — no persisted OFI time series for training alignment |
 | FIX-20260707-004 | 2026-07-07 | cursor-agent | — | **Phase 1 Flow Features — OFI cumulative delta + divergence + real volume ratio** (DQAF-20260707-003). OFICollector extended with 3 new outputs: OFI_Cumulative_Delta, OFI_Delta_Divergence, OFI_Volume_Real_Ratio. Tick flag bug fixed in microstructure_computer.py — BUY/SELL deal flags (32/64) as primary, BID/ASK (2/4) fallback, volume_real-based OFI_Real. New schema btc_macro_flow_46 (41 base + 5 OFI flow) registered in SCHEMA_DIMENSIONS, SCHEMA_CONTRACTS, feature_assembler with graceful zero-fill degradation. ofi_collector.py added to MODULE_SOURCE_MAP. | RC-12 — feature space lacks order flow; RC-06 — wrong MT5 tick flag values |
