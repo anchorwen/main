@@ -98,6 +98,7 @@ class RuleEngineStrategyWrapper:
         meta_filter: Any = None,
         meta_filter_gate: Any = None,
         conformal_ou_gate: Any = None,
+        microstructure_gate: Any = None,  # FIX-20260720-002: accepted for interface uniformity; rule engines use no ML gates
         micro_feature_dict: dict[str, float] | None = None,
         btc_augment: Any = None,
         governance_state: dict[str, Any]

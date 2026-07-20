@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-20T06:40:10Z
+> **自动生成**: 2026-07-20T07:35:59Z
 > **扫描模块数**: 779
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -269,7 +269,7 @@
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 589 | — | |
 | `regime_direction_gate.py` | ✅ active | RegimeDirectionGate | 4 | 220 | — | |
 | `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 841 | — | |
-| `rule_engine_strategy.py` | ✅ active | RuleEngineStrategyWrapper | 5 | 251 | — | |
+| `rule_engine_strategy.py` | ✅ active | RuleEngineStrategyWrapper | 5 | 252 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `session_detector.py` | ✅ active | SessionDetector | 3 | 182 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |

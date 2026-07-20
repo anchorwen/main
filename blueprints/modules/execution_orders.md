@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260720-002 | 2026-07-20 | cursor-agent | 472362d8 | L1: RuleEngineStrategyWrapper.evaluate() missing microstructure_gate parameter caused XAU engine crash loop. Added microstructure_gate: Any = None for interface uniformity. | contract-violation |
 ### FIX-20260719-001 — Vol_ZScore hard gate + TF hierarchy + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19)
 
 **Root Cause**: L3 — Four defense gaps identified by Investment Committee directive: (1) No dead-market circuit breaker — when M5 volatility collapses below -3σ, model predictions become random noise regardless of OOD Mahalanobis distance; (2) OOD diagnostic events didn't carry volatility context — impossible to correlate OOD blocks with market breathing; (3) Cross-strategy coordinator treated all timeframes equally — H4 macro signals blocked by M5/M15 noise positions; (4) 10006 "no such position" trail rejections were treated as transient — ghost positions survived 103+ retry cycles.
