@@ -453,7 +453,7 @@ _TRANSIENT_RETCODES: set[int] = {
 # (open, modify_sltp, close).  Consecutive order_send() calls within ~200ms
 # trigger TRADE_RETCODE_TOO_MANY_REQUESTS (10022).  This guard enforces a
 # minimum inter-request interval to avoid broker-side rejection.
-_TRADE_REQUEST_MIN_INTERVAL_S = 1.2  # seconds between consecutive trade requests
+_TRADE_REQUEST_MIN_INTERVAL_S = 2.0  # DQAF-20260721-001: 1.2→2.0 — Exness rate-limit headroom
 _last_trade_request_at: float = 0.0
 
 

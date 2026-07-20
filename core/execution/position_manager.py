@@ -83,6 +83,10 @@ class ActivePosition:
     # DQAF-064 §2: Track consecutive MT5 rejections of trail modify_sltp requests
     trail_rejection_streak: int = 0
     trail_last_rejection_code: int = 0
+    # DQAF-20260721-001: Skip trail dispatch for N cycles after broker rate-limit
+    # rejection (retcode 10022/10024). Prevents hammering the broker and accumulating
+    # 10024 errors across multiple positions on the same account.
+    trail_rate_limit_cooldown: int = 0
     r_milestones_hit: list[str] = field(default_factory=list)
     cycles_held: int = 0
     # DQAF-064 §3: Fractional accumulator for M5-bar normalized cycle counting.

@@ -83,6 +83,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260721-001 | 2026-07-21 | cursor-agent | — | **L2: Broker rate-limit cooldown for 10024 "Too many trade requests"** (DQAF-20260721-001). Per-position `trail_rate_limit_cooldown` (5 cycles) triggered on first 10022/10024 rejection. Cooldown guard before `compute_and_dispatch_trail()` skips trail dispatch while active; bridge `_TRADE_REQUEST_MIN_INTERVAL_S` 1.2→2.0s. ReB: `MT5_EXNESS_RATE_LIMIT_COOLDOWN`. | RC-03 |
 | FIX-20260720-003 | 2026-07-20 | cursor-agent | — | **L3: Interface Contract Consolidation**. strategy_evaluator.py call site updated to construct StrategyEvaluationContext and pass single `context=` parameter. Part of the L3 fix eliminating signature-drift TypeError across all strategy implementations. | L3 — no canonical interface contract |
 ### FIX-20260719-001 — Vol_ZScore hard gate + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19)
 

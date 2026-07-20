@@ -37,6 +37,7 @@ Three-phase fix for the MIA (Missing In Action) root cause — crash window betw
 
 | FIX ID | Date | Description | Root Cause |
 |--------|------|-------------|------------|
+| FIX-20260721-001 | 2026-07-21 | **L2: Rate-limit interval 1.2s→2.0s (Exness headroom) + management-phase cooldown** — 10024 ("Too many trade requests") still occurring despite FIX-016's 1.2s rate limiter. Multi-position per-cycle bursts (3 XAU swing positions each dispatching modify_sltp) exhaust Exness per-account rate-limit budget. Bridge interval increased to 2.0s; management_phase.py now sets per-position cooldown (5 cycles) on first 10022/10024 rejection, preventing hammering. DQAF-20260721-001. ReB: `MT5_EXNESS_RATE_LIMIT_COOLDOWN`. | RC-03 |
 | FIX-20260715-016 | 2026-07-15 | **L3: Inter-request rate limiter for "Too many trade requests" (10022)** — Added `_enforce_trade_rate_limit()` (1.2s min interval) before all `mt5.order_send()` calls for trade-modifying ops. Added 10022 to `_TRANSIENT_RETCODES`. Fixes dual-position SL/TP modify ping-pong failure causing stale SL (excess risk up to ~$470). ReB: `MT5_TOO_MANY_REQUESTS_NO_RATE_LIMIT`. | RC-03 |
 | FIX-20260621-041 | 2026-06-21 | DQAF-034 MIA Root Cause Fix — Bridge Idempotent WAL Gateway (3-Phase) | RC-04 |
 | FIX-20260621-040 | 2026-06-21 | DQAF-033 P0 Addendum — close_accepted detail.reason fix | RC-07 |

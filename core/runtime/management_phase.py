@@ -34,6 +34,13 @@ from core.runtime.ou_hurst import compute_tf_ou_hurst as _compute_tf_ou_hurst
 from core.runtime.time_utils import _utc_iso
 from core.runtime.trail_dispatch import compute_and_dispatch_trail
 
+# ── DQAF-20260721-001: Broker rate-limit retcodes — trigger cooldown, not retry ──
+# 10022 = TRADE_RETCODE_TOO_MANY_REQUESTS (MT5 internal rate limit)
+# 10024 = broker-side "Too many trade requests" (Exness per-account limit)
+# Retrying these immediately worsens the problem for ALL positions on the account.
+_RATE_LIMIT_RETCODES: set[int] = {10022, 10024}
+_TRAIL_RATE_LIMIT_COOLDOWN_CYCLES = 5  # skip ~5 management cycles after rate-limit rejection
+
 # ── V6 Shared Trading Infrastructure (FIX-20260629-195) ──
 from core.trading.position_lifecycle import ExitPriorityQueue
 from core.trading.ratchet_risk import RatchetConfig, RatchetRisk
@@ -1448,19 +1455,43 @@ def execute_management_phase(
 
     # ── 4-5.2: Trail SL, breakeven, trail TP ──
     # Strangler Fig #11: extracted to core/runtime/trail_dispatch.py
-    _trail_result = compute_and_dispatch_trail(
-        config=config,
-        pos=pos,
-        pm=pm,
-        state=state,
-        mid=mid,
-        bid=bid,
-        ask=ask,
-        current_atr=current_atr,
-        strategy_name=_sname,
-        utc_iso_fn=_utc_iso,
-        dispatch_modify_trail_fn=_modify_trail,
-    )
+    #
+    # DQAF-20260721-001: Skip trail dispatch when broker rate-limit cooldown
+    # is active.  Multiple positions on the same account can each trigger a
+    # modify_sltp in one cycle; if the broker rate-limits one, further attempts
+    # compound the problem.  A cooldown per position lets the broker rate-limit
+    # window reset without losing trail protection entirely.
+    _cooldown = getattr(pos, "trail_rate_limit_cooldown", 0)
+    if _cooldown > 0:
+        pos.trail_rate_limit_cooldown = _cooldown - 1
+        _trail_result: dict[str, Any] = {
+            "final_sl": getattr(pos, "current_sl", 0.0),
+            "final_tp": getattr(pos, "current_tp", 0.0),
+            "reasons": [],
+            "be_triggered": False,
+            "be_dispatched": False,
+            "sl_changed": False,
+            "tp_changed": False,
+        }
+        logger.debug(
+            "Trail dispatch skipped: rate-limit cooldown=%d ticket=%d",
+            _cooldown - 1,
+            pos.ticket,
+        )
+    else:
+        _trail_result = compute_and_dispatch_trail(
+            config=config,
+            pos=pos,
+            pm=pm,
+            state=state,
+            mid=mid,
+            bid=bid,
+            ask=ask,
+            current_atr=current_atr,
+            strategy_name=_sname,
+            utc_iso_fn=_utc_iso,
+            dispatch_modify_trail_fn=_modify_trail,
+        )
     _final_sl = _trail_result["final_sl"]
     _final_tp = _trail_result["final_tp"]
     _reasons = _trail_result["reasons"]
@@ -1475,12 +1506,27 @@ def execute_management_phase(
         if _prev_rejection:
             pos.trail_rejection_streak += 1
             pos.trail_last_rejection_code = _prev_rejection.get("retcode", 0)
-            logger.warning(
-                "Trail rejection streak=%d ticket=%d retcode=%d",
-                pos.trail_rejection_streak,
-                pos.ticket,
-                pos.trail_last_rejection_code,
-            )
+            # ── DQAF-20260721-001: Rate-limit retcodes → immediate cooldown ──
+            # 10022/10024 mean the broker is rate-limiting the account.  Retrying
+            # next cycle compounds the problem for ALL positions on that account.
+            # An immediate per-position cooldown gives the broker window time to
+            # reset without losing trail protection entirely.
+            if pos.trail_last_rejection_code in _RATE_LIMIT_RETCODES:
+                pos.trail_rate_limit_cooldown = _TRAIL_RATE_LIMIT_COOLDOWN_CYCLES
+                logger.warning(
+                    "Trail rate-limited: ticket=%d retcode=%d cooldown=%d cycles — "
+                    "skipping trail dispatch to let broker rate-limit window reset",
+                    pos.ticket,
+                    pos.trail_last_rejection_code,
+                    _TRAIL_RATE_LIMIT_COOLDOWN_CYCLES,
+                )
+            else:
+                logger.warning(
+                    "Trail rejection streak=%d ticket=%d retcode=%d",
+                    pos.trail_rejection_streak,
+                    pos.ticket,
+                    pos.trail_last_rejection_code,
+                )
         else:
             # Dispatch succeeded — reset streak
             if pos.trail_rejection_streak > 0:
@@ -1494,25 +1540,40 @@ def execute_management_phase(
 
         # ── Alert on 3+ consecutive rejections ──
         if pos.trail_rejection_streak >= 3:
-            # ── FIX-20260719-001 (P0-4): 10006 atomic cleanup ────────────
+            # ── 10006: FIX-20260719-001 (P0-4) atomic cleanup ──────────────
             # retcode 10006 = "No such position" — the ticket no longer
             # exists in MT5.  This is NOT a transient rejection; the position
             # has been closed externally (SL hit, manual close, bridge ghost).
             # Continuing to retry modify_sltp is wasteful and pollutes the
             # journal with 103+ rejected entries.
             #
+            # ── 10022/10024: DQAF-20260721-001 belt-and-suspenders ─────────
+            # Rate-limit retcodes should be caught at streak=1 with immediate
+            # cooldown.  If they reach streak≥3 anyway (e.g. cooldown field
+            # not persisted across restarts), skip the alert — rate-limiting
+            # is not an actionable per-position emergency.
+            #
             # Action: immediately mark the position as stale, skip the alert
-            # (it's not actionable — the position is already gone), and let
-            # Guard 2 (MIA check) handle the cleanup with full journal/state/
-            # reentry-guard reconciliation.
-            if pos.trail_last_rejection_code == 10006:
+            # (it's not actionable — the position is already gone / rate-limited),
+            # and let Guard 2 (MIA check) handle the cleanup with full journal/
+            # state/reentry-guard reconciliation.
+            if (
+                pos.trail_last_rejection_code == 10006
+                or pos.trail_last_rejection_code in _RATE_LIMIT_RETCODES
+            ):
                 _emit(
-                    "ghost_position_10006_detected",
+                    "ghost_position_10006_detected"
+                    if pos.trail_last_rejection_code == 10006
+                    else "trail_rate_limit_streak_alert_suppressed",
                     ticket=pos.ticket,
                     streak=pos.trail_rejection_streak,
-                    last_retcode=10006,
+                    last_retcode=pos.trail_last_rejection_code,
                     strategy=_sname,
-                    reason="position_removed_externally_no_such_position",
+                    reason=(
+                        "position_removed_externally_no_such_position"
+                        if pos.trail_last_rejection_code == 10006
+                        else "broker_rate_limit_cooldown_active"
+                    ),
                 )
                 # Clear the rejection streak so downstream trail dispatch
                 # suppression (DQAF-064 §2) is released for the close order.
