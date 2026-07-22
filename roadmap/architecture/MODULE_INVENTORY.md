@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-20T17:33:56Z
-> **扫描模块数**: 781
+> **自动生成**: 2026-07-22T06:26:09Z
+> **扫描模块数**: 784
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -261,7 +261,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2312 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2322 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 4 | 573 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -644,6 +644,8 @@
 | `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 159 | — | |
 | `_analyze_btc_now.py` | ✅ active | — | 1 | 252 | — | |
 | `_analyze_btc_segmented.py` | ✅ active | — | 4 | 262 | — | |
+| `_analyze_exits_comprehensive.py` | ✅ active | — | 3 | 399 | — | |
+| `_analyze_exits_deep.py` | ✅ active | — | 3 | 328 | — | |
 | `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
 | `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
 | `_analyze_tick_dataset.py` | ✅ active | — | 8 | 515 | — | |
@@ -653,6 +655,7 @@
 | `_analyze_xau_h1_position.py` | ✅ active | — | 1 | 156 | — | |
 | `_analyze_xau_live_status.py` | ✅ active | — | 2 | 229 | — | |
 | `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
+| `_analyze_xau_recent_longs.py` | ✅ active | — | 3 | 256 | — | |
 | `_analyze_xau_today_20260710.py` | ✅ active | — | 3 | 302 | — | |
 | `_analyze_xau_today_losses.py` | ✅ active | — | 2 | 169 | — | |
 | `_audit_zombie_ghost_positions.py` | ✅ active | — | 3 | 460 | — | |

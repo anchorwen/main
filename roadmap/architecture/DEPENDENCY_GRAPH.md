@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-20T17:33:56Z
+> **自动生成**: 2026-07-22T06:26:09Z
 
 ## Package-Level Dependencies
 
@@ -558,6 +558,8 @@
 - `_analyze_btc_long_losses.py` → (无内部依赖)
 - `_analyze_btc_now.py` → (无内部依赖)
 - `_analyze_btc_segmented.py` → (无内部依赖)
+- `_analyze_exits_comprehensive.py` → (无内部依赖)
+- `_analyze_exits_deep.py` → (无内部依赖)
 - `_analyze_live_status.py` → (无内部依赖)
 - `_analyze_post_deployment.py` → (无内部依赖)
 - `_analyze_tick_dataset.py` → (无内部依赖)
@@ -567,6 +569,7 @@
 - `_analyze_xau_h1_position.py` → (无内部依赖)
 - `_analyze_xau_live_status.py` → (无内部依赖)
 - `_analyze_xau_now.py` → (无内部依赖)
+- `_analyze_xau_recent_longs.py` → (无内部依赖)
 - `_analyze_xau_today_20260710.py` → (无内部依赖)
 - `_analyze_xau_today_losses.py` → (无内部依赖)
 - `_audit_zombie_ghost_positions.py` → (无内部依赖)

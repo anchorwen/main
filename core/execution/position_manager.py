@@ -1856,6 +1856,16 @@ class ActivePositionManager:
         if pos is None:
             return False, ""
 
+        # ── P0: DQAF-20260722-001 — EV trajectory requires prior profitability ──
+        # Positions that have NEVER been profitable must rely on the hard
+        # stop-loss, not the EV envelope.  The ev_floor is monotonic increasing
+        # (gamma∈[0.5,2.0]), so a position that never reaches r>0 is
+        # MATHEMATICALLY GUARANTEED to exit at a loss — often worse than the
+        # hard SL would have produced (avg −$3.96 vs SL avg −$1.13).
+        # Evidence: 36 unique EV trajectory exits across BTC/XAU, 0% win rate.
+        if pos.highest_r <= 0.0:
+            return False, ""
+
         r_now = self._compute_r_multiple(mid, ticket=ticket)
         effective_horizon = (
             override_horizon
