@@ -1146,3 +1146,21 @@
 **Cross-References**: DQAF_DOCKET_REGISTRY.md DQAF-20260715-011, CCT_LEDGER.md CCT-20260715-011; Deferred: p_win floor exemption + RR breakeven exemption audit
 
 **Cross-References**: DQAF_DOCKET_REGISTRY.md DQAF-20260709-002, CCT_LEDGER.md CCT-20260709-002; Deferred: R-metric ATR consistency + bars_held restart continuity
+
+---
+
+## ReB-20260722-002: PnL-Based Label Poisoning (Telemetry Black Hole)
+
+- **Pattern**: Exit label is derived from PnL sign rather than the causal exit signal carried in the MT5 deal comment. The deal comment is populated by dispatch_managed_close(reason=...) but the adapter ignores it when reason ≠ "exit_watchdog:".
+- **Signature**: grep 'label.*\"(win|loss)\"' in close-detection code → any hit that doesn't first check deal_comment/deal_reason is a black hole.
+- **Impact**: 100% of managed closes without watchdog prefix are labeled "win"/"loss" → downstream p_win calibration receives no signal provenance → Bayes update becomes PnL-fit noise.
+- **Detection**: `grep -n 'label.*=.*"loss"\|label.*=.*"win"' core/runtime/` — zero remaining after FIX-20260722-002.
+- **Status**: **CLOSED** (FIX-20260722-002)
+
+## ReB-20260722-003: Cross-TF ATR Activation Mismatch (Trail Silence)
+
+- **Pattern**: Risk exit activation watermark uses a different ATR scale than the R-measurement scale. When bracket_atr >> entry_atr (H1/H4 strategies), trail_activation_atr threshold is effectively unreachable.
+- **Signature**: `_resolve_geometry_atr()` returns bracket_atr; activation check divides price_move by bracket_atr; ratchet divides price_move by entry_atr. The two scales diverge by ~10× for H4.
+- **Impact**: Higher-TF positions have no trailing stop protection. The Chandelier trail, breakeven, graduated lock, and ratchet floor are all gated behind an unreachable activation threshold.
+- **Detection**: Check position_snapshots.jsonl for positions with MFE≥2R but current_sl==initial_sl throughout → trail never fired.
+- **Status**: **CLOSED** (FIX-20260722-003)

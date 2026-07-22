@@ -1335,3 +1335,23 @@
 
 - **状态**: **CLOSED** — 3 代码修复 + M15 退役 + BLE001 fail-open guard committed+pushed
 - **状态**: **CLOSED** — 3 方法删除 + BLE001 noqa 标化 committed+pushed; 构造参数保留 vestigial (hot-path omega 约束, 下次 live_intent_loop.py 变更清理); 零僵尸测试
+
+---
+
+## CCT-20260722-002
+
+- **Docket**: DQAF-20260722-002
+- **Layer 1 (症状)**: 8/9 give-back positions (MFE≥1R, PnL≤0) labeled "loss" with zero exit signal provenance. p_win rolling_wr WR=41.2% vs brain_confidence WR=72.4%.
+- **Layer 2 (传导)**: `position_close_adapter.py` label chain — watchdog→SL→TP→PnL fallthrough. For managed closes (bleed_stop, hesitation, time-based), the MT5 deal comment carries the exit reason set by dispatch_managed_close(), but the adapter ignores it and labels by PnL sign. `pwin_chain.py` resolve_p_win() rolling_wr step → resolve_p_win_from_brains() returns median win_rate regardless of aggregate sample count.
+- **Layer 3 (根因)**: (P0) Adapter label assignment lacks comment-based signal preservation — PnL is not a causal signal. (P2) No sample-size degradation gate on rolling_wr source — Kelly chain receives noisy small-N estimates.
+- **Fix**: FIX-20260722-002
+- **Status**: **CLOSED**
+
+## CCT-20260722-003
+
+- **Docket**: DQAF-20260722-003
+- **Layer 1 (症状)**: Ticket 4207155654 (h4_swing SHORT): +6.03R in entry_atr → SL never trailed from 4110.62 → gave back all profit → closed -$19.70. SL modification NEVER occurred throughout position lifecycle.
+- **Layer 2 (传导)**: trail_dispatch.compute_and_dispatch_trail() → pm.compute_trail_stop() → TrailStopEngine.compute_trail_stop() → activation watermark check uses _resolve_geometry_atr() which returns bracket_atr (~57 for H4). At peak MFE, price move ≈30.85 cents → unrealized_r = 30.85/57 = 0.54 < trail_activation_atr=1.0 → return None (trail not activated). The ratchet floor (_ratchet_lock_r) correctly uses entry_atr and would have locked +2.0R, but it's gated behind the activation watermark.
+- **Layer 3 (根因)**: Cross-TF ATR mismatch — FIX-20260709-004 (per-TF bracket_atr) correctly moved geometry distances to bracket_atr but also changed activation measurement. The activation threshold trail_activation_atr=1.0 was calibrated for entry_atr scale; using bracket_atr makes it 10× harder to reach for H1/H4.
+- **Fix**: FIX-20260722-003
+- **Status**: **CLOSED**

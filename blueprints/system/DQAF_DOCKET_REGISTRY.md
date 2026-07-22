@@ -88,3 +88,29 @@
 - `REJECTED` — IC 驳回，需重新诊断（注明驳回原因）
 - `TIERBREAKER` — DA 与 AR 结论矛盾，IC 要求第三轮诊断
 - `CLOSED` — 修复完成并验证通过
+
+---
+
+## DQAF-20260722-002
+
+- **Date**: 2026-07-22
+- **Severity**: Sev 2
+- **Title**: Exit label reform + p_win small-N degradation (P0+P2 投委会令)
+- **Evidence**: Terminal Epoch analysis (7/15-7/22, _analyze_xau_institutional.py); 8/9 give-back positions labeled "loss" with zero provenance
+- **DA (Direct Analysis)**: P0: PnL-based labeling at position_close_adapter.py:443-446 discards exit signal from deal comment. P2: resolve_p_win() rolling_wr path uses any N without degradation; Terminal Epoch rolling_wr WR=41.2% vs brain_confidence WR=72.4%.
+- **AR (Adversarial Refutation)**: P0 not MIA close (0 MIA markers in 7/15+ window). P2 not governance stale (brain_confidence WR=72.4% well-calibrated).
+- **Root Cause**: L2 — P0: telemetry poisoning (PnL-based label discards causal signal). P2: small-sample noise injection (N<30 rolling_wr is random walk).
+- **Fix**: FIX-20260722-002 — P0: position_close_adapter.py, reconciliation.py → structured `managed:<signal>` / `broker:<reason>`. P2: pwin_chain.py → N<30→brain_confidence, 30≤N<50→blend.
+- **Status**: **CLOSED** — committed + pushed (95446421)
+
+## DQAF-20260722-003
+
+- **Date**: 2026-07-22
+- **Severity**: Sev 2
+- **Title**: Cross-TF trail activation mismatch (P1 投委会令)
+- **Evidence**: Ticket 4207155654 forensic trace (138 snapshots, full journal lifecycle); +6.03R entry_atr → 0.54R bracket_atr < trail_activation_atr=1.0
+- **DA**: trail_stop_engine.py:227-233 activation watermark uses _resolve_geometry_atr() → bracket_atr (H4 ~57) but ratchet uses entry_atr (M5 ~5.1). For H1/H4 strategies where bracket_atr >> entry_atr, trail_activation_atr=1.0 is effectively unreachable.
+- **AR**: Not cold_explore (kelly_mult=1.03). Not min_hold_cycles (bar 10 > 3). Not exit_min_step (difference 124.65 >> 0.5).
+- **Root Cause**: L2 — cross-TF geometry ATR mismatch: activation uses bracket_atr, ratchet uses entry_atr, snapshots use entry_atr. Three different R-measurement scales in one pipeline.
+- **Fix**: FIX-20260722-003 — trail_stop_engine.py: activation watermark + breakeven now use pos.entry_atr (consistent with ratchet and snapshots).
+- **Status**: **CLOSED** — committed + pushed (95446421)
