@@ -223,12 +223,23 @@ class TrailStopEngine:
         tp = self._resolve_policy(pos)
 
         # ── Activation watermark check ──
+        # DQAF-20260722-003: Use entry_atr for the activation threshold, NOT
+        # _geom_atr (bracket_atr).  The activation watermark must measure
+        # profit in the same R-units as the ratchet floor and position
+        # snapshots (entry_atr).  When bracket_atr >> entry_atr (H1/H4
+        # strategies), using bracket_atr makes trail_activation_atr=1.0
+        # effectively unreachable — the Chandelier trail and ratchet floor
+        # are never computed, even at extreme entry_atr R-multiples.
+        # Ticket 4207155654 (h4_swing SHORT): +6.03R entry_atr → only
+        # 0.54R in bracket_atr (<1.0) → trail blocked → SL never trailed
+        # from 4110.62 → gave back all $345 unrealized profit.
         _geom_atr = self._resolve_geometry_atr(pos)
-        if tp.trail_activation_atr > 0 and _geom_atr > 0:
+        _activation_atr = pos.entry_atr if pos.entry_atr > 0 else _geom_atr
+        if tp.trail_activation_atr > 0 and _activation_atr > 0:
             if pos.side == "long":
-                _unrealized_r = (pos.highest_high - pos.entry_price) / _geom_atr
+                _unrealized_r = (pos.highest_high - pos.entry_price) / _activation_atr
             else:
-                _unrealized_r = (pos.entry_price - pos.lowest_low) / _geom_atr
+                _unrealized_r = (pos.entry_price - pos.lowest_low) / _activation_atr
             if _unrealized_r < tp.trail_activation_atr:
                 return None  # not enough profit yet — keep initial SL
 
@@ -304,13 +315,13 @@ class TrailStopEngine:
         _geom_atr = self._resolve_geometry_atr(pos)
 
         # ── Activation watermark check ──
-        if tp.trail_activation_atr > 0 and _geom_atr > 0:
+        # DQAF-20260722-003: Use entry_atr, consistent with trail activation.
+        _activation_atr = pos.entry_atr if pos.entry_atr > 0 else _geom_atr
+        if tp.trail_activation_atr > 0 and _activation_atr > 0:
             if pos.side == "long":
-                _unrealized_r = (
-                    pos.highest_high - pos.entry_price
-                ) / _geom_atr  # PER_TF: bracket_atr units
+                _unrealized_r = (pos.highest_high - pos.entry_price) / _activation_atr
             else:
-                _unrealized_r = (pos.entry_price - pos.lowest_low) / _geom_atr
+                _unrealized_r = (pos.entry_price - pos.lowest_low) / _activation_atr
             if _unrealized_r < tp.trail_activation_atr:
                 return False  # not enough profit yet — keep breakeven suppressed
 

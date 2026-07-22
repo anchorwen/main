@@ -32,6 +32,37 @@ logger = logging.getLogger(__name__)
 # ── resolve_p_win_from_brains ──────────────────────────────────────────────
 
 
+def _compute_live_sample_total(
+    brains: list[Any],
+    pnl_store: Any | None,
+    live_brain_ids: set[str] | None = None,
+) -> int:
+    """Sum sample_count across qualifying LIVE brains from the PnL store.
+
+    Uses the same filter as resolve_p_win_from_brains():
+    brain_id must be in *live_brain_ids*, sample_count >= 10.
+    """
+    if pnl_store is None:
+        return 0
+    total = 0
+    for b in brains:
+        brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
+        if not brain_id:
+            continue
+        if live_brain_ids is not None and brain_id not in live_brain_ids:
+            continue
+        try:
+            m = pnl_store.get_metrics(str(brain_id), window=100)
+        except (KeyError, ValueError):
+            continue
+        if m is None:
+            continue
+        sc = getattr(m, "sample_count", 0)
+        if sc >= 10:
+            total += sc
+    return total
+
+
 def resolve_p_win_from_brains(
     brains: list[Any],
     pnl_store: Any | None,
@@ -495,7 +526,45 @@ def resolve_p_win(
             live_brain_ids=live_brain_ids,
             governance_state=governance_state,
         )
-        p_win_source = "rolling_wr"
+
+        # ── DQAF-20260722-002: Small-sample degradation ──
+        # When N < 30, the rolling WR is a random walk — the law of large
+        # numbers has not kicked in.  Fall back to brain_confidence which
+        # carries a long-run prior (confidence ∈ [0.35, 1.0] → p_win ∈
+        # [0.47, 0.60]).  When 30 ≤ N < 50, blend rolling_wr with
+        # brain_confidence to smooth the transition.
+        # Terminal Epoch analysis: brain_confidence WR=72.4% (well-calibrated)
+        # vs rolling_wr WR=41.2% (small-N noise, N≈20 per strategy).
+        _total_n = _compute_live_sample_total(brains, pnl_store, live_brain_ids)
+        if _total_n < 30:
+            logger.warning(
+                "[pwin_chain:SMALL_N_DEGRADE] total_n=%d < 30 — "
+                "rolling_wr=%.3f overridden.  Small-N posterior is a random walk; "
+                "degrading to brain_confidence source (long-run prior).",
+                _total_n,
+                p_win,
+            )
+            _conf = max(0.0, min(1.0, confidence))
+            p_win = 0.40 + _conf * 0.20
+            p_win_source = "brain_confidence_small_n"
+        elif _total_n < 50:
+            # 30 ≤ N < 50: weighted blend — rolling_wr × α + brain_confidence × (1-α)
+            _alpha = (_total_n - 30) / 20.0
+            _conf = max(0.0, min(1.0, confidence))
+            _conf_p_win = 0.40 + _conf * 0.20
+            p_win = p_win * _alpha + _conf_p_win * (1.0 - _alpha)
+            p_win_source = f"rolling_wr_blend_n{_total_n}"
+            logger.info(
+                "[pwin_chain:SMALL_N_BLEND] total_n=%d (30≤N<50) — "
+                "α=%.2f rolling_wr=%.3f conf_p_win=%.3f → blended=%.3f",
+                _total_n,
+                _alpha,
+                p_win,
+                _conf_p_win,
+                p_win,
+            )
+        else:
+            p_win_source = "rolling_wr"
 
     # ── Step 4: Brain confidence → p_win monotonic fallback ──
     # FIX-20260531-015: Tier-3 fallback when MetaFilter unavailable AND
@@ -557,11 +626,14 @@ def resolve_p_win(
     # ── Degraded detection ──
     # DQAF-20260612-004: Track whether p_win is backed by real statistical
     # evidence or is a fallback estimate.
-    # REAL: meta_filter, cold_explore_neutral (intentional), rolling_wr > 0.40
-    # DEGRADED: neutral_default, brain_confidence, rolling_wr ≤ 0.40
+    # REAL: meta_filter, cold_explore_neutral (intentional), rolling_wr > 0.40,
+    #       rolling_wr_blend_n* (partially informed, 30≤N<50)
+    # DEGRADED: neutral_default, brain_confidence, brain_confidence_small_n,
+    #           rolling_wr ≤ 0.40
     p_win_degraded = p_win_source in (
         "neutral_default",
         "brain_confidence",
+        "brain_confidence_small_n",
     ) or (p_win_source in ("rolling_wr", "rolling_wr_no_metafilter") and p_win <= 0.40)
 
     return PWinResolution(

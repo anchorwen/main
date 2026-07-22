@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-22T06:26:09Z
+> **自动生成**: 2026-07-22T11:26:13Z
 
 ## Package-Level Dependencies
 
@@ -567,8 +567,10 @@
 - `_analyze_two_positions_sltp.py` → (无内部依赖)
 - `_analyze_xau_comprehensive.py` → (无内部依赖)
 - `_analyze_xau_h1_position.py` → (无内部依赖)
+- `_analyze_xau_institutional.py` → (无内部依赖)
 - `_analyze_xau_live_status.py` → (无内部依赖)
 - `_analyze_xau_now.py` → (无内部依赖)
+- `_analyze_xau_optimization.py` → (无内部依赖)
 - `_analyze_xau_recent_longs.py` → (无内部依赖)
 - `_analyze_xau_today_20260710.py` → (无内部依赖)
 - `_analyze_xau_today_losses.py` → (无内部依赖)

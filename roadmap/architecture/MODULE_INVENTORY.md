@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-22T06:26:09Z
-> **扫描模块数**: 784
+> **自动生成**: 2026-07-22T11:26:13Z
+> **扫描模块数**: 786
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -263,7 +263,7 @@
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
 | `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2322 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
-| `pwin_chain.py` | ✅ active | PWinResolution | 4 | 573 | — | |
+| `pwin_chain.py` | ✅ active | PWinResolution | 5 | 645 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 589 | — | |
@@ -280,7 +280,7 @@
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 431 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 442 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 234 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 345 | — | |
@@ -537,11 +537,11 @@
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 627 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 634 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 327 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
-| `reconciliation.py` | ✅ active | — | 2 | 435 | — | |
+| `reconciliation.py` | ✅ active | — | 2 | 432 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
 | `restart_state.py` | ✅ active | — | 2 | 490 | — | |
@@ -653,8 +653,10 @@
 | `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
 | `_analyze_xau_comprehensive.py` | ✅ active | — | 8 | 855 | — | |
 | `_analyze_xau_h1_position.py` | ✅ active | — | 1 | 156 | — | |
+| `_analyze_xau_institutional.py` | ✅ active | — | 5 | 624 | — | |
 | `_analyze_xau_live_status.py` | ✅ active | — | 2 | 229 | — | |
 | `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
+| `_analyze_xau_optimization.py` | ✅ active | — | 3 | 606 | — | |
 | `_analyze_xau_recent_longs.py` | ✅ active | — | 3 | 256 | — | |
 | `_analyze_xau_today_20260710.py` | ✅ active | — | 3 | 302 | — | |
 | `_analyze_xau_today_losses.py` | ✅ active | — | 2 | 169 | — | |

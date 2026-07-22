@@ -178,6 +178,18 @@ def reconcile_closed_positions(
         else:
             _pnl_status = "pending_mt5_confirmation"
 
+        # ── MT5 deal reason taxonomy (moved up: label logic references it) ──
+        _DEAL_REASON_MAP = {
+            0: "client_close",
+            1: "mobile_close",
+            2: "web_close",
+            3: "signal_close",
+            4: "sl_hit",
+            5: "tp_hit",
+            6: "stop_out",
+            7: "risk_out",
+        }
+
         # ── FIX-20260612-003: Trail-aware SL label ──
         # When close_reason == 4 (SL hit), check if the position had trail
         # activity via state.position_manager → pos.trail_advances.
@@ -205,31 +217,16 @@ def reconcile_closed_positions(
             label = "sl_hit_trailed" if trail_active else "sl_hit_first"
         elif close_reason in (5,):
             label = "tp_hit_first"
-        elif pnl is not None:
-            if pnl > 0:
-                label = "win"
-            elif pnl < 0:
-                label = "loss"
-            else:
-                label = "breakeven"
+        elif close_deal_comment:
+            # DQAF-20260722-002: Managed close — preserve the exit signal
+            # from the deal comment instead of PnL-based "win"/"loss".
+            label = f"managed:{close_deal_comment[:80]}"
         else:
-            label = "manual_close"
+            # No software-side signal — use broker reason as fallback
+            _broker_label = _DEAL_REASON_MAP.get(close_reason or 0, f"unattributed_{close_reason}")
+            label = f"broker:{_broker_label}"
 
-        # ── DQAF-20260614-012: Full MT5 deal reason mapping ──
-        # Previously only SL(4) and TP(5) were mapped — all other deal
-        # reasons fell into "unknown_close" (42% of all exits).
-        # MT5 DEAL_REASON codes: 0=CLIENT, 1=MOBILE, 2=WEB, 3=SIGNAL,
-        # 4=SL, 5=TP, 6=SO (Stop Out), 7=RO (Risk Out).
-        _DEAL_REASON_MAP = {
-            0: "client_close",
-            1: "mobile_close",
-            2: "web_close",
-            3: "signal_close",
-            4: "sl_hit",
-            5: "tp_hit",
-            6: "stop_out",
-            7: "risk_out",
-        }
+        # ── DQAF-20260614-012: Full MT5 deal reason mapping (see above) ──
         close_reason_str = _DEAL_REASON_MAP.get(
             close_reason or 0,
             f"mt5_deal_reason_{close_reason}" if close_reason else "unknown_close",

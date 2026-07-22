@@ -440,12 +440,19 @@ class PositionCloseAdapter:
                 _label = "sl_hit_first"
             elif _deal_reason == DEAL_REASON_TP:
                 _label = "tp_hit_first"
-            elif _deal_profit > 0:
-                _label = "win"
-            elif _deal_profit < 0:
-                _label = "loss"
+            elif _deal_comment:
+                # DQAF-20260722-002: Managed close — preserve the exit signal
+                # from the deal comment.  dispatch_managed_close() writes the
+                # exit reason (e.g. "bleed_stop_r-0.5", "ou_revert_z2.1",
+                # "confidence_decay_shielded") as the MT5 order comment.
+                # Previously this fell through to PnL-based "win"/"loss" which
+                # discarded the causal signal and poisoned p_win calibration.
+                _label = f"managed:{_deal_comment[:80]}"
             else:
-                _label = "breakeven"
+                # No software-side signal in comment — use broker reason taxonomy.
+                # Covers: manual client close, stop_out, risk_out, mobile/web close.
+                _broker_label = _DEAL_REASON_MAP.get(_deal_reason, f"unattributed_{_deal_reason}")
+                _label = f"broker:{_broker_label}"
 
             # ── Close time ──
             _close_time = ""

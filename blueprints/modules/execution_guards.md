@@ -49,6 +49,12 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260722-002 (P2) — p_win Small-N Degradation (DQAF-20260722-002) (2026-07-22)
+
+**Root Cause**: L2 — `rolling_wr` source produces p_win from PnL store at any sample size. When N<30, the rolling WR is a random walk (law of large numbers not in effect). Terminal Epoch analysis: rolling_wr WR=41.2% vs brain_confidence WR=72.4%.
+
+**Change**: `pwin_chain.py`: N<30 → full degradation to `brain_confidence` (p_win=0.40+confidence×0.20). 30≤N<50 → weighted blend (α=(N-30)/20). New `_compute_live_sample_total()` helper sums sample_count across qualifying LIVE brains. New source labels: `brain_confidence_small_n`, `rolling_wr_blend_n{d}`.
+
 ### FIX-20260718-004 — Microstructure Gate: Tick Liquidity Defence (DQAF-20260718-004 L3) (2026-07-18)
 
 **Root Cause**: L3 — No microstructure-quality gate exists in the pre-trade chain. The system's existing `MicrostructureFeatureComputer` computes 9 ML-consumed features from MT5 ticks, but none measure adverse selection (spread toxicity), liquidity shock (quote intensity anomaly), or directional order-flow pressure (buy/sell imbalance at tick level). These signals exist in the 42-day `E:/ai/tick/` XAU dataset but were never wired into live trading.
