@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-22T11:26:13Z
+> **自动生成**: 2026-07-24T12:23:32Z
 
 ## Package-Level Dependencies
 
@@ -574,14 +574,21 @@
 - `_analyze_xau_recent_longs.py` → (无内部依赖)
 - `_analyze_xau_today_20260710.py` → (无内部依赖)
 - `_analyze_xau_today_losses.py` → (无内部依赖)
+- `_apply_v43_edits.py` → (无内部依赖)
 - `_audit_zombie_ghost_positions.py` → (无内部依赖)
 - `_btc_evolution_audit.py` → (无内部依赖)
 - `_btc_governance_reconcile.py` → (无内部依赖)
 - `_check_status.py` → (无内部依赖)
 - `_commit_fixes.py` → (无内部依赖)
+- `_comprehensive_health_check.py` → (无内部依赖)
 - `_comprehensive_live_check_20260717.py` → (无内部依赖)
+- `_deep_cross_analysis.py` → (无内部依赖)
+- `_deep_cross_analysis_p2.py` → (无内部依赖)
+- `_deep_cross_v3.py` → (无内部依赖)
+- `_deep_cross_v3_deep.py` → (无内部依赖)
 - `_deep_dive_btc_source.py` → (无内部依赖)
 - `_deep_dive_m15_swing_20260710.py` → (无内部依赖)
+- `_deep_statistical_analysis.py` → (无内部依赖)
 - `_diagnose_atr_misalignment.py` → (无内部依赖)
 - `_diagnose_btc_v4_training_live_gap.py` → (无内部依赖)
 - `_diagnose_cold_explore_pwin.py` → (无内部依赖)
@@ -597,12 +604,23 @@
 - `_forensic_orphan_closes.py` → (无内部依赖)
 - `_forensic_tp_profit_giveback.py` → (无内部依赖)
 - `_generate_btc_brain_configs.py` → (无内部依赖)
+- `_ghost_brain_audit.py` → (无内部依赖)
+- `_ghost_brain_audit_v2.py` → (无内部依赖)
+- `_ghost_deprecation_verify.py` → (无内部依赖)
+- `_micro_enrichment_test.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_register_h4_governance.py` → `core.deployment.brain_lifecycle_manager`
+- `_retire_ghost_brains.py` → `core.governance.governance_service`
+- `_retire_ghost_configs.py` → `core.governance.governance_service`
+- `_retrain_with_micro.py` → (无内部依赖)
 - `_surface_scan_horizon4.py` → (无内部依赖)
+- `_test_micro_live.py` → (无内部依赖)
+- `_update_blueprint_v43.py` → (无内部依赖)
 - `_v4_binary_diagnostic.py` → (无内部依赖)
+- `_validate_tick_load.py` → (无内部依赖)
 - `_verify_btc_analysis_claims.py` → (无内部依赖)
 - `_verify_xau_three_issues.py` → (无内部依赖)
+- `_xau_performance_retrain_audit.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_btc_deep_diagnosis.py` → (无内部依赖)
@@ -792,6 +810,7 @@
 - `shadow_pnl_loop.py` → `core.brains.services.brain_factory`, `core.data.event_writer`, `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.rolling_normalizer`, `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`, `core.features.store_contracts`, `core.feedback.brain_pnl_ledger`, `core.ledger.storage.jsonl_ledger_store`, `core.risk.regime_detector`, `scripts.shadow_decision_recorder`
 - `shadow_rca.py` → (无内部依赖)
 - `smoke_test_e2e.py` → `core.features.local_feature_store`, `core.features.store_contracts`, `core.feedback.brain_performance_tracker`, `core.governance.governance_service`, `core.ledger.storage.jsonl_ledger_store`, `scripts.daily_ops`, `scripts.feedback_loop`, `scripts.live_shadow_ensemble`, `scripts.shadow_decision_recorder`, `scripts.training.dataset_builder`, `scripts.training.governance_scheduler`
+- `sync_training_csvs.py` → (无内部依赖)
 - `system_health.py` → `core.data.projections`, `core.observability.degradation`
 - `system_trust_report.py` → `core.execution.pre_trade_guards`
 - `task_a_directional_closure.py` → `scripts.training.build_calibrated_dataset`

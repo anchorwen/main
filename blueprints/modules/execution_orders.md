@@ -62,15 +62,24 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 | FIX-20260722-001 | 2026-07-22 | cursor-agent | 60216297 | DQAF-20260722-001: EV_TRAJECTORY guaranteed-loss guard — add highest_r<=0 precondition to should_exit_time_based(). 36 unique exits 0% WR -42 across BTC/XAU. Also freeze h4_swing strategy line (59 trades -43.61). | boundary-error |
 | FIX-20260722-002 | 2026-07-22 | cursor-agent | — | **P0+P2 投委会令: Exit label reform + p_win small-N degradation (DQAF-20260722-002).** `position_close_adapter.py`, `reconciliation.py`: PnL-based "win"/"loss" → structured `managed:<signal>` / `broker:<reason>`. `pwin_chain.py`: N<30→brain_confidence (rolling_wr is random walk), 30≤N<50→blend. | L2 — telemetry poisoning + small-sample noise |
 | FIX-20260722-003 | 2026-07-22 | cursor-agent | — | **P1 投委会令: Cross-TF trail activation mismatch (DQAF-20260722-003).** `trail_stop_engine.py`: activation watermark uses `pos.entry_atr` instead of `_geom_atr` (bracket_atr). Ticket 4207155654 (h4_swing SHORT): +6.03R entry_atr→0.54R bracket_atr<1.0→trail never fired→ratchet never armed→-$19.70. | L2 — cross-TF geometry ATR mismatch |
+| FIX-20260724-001 | 2026-07-24 | cursor-agent | — | **P0 (投委会令): ATR Ratio dead-market circuit breaker supersedes FIX-20260719-001 Vol_ZScore gate (DQAF-20260724-001).** Removed biased M5_Vol_ZScore < -3.0 gate. Replaced with `atr_ratio = current_atr / mean(buffer_sample_50)` at threshold 0.5. `_load_atr_buffer_sample()` with 60s cache TTL. See runtime_live.md for full details. | L3 — circuit breaker anchored to synthetic CFD pseudo-metric |
 | FIX-20260721-001 | 2026-07-21 | cursor-agent | — | **L2: Broker rate-limit cooldown — management-phase skip + bridge interval 2.0s** (DQAF-20260721-001). 10024 "Too many trade requests" still occurring on XAU/Exness despite FIX-016. Multi-position per-cycle bursts exhaust broker rate-limit. (1) `management_phase.py`: per-position cooldown (5 cycles) on first 10022/10024 rejection; guard before `compute_and_dispatch_trail()` skips while active. (2) `mt5_bridge_worker.py`: interval 1.2→2.0s. (3) `position_manager.py`: `trail_rate_limit_cooldown` field. ReB: `MT5_EXNESS_RATE_LIMIT_COOLDOWN`. | RC-03 |
 | FIX-20260720-002 | 2026-07-20 | cursor-agent | 472362d8 | L1: RuleEngineStrategyWrapper.evaluate() missing microstructure_gate parameter caused XAU engine crash loop. Added microstructure_gate: Any = None for interface uniformity. | contract-violation |
 | FIX-20260720-003 | 2026-07-20 | cursor-agent | — | **L3: Interface Contract Consolidation — StrategyEvaluationContext frozen dataclass + StrategyEvaluateProtocol**. Eliminates recurring signature-drift TypeError bug class (3 incidents: strategy_atr, governance_state, microstructure_gate). 28-param evaluate() → single-param evaluate(context). Parameter Object Pattern + Protocol enforcement — adding a field never changes any evaluate() signature again. | L3 — no canonical interface contract |
-### FIX-20260719-001 — Vol_ZScore hard gate + TF hierarchy + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19)
+### FIX-20260724-001 — ATR Ratio dead-market circuit breaker (投委会令 P0) (2026-07-24)
+
+**Supersedes**: FIX-20260719-001 item (1) — Vol_ZScore hard gate.
+
+See `runtime_live.md` FIX-20260724-001 for full root cause, changes, and deferred items.
+
+### FIX-20260719-001 — Vol_ZScore hard gate + TF hierarchy + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19) ⚫ PARTIALLY SUPERSEDED
+
+> **Item (1) Vol_ZScore hard gate SUPERSEDED by FIX-20260724-001.** Items (2)-(4) RETAINED.
 
 **Root Cause**: L3 — Four defense gaps identified by Investment Committee directive: (1) No dead-market circuit breaker — when M5 volatility collapses below -3σ, model predictions become random noise regardless of OOD Mahalanobis distance; (2) OOD diagnostic events didn't carry volatility context — impossible to correlate OOD blocks with market breathing; (3) Cross-strategy coordinator treated all timeframes equally — H4 macro signals blocked by M5/M15 noise positions; (4) 10006 "no such position" trail rejections were treated as transient — ghost positions survived 103+ retry cycles.
 
 **Change**:
-1. `strategy_evaluator.py`: Vol_ZScore hard gate (`_V9_M5_VOL_ZSCORE_IDX=5`, `_VOL_ZSCORE_HARD_BLOCK=-3.0`) — blocks swing/trend entries when M5_Vol_ZScore < -3.0. Micro strategies exempt. OOD block/cautious events now carry `m5_vol_zscore` field.
+1. ~~`strategy_evaluator.py`: Vol_ZScore hard gate (`_V9_M5_VOL_ZSCORE_IDX=5`, `_VOL_ZSCORE_HARD_BLOCK=-3.0`)~~ **(REMOVED by FIX-20260724-001 — CFD tick_volume 94% non-positive → chronic false-positive). Replaced by ATR ratio gate.** OOD block/cautious events still carry `m5_vol_zscore` field (diagnostic only).
 2. `cross_strategy_coordinator.py`: TF hierarchy (`TIMEFRAME_RANK` dict) — higher-TF pending entries NOT blocked by lower-TF opposing positions. `_resolve_timeframe()` extracts TF from strategy name. `respect_timeframe_hierarchy=True` by default.
 3. `management_phase.py`: 10006 atomic cleanup — 3+ consecutive retcode 10006 rejections emit `ghost_position_10006_detected` event and let Guard 2 MIA path handle cleanup instead of sending DingTalk alert and resetting.
 

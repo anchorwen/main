@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-22T11:26:13Z
-> **扫描模块数**: 786
+> **自动生成**: 2026-07-24T12:23:32Z
+> **扫描模块数**: 805
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -554,7 +554,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 1203 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 4 | 1250 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 5 | 1314 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -660,14 +660,21 @@
 | `_analyze_xau_recent_longs.py` | ✅ active | — | 3 | 256 | — | |
 | `_analyze_xau_today_20260710.py` | ✅ active | — | 3 | 302 | — | |
 | `_analyze_xau_today_losses.py` | ✅ active | — | 2 | 169 | — | |
+| `_apply_v43_edits.py` | 📄 config | — | 0 | 61 | — | |
 | `_audit_zombie_ghost_positions.py` | ✅ active | — | 3 | 460 | — | |
 | `_btc_evolution_audit.py` | ✅ active | — | 4 | 653 | — | |
 | `_btc_governance_reconcile.py` | ✅ active | — | 2 | 126 | — | |
 | `_check_status.py` | 📄 config | — | 0 | 106 | — | |
 | `_commit_fixes.py` | 📄 config | — | 0 | 46 | — | |
+| `_comprehensive_health_check.py` | ✅ active | — | 6 | 623 | — | |
 | `_comprehensive_live_check_20260717.py` | ✅ active | — | 2 | 327 | — | |
+| `_deep_cross_analysis.py` | 📄 config | — | 0 | 284 | — | |
+| `_deep_cross_analysis_p2.py` | 📄 config | — | 0 | 254 | — | |
+| `_deep_cross_v3.py` | 📄 config | — | 0 | 198 | — | |
+| `_deep_cross_v3_deep.py` | 📄 config | — | 0 | 180 | — | |
 | `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
 | `_deep_dive_m15_swing_20260710.py` | ✅ active | — | 3 | 220 | — | |
+| `_deep_statistical_analysis.py` | 📄 config | — | 0 | 250 | — | |
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
 | `_diagnose_btc_v4_training_live_gap.py` | ✅ active | — | 5 | 403 | — | |
 | `_diagnose_cold_explore_pwin.py` | ✅ active | — | 2 | 199 | — | |
@@ -683,12 +690,23 @@
 | `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
 | `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
 | `_generate_btc_brain_configs.py` | ✅ active | — | 1 | 246 | — | |
+| `_ghost_brain_audit.py` | 📄 config | — | 0 | 287 | — | |
+| `_ghost_brain_audit_v2.py` | ✅ active | — | 2 | 161 | — | |
+| `_ghost_deprecation_verify.py` | ✅ active | — | 2 | 286 | — | |
+| `_micro_enrichment_test.py` | ✅ active | — | 6 | 319 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_register_h4_governance.py` | 📄 config | — | 0 | 31 | — | |
+| `_retire_ghost_brains.py` | 📄 config | — | 0 | 168 | — | |
+| `_retire_ghost_configs.py` | 📄 config | — | 0 | 196 | — | |
+| `_retrain_with_micro.py` | ✅ active | — | 7 | 334 | — | |
 | `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
+| `_test_micro_live.py` | 📄 config | — | 0 | 99 | — | |
+| `_update_blueprint_v43.py` | 📄 config | — | 0 | 287 | — | |
 | `_v4_binary_diagnostic.py` | 📄 config | — | 0 | 135 | — | |
+| `_validate_tick_load.py` | ✅ active | — | 4 | 196 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
 | `_verify_xau_three_issues.py` | ✅ active | — | 2 | 297 | — | |
+| `_xau_performance_retrain_audit.py` | ✅ active | — | 6 | 616 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_btc_deep_diagnosis.py` | ✅ active | — | 5 | 830 | — | |
@@ -878,6 +896,7 @@
 | `shadow_pnl_loop.py` | ✅ active | — | 9 | 812 | — | |
 | `shadow_rca.py` | ✅ active | — | 12 | 525 | — | |
 | `smoke_test_e2e.py` | ✅ active | — | 15 | 381 | — | |
+| `sync_training_csvs.py` | ✅ active | — | 2 | 69 | — | |
 | `system_health.py` | ✅ active | — | 5 | 293 | — | |
 | `system_trust_report.py` | ✅ active | — | 20 | 992 | — | |
 | `task_a_directional_closure.py` | ✅ active | — | 8 | 437 | — | |

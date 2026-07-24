@@ -27,6 +27,26 @@
 
 ---
 
+### CCT-20260724-001
+- **Docket ID**: DQAF-20260724-001
+- **日期**: 2026-07-24
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU 实盘所有 swing/trend 策略被 vol_zscore_hard_block 持续熔断（~48h）。Golden master 显示每个 cycle 所有非 micro 策略的 reason 均为 `vol_zscore_hard_block:m5_vol_zscore_-3.NN_lt_-3.0`。Feature store 39,714 条 M5_Vol_ZScore 记录（2026-05-05 至 2026-07-24）94% 非正值，仅最大值 -1.34 — 从未达到正值。
+  - [Layer 2 — 中间异常]: `v9_live_computer._vol_zscore()` 算法结构正确（price_zscore 同算法 49/51 pos/neg 健康分布证明），但输入数据源 CFD tick_volume 具有 burst-decay 分布 + 连续相同值频发（→std=0→zscore=0）。`_vol_zscore` 使用 inclusive window（`volume[-lookback:]` 含当前 bar），当前 bar 加入 μ/σ 计算导致均值拖拽（Mean Drag）—— zscore 系统性地为负或零。
+  - [Layer 3 — 根因]: L3 架构缺陷 — 电路断路器（circuit breaker）锚定于合成 CFD 伪指标（tick_volume）而非真实价格行为（ATR）。CFD broker 的 tick_volume 是人工合成的、充满噪声的代理变量，不应作为保护实盘资本的物理熔断器的唯一信号源。Inclusive-window z-score 的 Mean Drag 效应是次要因素——即使改用 exclusive window，CFD tick_volume 的 burst-decay 分布仍会持续产生大量负 zscore。
+- **证据引用**:
+  - Source 1: `data/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl` — 39,714 条 Vol_ZScore 记录，94% 非正值
+  - Source 2: `core/features/computers/v9_live_computer.py:116-125` — `_vol_zscore()` 算法审计（inclusive window + tick_volume 输入）
+  - Source 3: `core/features/computers/v9_live_computer.py:180-189` — `_price_zscore()` 对照验证（同算法，48.9% 正值，证明算法正确）
+  - Source 4: `data/golden_master.jsonl` — 实时 golden master 输出显示每 cycle vol_zscore_hard_block
+  - Source 5: `core/runtime/strategy_evaluator.py:484-527` — 旧 Vol_ZScore 硬闸门代码位置
+  - Source 6: `data/regime_detector_state.json` — buffer_sample (50-bar ATR buffer, 3.38-4.31 range) 用于新 ATR 比率闸门
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260724-CIRCUIT_BREAKER_ANCHORED_TO_SYNTHETIC_CFD_PSEUDO_METRIC
+- **关联 FIX**: FIX-20260724-001
+- **状态**: **CLOSED** — 摘除 Vol_ZScore 硬闸门，替换为 ATR 比率闸门 (atr_ratio < 0.5)；阈值 0.5 为临时热修复，历史回测校准 Deferred
+
 ### CCT-20260718-001
 - **Docket ID**: DQAF-20260718-001
 - **日期**: 2026-07-18

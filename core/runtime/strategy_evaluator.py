@@ -49,13 +49,70 @@ def _get_ood_gateway() -> Any:
     return _ood_gateway
 
 
-# ── FIX-20260719-001: Vol_ZScore hard gate ──────────────────────────────────
+# ── FIX-20260724-001: ATR Ratio dead-market circuit breaker ──────────────────
+# Replaces FIX-20260719-001 (M5_Vol_ZScore hard gate) which was structurally
+# biased: CFD tick_volume has burst-decay distribution + frequent identical
+# consecutive values → Vol_ZScore 94% non-positive over 39,714 records.
+#
+# New gate uses price-action-based ATR ratio:
+#   atr_ratio = current_atr / mean(recent_atr_buffer_50)
+#   BLOCK when atr_ratio < 0.5  (current volatility < 50% of recent baseline)
+#
+# The baseline is the 50-bar buffer_sample from regime_detector_state.json,
+# NOT the 63-day EWMA atr_mean (which lags too much for regime-change detection).
+_ATR_DEAD_MARKET_RATIO: float = 0.5  # block entries when current_atr/mean(buffer) < this
+_ATR_BUFFER_MIN_SAMPLES: int = 10  # minimum buffer_sample entries required to arm gate
+
 # M5_Vol_ZScore index in the V9 Institutional 40-dim feature vector.
-# When volatility collapses below -3.0 z-score, model predictions become
-# random noise — all swing/trend entries must be blocked regardless of
-# what the OOD gateway says.  This is the "dead market" circuit breaker.
-_V9_M5_VOL_ZSCORE_IDX: int = 5  # 0-indexed position in V9_INSTITUTIONAL_40_FEATURES
-_VOL_ZSCORE_HARD_BLOCK: float = -3.0  # block entries when M5_Vol_ZScore < this value
+# Still present in the vector (feature calc unchanged per IC veto on Feature Drift)
+# but NO LONGER used as a circuit breaker — replaced by ATR ratio gate above.
+_V9_M5_VOL_ZSCORE_IDX: int = 5  # 0-indexed, for OOD diagnostic logging only
+
+# Module-level cache for ATR buffer_sample (refreshed every 60s from disk).
+# regime_detector_state.json is updated each cycle by the RegimeDetector,
+# so a short TTL keeps us in sync without re-reading on every strategy eval.
+_atr_buffer_cache: dict[str, Any] = {"data": None, "ts": 0.0, "base_dir": ""}
+
+
+def _load_atr_buffer_sample(base_dir: str) -> list[float] | None:
+    """Load buffer_sample from regime_detector_state.json, cached for 60s.
+
+    The buffer_sample is the RegimeDetector's rolling window of recent ATR
+    values (last 50 bars).  Using this as the denominator in the ATR ratio
+    gives us a "local relative dead market" detector that is NOT polluted
+    by the 63-day EWMA (which lags months behind regime changes).
+    """
+    global _atr_buffer_cache
+    _now = time.monotonic()
+    if (
+        _atr_buffer_cache["data"] is not None
+        and _atr_buffer_cache["base_dir"] == base_dir
+        and (_now - _atr_buffer_cache["ts"]) < 60.0
+    ):
+        return _atr_buffer_cache["data"]
+
+    if not base_dir:
+        return None
+
+    try:
+        from pathlib import Path as _Path
+
+        _state_path = _Path(base_dir) / "regime_detector_state.json"
+        if not _state_path.exists():
+            _atr_buffer_cache = {"data": None, "ts": _now, "base_dir": base_dir}
+            return None
+
+        _state = json.loads(_state_path.read_text(encoding="utf-8"))
+        _buf = _state.get("buffer_sample")
+        if isinstance(_buf, list) and len(_buf) > 0:
+            _buf_float = [float(v) for v in _buf]
+            _atr_buffer_cache = {"data": _buf_float, "ts": _now, "base_dir": base_dir}
+            return _buf_float
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        pass
+
+    _atr_buffer_cache = {"data": None, "ts": _now, "base_dir": base_dir}
+    return None
 
 
 def _resolve_ood_schema(strategy_name: str, strategy: Any) -> str:
@@ -481,50 +538,57 @@ def evaluate_strategy_lines(
                 # OOD is defense-in-depth — fail-open on gateway errors
                 pass
 
-        # ── FIX-20260719-001: Vol_ZScore Hard Gate (dead-market circuit breaker) ──
-        # When M5 tick volume collapses below -3.0 z-score, the market is
-        # effectively dead — model predictions become random noise regardless
-        # of what the OOD Mahalanobis distance says.  This gate blocks ALL
-        # swing/trend entries when volatility is pathologically low.
-        # Microstructure strategies (micro_*) are exempt — they have their
-        # own MicrostructureGate for tick-quality assessment.
+        # ── FIX-20260724-001: ATR Ratio dead-market circuit breaker ──────────
+        # Replaces FIX-20260719-001 (Vol_ZScore hard gate) which was structurally
+        # biased: CFD tick_volume burst-decay distribution → Vol_ZScore 94%
+        # non-positive over 39,714 records → persistent false-positive blockade.
         #
-        # This gate and the OOD gateway form a TWO-LAYER defense:
+        # New gate: atr_ratio = current_atr / mean(recent_atr_buffer_50)
+        # When current ATR drops below 50% of the recent 50-bar baseline,
+        # the market is effectively dead — model predictions become unreliable.
+        # Microstructure strategies (micro_*) are exempt (own MicrostructureGate).
+        #
+        # Defense layers (unchanged two-layer concept):
         #   Layer 1 (OOD):  Mahalanobis distance — "is the feature space normal?"
-        #   Layer 2 (Vol):  M5_Vol_ZScore   — "is the market breathing?"
+        #   Layer 2 (ATR):  ATR Ratio           — "is the market breathing?"
         # Both must pass for a trade to proceed.
-        if not sname.startswith("micro_"):
-            _fv_arr_vg = np.asarray(_fv, dtype=np.float64).ravel()
-            if len(_fv_arr_vg) > _V9_M5_VOL_ZSCORE_IDX:
-                _m5_vol_z_gate = float(_fv_arr_vg[_V9_M5_VOL_ZSCORE_IDX])
-                if _m5_vol_z_gate < _VOL_ZSCORE_HARD_BLOCK:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "vol_zscore_blocked",
-                                "time": _utc_iso(),
-                                "strategy": sname,
-                                "m5_vol_zscore": round(_m5_vol_z_gate, 4),
-                                "threshold": _VOL_ZSCORE_HARD_BLOCK,
-                                "reason": "dead_market_vol_collapse",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                    strategy_results.append(
-                        {
-                            "strategy": sname,
-                            "should_trade": False,
-                            "direction": "neutral",
-                            "confidence": 0.0,
-                            "reason": (
-                                f"vol_zscore_hard_block:"
-                                f"m5_vol_zscore_{_m5_vol_z_gate:.2f}_lt_{_VOL_ZSCORE_HARD_BLOCK}"
+        if not sname.startswith("micro_") and current_atr is not None and current_atr > 0:
+            _atr_buf = _load_atr_buffer_sample(base_dir)
+            if _atr_buf is not None and len(_atr_buf) >= _ATR_BUFFER_MIN_SAMPLES:
+                _recent_atr_baseline = float(np.mean(_atr_buf))
+                if _recent_atr_baseline > 0:
+                    _atr_ratio = current_atr / _recent_atr_baseline
+                    if _atr_ratio < _ATR_DEAD_MARKET_RATIO:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "atr_dead_market_blocked",
+                                    "time": _utc_iso(),
+                                    "strategy": sname,
+                                    "current_atr": round(current_atr, 4),
+                                    "atr_baseline": round(_recent_atr_baseline, 4),
+                                    "atr_ratio": round(_atr_ratio, 4),
+                                    "threshold": _ATR_DEAD_MARKET_RATIO,
+                                    "buffer_samples": len(_atr_buf),
+                                    "reason": "dead_market_atr_collapse",
+                                },
+                                ensure_ascii=False,
                             ),
-                        }
-                    )
-                    continue
+                            flush=True,
+                        )
+                        strategy_results.append(
+                            {
+                                "strategy": sname,
+                                "should_trade": False,
+                                "direction": "neutral",
+                                "confidence": 0.0,
+                                "reason": (
+                                    f"atr_dead_market_block:"
+                                    f"atr_ratio_{_atr_ratio:.3f}_lt_{_ATR_DEAD_MARKET_RATIO}"
+                                ),
+                            }
+                        )
+                        continue
 
         # ── FIX-20260629-171: Strategy mode enforcement ──
         # When mode=probation, the strategy MUST have ≥1 brain with governance

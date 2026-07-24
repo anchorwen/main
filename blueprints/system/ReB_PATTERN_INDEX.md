@@ -20,6 +20,23 @@
 
 ---
 
+### ReB-20260724-CIRCUIT_BREAKER_ANCHORED_TO_SYNTHETIC_CFD_PSEUDO_METRIC
+- **Pattern Signature**: `CIRCUIT_BREAKER_ANCHORED_TO_SYNTHETIC_CFD_PSEUDO_METRIC`
+- **Date Cataloged**: 2026-07-24
+- **Source Docket**: DQAF-20260724-001
+- **Related**: FIX-20260724-001 (supersedes FIX-20260719-001 item 1)
+
+**Definition**: A safety-critical circuit breaker (hard block on all swing/trend entries) is anchored to a CFD broker's synthetic `tick_volume` metric. CFD tick volume is an artificial construct with burst-decay distribution and frequent identical consecutive values — it does not measure real market activity. When combined with an inclusive-window z-score computation (current bar included in baseline μ/σ), every cycle produces a negative z-score → the circuit breaker becomes a permanent trade blockade. The signature: a gate metric that is structurally unable to produce positive values (94% non-positive over 39,714 records spanning ~80 days), yet is the sole signal for an all-strategies hard block.
+
+**Prevention Strategy**:
+1. All circuit breakers that block real capital must be anchored to **price-action-derived metrics** (ATR, Bollinger Band Width, high-low range) — never to volume proxies from CFD brokers.
+2. When adding a new hard gate, require **distributional validation**: sample ≥10,000 historical values and verify the gate metric produces both positive and negative values in rough proportion (|skew| < 2.0).
+3. Z-score computations should use **exclusive windows** (`window = data[-lookback-1:-1]`) to avoid Mean Drag on the current observation — but this alone does not fix a structurally broken data source.
+
+**Detection Method**: 
+- Automated: `scripts/audit_gate_metrics.py` — for each gate metric, compute positivity rate over trailing 10,000 cycles. Alert if positivity rate < 10% or > 90%.
+- Manual: Check golden_master.jsonl for gate block reason frequency. If a single reason accounts for >80% of blocks, investigate the gate metric's distribution.
+
 ### ReB-20260718-ORPHAN_CASCADE_DELETE_MISSING
 - **Pattern Signature**: `ORPHAN_CASCADE_DELETE_MISSING`
 - **Date Cataloged**: 2026-07-18

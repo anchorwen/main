@@ -83,21 +83,43 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260724-001 | 2026-07-24 | cursor-agent | — | **P0 (投委会令): ATR Ratio dead-market circuit breaker supersedes FIX-20260719-001 Vol_ZScore gate (DQAF-20260724-001).** Removed M5_Vol_ZScore < -3.0 gate (CFD tick_volume 94% non-positive → chronic false-positive blockade). Replaced with `atr_ratio = current_atr / mean(buffer_sample_50)` gate at threshold 0.5. `_load_atr_buffer_sample()` reads regime_detector_state.json with 60s cache TTL, fail-open on all errors. Micro strategies exempt. | L3 — circuit breaker anchored to synthetic CFD pseudo-metric instead of real price action |
 | FIX-20260722-002 | 2026-07-22 | cursor-agent | — | **P0 投委会令: Exit label reform (DQAF-20260722-002).** `position_close_adapter.py`, `reconciliation.py`: PnL-based "win"/"loss" labels abolished — managed closes now preserve exit signal via `managed:<signal>` or `broker:<reason>`. | L2 — telemetry poisoning: PnL-based label discards causal exit signal |
 | FIX-20260721-001 | 2026-07-21 | cursor-agent | — | **L2: Broker rate-limit cooldown for 10024 "Too many trade requests"** (DQAF-20260721-001). Per-position `trail_rate_limit_cooldown` (5 cycles) triggered on first 10022/10024 rejection. Cooldown guard before `compute_and_dispatch_trail()` skips trail dispatch while active; bridge `_TRADE_REQUEST_MIN_INTERVAL_S` 1.2→2.0s. ReB: `MT5_EXNESS_RATE_LIMIT_COOLDOWN`. | RC-03 |
 | FIX-20260720-003 | 2026-07-20 | cursor-agent | — | **L3: Interface Contract Consolidation**. strategy_evaluator.py call site updated to construct StrategyEvaluationContext and pass single `context=` parameter. Part of the L3 fix eliminating signature-drift TypeError across all strategy implementations. | L3 — no canonical interface contract |
-### FIX-20260719-001 — Vol_ZScore hard gate + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19)
+### FIX-20260724-001 — ATR Ratio dead-market circuit breaker (投委会令 P0) (2026-07-24)
 
-**Root Cause**: L3 — Three defense gaps: (1) No dead-market circuit breaker — M5_Vol_ZScore < -3σ produces random model predictions; (2) OOD diagnostics lacked volatility context for root-cause correlation; (3) 10006 ghost positions retried 103+ times instead of being atomically cleaned up.
+**Supersedes**: FIX-20260719-001 item (1) — Vol_ZScore hard gate.
+
+**Root Cause**: L3 — Circuit breaker anchored to synthetic CFD tick_volume pseudo-metric. CFD broker's tick_volume has burst-decay distribution + frequent identical consecutive values → `_vol_zscore()` (inclusive window, correct algorithm) produces 94% non-positive values over 39,714 records → `vol_zscore_hard_block` fires on every cycle for ~48h, blocking ALL swing/trend entries. The algorithmic bias (inclusive window Mean Drag) is secondary; the primary defect is using a synthetic CFD metric as the sole signal for a safety-critical hard block.
 
 **Change**:
-1. `strategy_evaluator.py`: Vol_ZScore hard gate blocks swing/trend entries when M5_Vol_ZScore < -3.0. OOD block/cautious events carry `m5_vol_zscore`. Module-level constants: `_V9_M5_VOL_ZSCORE_IDX=5`, `_VOL_ZSCORE_HARD_BLOCK=-3.0`.
+1. REMOVED: Vol_ZScore < -3.0 hard gate (lines 484-527 in old code). FIX-20260719-001 items (2) TF hierarchy and (3) 10006 ghost detection RETAINED.
+2. ADDED: `atr_ratio = current_atr / mean(buffer_sample_50)` gate at threshold 0.5. Block when ATR collapses below 50% of recent 50-bar baseline.
+3. ADDED: `_load_atr_buffer_sample(base_dir)` — reads `regime_detector_state.json`, 60s module-level cache TTL, fail-open on all error paths (missing file/empty buffer/zero ATR → gate skipped).
+4. RETAINED: `_V9_M5_VOL_ZSCORE_IDX = 5` constant for OOD diagnostic logging only (vol_zscore feature retained in vector per IC veto on Feature Drift).
+5. ARCHIVED: DQAF_DOCKET_REGISTRY + CCT_LEDGER + ReB_PATTERN_INDEX updated.
+
+**Files**:
+- `core/runtime/strategy_evaluator.py` — ATR ratio gate + `_load_atr_buffer_sample()` helper (~100 lines)
+- `blueprints/system/FIX_REGISTRY.md` — FIX-20260724-001 entry + FIX-20260719-001 superseded
+
+**Deferred**: Historical backtest calibration of optimal `atr_ratio` threshold (provisional 0.5 hotfix).
+
+### FIX-20260719-001 — Vol_ZScore hard gate + OOD diagnostics + 10006 atomic cleanup (IC Directive P0) (2026-07-19) ⚫ PARTIALLY SUPERSEDED
+
+> **Item (1) Vol_ZScore hard gate SUPERSEDED by FIX-20260724-001.** Items (2)-(3) RETAINED.
+
+**Root Cause**: L3 — Three defense gaps: (1) ~~No dead-market circuit breaker~~ **(SUPERSEDED — replaced by ATR ratio gate)**; (2) OOD diagnostics lacked volatility context for root-cause correlation; (3) 10006 ghost positions retried 103+ times instead of being atomically cleaned up.
+
+**Change**:
+1. ~~`strategy_evaluator.py`: Vol_ZScore hard gate~~ **(REMOVED by FIX-20260724-001 — CFD tick_volume structurally biased, 94% non-positive).** OOD block/cautious events **still** carry `m5_vol_zscore` field (diagnostic only).
 2. `management_phase.py`: 10006 atomic cleanup — 3+ consecutive "no such position" rejections emit `ghost_position_10006_detected`, skip DingTalk alert, let Guard 2 MIA handle full cleanup.
 
 See `execution_orders.md` FIX-20260719-001 for cross_strategy_coordinator TF hierarchy changes.
 
 **Files**:
-- `core/runtime/strategy_evaluator.py` — Vol_ZScore gate + OOD diagnostics (~60 lines)
+- `core/runtime/strategy_evaluator.py` — ATR ratio gate replaced Vol_ZScore gate; OOD diagnostics retained
 - `core/runtime/management_phase.py` — 10006 atomic cleanup (~25 lines)
 
 ### FIX-20260718-004 — MicrostructureGate lazy init + parameter passthrough (DQAF-20260718-004 L3) (2026-07-18)
