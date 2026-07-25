@@ -43,9 +43,9 @@ brains:
   - path: configs/brains/XAU_Swing_H1_Exec_A.json
     enabled: true
   - path: configs/brains/XAU_Swing_H4_Sym_A.json
-    enabled: true
+    enabled: false
   - path: configs/brains/XAU_Swing_H4_Exec_A.json
-    enabled: true
+    enabled: false
   - path: configs/brains/Swing_V9_M30_V3.json
     enabled: false
   - path: configs/brains/Swing_V9_M15_V2.json
@@ -55,7 +55,7 @@ brains:
   - path: configs/brains/Brain_Rev_M30_V1.json
     enabled: false
   - path: configs/brains/Barrier_V9_12B_V2.json
-    enabled: true
+    enabled: false
   - path: configs/brains/Brain_Trend_M30_V2.json
     enabled: false
   - path: configs/brains/Brain_Rev_M30_V2.json
@@ -81,6 +81,8 @@ brains:
   - path: configs/brains/Swing_V9_H1_V3.json
     enabled: true
   - path: configs/brains/Swing_V9_H4_V3.json
+    enabled: false
+  - path: configs/brains/XAU_Swing_M30_V5.json
     enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
@@ -760,7 +762,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   h4_swing:
-    enabled: false  # DQAF-20260722-001: frozen — 59 trades, -$143.61, brains shadow
+    enabled: false
     timeframe: H4
     magic: 90340
     brain_types:

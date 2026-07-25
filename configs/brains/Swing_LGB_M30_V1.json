@@ -9,8 +9,8 @@
   "model_path": "data/models/lgb_m30/lightgbm_d1_train_lgb.txt",
   "artifact_path": "data/models/lgb_m30/lightgbm_d1_train_lgb.txt",
   "model_version": "lgb_m30_v1",
-  "status": "shadow",
-  "vote_weight": 1.0,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -70,5 +70,7 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "_retire_reason": "FIX-20260605-126: LGB variant retained pending retrain (never executed), PF=0.81 16 trades, replaced by Exec+Symmetric+V5",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

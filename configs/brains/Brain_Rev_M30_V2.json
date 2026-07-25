@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\swing\\m30\\rev_v2\\Brain_Rev_M30_V2_model.json",
   "model_version": "brain_rev_m30_v2",
   "artifact_hash": "1b0d319ed39f6aa9f3875299d32c2a71eae1f5aea9b04896376a48bf85d5c91b",
-  "status": "probation",
-  "vote_weight": 1.0,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -76,5 +76,7 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "_retire_reason": "FIX-20260605-126: Rev archived, WR=0% 4 trades, replaced by Exec_A+Symmetric+V5",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

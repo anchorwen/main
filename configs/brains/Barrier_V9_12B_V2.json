@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\barrier\\v2\\Barrier_V9_12B_V2_model.json",
   "model_version": "barrier_v9_12b_v2",
   "artifact_hash": "8f70ce439a951d124f3d604d438a06672a82b43900a7e315ea36a678f59c1cc6",
-  "status": "probation",
-  "vote_weight": 1.0,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90001,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -82,5 +82,7 @@
     "tp_atr_mult": 1.5,
     "contract_type": "barrier_12bar",
     "aligned_with": "configs/live.yaml"
-  }
+  },
+  "_retire_reason": "DQAF-20260723-001: barrier_12bar disabled, 16→1 brain mass extinction, WR=0% 1 trade",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

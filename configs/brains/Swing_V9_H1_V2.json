@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_H1_V2_model.json",
   "model_version": "swing_v9_h1_v2",
   "artifact_hash": "d9d1ca5e296db5ee1f832dded36bbb96d77831686ebca30491bdc18a719a58c0",
-  "status": "frozen",
+  "status": "retired",
   "_ic_mandate": {
     "authority": "ARCHITECTURE_COMMITTEE",
     "date": "2026-07-03",
@@ -90,5 +90,7 @@
     "tp_atr_mult": 2.0,
     "contract_type": "h1_swing",
     "aligned_with": "configs/live.yaml"
-  }
+  },
+  "_retire_reason": "config already frozen vote_weight=0.0, replaced by V9_H1_V3+Exec_A+Symmetric",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

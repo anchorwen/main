@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\swing_tracer_c\\Swing_V9_M30_V2_model.json",
   "model_version": "swing_v9_m30_v2",
   "artifact_hash": "472e9270115f85cc2eec512dbd29b4a800908b4c5123370362650794e0d97b30",
-  "status": "frozen",
+  "status": "retired",
   "vote_weight": 0.0,
   "_note": "FIX-20260706-026: Frozen — superseded by V4. V2 TP=2.5 misaligned with m30_swing serving TP=3.0. V4 retrained with correct SL=2.0/TP=3.0 (seed=77).",
   "magic": 90320,
@@ -85,5 +85,7 @@
     "contract_type": "asymmetric_barrier",
     "training_serving_alignment": "misaligned",
     "_note": "TP misaligned — training TP=2.5, serving m30_swing TP=3.0. Candidate brain pending retrain."
-  }
+  },
+  "_retire_reason": "config already frozen vote_weight=0.0, PF=0.60 95 trades, replaced by Exec_A+Symmetric+V5",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

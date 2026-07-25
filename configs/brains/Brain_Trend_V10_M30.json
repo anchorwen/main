@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\swing\\m30\\v10\\Brain_Trend_V10_M30_model.json",
   "model_version": "brain_trend_v10_m30",
   "artifact_hash": "3cf538b1f48c7edc2b9f62b2d8ed32f38bf1d4030c316d37f0bf66c2a317f6fe",
-  "status": "probation",
-  "vote_weight": 1.0,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -76,5 +76,7 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "_retire_reason": "WR=25% PF=0.30 5 trades, replaced by Exec_A+Symmetric+V5",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

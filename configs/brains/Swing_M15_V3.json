@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\swing\\m15\\v3\\Swing_M15_V3_model.json",
   "model_version": "swing_m15_v3",
   "artifact_hash": "21b806238867fcef0e1eb4d09a98ad905eeca2f5fe0a61d3d78fdca4e925c26e",
-  "status": "probation",
-  "vote_weight": 1.0,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90310,
   "brain_role": "alpha_brain",
   "training_horizon": 24,
@@ -82,5 +82,7 @@
     "tp_atr_mult": 2.5,
     "contract_type": "m15_swing",
     "aligned_with": "configs/live.yaml"
-  }
+  },
+  "_retire_reason": "WR=0% 1 trade, replaced by V9_M15_V3+Exec_A+Symmetric",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

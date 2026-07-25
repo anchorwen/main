@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-25T10:34:24Z
+> **自动生成**: 2026-07-25T11:04:39Z
 
 ## Package-Level Dependencies
 
@@ -554,78 +554,8 @@
 
 ### `scripts/`
 
-- `_analyze_btc_gate_blocks.py` → (无内部依赖)
-- `_analyze_btc_long_losses.py` → (无内部依赖)
-- `_analyze_btc_now.py` → (无内部依赖)
-- `_analyze_btc_segmented.py` → (无内部依赖)
-- `_analyze_exits_comprehensive.py` → (无内部依赖)
-- `_analyze_exits_deep.py` → (无内部依赖)
-- `_analyze_live_status.py` → (无内部依赖)
-- `_analyze_post_deployment.py` → (无内部依赖)
-- `_analyze_tick_dataset.py` → (无内部依赖)
-- `_analyze_today_btc_entries.py` → (无内部依赖)
-- `_analyze_two_positions_sltp.py` → (无内部依赖)
-- `_analyze_xau_comprehensive.py` → (无内部依赖)
-- `_analyze_xau_h1_position.py` → (无内部依赖)
-- `_analyze_xau_institutional.py` → (无内部依赖)
-- `_analyze_xau_live_status.py` → (无内部依赖)
-- `_analyze_xau_now.py` → (无内部依赖)
-- `_analyze_xau_optimization.py` → (无内部依赖)
-- `_analyze_xau_recent_longs.py` → (无内部依赖)
-- `_analyze_xau_today_20260710.py` → (无内部依赖)
-- `_analyze_xau_today_losses.py` → (无内部依赖)
-- `_apply_v43_edits.py` → (无内部依赖)
-- `_audit_zombie_ghost_positions.py` → (无内部依赖)
-- `_btc_evolution_audit.py` → (无内部依赖)
-- `_btc_governance_reconcile.py` → (无内部依赖)
-- `_check_status.py` → (无内部依赖)
-- `_commit_fixes.py` → (无内部依赖)
-- `_comprehensive_health_check.py` → (无内部依赖)
-- `_comprehensive_live_check_20260717.py` → (无内部依赖)
-- `_deep_cross_analysis.py` → (无内部依赖)
-- `_deep_cross_analysis_p2.py` → (无内部依赖)
-- `_deep_cross_v3.py` → (无内部依赖)
-- `_deep_cross_v3_deep.py` → (无内部依赖)
-- `_deep_dive_btc_source.py` → (无内部依赖)
-- `_deep_dive_m15_swing_20260710.py` → (无内部依赖)
-- `_deep_statistical_analysis.py` → (无内部依赖)
-- `_diagnose_atr_misalignment.py` → (无内部依赖)
-- `_diagnose_btc_outage_20260725.py` → (无内部依赖)
-- `_diagnose_btc_v4_training_live_gap.py` → (无内部依赖)
-- `_diagnose_cold_explore_pwin.py` → (无内部依赖)
-- `_diagnose_dual_assassin_silence.py` → (无内部依赖)
-- `_diagnose_giveback_lifecycle.py` → (无内部依赖)
-- `_diagnose_mahalanobis_ood.py` → `core.execution.ood_gateway`
-- `_diagnose_model_raw_output.py` → (无内部依赖)
-- `_diagnose_tp_giveback_pollution.py` → (无内部依赖)
-- `_diagnose_v12_h1_direction_bias.py` → (无内部依赖)
-- `_diagnose_v4_silence_day2.py` → (无内部依赖)
-- `_diagnose_v4_silence_day2b.py` → (无内部依赖)
-- `_diagnose_xau_gates.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
-- `_export_btc_mt5.py` → (无内部依赖)
-- `_fix_shadow_configs.py` → (无内部依赖)
-- `_forensic_orphan_closes.py` → (无内部依赖)
-- `_forensic_tp_profit_giveback.py` → (无内部依赖)
-- `_generate_btc_brain_configs.py` → (无内部依赖)
-- `_ghost_brain_audit.py` → (无内部依赖)
-- `_ghost_brain_audit_v2.py` → (无内部依赖)
-- `_ghost_deprecation_verify.py` → (无内部依赖)
-- `_micro_enrichment_test.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
-- `_register_h4_governance.py` → `core.deployment.brain_lifecycle_manager`
-- `_retire_ghost_brains.py` → `core.governance.governance_service`
-- `_retire_ghost_configs.py` → `core.governance.governance_service`
-- `_retrain_with_micro.py` → (无内部依赖)
-- `_surface_scan_horizon4.py` → (无内部依赖)
-- `_test_micro_live.py` → (无内部依赖)
-- `_update_blueprint_v43.py` → (无内部依赖)
-- `_v4_binary_diagnostic.py` → (无内部依赖)
-- `_validate_tick_load.py` → (无内部依赖)
-- `_verify_btc_analysis_claims.py` → (无内部依赖)
-- `_verify_fix_20260724_001.py` → (无内部依赖)
-- `_verify_xau_three_issues.py` → (无内部依赖)
-- `_xau_performance_retrain_audit.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_btc_deep_diagnosis.py` → (无内部依赖)

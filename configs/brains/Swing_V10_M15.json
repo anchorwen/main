@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\swing\\m15\\v10\\Swing_V10_M15_model.json",
   "model_version": "swing_v10_m15",
   "artifact_hash": "21b806238867fcef0e1eb4d09a98ad905eeca2f5fe0a61d3d78fdca4e925c26e",
-  "status": "candidate",
-  "vote_weight": 1.0,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90310,
   "brain_role": "alpha_brain",
   "training_horizon": 24,
@@ -76,5 +76,7 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "_retire_reason": "FIX-20260621-032: explicit V10_M15 retirement, replaced by V3+Exec+Symmetric",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

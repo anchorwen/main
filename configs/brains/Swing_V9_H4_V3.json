@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_H4_V3_model.json",
   "model_version": "swing_v9_h4_v3",
   "artifact_hash": "d691b5f1fa967a0d40c0d290ea45c15044455580b24eb5ed05e0ffc568fd571c",
-  "status": "live",
+  "status": "retired",
   "_note": "DQAF-20260630-201 P1: aligned with M30_V3/H1_V3",
   "_ic_mandate": {
     "authority": "ARCHITECTURE_COMMITTEE",
@@ -20,7 +20,7 @@
     "reason": "Changeover Vacuum Bootstrap — bypass Rule 85+75 (6/100 settled, PF=2.16, 738 shadow signals). H4_V2 frozen (PF=0.74 toxic). H4_V3 100% short bias is assessed as legitimate macro regime alignment, not model failure.",
     "watchlist": "7-DAY CRITICAL: 738 signals all short (0 long). Monitor for macro regime reversal — manual freeze if H4 trend flips and brain fails to adapt."
   },
-  "vote_weight": 1.0,
+  "vote_weight": 0.0,
   "magic": 90340,
   "brain_role": "alpha_brain",
   "training_horizon": 18,
@@ -93,5 +93,7 @@
     "tp_atr_mult": 3.5,
     "contract_type": "h4_swing",
     "_note": "DQAF-20260630-200: aligned to strategy h4_swing live.yaml (was SL=3.0/TP=2.0 from training_params; training-serving skew to investigate)"
-  }
+  },
+  "_retire_reason": "strategy h4_swing disabled, PF=0.59 all-time, h4 strategy PF=0.60",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

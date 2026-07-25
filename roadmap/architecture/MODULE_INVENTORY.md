@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-25T10:34:24Z
-> **扫描模块数**: 810
+> **自动生成**: 2026-07-25T11:04:39Z
+> **扫描模块数**: 740
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -640,78 +640,8 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `_analyze_btc_gate_blocks.py` | ✅ active | — | 1 | 110 | — | |
-| `_analyze_btc_long_losses.py` | ✅ active | — | 1 | 159 | — | |
-| `_analyze_btc_now.py` | ✅ active | — | 1 | 252 | — | |
-| `_analyze_btc_segmented.py` | ✅ active | — | 4 | 262 | — | |
-| `_analyze_exits_comprehensive.py` | ✅ active | — | 3 | 399 | — | |
-| `_analyze_exits_deep.py` | ✅ active | — | 3 | 328 | — | |
-| `_analyze_live_status.py` | ✅ active | — | 5 | 361 | — | |
-| `_analyze_post_deployment.py` | ✅ active | — | 11 | 413 | — | |
-| `_analyze_tick_dataset.py` | ✅ active | — | 8 | 515 | — | |
-| `_analyze_today_btc_entries.py` | ✅ active | — | 1 | 241 | — | |
-| `_analyze_two_positions_sltp.py` | ✅ active | — | 2 | 175 | — | |
-| `_analyze_xau_comprehensive.py` | ✅ active | — | 8 | 855 | — | |
-| `_analyze_xau_h1_position.py` | ✅ active | — | 1 | 156 | — | |
-| `_analyze_xau_institutional.py` | ✅ active | — | 5 | 624 | — | |
-| `_analyze_xau_live_status.py` | ✅ active | — | 2 | 229 | — | |
-| `_analyze_xau_now.py` | ✅ active | — | 6 | 303 | — | |
-| `_analyze_xau_optimization.py` | ✅ active | — | 3 | 606 | — | |
-| `_analyze_xau_recent_longs.py` | ✅ active | — | 3 | 256 | — | |
-| `_analyze_xau_today_20260710.py` | ✅ active | — | 3 | 302 | — | |
-| `_analyze_xau_today_losses.py` | ✅ active | — | 2 | 169 | — | |
-| `_apply_v43_edits.py` | 📄 config | — | 0 | 61 | — | |
-| `_audit_zombie_ghost_positions.py` | ✅ active | — | 3 | 460 | — | |
-| `_btc_evolution_audit.py` | ✅ active | — | 4 | 653 | — | |
-| `_btc_governance_reconcile.py` | ✅ active | — | 2 | 126 | — | |
-| `_check_status.py` | 📄 config | — | 0 | 106 | — | |
-| `_commit_fixes.py` | 📄 config | — | 0 | 46 | — | |
-| `_comprehensive_health_check.py` | ✅ active | — | 6 | 623 | — | |
-| `_comprehensive_live_check_20260717.py` | ✅ active | — | 2 | 327 | — | |
-| `_deep_cross_analysis.py` | 📄 config | — | 0 | 284 | — | |
-| `_deep_cross_analysis_p2.py` | 📄 config | — | 0 | 254 | — | |
-| `_deep_cross_v3.py` | 📄 config | — | 0 | 198 | — | |
-| `_deep_cross_v3_deep.py` | 📄 config | — | 0 | 180 | — | |
-| `_deep_dive_btc_source.py` | ✅ active | — | 1 | 153 | — | |
-| `_deep_dive_m15_swing_20260710.py` | ✅ active | — | 3 | 220 | — | |
-| `_deep_statistical_analysis.py` | 📄 config | — | 0 | 250 | — | |
-| `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
-| `_diagnose_btc_outage_20260725.py` | ✅ active | — | 9 | 559 | — | |
-| `_diagnose_btc_v4_training_live_gap.py` | ✅ active | — | 5 | 403 | — | |
-| `_diagnose_cold_explore_pwin.py` | ✅ active | — | 2 | 199 | — | |
-| `_diagnose_dual_assassin_silence.py` | ✅ active | — | 1 | 360 | — | |
-| `_diagnose_giveback_lifecycle.py` | ✅ active | — | 5 | 247 | — | |
-| `_diagnose_mahalanobis_ood.py` | ✅ active | — | 1 | 178 | — | |
-| `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
-| `_diagnose_tp_giveback_pollution.py` | ✅ active | — | 4 | 164 | — | |
-| `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
-| `_diagnose_v4_silence_day2.py` | 📄 config | — | 0 | 289 | — | |
-| `_diagnose_v4_silence_day2b.py` | ✅ active | RegimeDetector | 4 | 420 | — | |
-| `_diagnose_xau_gates.py` | ✅ active | — | 3 | 411 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
-| `_export_btc_mt5.py` | 📄 config | — | 0 | 48 | — | |
-| `_fix_shadow_configs.py` | 📄 config | — | 0 | 61 | — | |
-| `_forensic_orphan_closes.py` | ✅ active | — | 4 | 142 | — | |
-| `_forensic_tp_profit_giveback.py` | ✅ active | — | 2 | 153 | — | |
-| `_generate_btc_brain_configs.py` | ✅ active | — | 1 | 246 | — | |
-| `_ghost_brain_audit.py` | 📄 config | — | 0 | 287 | — | |
-| `_ghost_brain_audit_v2.py` | ✅ active | — | 2 | 161 | — | |
-| `_ghost_deprecation_verify.py` | ✅ active | — | 2 | 286 | — | |
-| `_micro_enrichment_test.py` | ✅ active | — | 6 | 319 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
-| `_register_h4_governance.py` | 📄 config | — | 0 | 31 | — | |
-| `_retire_ghost_brains.py` | 📄 config | — | 0 | 168 | — | |
-| `_retire_ghost_configs.py` | 📄 config | — | 0 | 196 | — | |
-| `_retrain_with_micro.py` | ✅ active | — | 7 | 334 | — | |
-| `_surface_scan_horizon4.py` | ✅ active | — | 4 | 406 | — | |
-| `_test_micro_live.py` | 📄 config | — | 0 | 99 | — | |
-| `_update_blueprint_v43.py` | 📄 config | — | 0 | 287 | — | |
-| `_v4_binary_diagnostic.py` | 📄 config | — | 0 | 135 | — | |
-| `_validate_tick_load.py` | ✅ active | — | 4 | 196 | — | |
-| `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
-| `_verify_fix_20260724_001.py` | ✅ active | — | 1 | 160 | — | |
-| `_verify_xau_three_issues.py` | ✅ active | — | 2 | 297 | — | |
-| `_xau_performance_retrain_audit.py` | ✅ active | — | 6 | 616 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_btc_deep_diagnosis.py` | ✅ active | — | 5 | 830 | — | |

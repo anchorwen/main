@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\swing\\Swing_V9_M30_V4_model.json",
   "model_version": "swing_v9_m30_v4",
   "artifact_hash": "2436910dda22551a680298438821710ada4dd9b27517d38f5409a623a8dbef7b",
-  "status": "candidate",
-  "vote_weight": 1.0,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -84,5 +84,7 @@
     "contract_type": "asymmetric_barrier",
     "training_serving_alignment": "aligned",
     "_note": "FIX-20260706-026: V4 retrained with SL=2.0/TP=3.0 matching m30_swing serving contract. Seed=77 (≠V2 seed=42) to avoid identity leak."
-  }
+  },
+  "_retire_reason": "FIX-20260706-026: L3 retrain experiment, never registered, replaced by Exec_A(WR=64.4%,PF=1.57)+V5(WR=80%,PF=3.97)",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

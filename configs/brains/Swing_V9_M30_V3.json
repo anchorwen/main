@@ -10,7 +10,7 @@
   "artifact_path": "data/models/swing/Swing_V9_M30_V3_model.json",
   "model_version": "swing_v9_m30_v3",
   "artifact_hash": "fcab4c5d6f73ac8bec1323e0b69842d5f4de64e96feefd8b87eab0f8da4b1098",
-  "status": "frozen",
+  "status": "retired",
   "_note": "DQAF-20260630-201 P1: Rule 85 auto-promoted from candidate",
   "_ic_mandate": {
     "authority": "ARCHITECTURE_COMMITTEE",
@@ -91,5 +91,7 @@
     "tp_atr_mult": 3.0,
     "contract_type": "m30_swing",
     "_note": "DQAF-20260630-200: aligned to strategy m30_swing live.yaml (was SL=3.0/TP=1.5 from training_params; training-serving skew to investigate)"
-  }
+  },
+  "_retire_reason": "config already frozen vote_weight=0.0, PF=0.05 15 trades, replaced by Exec_A+Symmetric+V5",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

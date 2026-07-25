@@ -10,8 +10,8 @@
   "artifact_path": "data/models/brains/Brain_Rev_M30_V1_model.json",
   "model_version": "swing_m30_swing_v1",
   "artifact_hash": "",
-  "status": "candidate",
-  "vote_weight": 0.5,
+  "status": "retired",
+  "vote_weight": 0.0,
   "magic": 90321,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -79,5 +79,7 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "_retire_reason": "FIX-20260605-126: Rev killed by eval bug + SL/TP mismatch, strategy m30_reversion disabled",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

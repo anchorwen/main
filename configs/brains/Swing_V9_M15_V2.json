@@ -1,37 +1,37 @@
 {
   "schema_version": "brain_registry_entry.v1",
-  "brain_id": "Brain_Trend_M30_V2",
+  "brain_id": "Swing_V9_M15_V2",
   "brain_type": "xgboost_v9",
-  "contract_group": "m30_swing",
-  "training_contract": "m30_swing",
+  "contract_group": "m15_swing",
+  "training_contract": "m15_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
-  "model_path": "data\\models\\swing\\m30\\trend_v2\\Brain_Trend_M30_V2_model.json",
-  "artifact_path": "data\\models\\swing\\m30\\trend_v2\\Brain_Trend_M30_V2_model.json",
-  "model_version": "brain_trend_m30_v2",
-  "artifact_hash": "2cee2ac0c35dd56088d903fc7b904911d7c0db5053054f82fff25b2a151afe07",
+  "model_path": "data\\models\\swing\\Swing_V9_M15_V2_model.json",
+  "artifact_path": "data\\models\\swing\\Swing_V9_M15_V2_model.json",
+  "model_version": "swing_v9_m15_v2",
+  "artifact_hash": "4b9064adae92398984f1e265a41cc8a36cc42ef93ab32c8e6363aeeee6c92b2a",
   "status": "retired",
   "vote_weight": 0.0,
-  "magic": 90320,
+  "magic": 90310,
   "brain_role": "alpha_brain",
-  "training_horizon": 12,
-  "strategy": "m30_swing",
-  "timeframe": "M30",
+  "training_horizon": 24,
+  "strategy": "m15_swing",
+  "timeframe": "M15",
   "training_params": {
-    "sl_atr_mult": 1.5,
-    "tp_atr_mult": 2.5,
-    "horizon": 12,
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.0,
+    "horizon": 24,
     "n_estimators": 300,
     "learning_rate": 0.05,
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.4435,
-    "val_accuracy": 0.4435,
-    "test_accuracy": 0.5535,
-    "test_trade_win_rate": 0.5523,
-    "test_profit_factor": 4.5778,
-    "test_sharpe": 68.0528
+    "train_accuracy": 0.4734,
+    "val_accuracy": 0.4734,
+    "test_accuracy": 0.4763,
+    "test_trade_win_rate": 0.4763,
+    "test_profit_factor": 1.5925,
+    "test_sharpe": 22.5964
   },
   "features": [
     "D1_Ret_1",
@@ -71,12 +71,12 @@
     "TF_Hurst"
   ],
   "n_features": 35,
-  "n_train_samples": 1614,
-  "trained_at": "2026-06-02T01:21:03.299049Z",
+  "n_train_samples": 65513,
+  "trained_at": "2026-07-06T04:21:12.937866Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
   },
-  "_retire_reason": "WR=0% 4 trades, replaced by Exec_A+Symmetric+V5",
+  "_retire_reason": "PF=0.38 12 trades, config also in archive_deprecated, replaced by V3+Exec+Symmetric",
   "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

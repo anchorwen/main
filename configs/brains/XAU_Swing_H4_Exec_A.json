@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\swing\\XAU_Swing_H4_Exec_A_model.json",
   "model_version": "xau_swing_h4_exec_a",
   "artifact_hash": "ca342055b18ae53c6894d7c57f0f19a456aa9b92bef39a851c1bdfd111372467",
-  "status": "shadow",
+  "status": "retired",
   "vote_weight": 0.0,
   "magic": 90340,
   "brain_role": "alpha_brain",
@@ -100,5 +100,7 @@
     "action": "SHADOW_DEPLOY",
     "phase": "Tracer Bullet Phase 2 — Multi-Timeframe Extension",
     "reason": "h4_swing XAU_Swing_H4_Exec_A — SL=2.0/TP=3.5, RR=1.75. Shadow, vote_weight=0.0, 7-day observation."
-  }
+  },
+  "_retire_reason": "strategy h4_swing disabled, vote_weight already 0.0",
+  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
 }

@@ -1,16 +1,16 @@
 {
   "schema_version": "brain_registry_entry.v1",
-  "brain_id": "Brain_Trend_M30_V2",
+  "brain_id": "XAU_Swing_M30_V5",
   "brain_type": "xgboost_v9",
   "contract_group": "m30_swing",
   "training_contract": "m30_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
-  "model_path": "data\\models\\swing\\m30\\trend_v2\\Brain_Trend_M30_V2_model.json",
-  "artifact_path": "data\\models\\swing\\m30\\trend_v2\\Brain_Trend_M30_V2_model.json",
-  "model_version": "brain_trend_m30_v2",
-  "artifact_hash": "2cee2ac0c35dd56088d903fc7b904911d7c0db5053054f82fff25b2a151afe07",
-  "status": "retired",
+  "model_path": "data\\models\\swing\\XAU_Swing_M30_V5_model.json",
+  "artifact_path": "data\\models\\swing\\XAU_Swing_M30_V5_model.json",
+  "model_version": "xau_swing_m30_v5",
+  "artifact_hash": "7e5d529f2afe954717f43bf92b8ad7622c8504c745e7af01fb2b019d667974ae",
+  "status": "shadow",
   "vote_weight": 0.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
@@ -18,20 +18,20 @@
   "strategy": "m30_swing",
   "timeframe": "M30",
   "training_params": {
-    "sl_atr_mult": 1.5,
-    "tp_atr_mult": 2.5,
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.0,
     "horizon": 12,
     "n_estimators": 300,
     "learning_rate": 0.05,
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.4435,
-    "val_accuracy": 0.4435,
-    "test_accuracy": 0.5535,
-    "test_trade_win_rate": 0.5523,
-    "test_profit_factor": 4.5778,
-    "test_sharpe": 68.0528
+    "train_accuracy": 0.3409,
+    "val_accuracy": 0.3409,
+    "test_accuracy": 0.3396,
+    "test_trade_win_rate": 0.3369,
+    "test_profit_factor": 1.5625,
+    "test_sharpe": 18.1899
   },
   "features": [
     "D1_Ret_1",
@@ -72,11 +72,9 @@
   ],
   "n_features": 35,
   "n_train_samples": 1614,
-  "trained_at": "2026-06-02T01:21:03.299049Z",
+  "trained_at": "2026-07-22T13:06:34.798282Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  },
-  "_retire_reason": "WR=0% 4 trades, replaced by Exec_A+Symmetric+V5",
-  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
+  }
 }
