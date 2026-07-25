@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-25T01:50:29Z
-> **扫描模块数**: 807
+> **自动生成**: 2026-07-25T10:34:24Z
+> **扫描模块数**: 810
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -527,7 +527,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4850 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4875 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2461 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -676,6 +676,7 @@
 | `_deep_dive_m15_swing_20260710.py` | ✅ active | — | 3 | 220 | — | |
 | `_deep_statistical_analysis.py` | 📄 config | — | 0 | 250 | — | |
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
+| `_diagnose_btc_outage_20260725.py` | ✅ active | — | 9 | 559 | — | |
 | `_diagnose_btc_v4_training_live_gap.py` | ✅ active | — | 5 | 403 | — | |
 | `_diagnose_cold_explore_pwin.py` | ✅ active | — | 2 | 199 | — | |
 | `_diagnose_dual_assassin_silence.py` | ✅ active | — | 1 | 360 | — | |
@@ -684,6 +685,8 @@
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
 | `_diagnose_tp_giveback_pollution.py` | ✅ active | — | 4 | 164 | — | |
 | `_diagnose_v12_h1_direction_bias.py` | ✅ active | — | 1 | 263 | — | |
+| `_diagnose_v4_silence_day2.py` | 📄 config | — | 0 | 289 | — | |
+| `_diagnose_v4_silence_day2b.py` | ✅ active | RegimeDetector | 4 | 420 | — | |
 | `_diagnose_xau_gates.py` | ✅ active | — | 3 | 411 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_export_btc_mt5.py` | 📄 config | — | 0 | 48 | — | |

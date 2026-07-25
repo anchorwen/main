@@ -2321,6 +2321,31 @@ def execute_live_cycle(
                 _log_cycle_end(state.loop_iteration)
                 return state, True  # continue (skip cycle — strategy is blocked)
 
+    # ── CME daily maintenance window guard (FIX-20260725-002) ──
+    # During the CME daily close (20:58-22:02 UTC DST / 21:58-23:02 UTC EST),
+    # the broker server is unresponsive.  Every MT5 call times out (5s each),
+    # cumulatively >300s → watchdog _exit(1) → restart loop (10-14x/day since
+    # 2026-06-12, 767 kills, 45% at 21:00 UTC).  Skip ALL MT5 operations
+    # during this ~64-min window.  Heartbeat was already updated in
+    # live_intent_loop.py so the watchdog will not trip on fast returns.
+    from core.execution.pre_trade_guards import _is_daily_close_window
+
+    if _is_daily_close_window():
+        if state.loop_iteration % 20 == 0:  # ~every 100s at 5s cycle period
+            print(
+                json.dumps(
+                    {
+                        "event": "cme_maintenance_skip",
+                        "time": _utc_iso(),
+                        "detail": "CME daily close window — MT5 paused",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        _log_cycle_end(state.loop_iteration)
+        return state, True
+
     # ── Position limit check ──
     if not config.no_mt5:
         # _position_count internally wraps MT5 IPC in FTC(CRASH) — let it propagate
