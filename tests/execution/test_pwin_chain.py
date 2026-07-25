@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 
 from core.execution.pwin_chain import PWinResolution, resolve_p_win
 
-
 # ── Shared fixtures ──────────────────────────────────────────────────────────
 
 
@@ -75,7 +74,7 @@ def test_rolling_wr_fallback_with_metafilter_present():
     """MetaFilter present + PnL → rolling_wr (source stays clean)."""
     mock_store = MagicMock()
     mock_metric = MagicMock()
-    mock_metric.sample_count = 15
+    mock_metric.sample_count = 50  # ≥50 to bypass small-N degradation (DQAF-20260722-002)
     mock_metric.win_rate = 0.48
     mock_store.get_metrics.return_value = mock_metric
 
@@ -95,7 +94,7 @@ def test_rolling_wr_absent_metafilter_renames_source():
     """MetaFilter absent → rolling_wr → source renamed to rolling_wr_no_metafilter."""
     mock_store = MagicMock()
     mock_metric = MagicMock()
-    mock_metric.sample_count = 15
+    mock_metric.sample_count = 50  # ≥50 to bypass small-N degradation (DQAF-20260722-002)
     mock_metric.win_rate = 0.52
     mock_store.get_metrics.return_value = mock_metric
 
@@ -132,7 +131,7 @@ def test_brain_confidence_fallback_rolling_wr_low():
     """Rolling WR ≤ 0.40 triggers brain confidence fallback."""
     mock_store = MagicMock()
     mock_metric = MagicMock()
-    mock_metric.sample_count = 15
+    mock_metric.sample_count = 50  # ≥50 to bypass small-N degradation (DQAF-20260722-002)
     mock_metric.win_rate = 0.35  # Below 0.40 → fail_closed
     mock_store.get_metrics.return_value = mock_metric
 
@@ -154,7 +153,7 @@ def test_metafilter_absent_elevates_floor():
     """MetaFilter absent + rolling_wr → elevated floor, source renamed."""
     mock_store = MagicMock()
     mock_metric = MagicMock()
-    mock_metric.sample_count = 20
+    mock_metric.sample_count = 50  # ≥50 to bypass small-N degradation (DQAF-20260722-002)
     mock_metric.win_rate = 0.52  # Above 0.40, so NOT fail_closed
     mock_store.get_metrics.return_value = mock_metric
 
@@ -189,7 +188,7 @@ def test_ucb_elastic_floor_lifts_rolling_wr():
     """Rolling WR between 0.40 and min_p_win → UCB elastic floor lifts it."""
     mock_store = MagicMock()
     mock_metric = MagicMock()
-    mock_metric.sample_count = 20
+    mock_metric.sample_count = 50  # ≥50 to bypass small-N degradation (DQAF-20260722-002)
     mock_metric.win_rate = 0.42  # 0.40 < 0.42 < min_p_win(0.45)
     mock_store.get_metrics.return_value = mock_metric
 
@@ -213,7 +212,7 @@ def test_ucb_elastic_floor_inactive_when_p_win_above_min():
     """When rolling WR ≥ min_p_win, UCB elastic floor NOT triggered."""
     mock_store = MagicMock()
     mock_metric = MagicMock()
-    mock_metric.sample_count = 20
+    mock_metric.sample_count = 50  # ≥50 to bypass small-N degradation (DQAF-20260722-002)
     mock_metric.win_rate = 0.50  # Above min_p_win(0.45)
     mock_store.get_metrics.return_value = mock_metric
 

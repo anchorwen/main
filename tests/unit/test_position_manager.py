@@ -523,6 +523,7 @@ def test_time_exit_stale_past_horizon(long_position, manager):
     """Past expiry (t/T >= 1.0): must deliver full design R:R (3.5) to hold."""
     pos = manager._position = long_position
     pos.cycles_held = 65
+    pos.highest_r = 0.5  # DQAF-20260722-001: EV trajectory requires prior profitability
     manager.max_hold_cycles = 60
     # T_max=60, t_ratio=1.0, ev_floor=-0.5+4.0×1.0=3.5
     # mid=2501 → R=0.1 < 3.5 → exit
@@ -536,6 +537,7 @@ def test_time_exit_past_horizon_spares_strong_winner(long_position, manager):
     """Past expiry with R >= design R:R: horse is running, let it ride."""
     pos = manager._position = long_position
     pos.cycles_held = 65
+    pos.highest_r = 0.5  # DQAF-20260722-001: EV trajectory requires prior profitability
     manager.max_hold_cycles = 60
     # T_max=60, ev_floor=3.5; mid=2540 → R=4.0 >= 3.5 → spared
     should_exit, _ = manager.should_exit_time_based(mid=2540.0)
@@ -550,6 +552,7 @@ def test_time_exit_early_underwater_triggers(long_position, manager):
     """
     pos = manager._position = long_position
     pos.cycles_held = 10
+    pos.highest_r = 0.3  # DQAF-20260722-001: EV trajectory requires prior profitability
     manager.max_hold_cycles = 60  # t_ratio = 16.7%
     # ev_floor = -0.5 + 4.0 × 0.167 = 0.167
     # mid=2495 → R=-0.5 < 0.167 → exit
@@ -562,6 +565,7 @@ def test_time_exit_mid_life_override_min_r(long_position, manager):
     """override_min_r lowers the envelope endpoint — lenient early, tight late."""
     pos = manager._position = long_position
     pos.cycles_held = 36  # t/T = 60%
+    pos.highest_r = 0.5  # DQAF-20260722-001: EV trajectory requires prior profitability
     manager.max_hold_cycles = 60
     # override_min_r=0.3: end_target=0.3 (instead of r_target=3.5)
     # ev_floor at 60% = -0.5 + (0.3+0.5) × 0.6 = -0.02
@@ -577,6 +581,7 @@ def test_time_exit_late_stage_rising_bar(long_position, manager):
     """Late stage (t/T=90%) bar rises: must show real progress to hold."""
     pos = manager._position = long_position
     pos.cycles_held = 54  # t/T = 90%
+    pos.highest_r = 0.5  # DQAF-20260722-001: EV trajectory requires prior profitability
     manager.max_hold_cycles = 60
     # override_min_r=0.3: ev_floor at 90% = -0.5 + 0.8 × 0.9 = 0.22
     # R=0.1 (mid=2501) < 0.22 → exit
@@ -592,6 +597,7 @@ def test_time_exit_model_horizon_used(long_position, manager):
     pos = manager._position = long_position
     pos.model_horizons = {"v9_brain": 12, "mtx_brain": 3}  # min = 3
     pos.cycles_held = 2  # ratio = 2/3 = 0.67 → phase 2
+    pos.highest_r = 0.5  # DQAF-20260722-001: EV trajectory requires prior profitability
     manager.require_min_r = 0.3
     # R ≈ 0.1 at mid=2501
     should_exit, _ = manager.should_exit_time_based(mid=2501.0)

@@ -595,16 +595,17 @@ def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
 
         lb = BrainLeaderboard()
         # FIX-20260610-007: pass vote_weights from DynamicBrainWeighter
+        # FIX-20260725-001: load_brain_registry() never existed —
+        # the import has been a silent ImportError since 2026-06-10.
         _vote_weights: dict[str, float] = {}
         try:
-            from core.brains.brain_registry import load_brain_registry
             from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
+            from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 
             _perf_path = base_dir / "brain_performance.json"
             if _perf_path.exists():
-                _registry = load_brain_registry(base_dir=str(base_dir))
-                _tracker = _registry.get("tracker")
-                if _tracker is not None:
+                _tracker = BrainPerformanceTracker.load(str(_perf_path))
+                if _tracker is not None and _tracker.get_brain_ids():
                     _dw = DynamicBrainWeighter(
                         performance_tracker=_tracker,
                         pnl_store=pnl_store,

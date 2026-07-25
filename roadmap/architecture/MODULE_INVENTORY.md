@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-24T12:23:32Z
-> **扫描模块数**: 805
+> **自动生成**: 2026-07-25T01:50:29Z
+> **扫描模块数**: 807
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -678,6 +678,7 @@
 | `_diagnose_atr_misalignment.py` | ✅ active | — | 5 | 334 | — | |
 | `_diagnose_btc_v4_training_live_gap.py` | ✅ active | — | 5 | 403 | — | |
 | `_diagnose_cold_explore_pwin.py` | ✅ active | — | 2 | 199 | — | |
+| `_diagnose_dual_assassin_silence.py` | ✅ active | — | 1 | 360 | — | |
 | `_diagnose_giveback_lifecycle.py` | ✅ active | — | 5 | 247 | — | |
 | `_diagnose_mahalanobis_ood.py` | ✅ active | — | 1 | 178 | — | |
 | `_diagnose_model_raw_output.py` | ✅ active | — | 1 | 239 | — | |
@@ -705,6 +706,7 @@
 | `_v4_binary_diagnostic.py` | 📄 config | — | 0 | 135 | — | |
 | `_validate_tick_load.py` | ✅ active | — | 4 | 196 | — | |
 | `_verify_btc_analysis_claims.py` | ✅ active | — | 6 | 302 | — | |
+| `_verify_fix_20260724_001.py` | ✅ active | — | 1 | 160 | — | |
 | `_verify_xau_three_issues.py` | ✅ active | — | 2 | 297 | — | |
 | `_xau_performance_retrain_audit.py` | ✅ active | — | 6 | 616 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
@@ -804,7 +806,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 41 | 3546 | — | |
+| `daily_ops.py` | ✅ active | — | 41 | 3549 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -844,7 +846,7 @@
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
 | `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
-| `live_daily_recap.py` | ✅ active | — | 25 | 940 | — | |
+| `live_daily_recap.py` | ✅ active | — | 25 | 941 | — | |
 | `live_dashboard.py` | ✅ active | — | 16 | 538 | — | |
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |

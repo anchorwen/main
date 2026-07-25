@@ -1,7 +1,7 @@
 {
-  "passed": true,
-  "timestamp": 1780391503.6581407,
-  "commit": "dd46beb9a1cb89b83b885e8f9f86dc7306f92cc0",
-  "file_hash": "8484622001052438719",
-  "details": "full"
+  "passed": false,
+  "timestamp": 1784895443.9657295,
+  "commit": "50c3c53cbb067fbb86c4fe7123756c4b94308265",
+  "file_hash": "5851605273849933909",
+  "details": "quick"
 }
