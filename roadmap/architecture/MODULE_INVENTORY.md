@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-26T07:59:45Z
-> **扫描模块数**: 718
+> **自动生成**: 2026-07-26T09:40:31Z
+> **扫描模块数**: 720
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -527,7 +527,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4850 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4875 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2461 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -554,7 +554,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 1203 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 4 | 1250 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 5 | 1314 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -640,10 +640,12 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
+| `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
+| `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
@@ -708,7 +710,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 732 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 734 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -727,7 +729,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 41 | 3546 | — | |
+| `daily_ops.py` | ✅ active | — | 41 | 3549 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -763,7 +765,7 @@
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
 | `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
-| `live_daily_recap.py` | ✅ active | — | 25 | 940 | — | |
+| `live_daily_recap.py` | ✅ active | — | 25 | 941 | — | |
 | `live_dashboard.py` | ✅ active | — | 16 | 538 | — | |
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
