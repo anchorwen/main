@@ -9,7 +9,7 @@
   "model_path": "data/models/institutional/xgb_h4_binary_v1.json",
   "artifact_path": "data/models/institutional/xgb_h4_binary_v1.json",
   "model_version": "xau_swing_h4_binary_v1",
-  "artifact_hash": "TBD",
+  "artifact_hash": "7ee06b7bf703c74061496731f2c4b5d9e4ed0844389d6371b8bece35ff6a6855",
   "status": "shadow",
   "vote_weight": 0.0,
   "magic": 90340,
