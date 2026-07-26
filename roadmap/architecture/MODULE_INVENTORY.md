@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-26T06:28:55Z
-> **扫描模块数**: 714
+> **自动生成**: 2026-07-26T07:39:23Z
+> **扫描模块数**: 716
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -640,8 +640,10 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
+| `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
+| `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
@@ -704,7 +706,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 728 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 730 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -949,7 +951,7 @@
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |
 | `train_swing_v9.py` | ✅ active | — | 4 | 491 | — | |
 | `train_xau_directional_v1.py` | ✅ active | — | 6 | 293 | — | |
-| `train_xau_directional_v2.py` | ✅ active | — | 18 | 757 | — | |
+| `train_xau_directional_v2.py` | ✅ active | — | 18 | 923 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |
 | `your_trainer.py` | ✅ active | — | 7 | 223 | — | |
 

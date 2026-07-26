@@ -51,14 +51,22 @@ N_FEATURES = len(ALL_FEATURE_NAMES)  # 35
 
 # ── Micro feature names (positions 24-32 in swing_enhanced_35) ──
 MICRO_9_NAMES = [
-    "tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM",
-    "tick_velocity", "XAGUSDc_return", "EURUSDc_return", "USDJPYc_return",
+    "tick_return",
+    "hl_ratio",
+    "co_ratio",
+    "avg_spread",
+    "OIM",
+    "tick_velocity",
+    "XAGUSDc_return",
+    "EURUSDc_return",
+    "USDJPYc_return",
 ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Technical indicator helpers (extracted from train_btc_swing_v9)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def _atr(h: np.ndarray, l: np.ndarray, c: np.ndarray, period: int = 14) -> float:
     """Average True Range over *period* bars."""
@@ -68,7 +76,7 @@ def _atr(h: np.ndarray, l: np.ndarray, c: np.ndarray, period: int = 14) -> float
     tr = np.zeros(n)
     for i in range(1, n):
         tr[i] = max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1]))
-    return float(np.mean(tr[max(0, n - period):])) if n >= period else float(np.mean(tr[1:]))
+    return float(np.mean(tr[max(0, n - period) :])) if n >= period else float(np.mean(tr[1:]))
 
 
 def _rsi(close: np.ndarray, period: int = 14) -> float:
@@ -76,7 +84,7 @@ def _rsi(close: np.ndarray, period: int = 14) -> float:
     n = len(close)
     if n < period + 1:
         return 50.0
-    deltas = np.diff(close[-period - 1:])
+    deltas = np.diff(close[-period - 1 :])
     gains: list[float] = np.sum(deltas[deltas > 0])
     losses: list[float] = -np.sum(deltas[deltas < 0])
     if losses == 0:
@@ -115,7 +123,7 @@ def _vol_zscore(close: np.ndarray, period: int = 20) -> float:
     n = len(close)
     if n < period + 1:
         return 0.0
-    returns = np.diff(np.log(close[-period - 1:] + 1e-12))
+    returns = np.diff(np.log(close[-period - 1 :] + 1e-12))
     return float((returns[-1] - np.mean(returns)) / (np.std(returns) + 1e-8))
 
 
@@ -159,7 +167,7 @@ def _ou_theta(price: np.ndarray) -> float:
     n = len(price)
     if n < 10:
         return 0.0
-    log_p = np.log(price[-min(n, 200):] + 1e-12)
+    log_p = np.log(price[-min(n, 200) :] + 1e-12)
     y = log_p[1:]
     x = log_p[:-1]
     mu_x, mu_y = np.mean(x), np.mean(y)
@@ -178,7 +186,7 @@ def _hurst(price: np.ndarray, max_lag: int = 20) -> float:
     n = len(price)
     if n < max_lag * 2:
         return 0.5
-    log_p = np.log(price[-min(n, 500):] + 1e-12)
+    log_p = np.log(price[-min(n, 500) :] + 1e-12)
     lags = np.arange(2, max_lag + 1)
     rs_values = np.zeros(len(lags))
     for j, lag in enumerate(lags):
@@ -187,7 +195,7 @@ def _hurst(price: np.ndarray, max_lag: int = 20) -> float:
             continue
         r_sum = 0.0
         for s in range(min(segments, 10)):
-            seg = log_p[s * lag:(s + 1) * lag]
+            seg = log_p[s * lag : (s + 1) * lag]
             if len(seg) < 2:
                 continue
             mean_seg = np.mean(seg)
@@ -207,14 +215,21 @@ def _hurst(price: np.ndarray, max_lag: int = 20) -> float:
 # XAU 35-dim feature computation
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def compute_xau_feature_row(
     idx: int,
-    o: np.ndarray, h: np.ndarray, l: np.ndarray, c: np.ndarray,
-    v: np.ndarray, spreads: np.ndarray,
+    o: np.ndarray,
+    h: np.ndarray,
+    l: np.ndarray,
+    c: np.ndarray,
+    v: np.ndarray,
+    spreads: np.ndarray,
     day_features: dict[int, dict[str, float]],
     daily_ts: np.ndarray,
-    daily_o: np.ndarray, daily_h: np.ndarray,
-    daily_l: np.ndarray, daily_c: np.ndarray,
+    daily_o: np.ndarray,
+    daily_h: np.ndarray,
+    daily_l: np.ndarray,
+    daily_c: np.ndarray,
     gold_price_hist: np.ndarray,
     tf_minutes: float = 60.0,
     prev_ou: float | None = None,
@@ -260,6 +275,7 @@ def compute_xau_feature_row(
     weekday_sin = math.sin(2 * math.pi * weekday / 7.0)
     weekday_cos = math.cos(2 * math.pi * weekday / 7.0)
     import calendar as _cal
+
     days_in_month = _cal.monthrange(dt_obj.year, dt_obj.month)[1]
     days_to_end = (days_in_month - dt_obj.day) / float(days_in_month)
     is_month_end = 1.0 if dt_obj.day >= days_in_month - 4 else 0.0
@@ -268,10 +284,22 @@ def compute_xau_feature_row(
     # ── Vol regime + momentum ──
     atr_val = _atr(h_slice, l_slice, c_slice)
     lookback_5d = min(len(c_slice), 288 * 5)
-    atr_5d = _atr(h_slice[-lookback_5d:], l_slice[-lookback_5d:], c_slice[-lookback_5d:]) if len(c_slice) >= 288 * 5 else atr_val
+    atr_5d = (
+        _atr(h_slice[-lookback_5d:], l_slice[-lookback_5d:], c_slice[-lookback_5d:])
+        if len(c_slice) >= 288 * 5
+        else atr_val
+    )
     vol_regime = atr_val / atr_5d if atr_5d > 0 else 1.0
-    mom_5d = (c[idx] - c[max(0, idx - 288 * 5)]) / c[max(0, idx - 288 * 5)] if len(c) > 288 * 5 and c[max(0, idx - 288 * 5)] > 0 else 0.0
-    mom_20d = (c[idx] - c[max(0, idx - 288 * 20)]) / c[max(0, idx - 288 * 20)] if len(c) > 288 * 20 and c[max(0, idx - 288 * 20)] > 0 else 0.0
+    mom_5d = (
+        (c[idx] - c[max(0, idx - 288 * 5)]) / c[max(0, idx - 288 * 5)]
+        if len(c) > 288 * 5 and c[max(0, idx - 288 * 5)] > 0
+        else 0.0
+    )
+    mom_20d = (
+        (c[idx] - c[max(0, idx - 288 * 20)]) / c[max(0, idx - 288 * 20)]
+        if len(c) > 288 * 20 and c[max(0, idx - 288 * 20)] > 0
+        else 0.0
+    )
 
     # ── Micro features (bar-level) ──
     prev_c_val = c[idx - 1] if idx > 0 else c[idx]
@@ -280,12 +308,14 @@ def compute_xau_feature_row(
     co_ratio_val = abs(c[idx] - o[idx]) / (h[idx] - l[idx]) if (h[idx] - l[idx]) > 0 else 0.0
     avg_spread_val = float(spreads[idx]) if idx < len(spreads) else 0.5
     oim = (c[idx] - o[idx]) / (h[idx] - l[idx]) if (h[idx] - l[idx]) > 0 else 0.0
-    tick_vel = float(v[idx]) / (float(np.mean(v[max(0, idx - 20):end])) + 1e-8) if idx > 20 else 1.0
+    tick_vel = (
+        float(v[idx]) / (float(np.mean(v[max(0, idx - 20) : end])) + 1e-8) if idx > 20 else 1.0
+    )
 
     # XAU cross-market micro returns (XAGUSDc = silver, key gold proxy)
-    xagusd_ret = 0.0   # placeholder — real data from MT5 cross-asset feed
-    eur_ret = 0.0      # placeholder
-    usdjpy_ret = 0.0   # placeholder
+    xagusd_ret = 0.0  # placeholder — real data from MT5 cross-asset feed
+    eur_ret = 0.0  # placeholder
+    usdjpy_ret = 0.0  # placeholder
 
     # ── TF-specific (timeframe-aware) ──
     tf_ou = _ou_theta(price_slice)
@@ -340,8 +370,10 @@ def compute_xau_feature_row(
 # Time decay weights (replaces v9.compute_time_decay_weights)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def compute_time_decay_weights(
-    timestamps: np.ndarray, half_life_days: float = 90.0,
+    timestamps: np.ndarray,
+    half_life_days: float = 90.0,
 ) -> np.ndarray:
     """Exponential time-decay weights (newer samples weight more)."""
     if len(timestamps) == 0:
@@ -358,8 +390,12 @@ def compute_time_decay_weights(
 # Walk-forward purged CV splits
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def walk_forward_purged_splits(
-    n: int, timestamps: np.ndarray, n_folds: int = 5, purge_bars: int = 24,
+    n: int,
+    timestamps: np.ndarray,
+    n_folds: int = 5,
+    purge_bars: int = 24,
 ) -> list[dict[str, Any]]:
     """Walk-forward purged CV splits with embargo."""
     splits = []
@@ -370,11 +406,13 @@ def walk_forward_purged_splits(
         train_end = test_start - purge_bars
         if train_end <= 0:
             continue
-        splits.append({
-            "train_idx": list(range(0, train_end)),
-            "test_idx": list(range(test_start, test_end)),
-            "fold": f,
-        })
+        splits.append(
+            {
+                "train_idx": list(range(0, train_end)),
+                "test_idx": list(range(test_start, test_end)),
+                "fold": f,
+            }
+        )
     return splits
 
 
@@ -382,10 +420,17 @@ def walk_forward_purged_splits(
 # Directional label computation (from V1 — unchanged)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _simulate_one_trade(
-    o: np.ndarray, h: np.ndarray, l: np.ndarray, c: np.ndarray,
-    i: int, horizon: int,
-    entry_price: float, sl_price: float, tp_price: float,
+    o: np.ndarray,
+    h: np.ndarray,
+    l: np.ndarray,
+    c: np.ndarray,
+    i: int,
+    horizon: int,
+    entry_price: float,
+    sl_price: float,
+    tp_price: float,
     direction: str,
 ) -> tuple[int, float, int]:
     """Simulate ONE directional trade."""
@@ -410,9 +455,15 @@ def _simulate_one_trade(
 
 
 def compute_directional_labels(
-    o: np.ndarray, h: np.ndarray, l: np.ndarray, c: np.ndarray,
-    horizon: int, sl_atr_mult: float, tp_atr_mult: float,
-    spread_points: float, slippage_points: float,
+    o: np.ndarray,
+    h: np.ndarray,
+    l: np.ndarray,
+    c: np.ndarray,
+    horizon: int,
+    sl_atr_mult: float,
+    tp_atr_mult: float,
+    spread_points: float,
+    slippage_points: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Directional labels — V1-compatible: entry at NEXT bar open, select winning direction."""
     n = len(o)
@@ -420,7 +471,7 @@ def compute_directional_labels(
     pnl_r = np.zeros(n, dtype=np.float32)
     atr = np.zeros(n)
     for i in range(14, n):
-        atr[i] = _atr(h[:i + 1], l[:i + 1], c[:i + 1])
+        atr[i] = _atr(h[: i + 1], l[: i + 1], c[: i + 1])
     half_sp = spread_points / 2.0
     n_long = n_short = n_neutral = 0
     for i in range(14, n - horizon - 1):
@@ -431,14 +482,30 @@ def compute_directional_labels(
         # Long simulation: entry at next bar open + half_spread + slippage
         entry_long = o[i + 1] + half_sp + slippage_points
         lo, _, _ = _simulate_one_trade(
-            o, h, l, c, i, horizon,
-            entry_long, entry_long - sl_raw, entry_long + tp_raw, "long",
+            o,
+            h,
+            l,
+            c,
+            i,
+            horizon,
+            entry_long,
+            entry_long - sl_raw,
+            entry_long + tp_raw,
+            "long",
         )
         # Short simulation: entry at next bar open - half_spread - slippage
         entry_short = o[i + 1] - half_sp - slippage_points
         so, _, _ = _simulate_one_trade(
-            o, h, l, c, i, horizon,
-            entry_short, entry_short + sl_raw, entry_short - tp_raw, "short",
+            o,
+            h,
+            l,
+            c,
+            i,
+            horizon,
+            entry_short,
+            entry_short + sl_raw,
+            entry_short - tp_raw,
+            "short",
         )
         # Select winning direction — discard conflicting/neutral signals
         if lo == 1 and so != 1:
@@ -453,7 +520,9 @@ def compute_directional_labels(
             n_neutral += 1
     total = n_long + n_short + n_neutral
     if total > 0:
-        print(f"  Labels: LONG={n_long} ({100*n_long/total:.1f}%) SHORT={n_short} ({100*n_short/total:.1f}%) NEUTRAL={n_neutral} ({100*n_neutral/total:.1f}%)")
+        print(
+            f"  Labels: LONG={n_long} ({100*n_long/total:.1f}%) SHORT={n_short} ({100*n_short/total:.1f}%) NEUTRAL={n_neutral} ({100*n_neutral/total:.1f}%)"
+        )
     return labels, pnl_r, np.zeros(n, dtype=np.int32)
 
 
@@ -461,11 +530,18 @@ def compute_directional_labels(
 # Dataset builder
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def build_dataset(
-    csv_path: str, output_dir: str,
-    horizon: int, sl_atr_mult: float, tp_atr_mult: float,
-    spread_points: float, slippage_points: float,
-    cv_folds: int, purge_bars: int, tf_minutes: float,
+    csv_path: str,
+    output_dir: str,
+    horizon: int,
+    sl_atr_mult: float,
+    tp_atr_mult: float,
+    spread_points: float,
+    slippage_points: float,
+    cv_folds: int,
+    purge_bars: int,
+    tf_minutes: float,
 ) -> dict[str, Any]:
     """Build 35-dim XAU directional dataset."""
     print(f"[B2] Loading XAU data from {csv_path}...")
@@ -486,9 +562,12 @@ def build_dataset(
     # Daily features
     print("[B2] Computing day-level context features...")
     df_dt = pd.to_datetime(df["time"])
-    daily = df.set_index(df_dt).resample("D").agg(
-        {"open": "first", "high": "max", "low": "min", "close": "last", vol_col: "sum"}
-    ).dropna()
+    daily = (
+        df.set_index(df_dt)
+        .resample("D")
+        .agg({"open": "first", "high": "max", "low": "min", "close": "last", vol_col: "sum"})
+        .dropna()
+    )
     daily_ts = daily.index.astype(np.int64).values // 10**9
     daily_ts_f = daily_ts.astype(np.float64)
     daily_o = daily["open"].values
@@ -502,7 +581,9 @@ def build_dataset(
         prev_c = daily_c[-2] if len(daily_c) >= 2 else daily_c[-1]
         day_features[d_idx] = {
             "D1_Ret_1": (daily_c[-1] - prev_c) / prev_c if prev_c > 0 else 0.0,
-            "D1_Body_Ratio": abs(daily_c[-1] - daily_o[-1]) / (daily_h[-1] - daily_l[-1]) if (daily_h[-1] - daily_l[-1]) > 0 else 0.5,
+            "D1_Body_Ratio": abs(daily_c[-1] - daily_o[-1]) / (daily_h[-1] - daily_l[-1])
+            if (daily_h[-1] - daily_l[-1]) > 0
+            else 0.5,
             "D1_ATR_14": _atr(daily_h[:end], daily_l[:end], daily_c[:end]),
             "D1_RSI_14": _rsi(daily_c[:end]),
             "D1_MACD": _macd(daily_c[:end])[2],
@@ -532,9 +613,19 @@ def build_dataset(
         if (i - start_bar) % 20000 == 0 and i > start_bar:
             print(f"  ... {i}/{n_bars} bars ({100 * i / n_bars:.0f}%)")
         row, tf_ou, tf_hurst = compute_xau_feature_row(
-            i, o, h, l, c, v, spreads,
-            day_features, daily_ts_f,
-            daily_o, daily_h, daily_l, daily_c,
+            i,
+            o,
+            h,
+            l,
+            c,
+            v,
+            spreads,
+            day_features,
+            daily_ts_f,
+            daily_o,
+            daily_h,
+            daily_l,
+            daily_c,
             gold_price_hist,
             tf_minutes=tf_minutes,
             prev_ou=prev_ou,
@@ -545,7 +636,15 @@ def build_dataset(
         prev_hurst = tf_hurst
 
     labels, pnl_r, _ = compute_directional_labels(
-        o, h, l, c, horizon, sl_atr_mult, tp_atr_mult, spread_points, slippage_points,
+        o,
+        h,
+        l,
+        c,
+        horizon,
+        sl_atr_mult,
+        tp_atr_mult,
+        spread_points,
+        slippage_points,
     )
     valid_idx = np.arange(start_bar, n_bars - horizon - 1)
     features = features[valid_idx]
@@ -564,7 +663,11 @@ def build_dataset(
     os.makedirs(output_dir, exist_ok=True)
     np.savez_compressed(
         os.path.join(output_dir, "train.npz"),
-        X=X, y=y, pnl_r=r, sample_weight=weights, timestamps=ts_labeled,
+        X=X,
+        y=y,
+        pnl_r=r,
+        sample_weight=weights,
+        timestamps=ts_labeled,
     )
     splits_json = []
     for s in splits:
@@ -594,9 +697,14 @@ def build_dataset(
 # Model evaluation
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _evaluate_model(y_true, y_pred, pnl_r):
     signal_mask = np.abs(y_pred) > 0.05
-    dir_acc = float(np.mean(np.sign(y_pred[signal_mask]) == np.sign(y_true[signal_mask]))) if np.sum(signal_mask) > 0 else 0.0
+    dir_acc = (
+        float(np.mean(np.sign(y_pred[signal_mask]) == np.sign(y_true[signal_mask])))
+        if np.sum(signal_mask) > 0
+        else 0.0
+    )
     long_actual, short_actual = y_true > 0, y_true < 0
     long_pred, short_pred = y_pred > 0.05, y_pred < -0.05
     long_rec = float(np.sum(long_actual & long_pred) / max(np.sum(long_actual), 1))
@@ -624,7 +732,8 @@ def _evaluate_model(y_true, y_pred, pnl_r):
 # Model training
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def train_models(data_dir, output_dir):
+
+def train_models(data_dir, output_dir, lr=0.02, n_estimators=500, max_depth=None, num_leaves=31):
     data = np.load(os.path.join(data_dir, "train.npz"))
     X_all, y_all = data["X"], data["y"]
     pnl_r_all = data.get("pnl_r", np.zeros(len(y_all)))
@@ -642,41 +751,67 @@ def train_models(data_dir, output_dir):
         # LightGBM
         try:
             import lightgbm as lgb
+
             params = {
-                "objective": "regression", "metric": "rmse", "boosting_type": "gbdt",
-                "num_leaves": 31, "learning_rate": 0.02, "feature_fraction": 0.8,
-                "bagging_fraction": 0.8, "bagging_freq": 5, "verbose": -1, "seed": 42,
+                "objective": "regression",
+                "metric": "rmse",
+                "boosting_type": "gbdt",
+                "num_leaves": num_leaves,
+                "learning_rate": lr,
+                "feature_fraction": 0.8,
+                "bagging_fraction": 0.8,
+                "bagging_freq": 5,
+                "verbose": -1,
+                "seed": 42,
             }
             dtrain = lgb.Dataset(X_tr, label=y_tr, weight=w_tr)
             dval = lgb.Dataset(X_val, label=y_val, reference=dtrain)
             model = lgb.train(
-                params, dtrain, valid_sets=[dval], num_boost_round=500,
+                params,
+                dtrain,
+                valid_sets=[dval],
+                num_boost_round=n_estimators,
                 callbacks=[lgb.early_stopping(50)],
             )
             model.save_model(os.path.join(output_dir, f"lightgbm_fold{fold_idx}_s42.txt"))
             ev = _evaluate_model(y_val, model.predict(X_val), r_val)
             results["lightgbm"].append(ev)
-            print(f"    LGB: DirAcc={ev['directional_accuracy']:.3f} LongRec={ev['long_recall']:.3f} ShortRec={ev['short_recall']:.3f} trades={len(ev['trade_rs'])}")
+            print(
+                f"    LGB: DirAcc={ev['directional_accuracy']:.3f} LongRec={ev['long_recall']:.3f} ShortRec={ev['short_recall']:.3f} trades={len(ev['trade_rs'])}"
+            )
         except ImportError:
             pass
         # XGBoost
         try:
             import xgboost as xgb
+
+            md = max_depth if max_depth is not None else 5
             params = {
-                "objective": "reg:squarederror", "eval_metric": "rmse", "max_depth": 5,
-                "learning_rate": 0.02, "subsample": 0.8, "colsample_bytree": 0.8,
-                "seed": 42, "verbosity": 0,
+                "objective": "reg:squarederror",
+                "eval_metric": "rmse",
+                "max_depth": md,
+                "learning_rate": lr,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "seed": 42,
+                "verbosity": 0,
             }
             dtrain = xgb.DMatrix(X_tr, label=y_tr, weight=w_tr)
             dval = xgb.DMatrix(X_val, label=y_val)
             model = xgb.train(
-                params, dtrain, num_boost_round=500,
-                evals=[(dval, "val")], early_stopping_rounds=50, verbose_eval=False,
+                params,
+                dtrain,
+                num_boost_round=n_estimators,
+                evals=[(dval, "val")],
+                early_stopping_rounds=50,
+                verbose_eval=False,
             )
             model.save_model(os.path.join(output_dir, f"xgboost_fold{fold_idx}_s42.json"))
             ev = _evaluate_model(y_val, model.predict(dval), r_val)
             results["xgboost"].append(ev)
-            print(f"    XGB: DirAcc={ev['directional_accuracy']:.3f} LongRec={ev['long_recall']:.3f} ShortRec={ev['short_recall']:.3f} trades={len(ev['trade_rs'])}")
+            print(
+                f"    XGB: DirAcc={ev['directional_accuracy']:.3f} LongRec={ev['long_recall']:.3f} ShortRec={ev['short_recall']:.3f} trades={len(ev['trade_rs'])}"
+            )
         except ImportError:
             pass
     summary = {}
@@ -704,39 +839,68 @@ def train_models(data_dir, output_dir):
 # Main
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def main():
-    parser = argparse.ArgumentParser(description="XAU Directional Brain V2 — 35-dim swing_enhanced_35")
+    parser = argparse.ArgumentParser(
+        description="XAU Directional Brain V2 — 35-dim swing_enhanced_35"
+    )
     parser.add_argument("--timeframe", default="H1", choices=["H1", "M15", "M30", "H4"])
     parser.add_argument("--horizon", type=int, default=24)
+    parser.add_argument(
+        "--sl-atr-mult", type=float, default=None, help="Override SL ATR multiplier"
+    )
+    parser.add_argument(
+        "--tp-atr-mult", type=float, default=None, help="Override TP ATR multiplier"
+    )
     parser.add_argument("--csv", default=None)
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--model-dir", default=None)
     parser.add_argument("--cv-folds", type=int, default=5)
     parser.add_argument("--skip-train", action="store_true")
+    parser.add_argument("--n-estimators", type=int, default=500, help="Max boosting rounds")
+    parser.add_argument("--lr", type=float, default=0.02, help="Learning rate")
+    parser.add_argument("--max-depth", type=int, default=None, help="Max depth (XGBoost)")
+    parser.add_argument("--num-leaves", type=int, default=31, help="Num leaves (LightGBM)")
     args = parser.parse_args()
     tf = args.timeframe
+    sl_atr = args.sl_atr_mult if args.sl_atr_mult is not None else SL_ATR_MULT
+    tp_atr = args.tp_atr_mult if args.tp_atr_mult is not None else TP_ATR_MULT
     data_dir = args.data_dir or f"data/training/xau_directional_v2_{tf.lower()}"
     csv_path = args.csv or f"data/raw/xauusdc_{tf.lower()}_merged.csv"
     tf_minutes = {"H1": 60.0, "M15": 15.0, "M30": 30.0, "H4": 240.0}[tf]
     np.random.seed(42)
     print(f"{'=' * 60}")
     print(f"XAU Directional Brain V2 — {tf} (35-dim swing_enhanced_35)")
-    print(f"  SL={SL_ATR_MULT}×ATR  TP={TP_ATR_MULT}×ATR  spread={SPREAD_POINTS}")
+    print(f"  SL={sl_atr}×ATR  TP={tp_atr}×ATR  spread={SPREAD_POINTS}")
     print(f"  data: {csv_path}")
+    print(f"  lr={args.lr} n_estimators={args.n_estimators}")
     print(f"{'=' * 60}")
     build_dataset(
-        csv_path, data_dir,
-        args.horizon, SL_ATR_MULT, TP_ATR_MULT,
-        SPREAD_POINTS, SLIPPAGE_POINTS,
-        args.cv_folds, args.horizon, tf_minutes,
+        csv_path,
+        data_dir,
+        args.horizon,
+        sl_atr,
+        tp_atr,
+        SPREAD_POINTS,
+        SLIPPAGE_POINTS,
+        args.cv_folds,
+        args.horizon,
+        tf_minutes,
     )
     if not args.skip_train:
-        results = train_models(data_dir, data_dir)
+        results = train_models(
+            data_dir,
+            data_dir,
+            lr=args.lr,
+            n_estimators=args.n_estimators,
+            max_depth=args.max_depth,
+            num_leaves=args.num_leaves,
+        )
         summary = {
             "schema_version": "xau_directional_v2.v1",
             "timeframe": tf,
-            "sl_atr_mult": SL_ATR_MULT,
-            "tp_atr_mult": TP_ATR_MULT,
+            "sl_atr_mult": sl_atr,
+            "tp_atr_mult": tp_atr,
             "n_features": N_FEATURES,
             "feature_schema": "swing_enhanced_35",
             "models": results,
@@ -746,10 +910,12 @@ def main():
             json.dump(summary, f, indent=2)
         print(f"\n{'=' * 60}")
         for mn, mr in results.items():
-            print(f"  {mn}: DirAcc={mr.get('directional_accuracy_mean', 0):.3f} "
-                  f"LongRec={mr.get('long_recall_mean', 0):.3f} "
-                  f"ShortRec={mr.get('short_recall_mean', 0):.3f} "
-                  f"bt_WR={mr.get('bt_win_rate', 0):.1%}")
+            print(
+                f"  {mn}: DirAcc={mr.get('directional_accuracy_mean', 0):.3f} "
+                f"LongRec={mr.get('long_recall_mean', 0):.3f} "
+                f"ShortRec={mr.get('short_recall_mean', 0):.3f} "
+                f"bt_WR={mr.get('bt_win_rate', 0):.1%}"
+            )
         print(f"  Summary: {data_dir}/training_summary.json")
 
 
