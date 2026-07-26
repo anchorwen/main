@@ -138,7 +138,7 @@ M15_SWING_GROUP: dict[str, Any] = {
 M30_SWING_GROUP: dict[str, Any] = {
     "name": "m30_swing",
     "horizon_cycles": 36,  # 12 M30 bars × 3 M5 cycles/M30 (M30≈6 M5 bars)
-    "brain_types": {"xgboost_v9"},
+    "brain_types": {"xgboost_v9", "lightgbm_v1"},
     "contract": "m30_swing_12bar",
     "voting_mode": "weighted",
     "description": "M30 intraday swing — 12-bar (~6h) barrier, SL=1.5xATR, TP=3.0xATR",
