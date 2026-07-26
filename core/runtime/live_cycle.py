@@ -1434,35 +1434,51 @@ def execute_live_cycle(
         cycle_duration=_cycle_duration,
     )
 
-    # ── DQAF-20260710-003 (L3): Bootstrap known_open_tickets from journal ──
-    # On every fresh restart, known_open_tickets starts as {}.  Without this
-    # bootstrap, the startup reconciliation gate below (line 1356) evaluates
-    # to False and ghost-position detection is SKIPPED entirely.
-    # This scan finds every journal OPEN without a matching CLOSE and seeds
-    # known_open_tickets so the existing reconciliation logic (which already
-    # knows how to compare against MT5 positions_get and write close entries)
-    # can do its job.
+    # ── DQAF-20260710-003 (L3) + FIX-20260726-012: Bootstrap known_open_tickets ──
+    # from journal on every restart.  Previously gated behind
+    # ``not state.known_open_tickets`` — when execution_state.json restored any
+    # position, the journal bootstrap was SKIPPED entirely.  Ghost positions
+    # (closed in MT5 during downtime) whose journal OPEN lacks a matching CLOSE
+    # were never seeded → the startup reconciliation gate never checked them →
+    # they survived indefinitely (ReB: GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION).
+    #
+    # Now: ALWAYS scan the journal on loop_iteration==1 and MERGE any unclosed
+    # positions that aren't already in known_open_tickets.  The merge is
+    # idempotent — bootstrap_known_open_from_journal() matches opens and closes
+    # by message_id (not mutable position_ticket), so entries with a journal
+    # CLOSE are correctly excluded even when execution_state restore already
+    # populated the dict.
+    #
     # Must run BEFORE the reconciliation gate AND before bootstrap_restart_state
     # (which uses known_open_tickets for _active_open_mids filtering).
-    if state.loop_iteration == 1 and not state.known_open_tickets and not config.no_mt5:
+    if state.loop_iteration == 1 and not config.no_mt5:
         try:
             from core.runtime.restart_state import bootstrap_known_open_from_journal
 
             _bootstrapped = bootstrap_known_open_from_journal(str(journal_path))
             if _bootstrapped:
-                state.known_open_tickets.update(_bootstrapped)
-                print(
-                    json.dumps(
-                        {
-                            "event": "known_open_bootstrapped_from_journal",
-                            "time": _utc_iso(),
-                            "count": len(_bootstrapped),
-                            "tickets": sorted(_bootstrapped.keys()),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+                # Merge: only add positions we don't already know about
+                # (execution_state.json restore may have populated some)
+                _new_tickets: list[int] = []
+                for _tkt, _data in _bootstrapped.items():
+                    if _tkt not in state.known_open_tickets:
+                        state.known_open_tickets[_tkt] = _data
+                        _new_tickets.append(_tkt)
+                if _new_tickets:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "known_open_bootstrapped_from_journal",
+                                "time": _utc_iso(),
+                                "seeded": len(_new_tickets),
+                                "total_bootstrapped": len(_bootstrapped),
+                                "total_known": len(state.known_open_tickets),
+                                "new_tickets": sorted(_new_tickets)[:20],
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             pass
 
