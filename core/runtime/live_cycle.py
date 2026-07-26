@@ -1452,13 +1452,17 @@ def execute_live_cycle(
     # Must run BEFORE the reconciliation gate AND before bootstrap_restart_state
     # (which uses known_open_tickets for _active_open_mids filtering).
     if state.loop_iteration == 1 and not config.no_mt5:
-        try:
+        # DQAF-20260616-101/P1.3: BLE001 → fail_open_guard
+        # Journal bootstrap is a startup diagnostic aid — failure must
+        # never block the main loop.  fail_open_guard logs + contains.
+        with fail_open_guard("JournalBootstrap"):
             from core.runtime.restart_state import bootstrap_known_open_from_journal
 
             _bootstrapped = bootstrap_known_open_from_journal(str(journal_path))
             if _bootstrapped:
                 # Merge: only add positions we don't already know about
                 # (execution_state.json restore may have populated some)
+                _seeded = len(state.known_open_tickets)
                 _new_tickets: list[int] = []
                 for _tkt, _data in _bootstrapped.items():
                     if _tkt not in state.known_open_tickets:
@@ -1470,7 +1474,7 @@ def execute_live_cycle(
                             {
                                 "event": "known_open_bootstrapped_from_journal",
                                 "time": _utc_iso(),
-                                "seeded": len(_new_tickets),
+                                "seeded": _seeded,
                                 "total_bootstrapped": len(_bootstrapped),
                                 "total_known": len(state.known_open_tickets),
                                 "new_tickets": sorted(_new_tickets)[:20],
@@ -1479,8 +1483,6 @@ def execute_live_cycle(
                         ),
                         flush=True,
                     )
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
-            pass
 
     # ── FIX-20260603-074: On first cycle, reconcile positions closed during
     # downtime BEFORE the restart state bootstrap.  Positions in known_open_tickets
