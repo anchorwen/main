@@ -409,6 +409,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/train_xau_metafilter.py",
         "scripts/_train_m15_binary_final.py",  # DQAF-20260726-007: M15 binary_directional training
         "scripts/_analyze_m15_swing_now.py",  # DQAF-20260726-007: M15 swing live performance audit
+        "scripts/_train_h4_binary_final.py",  # DQAF-20260726-008: H4 binary_directional training
+        "scripts/_analyze_h4_swing_now.py",  # DQAF-20260726-008: H4 swing live performance audit
         "scripts/task_a_directional_closure.py",
         "scripts/analyze_shadow_predictions.py",
         "scripts/optimize_sltp_params.py",

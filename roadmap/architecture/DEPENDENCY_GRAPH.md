@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-26T07:39:23Z
+> **自动生成**: 2026-07-26T07:59:45Z
 
 ## Package-Level Dependencies
 
@@ -554,9 +554,11 @@
 
 ### `scripts/`
 
+- `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
+- `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
