@@ -1716,7 +1716,21 @@ def execute_management_phase(
             else:
                 pos.partial_tp_triggered = True
                 # Move remaining SL to breakeven
-                breakeven_sl = pos.entry_price
+                # FIX-20260726-011: Spread-aware breakeven — offset by spread
+                # so partial-TP residual exits at true breakeven, not micro-loss.
+                _be_spread = (
+                    abs(ask - bid)
+                    if (bid is not None and ask is not None and bid > 0 and ask > 0)
+                    else 0.0
+                )
+                if pos.side == "short":
+                    breakeven_sl = (
+                        pos.entry_price - _be_spread if _be_spread > 0 else pos.entry_price
+                    )
+                else:
+                    breakeven_sl = (
+                        pos.entry_price + _be_spread if _be_spread > 0 else pos.entry_price
+                    )
                 improve = (pos.side == "long" and breakeven_sl > pos.current_sl) or (
                     pos.side == "short" and breakeven_sl < pos.current_sl
                 )

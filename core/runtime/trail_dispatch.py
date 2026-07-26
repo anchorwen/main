@@ -84,7 +84,16 @@ def compute_and_dispatch_trail(
     # ── Breakeven check — only fires once per position ──
     if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr, ticket=pos.ticket):
         _be_triggered = True
-        _be_sl = pos.entry_price
+        # FIX-20260726-011: Spread-aware breakeven — offset SL by current spread
+        # so the exit fill lands at true breakeven instead of a guaranteed
+        # micro-loss.  SHORT enters at Bid, exits at Ask → SL must be placed
+        # *below* entry by spread.  LONG enters at Ask, exits at Bid → SL
+        # must be placed *above* entry by spread.  Degrades to entry_price
+        # when bid/ask unavailable (preserves existing behavior).
+        if pos.side == "short":
+            _be_sl = pos.entry_price - _spread if _spread > 0 else pos.entry_price
+        else:
+            _be_sl = pos.entry_price + _spread if _spread > 0 else pos.entry_price
         _be_improves = (pos.side == "long" and _be_sl > _final_sl) or (
             pos.side == "short" and _be_sl < _final_sl
         )
