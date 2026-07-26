@@ -20,6 +20,20 @@
 
 ---
 
+### ReB-20260726-GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION
+- **Pattern Signature**: `GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION`
+- **Date Cataloged**: 2026-07-26
+- **Source Docket**: DQAF-20260726-012
+- **Related**: FIX-20260726-012 (supersedes DQAF-20260710-003's conditional guard)
+
+**Definition**: A startup safety mechanism with redundant paths (belt-and-suspenders) where the two paths are mutually exclusive rather than complementary. When path A (execution_state restore) succeeds, path B (journal bootstrap) is unconditionally skipped via a guard condition. If path A has incomplete data (e.g. doesn't contain a position that was cleaned up on a previous restart), the gap is never detected because path B never runs to fill it. The signature: `if condition_A_succeeded: skip condition_B` where B should instead merge with A's results.
+
+**Prevention**: Defensive startup guards should use MERGE semantics (additive union) rather than REPLACE semantics (either-or). Each protective path should contribute its findings to the shared state without suppressing other paths. Specifically: `if should_run_bootstrap(): merge_bootstrap_results_into_existing_state()` — never `if state_is_empty: run_bootstrap()`.
+
+**Detection**: Grep for startup guards with `not state.*` conditions that gate protective scans. The pattern `if loop_iteration == 1 and not state.X:` where X is populated by a parallel restore path is a candidate.
+
+---
+
 ### ReB-20260724-CIRCUIT_BREAKER_ANCHORED_TO_SYNTHETIC_CFD_PSEUDO_METRIC
 - **Pattern Signature**: `CIRCUIT_BREAKER_ANCHORED_TO_SYNTHETIC_CFD_PSEUDO_METRIC`
 - **Date Cataloged**: 2026-07-24

@@ -27,6 +27,23 @@
 
 ---
 
+### CCT-20260726-012
+- **Docket ID**: DQAF-20260726-012
+- **日期**: 2026-07-26
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 在 downtime 中于 MT5 侧平仓的仓位（SL/TP/手动）跨重启后仍出现在分析脚本的「活跃仓位」列表中。3871727437（6/10 开仓）50+ 天后仍被报告为活跃。
+  - [Layer 2 — 中间异常]: execution_state.json 恢复 `known_open_tickets` → `state.known_open_tickets` 非空 → `live_cycle.py:1447` 条件 `not state.known_open_tickets` 为 False → `bootstrap_known_open_from_journal()` 被跳过 → 未播种幽灵仓位 → 启动 reconciliation 仅检查 restored state 中的票号 → 幽灵仓位永不检测。
+  - [Layer 3 — 根因]: L2 — DQAF-20260710-003 的 belt-and-suspenders 设计为互斥而非互补。Journal bootstrap（suspenders）被 execution_state restore（belt）静默抑制。
+- **证据引用**:
+  - Source 1: `data_btc/state/execution_state.json` — 仅含 4308533605，不含 3871727437
+  - Source 2: `data_btc/live_trade_journal.jsonl:327-328` — 3871727437 的 OPEN 与 3871726916 的 CLOSE（message_id 匹配但 ticket 不匹配），确认 journal bootstrap 通过 message_id 正确排除此记录
+  - Source 3: `core/runtime/live_cycle.py:1447` — `not state.known_open_tickets` 守卫条件
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION
+
+---
+
 ### CCT-20260724-001
 - **Docket ID**: DQAF-20260724-001
 - **日期**: 2026-07-24
