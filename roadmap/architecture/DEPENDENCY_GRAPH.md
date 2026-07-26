@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-26T10:22:34Z
+> **自动生成**: 2026-07-26T12:07:53Z
 
 ## Package-Level Dependencies
 
@@ -554,6 +554,8 @@
 
 ### `scripts/`
 
+- `_analyze_btc_exits.py` → (无内部依赖)
+- `_analyze_btc_improvement.py` → (无内部依赖)
 - `_analyze_h1_swing_now.py` → (无内部依赖)
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)

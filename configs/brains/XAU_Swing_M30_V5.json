@@ -76,5 +76,13 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
+  },
+  "label_contract": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.0,
+    "rr_ratio": 1.5,
+    "contract_type": "asymmetric_barrier",
+    "training_serving_alignment": "aligned",
+    "_note": "Training SL=2.0/TP=3.0 matches m30_swing live config. V5 3-class model (LONG/SHORT/NEUTRAL) with 35 swing_enhanced features."
   }
 }

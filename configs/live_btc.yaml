@@ -376,7 +376,7 @@ strategy_lines:
       cooldown_minutes: 0  # FIX-20260613-090: fail-closed latch, never auto-unpause
     confidence_threshold: 0.35
     direction_balance:
-      long_bias_discount: 0.0
+      long_bias_discount: 0.15
     # ── DQAF-20260705-064 KILL SWITCH LIFTED (2026-07-05) ──
     # Kill switch reason: V4 flipped SHORT-only since June 28 (0 LONG post-June28),
     #   feature manifold shift (fv[2] halved 135.7→67.5, fv[4] collapsed 15.5→2.9) →
@@ -392,6 +392,7 @@ strategy_lines:
       flip_threshold: 0.5
       hesitation_cycles: 12
       time_exit_cycles: 72
+      ev_trajectory_enabled: false
       trail_activation_atr: 0.5   # FIX-20260620-004: 0.3→0.5 — reduce premature trail activation, lower breakeven rate
       trail_atr_mult: 2.0
       trail_enabled: true
@@ -472,13 +473,14 @@ strategy_lines:
       cooldown_minutes: 0
     confidence_threshold: 0.35
     direction_balance:
-      long_bias_discount: 0.0
+      long_bias_discount: 0.15
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true
       flip_threshold: 0.5
       hesitation_cycles: 12
       time_exit_cycles: 72
+      ev_trajectory_enabled: false
       trail_activation_atr: 0.5
       trail_atr_mult: 2.0
       trail_enabled: true
@@ -512,13 +514,14 @@ strategy_lines:
       cooldown_minutes: 0
     confidence_threshold: 0.35
     direction_balance:
-      long_bias_discount: 0.0
+      long_bias_discount: 0.15
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true
       flip_threshold: 0.5
       hesitation_cycles: 12
       time_exit_cycles: 72
+      ev_trajectory_enabled: false
       trail_activation_atr: 0.5
       trail_atr_mult: 2.0
       trail_enabled: true
@@ -552,13 +555,14 @@ strategy_lines:
       cooldown_minutes: 0
     confidence_threshold: 0.35
     direction_balance:
-      long_bias_discount: 0.0
+      long_bias_discount: 0.15
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true
       flip_threshold: 0.5
       hesitation_cycles: 12
       time_exit_cycles: 72
+      ev_trajectory_enabled: false
       trail_activation_atr: 0.5
       trail_atr_mult: 2.0
       trail_enabled: true

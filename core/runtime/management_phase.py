@@ -1764,6 +1764,7 @@ def execute_management_phase(
     _confidence_decay_enabled = _exit_cfg.get("confidence_decay_exit", True)
     _hesitation_cycles = int(_exit_cfg.get("hesitation_cycles", 0) or 0)
     _exit_min_r = _exit_cfg.get("min_r_for_hold", config.exit_require_min_r)
+    _ev_trajectory_enabled = _exit_cfg.get("ev_trajectory_enabled", True)
     _exit_confidence = float(
         (pos.entry_consensus or {}).get(
             "consensus_score", (pos.entry_consensus or {}).get("majority_ratio", 0.5)
@@ -1980,7 +1981,7 @@ def execute_management_phase(
     _skip_time = pm._is_protected_period(ticket=pos.ticket) and not pm._toxicity_veto(
         mid if mid is not None else 0.0, ticket=pos.ticket
     )
-    if not _skip_time:
+    if _ev_trajectory_enabled and not _skip_time:
         _tz_override = int(_exit_time_cycles) if _exit_time_cycles is not None else None
         should_time_exit, exit_reason = pm.should_exit_time_based(
             mid,
