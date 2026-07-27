@@ -817,19 +817,36 @@ class ActivePositionManager:
 
     # ── Layer 1: Chandelier trailing stop (delegated to TrailStopEngine) ──
 
-    def compute_trail_stop(self, current_atr: float, ticket: int | None = None) -> float | None:
+    def compute_trail_stop(
+        self,
+        current_atr: float,
+        ticket: int | None = None,
+        pre_close_atr_mult_override: float | None = None,
+    ) -> float | None:
         """Return new SL if the trail has advanced, else None.  Delegates to TrailStopEngine."""
         pos = self._get_pos(ticket)
         if pos is None:
             return None
-        return self._trail_engine.compute_trail_stop(pos, current_atr)
+        return self._trail_engine.compute_trail_stop(
+            pos, current_atr, pre_close_atr_mult_override=pre_close_atr_mult_override
+        )
 
-    def should_breakeven(self, mid: float, current_atr: float, ticket: int | None = None) -> bool:
+    def should_breakeven(
+        self,
+        mid: float,
+        current_atr: float,
+        ticket: int | None = None,
+        breakeven_threshold_mult_override: float | None = None,
+    ) -> bool:
         """Return True when the favorable move exceeds the breakeven threshold.  Delegates to TrailStopEngine."""
         pos = self._get_pos(ticket)
         if pos is None or pos.breakeven_triggered:
             return False
-        return self._trail_engine.should_breakeven(pos, current_atr)
+        return self._trail_engine.should_breakeven(
+            pos,
+            current_atr,
+            breakeven_threshold_mult_override=breakeven_threshold_mult_override,
+        )
 
     def should_partial_tp(self, mid: float, ticket: int | None = None) -> tuple[bool, float, float]:
         """Return (trigger, close_volume, remaining_volume) if partial TP should fire."""
@@ -1142,22 +1159,27 @@ class ActivePositionManager:
         pos: ActivePosition,
         current_pnl_r: float,
         bleed_bars: int = 3,
+        bleed_bars_override: int | None = None,
     ) -> tuple[bool, str]:
         """Exit if N consecutive bars have negative PnL since entry.
 
         Saves ~1.55R per trade vs waiting for hard_stop at -2.0R.
+
+        bleed_bars_override: pre-close reduced window (applied externally via
+        PreCloseContext.compute_effective_bleed_bars).  None → use normal value.
         """
+        _eff_bars = bleed_bars_override if bleed_bars_override is not None else bleed_bars
         # DQAF-064 §3: Only append bar_pnls on integer cycle boundaries.
         # Previously this appended every main-loop tick (~30s), causing
         # bleed_stop to accumulate negative bars ~10x too fast.
         if pos.cycles_held > pos._last_bar_cycle:
             pos.bar_pnls.append(current_pnl_r)
             pos._last_bar_cycle = pos.cycles_held
-        if len(pos.bar_pnls) > bleed_bars:
-            pos.bar_pnls = pos.bar_pnls[-bleed_bars:]
-        if len(pos.bar_pnls) >= bleed_bars and all(p < 0 for p in pos.bar_pnls):
+        if len(pos.bar_pnls) > _eff_bars:
+            pos.bar_pnls = pos.bar_pnls[-_eff_bars:]
+        if len(pos.bar_pnls) >= _eff_bars and all(p < 0 for p in pos.bar_pnls):
             pos.bleed_triggered = True
-            return True, f"bleed_stop_{bleed_bars}bars_neg"
+            return True, f"bleed_stop_{_eff_bars}bars_neg"
         return False, ""
 
     # ── Knife 2: Drift Lock (v3.2) ──
@@ -1663,11 +1685,22 @@ class ActivePositionManager:
         return pos_side == trend_dir
 
     def compute_trail_tp(
-        self, current_atr: float, ticket: int | None = None, mid: float | None = None
+        self,
+        current_atr: float,
+        ticket: int | None = None,
+        mid: float | None = None,
+        disable_dynamic_tp: bool = False,
     ) -> float | None:
         """Return new TP if it should be tightened based on ATR contraction.
 
         TP only moves INWARD (closer to entry) — never widens.
+
+        disable_dynamic_tp: pre-close aggressive phase guard (CRITICAL CORRECTION 1).
+        When True, return None immediately — keep existing TP unchanged.  Setting
+        tp_mult=0.0 would compute tp_price ≈ entry_price, triggering MT5 Error
+        10016 (Invalid Stops) because the price is within the broker's Stop Level.
+        Boolean truncation delegates position termination to the rapidly-tightening
+        trail SL instead.
 
         **FIX-20260713-008 (L2): SL-Anchored TP + Proximity Gate + TP Floor + Debounce**
 
@@ -1703,6 +1736,12 @@ class ActivePositionManager:
         """
         pos = self._get_pos(ticket)
         if pos is None or pos.entry_atr <= 0 or current_atr <= 0:
+            return None
+
+        # ── CRITICAL CORRECTION 1: Pre-close TP suppression ──
+        # Boolean truncation — keep existing TP, delegate termination to trail SL.
+        # NEVER compute tp_mult=0.0 → tp_price ≈ entry_price → MT5 Error 10016.
+        if disable_dynamic_tp:
             return None
 
         # ── FIX-20260707-009: Bracket inversion pre-check ──
@@ -1911,12 +1950,19 @@ class ActivePositionManager:
         return False, ""
 
     def should_exit_hesitation(
-        self, mid: float = 0.0, ticket: int | None = None
+        self,
+        mid: float = 0.0,
+        ticket: int | None = None,
+        effective_limit_override: int | None = None,
     ) -> tuple[bool, str]:
         """Exit if position has not triggered breakeven within hesitation_cycles.
 
         Catches positions that never gain traction — the consensus said "trade"
         but the market did not follow through.  Returns (should_exit, reason).
+
+        effective_limit_override: pre-close absolute time cap (applied externally
+        via PreCloseContext.compute_effective_hesitation).  None → use normal value.
+        Overrides ALL timeframe multipliers — remaining time dominates.
 
         Pillar 2 — Profit Pardon: if highest_r >= 0.15 (position had meaningful
         profit but breakeven was missed due to sampling blind spot), grant
@@ -1945,6 +1991,14 @@ class ActivePositionManager:
             return False, ""
         else:
             _effective_limit = self.hesitation_cycles
+
+        # ── Pre-close absolute time cap (CRITICAL CORRECTION 2) ──
+        # Overrides ALL timeframe multipliers.  H4 hesitation=240 bars (20h)
+        # is meaningless when only 6 bars remain before flatten.  The
+        # remaining-time cap ensures H1/H4 strategies exit at the same
+        # physical urgency as M5/M15.
+        if effective_limit_override is not None:
+            _effective_limit = min(_effective_limit, effective_limit_override)
 
         if pos.breakeven_triggered:
             return False, ""

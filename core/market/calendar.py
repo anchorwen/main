@@ -79,17 +79,21 @@ def evaluate_pre_close(
     """Check if we are approaching a market close that requires action.
 
     Returns a dict with:
-      - in_pre_close: bool — within the pre-close danger zone
+      - in_pre_close: bool — within any pre-close window (tighten + aggressive + flatten)
+      - in_tighten: bool — Phase 1: T-tighten_start to T-no_new (exit tightening only)
       - minutes_to_close: float | None — minutes until market close
-      - no_new_positions: bool — stop opening new positions
-      - must_flatten: bool — close all positions immediately
+      - no_new_positions: bool — Phase 2: T-no_new to T-flatten (stop opening)
+      - must_flatten: bool — Phase 3: T-flatten to T-0 (close all positions)
+      - phase: str — "tighten" | "aggressive" | "flatten" | ""
       - close_label: str — human-readable label for logging
     """
-    base = {
+    base: dict[str, Any] = {
         "in_pre_close": False,
+        "in_tighten": False,
         "minutes_to_close": None,
         "no_new_positions": False,
         "must_flatten": False,
+        "phase": "",
         "close_label": "",
     }
 
@@ -97,6 +101,9 @@ def evaluate_pre_close(
         now_utc = now_utc.replace(tzinfo=UTC)
     else:
         now_utc = now_utc.astimezone(UTC)
+
+    # Per-symbol overrides for any field (weekly_close, fixed_blackouts, etc.)
+    overrides = (config.get("symbol_overrides") or {}).get(symbol or "", {}) if symbol else {}
 
     for window in config.get("fixed_blackouts") or []:
         try:
@@ -114,18 +121,27 @@ def evaluate_pre_close(
             base["minutes_to_close"] = str(round(minutes, 1))
             base["no_new_positions"] = True
             base["must_flatten"] = now_utc >= flatten_start
+            base["phase"] = "flatten" if base["must_flatten"] else "aggressive"
             base["close_label"] = str(window.get("label", "holiday_close"))
             return base
 
     wc = config.get("weekly_close") or {}
+    wc_override = overrides.get("weekly_close") or {}
+
+    # Per-symbol override can explicitly disable weekly_close (e.g. BTC 24/7)
+    if wc_override.get("enabled") is False:
+        return base
     if not wc.get("enabled"):
         return base
 
-    close_wd = int(wc.get("close_weekday_utc", 4))
-    close_h = int(wc.get("close_hour_utc", 21))
-    close_m = int(wc.get("close_minute_utc", 0))
-    no_new_m = int(wc.get("no_new_positions_minutes", 30))
-    flatten_m = int(wc.get("flatten_all_minutes", 5))
+    close_wd = int(wc_override.get("close_weekday_utc", wc.get("close_weekday_utc", 4)))
+    close_h = int(wc_override.get("close_hour_utc", wc.get("close_hour_utc", 21)))
+    close_m = int(wc_override.get("close_minute_utc", wc.get("close_minute_utc", 0)))
+    tighten_m = int(wc_override.get("tighten_start_minutes", wc.get("tighten_start_minutes", 0)))
+    no_new_m = int(
+        wc_override.get("no_new_positions_minutes", wc.get("no_new_positions_minutes", 30))
+    )
+    flatten_m = int(wc_override.get("flatten_all_minutes", wc.get("flatten_all_minutes", 5)))
 
     days_ahead = (close_wd - now_utc.weekday()) % 7
     if days_ahead == 0 and (
@@ -138,8 +154,20 @@ def evaluate_pre_close(
         tzinfo=UTC,
     )
 
+    tighten_start = close_dt - timedelta(minutes=tighten_m) if tighten_m > 0 else None
     pre_close_start = close_dt - timedelta(minutes=no_new_m)
     flatten_start = close_dt - timedelta(minutes=flatten_m)
+
+    if tighten_start and tighten_start <= now_utc < pre_close_start:
+        # Phase 1: T-tighten → T-no_new — exit tightening only, new positions still allowed
+        delta = close_dt - now_utc
+        minutes = delta.total_seconds() / 60.0
+        base["in_pre_close"] = True
+        base["in_tighten"] = True
+        base["minutes_to_close"] = str(round(minutes, 1))
+        base["phase"] = "tighten"
+        base["close_label"] = "weekly_close"
+        return base
 
     if pre_close_start <= now_utc < close_dt:
         delta = close_dt - now_utc
@@ -148,6 +176,7 @@ def evaluate_pre_close(
         base["minutes_to_close"] = str(round(minutes, 1))
         base["no_new_positions"] = True
         base["must_flatten"] = now_utc >= flatten_start
+        base["phase"] = "flatten" if base["must_flatten"] else "aggressive"
         base["close_label"] = "weekly_close"
 
     return base

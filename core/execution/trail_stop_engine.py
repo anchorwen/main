@@ -198,7 +198,10 @@ class TrailStopEngine:
         return min(lock_r, tp.max_lock_atr)
 
     def compute_trail_stop(
-        self, pos: ActivePosition, current_atr: float
+        self,
+        pos: ActivePosition,
+        current_atr: float,
+        pre_close_atr_mult_override: float | None = None,
     ) -> float | None:  # current_atr vestigial post PER_TF migration
         """Return new SL if the trail has advanced, else None.
 
@@ -244,6 +247,12 @@ class TrailStopEngine:
                 return None  # not enough profit yet — keep initial SL
 
         effective_mult = self._compute_decayed_mult(pos, tp)
+
+        # ── Pre-close tightening (Institutional Risk Override) ──
+        # min() guarantees pre_close can only TIGHTEN the trail, never loosen.
+        # Normal trading: pre_close_atr_mult_override=None → no effect.
+        if pre_close_atr_mult_override is not None:
+            effective_mult = min(effective_mult, pre_close_atr_mult_override)
 
         if pos.side == "long":
             candidate = (
@@ -301,9 +310,16 @@ class TrailStopEngine:
             return round(candidate, 3)
 
     def should_breakeven(
-        self, pos: ActivePosition, current_atr: float
+        self,
+        pos: ActivePosition,
+        current_atr: float,
+        breakeven_threshold_mult_override: float | None = None,
     ) -> bool:  # current_atr vestigial post PER_TF migration
         """Return True when the favorable move exceeds the breakeven threshold.
+
+        breakeven_threshold_mult_override: pre-close tightening factor (< 1.0).
+        Multiplied into the threshold to trigger breakeven earlier as the
+        market close approaches.  None → no override.
 
         FIX-20260603-064: activation watermark — breakeven is suppressed until
         unrealized profit exceeds trail_activation_atr × entry_atr.  Prevents
@@ -326,6 +342,9 @@ class TrailStopEngine:
                 return False  # not enough profit yet — keep breakeven suppressed
 
         threshold = tp.breakeven_threshold_atr * _geom_atr  # PER_TF: bracket_atr units
+        # ── Pre-close tightening: lower threshold → earlier BE trigger ──
+        if breakeven_threshold_mult_override is not None:
+            threshold *= breakeven_threshold_mult_override
         if pos.side == "long":
             return (pos.highest_high - pos.entry_price) >= threshold
         else:

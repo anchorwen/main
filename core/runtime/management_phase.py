@@ -756,8 +756,13 @@ def _evaluate_brain_ensemble(
                         _should_bleed, _bleed_reason = False, ""
                     else:
                         _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
+                        # ── Pre-close bleed acceleration ──
+                        _pcc_bleed = getattr(state, "pre_close_ctx", None)
+                        _eff_bleed = _bleed_bars
+                        if _pcc_bleed is not None and _pcc_bleed.in_pre_close:
+                            _eff_bleed = _pcc_bleed.compute_effective_bleed_bars(_bleed_bars)
                         _should_bleed, _bleed_reason = pm.should_exit_bleed(
-                            pos, _r_now, bleed_bars=_bleed_bars
+                            pos, _r_now, bleed_bars=_eff_bleed
                         )
                     if _should_bleed:
                         pm.mark_pending_close(pos.ticket, state.loop_iteration)
@@ -1491,6 +1496,7 @@ def execute_management_phase(
             strategy_name=_sname,
             utc_iso_fn=_utc_iso,
             dispatch_modify_trail_fn=_modify_trail,
+            pre_close_ctx=getattr(state, "pre_close_ctx", None),
         )
     _final_sl = _trail_result["final_sl"]
     _final_tp = _trail_result["final_tp"]
@@ -1962,8 +1968,15 @@ def execute_management_phase(
         mid if mid is not None else 0.0, ticket=pos.ticket
     )
     if not _skip_hesitation:
+        # ── Pre-close hesitation acceleration (absolute time cap) ──
+        _pcc_hes = getattr(state, "pre_close_ctx", None)
+        _eff_hes_limit: int | None = None
+        if _pcc_hes is not None and _pcc_hes.in_pre_close:
+            _eff_hes_limit = _pcc_hes.compute_effective_hesitation(pm.hesitation_cycles)
         should_hesitate, hesitate_reason = pm.should_exit_hesitation(
-            mid if mid is not None else 0.0, ticket=pos.ticket
+            mid if mid is not None else 0.0,
+            ticket=pos.ticket,
+            effective_limit_override=_eff_hes_limit,
         )
         if should_hesitate:
             pm.mark_pending_close(pos.ticket, state.loop_iteration)

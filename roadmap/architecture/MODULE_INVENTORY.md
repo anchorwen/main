@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-26T15:53:41Z
-> **扫描模块数**: 722
+> **自动生成**: 2026-07-27T09:09:12Z
+> **扫描模块数**: 724
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -261,7 +261,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2322 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2376 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 5 | 645 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -280,7 +280,7 @@
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 442 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 461 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 234 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 345 | — | |
@@ -405,7 +405,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `calendar.py` | ✅ active | — | 4 | 153 | — | |
+| `calendar.py` | ✅ active | — | 4 | 182 | — | |
 | `mtf_price_service.py` | ✅ active | MTFPriceService | 11 | 166 | — | |
 | `position_tracker.py` | ✅ active | PositionTracker, MarketContextProvider | 12 | 125 | — | |
 | `signal_processor.py` | ✅ active | SignalFilter, MarketSignalProcessor | 8 | 121 | — | |
@@ -527,9 +527,9 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4893 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4904 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2476 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2489 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -541,6 +541,7 @@
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 327 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
+| `pre_close_context.py` | ✅ active | PreCloseContext | 8 | 145 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 432 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
@@ -560,7 +561,7 @@
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
-| `trail_dispatch.py` | ✅ active | — | 1 | 405 | — | |
+| `trail_dispatch.py` | ✅ active | — | 1 | 428 | — | |
 | `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 205 | — | |
 
 ## core/schemas
@@ -645,6 +646,7 @@
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
+| `_analyze_v4_timeline.py` | 📄 config | — | 0 | 263 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |

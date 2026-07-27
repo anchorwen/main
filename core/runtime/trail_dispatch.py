@@ -30,6 +30,7 @@ def compute_and_dispatch_trail(
     strategy_name: str = "",
     utc_iso_fn: Any = None,
     dispatch_modify_trail_fn: Any = None,  # _dispatch_modify_trail from live_cycle
+    pre_close_ctx: Any = None,  # PreCloseContext — institutional pre-close risk overrides
 ) -> dict[str, Any]:
     """Compute trail SL, breakeven, trail TP and dispatch.
 
@@ -42,6 +43,9 @@ def compute_and_dispatch_trail(
         current_atr: Current ATR(14) value.
         strategy_name: Strategy name for dispatch attribution.
         utc_iso_fn: Callable returning UTC ISO timestamp string.
+        pre_close_ctx: PreCloseContext — when in pre-close window, contains
+            pre-computed multiplier overrides for trail/breakeven/TP.
+            None or in_pre_close=False → zero overhead (all multipliers = 1.0).
 
     Returns:
         dict with keys: final_sl, final_tp, reasons, sl_changed, tp_changed,
@@ -60,9 +64,21 @@ def compute_and_dispatch_trail(
     _be_dispatched = False
     _be_skipped_price = False
 
+    # ── Pre-close context extraction (zero-cost when None or in_pre_close=False) ──
+    _pcc = pre_close_ctx
+    _trail_mult_override = (
+        getattr(_pcc, "trail_atr_mult", 1.0) if _pcc is not None and _pcc.in_pre_close else None
+    )
+    _be_mult_override = (
+        getattr(_pcc, "breakeven_mult", 1.0) if _pcc is not None and _pcc.in_pre_close else None
+    )
+    _disable_tp = bool(getattr(_pcc, "disable_dynamic_tp", False)) if _pcc is not None else False
+
     # ── Layer 1: Chandelier trailing stop ──
     if not getattr(pos, "cold_explore", False):
-        _trail_sl = pm.compute_trail_stop(current_atr, ticket=pos.ticket)
+        _trail_sl = pm.compute_trail_stop(
+            current_atr, ticket=pos.ticket, pre_close_atr_mult_override=_trail_mult_override
+        )
         if _trail_sl is not None and abs(_trail_sl - pos.current_sl) >= config.exit_min_step:
             if pos.cycles_held >= pm.min_hold_cycles:
                 _reasons.append("trail")
@@ -82,7 +98,12 @@ def compute_and_dispatch_trail(
     )
 
     # ── Breakeven check — only fires once per position ──
-    if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr, ticket=pos.ticket):
+    if not pos.breakeven_triggered and pm.should_breakeven(
+        mid,
+        current_atr,
+        ticket=pos.ticket,
+        breakeven_threshold_mult_override=_be_mult_override,
+    ):
         _be_triggered = True
         # FIX-20260726-011: Spread-aware breakeven — offset SL by current spread
         # so the exit fill lands at true breakeven instead of a guaranteed
@@ -128,7 +149,9 @@ def compute_and_dispatch_trail(
         _be_skipped_price = False
 
     # ── Dynamic trailing TP ──
-    _trail_tp = pm.compute_trail_tp(current_atr, ticket=pos.ticket, mid=mid)
+    _trail_tp = pm.compute_trail_tp(
+        current_atr, ticket=pos.ticket, mid=mid, disable_dynamic_tp=_disable_tp
+    )
     if _trail_tp is not None and abs(_trail_tp - pos.current_tp) >= config.exit_min_step:
         _reasons.append("tp")
         _final_tp = _trail_tp

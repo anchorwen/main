@@ -375,6 +375,9 @@ class LiveCycleState:
     _last_bridge_ack_time: float = 0.0  # Unix ts of last successful broker.fetch_prices()
     _last_cycle_start_time: float = 0.0  # wall clock at start of current cycle
     _last_tick_age: float = 0.0  # FIX-20260613-052: resolved placeholder: age of latest tick (seconds) for staleness guard
+    pre_close_ctx: Any = (
+        None  # PreCloseContext — populated by _check_pre_close() each cycle, read by exit pipeline
+    )
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
     _strategies: dict[str, Any] | None = None  # FIX-072: cached strategy_lines for persistence
@@ -509,6 +512,14 @@ def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str
         symbol=config.symbol,
         calendar_path=config.calendar_path,
     )
+
+    # ── Populate PreCloseContext on state for downstream exit pipeline ──
+    # Always set (even when not in pre_close) so downstream code can
+    # unconditionally read state.pre_close_ctx with zero None-guard branches.
+    from core.runtime.pre_close_context import PreCloseContext
+
+    state.pre_close_ctx = PreCloseContext.from_calendar_result(result)
+
     if not result.get("in_pre_close"):
         return {}
 

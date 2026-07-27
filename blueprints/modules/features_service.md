@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260727-001 | 2026-07-27 | cursor-agent | — | **L3: Weekend pre-close exit tightening — calendar.py extended (DQAF-20260727-001).** `evaluate_pre_close()`: new `tighten_start_minutes` support with `in_tighten`/`phase` return fields. Per-symbol overrides (`symbol_overrides.BTCUSDc.weekly_close.enabled=false` skips crypto 24/7). Three-phase output: tighten/aggressive/flatten. XAU close time 20:55 UTC (Exness spot). Drives `PreCloseContext` multiplier matrix in runtime. | RC-12 — missing-feature: no pre-close calendar awareness |
 ### FIX-20260718-004 — Microstructure Gate: 4 gate-only tick features (DQAF-20260718-004 L3) (2026-07-18)
 
 **Root Cause**: L3 — No microstructure-quality metrics computed for live gate chain. The existing 9 ML-consumed micro features capture sub-bar return dynamics but none measure adverse selection, liquidity shock, or directional order-flow pressure.
