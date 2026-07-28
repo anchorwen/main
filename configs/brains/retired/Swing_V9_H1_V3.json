@@ -1,7 +1,7 @@
 {
   "schema_version": "brain_registry_entry.v1",
   "brain_id": "Swing_V9_H1_V3",
-  "brain_type": "xgboost_v9",
+  "brain_type": "xgboost_binary_directional",
   "contract_group": "h1_swing",
   "training_contract": "h1_swing",
   "feature_schema": "swing_enhanced_35",
@@ -9,38 +9,31 @@
   "model_path": "data\\models\\swing\\Swing_V9_H1_V3_model.json",
   "artifact_path": "data\\models\\swing\\Swing_V9_H1_V3_model.json",
   "model_version": "swing_v9_h1_v3",
-  "artifact_hash": "05272ed48f47b037f019f5d5aac6a3e8ad7cb3600ad5b511db746bb9957e5ba3",
-  "status": "live",
-  "_note": "DQAF-20260630-201 P1: Rule 85 auto-promoted from candidate",
-  "_ic_mandate": {
-    "authority": "ARCHITECTURE_COMMITTEE",
-    "date": "2026-07-02",
-    "docket": "DQAF-20260702-FP001",
-    "action": "FIELD_PROMOTION_probation_to_live",
-    "reason": "Changeover Vacuum Bootstrap — bypass Rule 75 (4/100 settled, PF=1.97, 701 shadow signals). H1_V3 is the H1 vanguard replacing degraded H1_V2 (PF=1.11).",
-    "watchlist": "7-day direction bias monitor (684L/17S=97.6% long)"
-  },
+  "artifact_hash": "03c07acc01cc787f2e1c2823e92238e656d3374b1c47733d17b073ed6bf737bf",
+  "status": "candidate",
   "vote_weight": 1.0,
   "magic": 90330,
   "brain_role": "alpha_brain",
-  "training_horizon": 24,
+  "training_horizon": 4,
   "strategy": "h1_swing",
   "timeframe": "H1",
   "training_params": {
-    "sl_atr_mult": 3.0,
-    "tp_atr_mult": 2.0,
-    "horizon": 24,
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5,
+    "horizon": 4,
+    "mode": "binary_directional",
     "n_estimators": 300,
-    "learning_rate": 0.03,
+    "learning_rate": 0.05,
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.5927,
-    "val_accuracy": 0.5927,
-    "test_accuracy": 0.531,
-    "test_trade_win_rate": 0.5487,
-    "test_profit_factor": 1.9735,
-    "test_sharpe": 34.2938
+    "val_accuracy": 0.8825622775800712,
+    "val_trade_win_rate": 0.8826,
+    "val_profit_factor": 22500000000000.0,
+    "test_accuracy": 0.9158878504672897,
+    "test_trade_win_rate": 0.9159,
+    "test_profit_factor": 24000000000000.0,
+    "test_sharpe": 31.2643
   },
   "features": [
     "D1_Ret_1",
@@ -80,16 +73,10 @@
     "TF_Hurst"
   ],
   "n_features": 35,
-  "n_train_samples": 19207,
-  "trained_at": "2026-06-28T07:37:43.571329Z",
+  "n_train_samples": 911,
+  "trained_at": "2026-07-28T03:56:06.650956Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  },
-  "label_contract": {
-    "sl_atr_mult": 2.0,
-    "tp_atr_mult": 3.5,
-    "contract_type": "h1_swing",
-    "_note": "DQAF-20260630-200: aligned to strategy h1_swing live.yaml (was SL=3.0/TP=2.0 from training_params; training-serving skew to investigate)"
   }
 }

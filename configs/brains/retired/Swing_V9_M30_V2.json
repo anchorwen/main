@@ -6,13 +6,12 @@
   "training_contract": "m30_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
-  "model_path": "data\\models\\swing_tracer_c\\Swing_V9_M30_V2_model.json",
-  "artifact_path": "data\\models\\swing_tracer_c\\Swing_V9_M30_V2_model.json",
+  "model_path": "data\\models\\swing\\Swing_V9_M30_V2_model.json",
+  "artifact_path": "data\\models\\swing\\Swing_V9_M30_V2_model.json",
   "model_version": "swing_v9_m30_v2",
-  "artifact_hash": "472e9270115f85cc2eec512dbd29b4a800908b4c5123370362650794e0d97b30",
-  "status": "retired",
-  "vote_weight": 0.0,
-  "_note": "FIX-20260706-026: Frozen — superseded by V4. V2 TP=2.5 misaligned with m30_swing serving TP=3.0. V4 retrained with correct SL=2.0/TP=3.0 (seed=77).",
+  "artifact_hash": "ef42f367cf0eb919d2b5b5d9e87877df37c9136345e7164f531b7f2e6b5a80c9",
+  "status": "candidate",
+  "vote_weight": 1.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -20,19 +19,19 @@
   "timeframe": "M30",
   "training_params": {
     "sl_atr_mult": 2.0,
-    "tp_atr_mult": 2.5,
+    "tp_atr_mult": 3.0,
     "horizon": 12,
     "n_estimators": 300,
     "learning_rate": 0.05,
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.4152,
-    "val_accuracy": 0.4152,
-    "test_accuracy": 0.3981,
-    "test_trade_win_rate": 0.3981,
-    "test_profit_factor": 1.9837,
-    "test_sharpe": 29.0189
+    "train_accuracy": 0.3869,
+    "val_accuracy": 0.3869,
+    "test_accuracy": 0.3808,
+    "test_trade_win_rate": 0.3648,
+    "test_profit_factor": 1.766,
+    "test_sharpe": 23.5446
   },
   "features": [
     "D1_Ret_1",
@@ -72,20 +71,10 @@
     "TF_Hurst"
   ],
   "n_features": 35,
-  "n_train_samples": 38315,
-  "trained_at": "2026-07-06T03:00:23.837762Z",
+  "n_train_samples": 2155,
+  "trained_at": "2026-07-28T03:42:30.913125Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  },
-  "label_contract": {
-    "sl_atr_mult": 2.0,
-    "tp_atr_mult": 2.5,
-    "rr_ratio": 1.25,
-    "contract_type": "asymmetric_barrier",
-    "training_serving_alignment": "misaligned",
-    "_note": "TP misaligned — training TP=2.5, serving m30_swing TP=3.0. Candidate brain pending retrain."
-  },
-  "_retire_reason": "config already frozen vote_weight=0.0, PF=0.60 95 trades, replaced by Exec_A+Symmetric+V5",
-  "_retired_at": "2026-07-24T10:46:55.477630+00:00"
+  }
 }

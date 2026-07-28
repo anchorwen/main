@@ -20,6 +20,7 @@ Institutional ML training infrastructure: unified dataset abstraction, Combinato
 | `core/training/checkpoint.py` | Checkpoint manager — save/resume for long-running training jobs |
 | `core/training/registries.py` | Loss/metric/optimizer/scheduler registries (decorator pattern) |
 | `core/training/utils.py` | Shared utilities: git metadata, time helpers |
+| `scripts/training/train_swing_binary_directional.py` | Binary directional XGBoost swing trainer — filters NEUTRAL labels, binary:logistic, SL/TP PnL simulation |
 
 ## Training Flow
 ```
@@ -85,6 +86,7 @@ Promotion pipeline (shadow → live)
 | FIX-20260617-100 | 2026-06-17 | MetaFilter V3 — 102 samples, 47-dim | — |
 | FIX-20260616-003 | 2026-06-16 | Directional Balance Filter (Tactic A) | RC-05 |
 | FIX-20260610-003 | 2026-06-10 | Training pipeline CPCV integration | — |
+| FIX-20260728-001 | 2026-07-28 | **L3: M30 Swing binary_directional V3 + generic training script.** Closed gap: M15/H1/H4 already converted to binary_directional (FIX-20260726-007/008/009), M30 was last 3-class holdout. New `train_swing_binary_directional.py`: filters NEUTRAL labels, trains binary:logistic with SL/TP PnL simulation. M30 V3: WR=63.5%, PF=2.62 (vs 3-class WR=36.5%/PF=1.77). H1 V4 (horizon=48) rejected: regime overfitting (22.4σ feature drift, label rupture). | RC-12 — missing-feature |
 | FIX-20260602-078 | 2026-06-02 | V9 institutional schema 41-dim training | — |
 
 ## Cross-Module Contracts

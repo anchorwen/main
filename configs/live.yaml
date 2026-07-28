@@ -78,8 +78,6 @@ brains:
     enabled: false
   - path: configs/brains/Swing_V9_M15_V3.json
     enabled: true
-  - path: configs/brains/Swing_V9_H1_V3.json
-    enabled: true
   - path: configs/brains/Swing_V9_H4_V3.json
     enabled: false
   - path: configs/brains/XAU_Swing_M30_V5.json

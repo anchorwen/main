@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-27T09:09:12Z
+> **自动生成**: 2026-07-28T04:50:57Z
 
 ## Package-Level Dependencies
 
@@ -561,6 +561,7 @@
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_analyze_v4_timeline.py` → (无内部依赖)
+- `_diagnose_h1_v4_degradation.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_train_h1_binary_final.py` → (无内部依赖)
@@ -857,6 +858,7 @@
 - `train_online_init.py` → (无内部依赖)
 - `train_stage2_lgb_pit.py` → (无内部依赖)
 - `train_stage2_mlp_pit.py` → `core.brains.online_mlp_model`
+- `train_swing_binary_directional.py` → (无内部依赖)
 - `train_swing_v9.py` → (无内部依赖)
 - `train_xau_directional_v1.py` → (无内部依赖)
 - `train_xau_directional_v2.py` → `core.features.schemas.swing_enhanced_schema`

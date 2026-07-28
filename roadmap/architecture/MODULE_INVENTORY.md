@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-27T09:09:12Z
-> **扫描模块数**: 724
+> **自动生成**: 2026-07-28T04:50:57Z
+> **扫描模块数**: 726
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -647,6 +647,7 @@
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_analyze_v4_timeline.py` | 📄 config | — | 0 | 263 | — | |
+| `_diagnose_h1_v4_degradation.py` | ✅ active | — | 6 | 237 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
@@ -957,6 +958,7 @@
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |
+| `train_swing_binary_directional.py` | ✅ active | — | 5 | 481 | — | |
 | `train_swing_v9.py` | ✅ active | — | 4 | 491 | — | |
 | `train_xau_directional_v1.py` | ✅ active | — | 6 | 293 | — | |
 | `train_xau_directional_v2.py` | ✅ active | — | 18 | 923 | — | |
