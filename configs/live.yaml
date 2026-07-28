@@ -105,10 +105,10 @@ training:
 live_trading:
   mt5_terminal_path: D:\exness\MetaTrader 5 EXNESS2\terminal64.exe
   symbol: XAUUSDc
-  volume: 0.01
+  volume: 0.05
   interval_seconds: 60
   confidence_threshold: 0.25
-  risk_budget_usd: 30.0
+  risk_budget_usd: 150.0
   equity_risk_pct: 0.0
   min_lot: 0.01
   max_lot: 0.1
@@ -157,10 +157,10 @@ reentry:
 alert:
   enabled: true
   thresholds:
-    daily_loss_limit: -5.0
+    daily_loss_limit: -25.0
     consecutive_losers: 8
     win_rate_collapse: 0.3
-    strategy_degradation_loss: -3.0
+    strategy_degradation_loss: -15.0
     strategy_degradation_wr: 0.3
   channels:
     slack: true
@@ -215,7 +215,7 @@ alert_system:
     name: daily_loss_exceeded
     context_key: daily_pnl_usd
     operator: lt
-    threshold: -5.0
+    threshold: -25.0
     severity: critical
     cooldown_seconds: 300
   - id: RULE-008
@@ -249,7 +249,7 @@ alert_system:
     severity: warning
     cooldown_seconds: 300
 capital_allocator:
-  base_volume: 0.01
+  base_volume: 0.05
   min_volume: 0.01
   max_volume: 0.1
   require_unanimous: false
@@ -561,8 +561,8 @@ strategy_lines:
     magic: 90310
     brain_types:
     - xgboost_v9
-    base_volume: 0.01
-    max_volume: 0.03
+    base_volume: 0.05
+    max_volume: 0.08
     confidence_threshold: 0.35
     min_p_win: 0.4
     max_spread_points: 60
@@ -604,8 +604,8 @@ strategy_lines:
     magic: 90320
     brain_types:
     - xgboost_v9
-    base_volume: 0.01
-    max_volume: 0.03
+    base_volume: 0.05
+    max_volume: 0.08
     confidence_threshold: 0.35
     min_p_win: 0.45
     max_spread_points: 70
@@ -678,8 +678,8 @@ strategy_lines:
     brain_types:
     - xgboost_v9
     - lightgbm_v1
-    base_volume: 0.01
-    max_volume: 0.02
+    base_volume: 0.05
+    max_volume: 0.08
     confidence_threshold: 0.45
     min_p_win: 0.3
     spread_points: 30
@@ -721,8 +721,8 @@ strategy_lines:
     magic: 90303
     brain_types:
     - xgboost_v9
-    base_volume: 0.01
-    max_volume: 0.02
+    base_volume: 0.05
+    max_volume: 0.08
     confidence_threshold: 0.45
     min_p_win: 0.3
     spread_points: 30

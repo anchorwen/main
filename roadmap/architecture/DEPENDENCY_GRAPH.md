@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-28T06:40:13Z
+> **自动生成**: 2026-07-28T14:16:18Z
 
 ## Package-Level Dependencies
 
@@ -561,6 +561,8 @@
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_analyze_v4_timeline.py` → (无内部依赖)
+- `_assess_position_sizing.py` → (无内部依赖)
+- `_check_post_restart.py` → (无内部依赖)
 - `_diagnose_h1_v4_degradation.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
