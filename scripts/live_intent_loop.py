@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import sys
 import time
@@ -319,6 +320,12 @@ def main(argv: list[str] | None = None) -> int:
     _yaml_blocked_hours: list[int] = []  # FIX-20260629-188 (P1-3)
     # ── FIX-20260605-120: reentry thresholds ──
     _reentry_cfg: dict[str, Any] = {}
+    # ── FIX-20260729-001: Default to live.yaml when --config not explicitly passed ──
+    # Without this, risk_budget_usd falls back to hardcoded 10.0 → all positions 0.01.
+    if not args.config:
+        _default_cfg = "configs/live.yaml"
+        if os.path.exists(_default_cfg):
+            args.config = _default_cfg
     if args.config:
         try:
             with open(args.config, encoding="utf-8") as fh:
