@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-28T14:16:18Z
-> **扫描模块数**: 728
+> **自动生成**: 2026-07-28T14:26:44Z
+> **扫描模块数**: 729
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -648,6 +648,7 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_analyze_v4_timeline.py` | 📄 config | — | 0 | 263 | — | |
 | `_assess_position_sizing.py` | ✅ active | — | 6 | 305 | — | |
+| `_calibrate_thresholds.py` | 📄 config | — | 0 | 126 | — | |
 | `_check_post_restart.py` | ✅ active | — | 3 | 192 | — | |
 | `_diagnose_h1_v4_degradation.py` | ✅ active | — | 6 | 237 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
