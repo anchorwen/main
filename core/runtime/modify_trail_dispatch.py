@@ -3,14 +3,34 @@
 Strangler Fig #25 (FIX-20260619-063): Extracted _dispatch_modify_trail()
 as a standalone function.  Builds the modify_sltp payload and dispatches
 through the live_order_sender outbox pipeline.
+
+DQAF-20260728-003 (Component A): Global anti-starvation rate limiter.
+Prevents MT5 broker 10024 "Too many trade requests" by enforcing a
+minimum interval between consecutive modify_sltp calls across all
+positions.  Uses micro-sleep (blocking) rather than rejection — every
+position gets through within the same M5 cycle, just serialised.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from typing import Any
 
 _logger = logging.getLogger(__name__)
+
+# ── DQAF-20260728-003: Global modify_sltp rate limiter ──────────────
+# Per-account rate limit: max 1 modify_sltp per _MIN_INTERVAL seconds.
+# Micro-sleep (blocking) ensures anti-starvation — no position is
+# deferred to the next 5-minute cycle.  Total sleep across N positions
+# in one cycle ≈ (N-1) × _MIN_INTERVAL; with N≤4 and interval=1.5s,
+# worst-case total is 4.5s < 5s M5 cycle budget.
+# ⛔ CLOSE ORDERS MUST NEVER USE THIS LIMITER (IC Hard Constraint).
+#    Closes go through dispatch_managed_close(), not this function.
+_MODIFY_SLTP_MIN_INTERVAL: float = 1.5  # seconds between dispatches
+_last_modify_sltp_time: float = 0.0
+_modify_sltp_lock: threading.Lock = threading.Lock()
 
 
 def dispatch_modify_trail(
@@ -48,6 +68,24 @@ def dispatch_modify_trail(
         brain_ids: Brain IDs for journal attribution.
         strategy_name: Strategy name for magic resolution.
     """
+    # ── DQAF-20260728-003: Global anti-starvation rate limiter ──────
+    # Micro-sleep to enforce minimum interval between consecutive
+    # modify_sltp dispatches across ALL positions on the account.
+    # Blocking (not rejection) ensures no position is starved —
+    # every position gets its SL update within the same M5 cycle,
+    # just serialised.  Worst-case ~4.5s total for 4 positions.
+    # ⛔ CLOSE ORDERS NEVER ROUTED THROUGH HERE (IC Hard Constraint).
+    global _last_modify_sltp_time
+    with _modify_sltp_lock:
+        _now = time.monotonic()
+        _gap = _now - _last_modify_sltp_time
+        if _gap < _MODIFY_SLTP_MIN_INTERVAL:
+            _sleep_s = round(_MODIFY_SLTP_MIN_INTERVAL - _gap, 3)
+            if _sleep_s > 0:
+                time.sleep(_sleep_s)
+            _now = time.monotonic()
+        _last_modify_sltp_time = _now
+
     from core.execution.live_order_sender import dispatch_live_order
 
     payload: dict[str, Any] = {

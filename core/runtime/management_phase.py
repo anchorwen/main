@@ -1461,53 +1461,20 @@ def execute_management_phase(
     # ── 4-5.2: Trail SL, breakeven, trail TP ──
     # Strangler Fig #11: extracted to core/runtime/trail_dispatch.py
     #
-    # DQAF-20260721-001: Skip trail dispatch when broker rate-limit cooldown
-    # is active.  Multiple positions on the same account can each trigger a
-    # modify_sltp in one cycle; if the broker rate-limits one, further attempts
-    # compound the problem.  A cooldown per position lets the broker rate-limit
-    # window reset without losing trail protection entirely.
-    _cooldown = getattr(pos, "trail_rate_limit_cooldown", 0)
-    if _cooldown > 0:
-        pos.trail_rate_limit_cooldown = _cooldown - 1
-        _trail_result: dict[str, Any] = {
-            "final_sl": getattr(pos, "current_sl", 0.0),
-            "final_tp": getattr(pos, "current_tp", 0.0),
-            "reasons": [],
-            "be_triggered": False,
-            "be_dispatched": False,
-            "sl_changed": False,
-            "tp_changed": False,
-        }
-        logger.debug(
-            "Trail dispatch skipped: rate-limit cooldown=%d ticket=%d",
-            _cooldown - 1,
-            pos.ticket,
-        )
-    else:
-        _trail_result = compute_and_dispatch_trail(
-            config=config,
-            pos=pos,
-            pm=pm,
-            state=state,
-            mid=mid,
-            bid=bid,
-            ask=ask,
-            current_atr=current_atr,
-            strategy_name=_sname,
-            utc_iso_fn=_utc_iso,
-            dispatch_modify_trail_fn=_modify_trail,
-            pre_close_ctx=getattr(state, "pre_close_ctx", None),
-        )
-    _final_sl = _trail_result["final_sl"]
-    _final_tp = _trail_result["final_tp"]
-    _reasons = _trail_result["reasons"]
-    _be_triggered = _trail_result["be_triggered"]
-    _be_dispatched = _trail_result["be_dispatched"]
-    _sl_changed = _trail_result["sl_changed"]
-    _tp_changed = _trail_result["tp_changed"]
+    # DQAF-20260728-003 (Component B): State sync BEFORE action dispatch.
+    # The rejection check (state layer) must run before the cooldown gate
+    # (action layer).  DQAF-20260721-001 had a 1-cycle detection gap:
+    # cooldown was checked first, dispatch went out, THEN the previous
+    # cycle's rejection was detected — so the double-hit window was always
+    # one cycle wide.  The check is also decoupled from _sl_changed —
+    # cooldown activation must not depend on whether this cycle's trail
+    # computation decides to modify SL.
 
-    # ── DQAF-064 §2: Check previous cycle's trail dispatch for rejection ──
-    if _reasons and _sl_changed:
+    # ── State sync: check previous cycle's trail dispatch result ──
+    # Only run when a dispatch was actually sent on the previous cycle
+    # (tracked via _trail_dispatched_prev_cycle).  This prevents
+    # re-detection of stale rejections during cooldown-skipped cycles.
+    if getattr(pos, "_trail_dispatched_prev_cycle", False):
         _prev_rejection = _check_trail_rejection(pos.ticket, config)
         if _prev_rejection:
             pos.trail_rejection_streak += 1
@@ -1599,6 +1566,58 @@ def execute_management_phase(
                 )
                 # Reset after alert so the next cycle can retry
                 pos.trail_rejection_streak = 0
+
+    # ── Cooldown gate (runs AFTER state sync — no 1-cycle gap) ──
+    # DQAF-20260721-001: Skip trail dispatch when broker rate-limit cooldown
+    # is active.  Multiple positions on the same account can each trigger a
+    # modify_sltp in one cycle; if the broker rate-limits one, further attempts
+    # compound the problem.  A cooldown per position lets the broker rate-limit
+    # window reset without losing trail protection entirely.
+    _cooldown = getattr(pos, "trail_rate_limit_cooldown", 0)
+    if _cooldown > 0:
+        pos.trail_rate_limit_cooldown = _cooldown - 1
+        _trail_result: dict[str, Any] = {
+            "final_sl": getattr(pos, "current_sl", 0.0),
+            "final_tp": getattr(pos, "current_tp", 0.0),
+            "reasons": [],
+            "be_triggered": False,
+            "be_dispatched": False,
+            "sl_changed": False,
+            "tp_changed": False,
+        }
+        logger.debug(
+            "Trail dispatch skipped: rate-limit cooldown=%d ticket=%d",
+            _cooldown - 1,
+            pos.ticket,
+        )
+        pos._trail_dispatched_prev_cycle = False
+    else:
+        _trail_result = compute_and_dispatch_trail(
+            config=config,
+            pos=pos,
+            pm=pm,
+            state=state,
+            mid=mid,
+            bid=bid,
+            ask=ask,
+            current_atr=current_atr,
+            strategy_name=_sname,
+            utc_iso_fn=_utc_iso,
+            dispatch_modify_trail_fn=_modify_trail,
+            pre_close_ctx=getattr(state, "pre_close_ctx", None),
+        )
+        # Track for next cycle's rejection check — only flag if a dispatch
+        # was actually sent (prevents re-detecting stale rejections).
+        pos._trail_dispatched_prev_cycle = _trail_result.get(
+            "sl_changed", False
+        ) or _trail_result.get("tp_changed", False)
+    _final_sl = _trail_result["final_sl"]
+    _final_tp = _trail_result["final_tp"]
+    _reasons = _trail_result["reasons"]
+    _be_triggered = _trail_result["be_triggered"]
+    _be_dispatched = _trail_result["be_dispatched"]
+    _sl_changed = _trail_result["sl_changed"]
+    _tp_changed = _trail_result["tp_changed"]
 
     # ── 5.5 Partial take-profit ──
     if not pos.partial_tp_triggered and pos.partial_tp_r > 0:

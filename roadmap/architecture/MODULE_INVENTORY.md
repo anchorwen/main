@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-28T05:20:06Z
+> **自动生成**: 2026-07-28T06:40:13Z
 > **扫描模块数**: 726
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -529,11 +529,11 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 4904 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2489 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2508 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
-| `modify_trail_dispatch.py` | ✅ active | — | 1 | 119 | — | |
+| `modify_trail_dispatch.py` | ✅ active | — | 1 | 157 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
