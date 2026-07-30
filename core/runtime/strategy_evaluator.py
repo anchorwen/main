@@ -882,7 +882,10 @@ def evaluate_strategy_lines(
             _total_voters = len(_voted_brain_ids)
             if _live_count == 0:
                 _degraded_confidence_floor = 0.50
-                _degraded_max_volume = 0.01
+                # FIX-20260730-010: Proportional reduction replaces hard cap at 0.01.
+                # Ω Phase 2 — all degradation gates use multiplicative factors;
+                # the only floor is MIN_ECONOMIC_VOLUME at the final settlement gate.
+                _degraded_vol_factor = 0.25
                 if decision.confidence < _degraded_confidence_floor:
                     decision.should_trade = False
                     decision.reason = "no_live_brains_and_low_confidence"
@@ -902,8 +905,10 @@ def evaluate_strategy_lines(
                         flush=True,
                     )
                 else:
-                    decision.volume = min(decision.volume, _degraded_max_volume)
-                    decision.reason = (decision.reason or "") + " [degraded: no_live_brains]"
+                    decision.volume = round(decision.volume * _degraded_vol_factor, 4)
+                    decision.reason = (
+                        decision.reason or ""
+                    ) + f" [degraded: no_live_brains x{_degraded_vol_factor}]"
                     print(
                         json.dumps(
                             {
@@ -914,6 +919,7 @@ def evaluate_strategy_lines(
                                 "confidence": round(decision.confidence, 4),
                                 "volume": decision.volume,
                                 "live_brains": 0,
+                                "vol_factor": _degraded_vol_factor,
                                 "reason": decision.reason,
                             },
                             ensure_ascii=False,
@@ -940,7 +946,9 @@ def evaluate_strategy_lines(
                 _live_ratio = _live_count / _total_voters
                 if _live_ratio < 0.5:
                     _nonlive_confidence_floor = 0.55
-                    _nonlive_max_volume = 0.01
+                    # FIX-20260730-010: Proportional reduction replaces hard cap at 0.01.
+                    # Ω Phase 2 — all degradation gates use multiplicative factors.
+                    _nonlive_vol_factor = 0.25
                     if decision.confidence < _nonlive_confidence_floor:
                         decision.should_trade = False
                         decision.reason = "non_live_dominance_low_confidence"
@@ -962,10 +970,10 @@ def evaluate_strategy_lines(
                             flush=True,
                         )
                     else:
-                        decision.volume = min(decision.volume, _nonlive_max_volume)
+                        decision.volume = round(decision.volume * _nonlive_vol_factor, 4)
                         decision.reason = (
                             decision.reason or ""
-                        ) + " [degraded: non_live_dominance]"
+                        ) + f" [degraded: non_live_dominance x{_nonlive_vol_factor}]"
                         print(
                             json.dumps(
                                 {
@@ -978,6 +986,7 @@ def evaluate_strategy_lines(
                                     "live_brains": _live_count,
                                     "total_voters": _total_voters,
                                     "live_ratio": round(_live_ratio, 3),
+                                    "vol_factor": _nonlive_vol_factor,
                                     "reason": decision.reason,
                                 },
                                 ensure_ascii=False,
@@ -1094,9 +1103,11 @@ def evaluate_strategy_lines(
             # "normal": no modification
 
             # ── Health-based volume modulation ──
+            # FIX-20260730-010: Removed max(0.01, ...) floor — Ω Phase 2.
+            # Volume floor is now enforced ONLY at the final settlement gate.
             if decision.should_trade:
-                _health_vol = max(0.25, _ge_health)  # floor at 25%
-                decision.volume = max(0.01, round(decision.volume * _health_vol, 2))
+                _health_vol = max(0.25, _ge_health)  # floor health score at 25%, not volume
+                decision.volume = round(decision.volume * _health_vol, 4)
                 # Append God's Eye diagnostic to reason
                 _ge_tag = f"+gods_eye:{_ge_mode}" f"_h={_ge_health:.2f}" f"_cm={_ge_conf_mod:.2f}"
                 if _ge_chop:
@@ -1108,10 +1119,58 @@ def evaluate_strategy_lines(
                 decision.reason = (decision.reason or "") + _ge_tag
 
         # Apply session + health volume multipliers
+        # FIX-20260730-010: Removed max(0.01, ...) floor — Ω Phase 2.
         if decision.should_trade:
             combined_mult = session_volume_mult * health_volume_mult
             if combined_mult != 1.0:
-                decision.volume = max(0.01, round(decision.volume * combined_mult, 2))
+                decision.volume = round(decision.volume * combined_mult, 4)
+
+        # ═══════════════════════════════════════════════════════════════
+        # Ω Final Settlement Gate: Minimum Economic Volume
+        # FIX-20260730-010 — Phase 2 Architecture Refactoring.
+        #
+        # This is the ONLY volume floor in the entire pipeline.  All
+        # upstream degradation gates (governance, God's Eye health,
+        # session multiplier) apply multiplicative factors WITHOUT
+        # individual floors.  The raw product flows through to here.
+        #
+        # Below MIN_ECONOMIC_VOLUME the trade is KILLED — not silently
+        # forced to an uneconomic lot size.  The system honestly reports
+        # "conditions too degraded to trade at viable size."
+        #
+        # For XAU: lot_step=0.01, 2× lot_step = 0.02 minimum economic.
+        # 0.01 lots (~$1/pip) cannot absorb spread friction + risk decay.
+        # ═══════════════════════════════════════════════════════════════
+        _MIN_ECONOMIC_VOLUME = 0.02
+        if decision.should_trade and decision.volume < _MIN_ECONOMIC_VOLUME:
+            decision.should_trade = False
+            decision.reason = (
+                (decision.reason or "")
+                + " [volume_degraded_below_economic_minimum: "
+                + f"{decision.volume:.4f} < {_MIN_ECONOMIC_VOLUME}]"
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "min_economic_volume_blocked",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "direction": decision.direction,
+                        "volume": decision.volume,
+                        "min_economic": _MIN_ECONOMIC_VOLUME,
+                        "confidence": round(decision.confidence, 4),
+                        "reason": decision.reason,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        elif decision.should_trade:
+            # Final rounding to nearest lot_step (0.01) — the only place
+            # this happens after all degradation factors.  No floor needed:
+            # MIN_ECONOMIC_VOLUME already guarantees volume >= 0.02.
+            _ticks = int(decision.volume / 0.01 + 0.5)
+            decision.volume = round(_ticks * 0.01, 2)
 
         strategy_results.append(
             {

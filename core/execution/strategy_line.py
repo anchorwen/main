@@ -1604,8 +1604,11 @@ class StrategyLine(StrategyEvaluateProtocol):
             strategy_family=self.config.strategy_family,
         )
         volume *= _maturity_mult
+        # FIX-20260730-010: Removed max(base_volume, ...) floor — Ω Phase 2.
+        # The ONLY volume floor is MIN_ECONOMIC_VOLUME at the evaluator's final
+        # settlement gate.  Strategy layer computes honestly; evaluator gates.
         _ticks2 = math.floor(volume / self.config.lot_step + 0.5)
-        volume = max(self.config.base_volume, round(_ticks2 * self.config.lot_step, 2))
+        volume = round(_ticks2 * self.config.lot_step, 2)
 
         # ── Volume finalization (COLD safety + Kelly diagnostic) ──
         volume = self._finalize_volume(
@@ -1999,7 +2002,11 @@ class StrategyLine(StrategyEvaluateProtocol):
         # always die at 0.01.
         _lot_step = self.config.lot_step
         _ticks = math.floor(size / _lot_step + 0.5)
-        return max(_lot_step, min(self.config.max_volume, round(_ticks * _lot_step, 2)))
+        # FIX-20260730-010: Removed max(lot_step, ...) floor — Ω Phase 2.
+        # The MVS cutoff above already zeroes sub-cutoff sizes; the lot_step
+        # floor was resurrecting them at 0.01, defeating the cutoff's intent.
+        # The final settlement gate in strategy_evaluator handles the economic floor.
+        return min(self.config.max_volume, round(_ticks * _lot_step, 2))
 
     def _finalize_volume(
         self,

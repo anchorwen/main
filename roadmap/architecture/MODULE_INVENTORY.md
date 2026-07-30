@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-30T01:56:37Z
-> **扫描模块数**: 729
+> **自动生成**: 2026-07-30T09:24:57Z
+> **扫描模块数**: 732
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -276,7 +276,7 @@
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_context.py` | ✅ active | StrategyEvaluationContext | 0 | 85 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2065 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2072 | — | |
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
@@ -555,7 +555,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 1203 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 5 | 1314 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 5 | 1373 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -648,6 +648,7 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_analyze_v4_timeline.py` | 📄 config | — | 0 | 263 | — | |
 | `_assess_position_sizing.py` | ✅ active | — | 6 | 305 | — | |
+| `_audit_xau_brains_20260730.py` | ✅ active | — | 2 | 221 | — | |
 | `_calibrate_thresholds.py` | 📄 config | — | 0 | 126 | — | |
 | `_check_post_restart.py` | ✅ active | — | 3 | 192 | — | |
 | `_diagnose_h1_v4_degradation.py` | ✅ active | — | 6 | 237 | — | |
@@ -656,6 +657,8 @@
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
+| `_verify_xau_final.py` | 📄 config | — | 0 | 353 | — | |
+| `_verify_xau_governance_anomalies.py` | ✅ active | — | 2 | 407 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-30T01:56:37Z
+> **自动生成**: 2026-07-30T09:24:57Z
 
 ## Package-Level Dependencies
 
@@ -562,6 +562,7 @@
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_analyze_v4_timeline.py` → (无内部依赖)
 - `_assess_position_sizing.py` → (无内部依赖)
+- `_audit_xau_brains_20260730.py` → (无内部依赖)
 - `_calibrate_thresholds.py` → (无内部依赖)
 - `_check_post_restart.py` → (无内部依赖)
 - `_diagnose_h1_v4_degradation.py` → (无内部依赖)
@@ -570,6 +571,8 @@
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)
+- `_verify_xau_final.py` → (无内部依赖)
+- `_verify_xau_governance_anomalies.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)
