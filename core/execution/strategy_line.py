@@ -1605,7 +1605,7 @@ class StrategyLine(StrategyEvaluateProtocol):
         )
         volume *= _maturity_mult
         _ticks2 = math.floor(volume / self.config.lot_step + 0.5)
-        volume = max(self.config.lot_step, round(_ticks2 * self.config.lot_step, 2))
+        volume = max(self.config.base_volume, round(_ticks2 * self.config.lot_step, 2))
 
         # ── Volume finalization (COLD safety + Kelly diagnostic) ──
         volume = self._finalize_volume(
@@ -2027,7 +2027,7 @@ class StrategyLine(StrategyEvaluateProtocol):
         _ou_gate = getattr(self, "_last_ou_result", None)
         if _ou_gate is not None and _ou_gate.get("force_min_volume"):
             _pre_override = volume
-            volume = 0.01
+            volume = self.config.base_volume
             import logging as _logging
 
             _logging.getLogger(__name__).info(
