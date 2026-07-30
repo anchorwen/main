@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\swing\\XAU_Swing_M30_V5_model.json",
   "model_version": "xau_swing_m30_v5",
   "artifact_hash": "7e5d529f2afe954717f43bf92b8ad7622c8504c745e7af01fb2b019d667974ae",
-  "status": "shadow",
-  "vote_weight": 0.0,
+  "status": "live",
+  "vote_weight": 1.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -84,5 +84,21 @@
     "contract_type": "asymmetric_barrier",
     "training_serving_alignment": "aligned",
     "_note": "Training SL=2.0/TP=3.0 matches m30_swing live config. V5 3-class model (LONG/SHORT/NEUTRAL) with 35 swing_enhanced features."
+  },
+  "_ic_mandate_live_promotion": {
+    "authority": "INVESTMENT_COMMITTEE",
+    "date": "2026-07-31",
+    "docket": "DQAF-20260731-001",
+    "action": "PROMOTE_TO_LIVE",
+    "reason": "m30_swing MT5-verified +$197.10 PnL across 255 trades, WR=48.8%, 7d WR=64.3%, 30d WR=56.4%. July +$70.00. Shadow observation complete (7/22→7/31). Promoted shadow→live, vote_weight=1.0.",
+    "evidence": {
+      "mt5_pnl": 197.10,
+      "trades": 255,
+      "win_rate": 48.8,
+      "july_pnl": 70.00,
+      "july_wr": 56.9,
+      "recent_7d_wr": 64.3,
+      "recent_30d_wr": 56.4
+    }
   }
 }

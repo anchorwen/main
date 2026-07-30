@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-30T13:30:50Z
+> **自动生成**: 2026-07-30T17:19:27Z
 
 ## Package-Level Dependencies
 
@@ -564,24 +564,31 @@
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_analyze_v4_timeline.py` → (无内部依赖)
 - `_assess_position_sizing.py` → (无内部依赖)
+- `_audit_btc_brains_full.py` → (无内部依赖)
 - `_audit_xau_brains_20260730.py` → (无内部依赖)
 - `_btc_audit_20260730_v2.py` → (无内部依赖)
 - `_calibrate_thresholds.py` → (无内部依赖)
+- `_check_live_entries_now.py` → (无内部依赖)
 - `_check_post_restart.py` → (无内部依赖)
 - `_commit_dqaf_011.py` → (无内部依赖)
+- `_cross_validate_mt5.py` → (无内部依赖)
 - `_diagnose_h1_v4_degradation.py` → (无内部依赖)
 - `_diagnose_pnl_mismatch.py` → (无内部依赖)
 - `_diagnose_pnl_provenance.py` → (无内部依赖)
 - `_diagnose_pnl_status.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
+- `_parse_mt5_text.py` → (无内部依赖)
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)
 - `_validate_btc_july.py` → (无内部依赖)
+- `_validate_mt5_complete.py` → (无内部依赖)
 - `_validate_mt5_report.py` → (无内部依赖)
 - `_verify_xau_final.py` → (无内部依赖)
 - `_verify_xau_governance_anomalies.py` → (无内部依赖)
+- `_xau_account_check.py` → (无内部依赖)
+- `_xau_full_audit.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)

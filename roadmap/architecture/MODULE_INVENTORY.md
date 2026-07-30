@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-30T13:30:50Z
-> **扫描模块数**: 741
+> **自动生成**: 2026-07-30T17:19:27Z
+> **扫描模块数**: 748
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -650,24 +650,31 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_analyze_v4_timeline.py` | 📄 config | — | 0 | 263 | — | |
 | `_assess_position_sizing.py` | ✅ active | — | 6 | 305 | — | |
+| `_audit_btc_brains_full.py` | ✅ active | — | 9 | 454 | — | |
 | `_audit_xau_brains_20260730.py` | ✅ active | — | 2 | 221 | — | |
 | `_btc_audit_20260730_v2.py` | ✅ active | — | 2 | 319 | — | |
 | `_calibrate_thresholds.py` | 📄 config | — | 0 | 126 | — | |
+| `_check_live_entries_now.py` | ✅ active | — | 6 | 191 | — | |
 | `_check_post_restart.py` | ✅ active | — | 3 | 192 | — | |
 | `_commit_dqaf_011.py` | ✅ active | — | 2 | 54 | — | |
+| `_cross_validate_mt5.py` | ✅ active | — | 4 | 336 | — | |
 | `_diagnose_h1_v4_degradation.py` | ✅ active | — | 6 | 237 | — | |
 | `_diagnose_pnl_mismatch.py` | 📄 config | — | 0 | 198 | — | |
 | `_diagnose_pnl_provenance.py` | 📄 config | — | 0 | 178 | — | |
 | `_diagnose_pnl_status.py` | 📄 config | — | 0 | 128 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
+| `_parse_mt5_text.py` | ✅ active | — | 2 | 83 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
 | `_validate_btc_july.py` | 📄 config | — | 0 | 173 | — | |
+| `_validate_mt5_complete.py` | ✅ active | — | 7 | 469 | — | |
 | `_validate_mt5_report.py` | 📄 config | — | 0 | 247 | — | |
 | `_verify_xau_final.py` | 📄 config | — | 0 | 353 | — | |
 | `_verify_xau_governance_anomalies.py` | ✅ active | — | 2 | 407 | — | |
+| `_xau_account_check.py` | ✅ active | — | 3 | 163 | — | |
+| `_xau_full_audit.py` | ✅ active | — | 5 | 372 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |

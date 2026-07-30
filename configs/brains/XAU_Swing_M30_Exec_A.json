@@ -10,8 +10,8 @@
   "artifact_path": "data\\models\\swing\\XAU_Swing_M30_Exec_A_model.json",
   "model_version": "xau_swing_m30_exec_a",
   "artifact_hash": "8faa6788c1755a9f6766533bf91c5fdba957729f74f87b1fbbbb2d857b7b3fe0",
-  "status": "shadow",
-  "vote_weight": 0.0,
+  "status": "live",
+  "vote_weight": 1.0,
   "magic": 90320,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
@@ -100,5 +100,12 @@
     "action": "SHADOW_DEPLOY",
     "phase": "Tracer Bullet Phase 2 — Multi-Timeframe Extension",
     "reason": "m30_swing XAU_Swing_M30_Exec_A — SL=2.0/TP=3.0, RR=1.5. Shadow, vote_weight=0.0, 7-day observation."
+  },
+  "_ic_mandate_live_promotion": {
+    "authority": "INVESTMENT_COMMITTEE",
+    "date": "2026-07-31",
+    "docket": "DQAF-20260731-001",
+    "action": "PROMOTE_TO_LIVE",
+    "reason": "Co-promoted with V5. Training-serving aligned (SL=2.0/TP=3.0). MT5-verified m30_swing group +$197.10 across 255 trades. Shadow→live, vote_weight=1.0."
   }
 }

@@ -10,7 +10,7 @@
   "artifact_path": "data\\models\\swing\\XAU_Swing_H1_Exec_A_model.json",
   "model_version": "xau_swing_h1_exec_a",
   "artifact_hash": "0680bf9b4298ba2df488b031e9ff9c7c90cbc41059a5d2da5c8b80bdb922b747",
-  "status": "probation",
+  "status": "live",
   "vote_weight": 1.0,
   "magic": 90330,
   "brain_role": "alpha_brain",
@@ -101,5 +101,12 @@
     "phase": "Fire Brigade — H1 brain vacancy fill",
     "reason": "Swing_V9_H1_V2 retired 7/25 (governance sync), V3 retired 7/28 (experimental). Exec_A is the ONLY remaining h1_swing brain with train-serve parameter alignment (SL=2.0/TP=3.5 ≡ live.yaml). 19 shadow signals (WR=78.9%, PF=1.66). Promoted probation with vw=1.0 as emergency measure — N=19 is below normal 50+ threshold but preferred over strategy-line paralysis.",
     "predecessor": "DQAF-20260706-002 (SHADOW_DEPLOY)"
+  },
+  "_ic_mandate_live_promotion": {
+    "authority": "INVESTMENT_COMMITTEE",
+    "date": "2026-07-31",
+    "docket": "DQAF-20260731-001",
+    "action": "PROMOTE_TO_LIVE",
+    "reason": "h1_swing MT5-verified +$132.30 PnL across 161 trades, WR=50.9%, best WR among all XAU brains. July upward trend. Probation→live. vote_weight already 1.0."
   }
 }
