@@ -1392,3 +1392,12 @@
 - **Layer 3 (根因)**: Cross-TF ATR mismatch — FIX-20260709-004 (per-TF bracket_atr) correctly moved geometry distances to bracket_atr but also changed activation measurement. The activation threshold trail_activation_atr=1.0 was calibrated for entry_atr scale; using bracket_atr makes it 10× harder to reach for H1/H4.
 - **Fix**: FIX-20260722-003
 - **Status**: **CLOSED**
+
+## CCT-20260730-011
+
+- **Docket**: DQAF-20260730-011
+- **Layer 1 (症状)**: BTC July 2026 journal PnL系统性偏离MT5真相。MT5经纪商报表: 426笔, PnL=+$26.86, WR=49.1%, PF=1.07。系统journal: PnL=-$140.89（偏差+$167.75）。53个票号级别PnL不匹配。`scripts/_diagnose_pnl_mismatch.py` stdout。
+- **Layer 2 (传导)**: (C1) Bridge `order_send()`后立即`mt5.history_deals_get(position=ticket)`查询deal → MT5 deal清算为异步，`deal.profit`未填充 → Bridge回退到`msg_payload["pnl"]`(引擎中价估算`(mid-entry)*volume`)。`mt5_bridge_worker.py:820,1132-1136`。(C2) Bridge写入journal时无provenance标签(FIX-20260716-005前)，796/1226条(65%)`_pnl_status`缺失 → 无法区分verified vs estimated。`scripts/_diagnose_pnl_provenance.py` stdout。(C3) Engine `managed_close.py:75`注释"reconciliation corrects it later" — 但`known_open_tickets`在reconciliation运行前被清除(management_phase MIA/stale-clear路径直接`pop`)→ Reconciliation仅写9条(0.7%)vs Bridge 1217条(99.3%)。(C4) Journal dedup允许`_source=mt5_reconciliation` supersede但Reconciliation饥荒→ Bridge估算值永不被修正。
+- **Layer 3 (根因)**: L3架构缺陷 — Journal PnL字段无Single Source of Truth。双写者(Bridge + Reconciliation)竞争写入同一字段，Bridge在deal.profit异步清算窗口中静默回退到中价估算并写入无provenance条目，Reconciliation修正路径因`known_open_tickets`提前清除而饥饿 → 99.3%的journal PnL值来自中价估算而非MT5权威数据。
+- **Fix**: FIX-20260730-011 — Settlement Queue Isolation (委员会覆写): Bridge写`pnl=null`+`_pnl_status="pending_mt5_settlement"`; SettlementQueue三态隔离(`known_open_tickets→pending_settlement_tickets→settled`); Reconciliation消费`pending_settlement_tickets`通过`resolve_exit_deal()`轮询验证deal.profit; 四级超时上报(T1 5min→T2 1hr→T3 24hr→T4 terminal); 队列持久化+僵尸单告警; Journal dedup扩展权威来源白名单+null PnL自动被非null supersede。
+- **Status**: **CLOSED**

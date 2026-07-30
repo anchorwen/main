@@ -1063,6 +1063,21 @@ def execute_management_phase(
         return False
     if _stale_action == "clear":
         # Broker CONFIRMS gone (or backtest / no_mt5) → genuine stale close.
+        # ── FIX-20260730-011 (L3): Enqueue to settlement queue for PnL verification ──
+        if state.pending_settlement_tickets is not None:
+            state.pending_settlement_tickets.enqueue(
+                ticket=pos.ticket,
+                symbol=config.symbol,
+                side=str(pos.side),
+                entry_price=float(pos.entry_price),
+                volume=float(pos.volume),
+                strategy=str(getattr(pos, "strategy_name", "")),
+                magic=0,
+                brain_ids=list(getattr(pos, "supporting_brain_ids", []) or []),
+                estimated_pnl=None,
+                estimated_close_price=None,
+                cycle=state.loop_iteration,
+            )
         pm.clear_position(ticket=pos.ticket)
         _emit(
             "position_manager_stale_cleared",
@@ -1135,8 +1150,35 @@ def execute_management_phase(
                 if _deals:
                     _enrich_mia_from_deals(_mia_entry, _deals)
             state._pending_mia_closes.append(_mia_entry)
+            # ── FIX-20260730-011 (L3): Settlement Queue Isolation ──
+            # Enqueue to pending_settlement_tickets so the Reconciliation
+            # adapter verifies deal.profit and writes authoritative PnL.
+            # The engine MUST NOT manage this ticket anymore.
+            _mia_tkt = pos.ticket
+            _mia_open = state.known_open_tickets.pop(_mia_tkt, None)
+            if _mia_open is not None and state.pending_settlement_tickets is not None:
+                state.pending_settlement_tickets.enqueue(
+                    ticket=_mia_tkt,
+                    symbol=config.symbol,
+                    side=str(pos.side),
+                    entry_price=float(pos.entry_price),
+                    volume=float(pos.volume),
+                    strategy=str(
+                        getattr(pos, "strategy_name", "") or _mia_open.get("strategy", "")
+                    ),
+                    magic=int(_mia_open.get("magic", 0) or 0),
+                    brain_ids=list(getattr(pos, "supporting_brain_ids", []) or []),
+                    open_message_id=str(_mia_open.get("message_id", "")),
+                    estimated_pnl=float(_mia_entry.get("pnl", 0))
+                    if _mia_entry.get("pnl") is not None
+                    else None,
+                    estimated_close_price=float(_mia_entry.get("detail", {}).get("close_price", 0))
+                    if isinstance(_mia_entry.get("detail"), dict)
+                    and _mia_entry.get("detail", {}).get("close_price") is not None
+                    else None,
+                    cycle=state.loop_iteration,
+                )
             pm.clear_position(ticket=pos.ticket)
-            state.known_open_tickets.pop(pos.ticket, None)
             # Save position state immediately — don't wait for periodic save
             with FaultTolerantContext(
                 level=FaultLevel.DEGRADE,

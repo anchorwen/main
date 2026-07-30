@@ -41,6 +41,8 @@ def save_execution_state(
     circuit_breaker_trip_reason: str = "",
     # ── DQAF-20260615-004: known_open_tickets persistence ──
     known_open_tickets: dict[str, Any] | None = None,
+    # ── FIX-20260730-011 (L3): Settlement Queue persistence ──
+    pending_settlement_tickets: dict[str, Any] | None = None,
 ) -> None:
     """Snapshot all execution guard state to disk (atomic write via tmp+replace)."""
     p = Path(save_path)
@@ -50,11 +52,12 @@ def save_execution_state(
         pass
 
     payload: dict[str, Any] = {
-        "version": 3,  # DQAF-20260615-004: + known_open_tickets
-        "schema_version": "execution_state.v3",
+        "version": 4,  # FIX-20260730-011: + pending_settlement_tickets
+        "schema_version": "execution_state.v4",
         "saved_at_utc": _utc_iso(),
         "budgets": {},
         "known_open_tickets": {},
+        "pending_settlement_tickets": {},
         "cooldown_registry": {},
         "family_entry_tracker": {},
         "sl_streak_blocks": sl_streak_blocks or {},
@@ -73,6 +76,10 @@ def save_execution_state(
         payload["known_open_tickets"] = {
             str(t): {k: v for k, v in data.items()} for t, data in known_open_tickets.items()
         }
+
+    # ── FIX-20260730-011 (L3): Persist pending_settlement_tickets ──
+    if pending_settlement_tickets:
+        payload["pending_settlement_tickets"] = pending_settlement_tickets
 
     # ── Strategy budgets ──
     for sname, strategy in strategies.items():
@@ -268,6 +275,34 @@ def restore_execution_state(
         state.block_new_entries = True
 
     # ── DQAF-20260710-003: Restore known_open_tickets from persisted state ──
+    # ... (existing block unchanged)
+
+    # ── FIX-20260730-011 (L3): Restore pending_settlement_tickets ──
+    _saved_pending = data.get("pending_settlement_tickets", {})
+    if (
+        _saved_pending
+        and hasattr(state, "pending_settlement_tickets")
+        and state.pending_settlement_tickets is not None
+    ):
+        try:
+            from core.runtime.settlement_queue import SettlementQueue
+
+            _restored_sq = SettlementQueue.from_dict({"entries": _saved_pending})
+            # Merge: disk entries that aren't already in memory
+            for _tkt in _restored_sq.tickets:
+                if not state.pending_settlement_tickets.is_pending(_tkt):
+                    _entry = _restored_sq.get(_tkt)
+                    if _entry is not None:
+                        state.pending_settlement_tickets._pending[_tkt] = _entry
+            import logging as _logging2
+
+            _logger2 = _logging2.getLogger(__name__)
+            _logger2.info(
+                "Restored %d pending_settlement_tickets from execution_state.json",
+                len(_restored_sq._pending),
+            )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass
     # save_execution_state() persists known_open_tickets (v3 schema, line 72-75),
     # but the restore path was NEVER wired — the round-trip was broken since the
     # field was added (DQAF-20260615-004).  This caused every restart to start

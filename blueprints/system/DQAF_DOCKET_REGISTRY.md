@@ -116,3 +116,15 @@
 - **Root Cause**: L2 — cross-TF geometry ATR mismatch: activation uses bracket_atr, ratchet uses entry_atr, snapshots use entry_atr. Three different R-measurement scales in one pipeline.
 - **Fix**: FIX-20260722-003 — trail_stop_engine.py: activation watermark + breakeven now use pos.entry_atr (consistent with ratchet and snapshots).
 - **Status**: **CLOSED** — committed + pushed (95446421)
+
+- **Docket ID**: DQAF-20260730-011
+- **Date**: 2026-07-30
+- **Severity**: Sev 1
+- **Title**: Journal PnL SSOT缺失 — 双写竞争+修正链路饥饿（Settlement Queue Isolation）
+- **Evidence**: BTC七月: MT5 +$26.86 vs 系统journal -$140.89（偏差+$167.75）。1226条close中1217(99.3%)来自Bridge，仅9(0.7%)来自Reconciliation。796条(65%)无_pnl_status provenance标签。Bridge在order_send()后立即history_deals_get()→MT5 deal清算未完成→回退到引擎中价估算(mid-entry)*volume→静默写入journal无provenance。
+- **DA**: Journal PnL字段无Single Source of Truth。Bridge在deal.profit不可用时使用msg_payload["pnl"](中价估算)。Reconciliation通过resolve_exit_deal()正确策展DEAL_ENTRY_OUT但仅写9条因known_open_tickets在reconciliation运行前被清除。
+- **AR**: 推翻"漏记交易"(票号100%重叠)、"commission/swap遗漏"(BTC账户comm=$0, swap=$0)、"Reconciliation会修正"(修正链路饥饿,仅0.7%)。
+- **Root Cause**: L3 — Journal PnL字段无SSOT。C1: MT5 deal异步清算窗口→Bridge读不到deal.profit。C2: Bridge静默回退到中价估算。C3: 修复前65%条目无provenance标签。C4: Reconciliation修正链路饥饿(known_open_tickets提前清除)。C5: Dedup允许reconciliation supersede但饥荒。
+- **Fix**: FIX-20260730-011 — Settlement Queue Isolation (L3架构修复): (1) Bridge deal.profit不可用时写pnl=null+_pnl_status="pending_mt5_settlement",估算值仅存detail.estimated_pnl供取证。(2) SettlementQueue(新模块core/runtime/settlement_queue.py)实现known_open_tickets→pending_settlement_tickets→settled三态隔离。(3) Reconciliation作为唯一PnL权威消费pending_settlement_tickets,通过resolve_exit_deal()轮询直到deal.profit可用→写journal(_source=mt5_reconciliation自动supersede bridge的pnl=null条目)。(4) 四级超时上报(Tier1 5min→Tier2 1hr→Tier3 24hr降级写入→Tier4 24hr终端超时),队列持久化+僵尸单告警。
+- **ReB**: JOURNAL_PNL_DUAL_WRITER_RACE_WITH_STARVED_CORRECTION_PATH
+- **Status**: **CLOSED**

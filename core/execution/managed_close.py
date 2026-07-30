@@ -48,6 +48,7 @@ def dispatch_managed_close(
     from core.execution.live_order_sender import dispatch_live_order
     from core.execution.reentry_guard import ExitRecord, ensure_reentry_state
     from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+
     # ── DQAF-033 P0: reason enforcement ──
     # Empty reason = blind spot in journal detail.reason.  Default to a
     # diagnostic label so every close is attributable.
@@ -72,7 +73,12 @@ def dispatch_managed_close(
             flush=True,
         )
 
-    # Estimate PnL so the journal entry has it (reconciliation corrects it later)
+    # FIX-20260730-011 (L3): Estimate PnL for reference only.
+    # The Bridge writes pnl=null when deal.profit is unavailable; the
+    # Reconciliation adapter (via SettlementQueue) is the sole PnL authority.
+    # This estimate is passed as msg_payload["pnl"] and stored by the Bridge
+    # as detail.estimated_pnl for forensic reference — it is NEVER the
+    # journal "pnl" field value.
     pnl = None
     entry_price = getattr(pos, "entry_price", None)
     if entry_price is not None and mid is not None and pos.volume:
@@ -348,7 +354,13 @@ def dispatch_managed_close(
                 if mt5_worker is not None:
                     _acc = mt5_worker.account_info()
                     _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
-            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG (Sev 4, Phase 3b — MT5 account_info fallback)
+            except (
+                RuntimeError,
+                ValueError,
+                KeyError,
+                TypeError,
+                OSError,
+            ):  # BLE001:FOG (Sev 4, Phase 3b — MT5 account_info fallback)
                 pass  # graceful fallback — keep _eq at 1000.0
             _pnl_pct = float(pnl) / _eq if _eq > 0 else 0.0
             state._pending_budget_records.append(

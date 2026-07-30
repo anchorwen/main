@@ -326,6 +326,12 @@ class LiveCycleState:
     loop_iteration: int = 0
     flag_notice: bool = False
     known_open_tickets: dict[int, dict[str, Any]] = field(default_factory=dict)
+    # ── FIX-20260730-011 (L3): Settlement Queue Isolation ──
+    # Tickets that have been closed by the Bridge but whose deal.profit has
+    # not yet been verified by the Reconciliation adapter.  The engine MUST
+    # NOT manage these tickets (no trail, no watchdog).  Only the settlement
+    # path (settlement_queue.settle_all) may touch them.
+    pending_settlement_tickets: Any = None  # SettlementQueue (set by caller)
     # ── DQAF-20260709-002 (entry-phase): lazily-built cross-strategy
     # opposing-position coordinator.  Held on state so its conflict telemetry
     # accumulates across cycles.  None until first activated (or if mode="off").
@@ -1879,10 +1885,49 @@ def execute_live_cycle(
                     if _blocked_count >= 3:
                         state.sl_streak_blocked_all_until = time.time() + 3600
 
-                # Remove closed tickets from tracking
+                # ── FIX-20260730-011 (L3): Settlement Queue Isolation ──
+                # Instead of just removing closed tickets from tracking, enqueue
+                # them into pending_settlement_tickets so the Reconciliation
+                # adapter can verify deal.profit and write authoritative PnL.
+                # The engine MUST NOT manage tickets in the settlement queue.
                 for _evt in _events:
                     if _evt.remaining_volume <= 0:
-                        state.known_open_tickets.pop(_evt.position_ticket, None)
+                        _tkt = _evt.position_ticket
+                        _open_entry = state.known_open_tickets.pop(_tkt, None)
+                        if _open_entry is not None and state.pending_settlement_tickets is not None:
+                            state.pending_settlement_tickets.enqueue(
+                                ticket=_tkt,
+                                symbol=config.symbol,
+                                side=str(getattr(_evt, "side", "") or _open_entry.get("side", "")),
+                                entry_price=float(
+                                    getattr(_evt, "entry_price", 0)
+                                    or _open_entry.get("entry_price", 0)
+                                ),
+                                volume=float(
+                                    getattr(_evt, "closed_volume", 0)
+                                    or _open_entry.get("volume", 0)
+                                ),
+                                strategy=str(
+                                    getattr(_evt, "strategy", "") or _open_entry.get("strategy", "")
+                                ),
+                                magic=int(_open_entry.get("magic", 0) or 0),
+                                brain_ids=list(
+                                    getattr(_evt, "brain_ids", [])
+                                    or _open_entry.get("brain_ids", [])
+                                ),
+                                open_message_id=str(
+                                    getattr(_evt, "open_message_id", "")
+                                    or _open_entry.get("message_id", "")
+                                ),
+                                estimated_pnl=float(getattr(_evt, "pnl", 0))
+                                if getattr(_evt, "pnl", None) is not None
+                                else None,
+                                estimated_close_price=float(getattr(_evt, "close_price", 0))
+                                if getattr(_evt, "close_price", None) is not None
+                                and float(getattr(_evt, "close_price", 0)) > 0
+                                else None,
+                                cycle=state.loop_iteration,
+                            )
 
                 # Sync position_manager
                 if state.position_manager is not None and state.position_manager.has_position():
@@ -1908,6 +1953,68 @@ def execute_live_cycle(
             # (json.dumps → TypeError) or console write (print → OSError).
             # BLE001:AUDITED — complex nested block, non-trading-path.
             pass
+
+    # ── FIX-20260730-011 (L3): Settlement Queue Processing ──
+    # Runs EVERY cycle (not throttled like reconciliation) to minimize the
+    # window between Bridge close → verified deal.profit.  The SettlementQueue
+    # polls history_deals_get() for each pending ticket; when deal.profit is
+    # available, writes the authoritative journal entry and removes the ticket.
+    # Zombie tickets age through 4-tier escalation (5min→1hr→24hr→terminal).
+    if (
+        not config.no_mt5
+        and state.pending_settlement_tickets is not None
+        and state.pending_settlement_tickets.pending_count > 0
+    ):
+        try:
+            _settlement_results = state.pending_settlement_tickets.settle_all(
+                mt5_worker,
+                config.symbol,
+                str(journal_path),
+                state,
+                gate=journal_gate,
+            )
+            if _settlement_results:
+                for _sr in _settlement_results:
+                    if _sr.get("status") == "settled" and _sr.get("event") is not None:
+                        _evt = _sr["event"]
+                        # Feed downstream consumers (same as reconciliation path)
+                        _strat = _evt.strategy or ""
+                        _label = _evt.label
+                        if _label in ("sl_hit_first", "loss"):
+                            _curr = state.consecutive_sl_hits.get(_strat, 0) + 1
+                            state.consecutive_sl_hits[_strat] = _curr
+                        elif _label in ("tp_hit_first", "win"):
+                            state.consecutive_sl_hits[_strat] = 0
+                        # Conformal calibrator
+                        _calib = getattr(state, "_conformal_calibrator", None)
+                        if _calib is not None:
+                            try:
+                                _p_win = float(getattr(_evt, "p_win", 0.5) or 0.5)
+                                _ls = str(getattr(_evt, "label", "") or "").lower()
+                                _li = (
+                                    1
+                                    if _ls in ("tp_hit_first", "win")
+                                    else (-1 if _ls in ("sl_hit_first", "loss") else 0)
+                                )
+                                _calib.update(_p_win, _li)
+                            except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                                pass
+                    elif _sr.get("status") == "terminal_timeout":
+                        # Emit structured alert
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "settlement_terminal_timeout",
+                                    "severity": "CRITICAL",
+                                    "ticket": _sr["ticket"],
+                                    "time": _utc_iso(),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+            pass  # Settlement is best-effort — never block the main loop
 
     # ── Protection flag check ──
     from core.execution.live_order_sender import resolve_protection_flag_path
@@ -2571,11 +2678,38 @@ def execute_live_cycle(
                                     ),
                                     flush=True,
                                 )
-                            # Clear confirmed aged zombies
+                            # ── FIX-20260730-011 (L3): Enqueue aged zombies to settlement ──
                             if _aged_zombies:
                                 for _zt in sorted(_aged_zombies):
+                                    _z_open = state.known_open_tickets.pop(_zt, None)
+                                    _z_pm = state.position_manager.get_position(ticket=_zt)
+                                    if (
+                                        _z_open is not None
+                                        and state.pending_settlement_tickets is not None
+                                    ):
+                                        state.pending_settlement_tickets.enqueue(
+                                            ticket=_zt,
+                                            symbol=config.symbol,
+                                            side=str(
+                                                _z_open.get("side", "")
+                                                or getattr(_z_pm, "side", "")
+                                            ),
+                                            entry_price=float(
+                                                _z_open.get("entry_price", 0)
+                                                or getattr(_z_pm, "entry_price", 0)
+                                            ),
+                                            volume=float(
+                                                _z_open.get("volume", 0)
+                                                or getattr(_z_pm, "volume", 0)
+                                            ),
+                                            strategy=str(_z_open.get("strategy", "")),
+                                            magic=int(_z_open.get("magic", 0) or 0),
+                                            brain_ids=list(_z_open.get("brain_ids", []) or []),
+                                            estimated_pnl=None,
+                                            estimated_close_price=None,
+                                            cycle=state.loop_iteration,
+                                        )
                                     state.position_manager.clear_position(ticket=_zt)
-                                    state.known_open_tickets.pop(_zt, None)
                                 print(
                                     json.dumps(
                                         {
@@ -2942,7 +3076,37 @@ def execute_live_cycle(
                         )
                     if _zk_aged_zombies:
                         for _zt in sorted(_zk_aged_zombies):
-                            state.known_open_tickets.pop(_zt, None)
+                            # ── FIX-20260730-011 (L3): Enqueue zombie to settlement ──
+                            _zk_open = state.known_open_tickets.pop(_zt, None)
+                            _zk_pm = (
+                                state.position_manager.get_position(ticket=_zt)
+                                if state.position_manager is not None
+                                else None
+                            )
+                            if (
+                                _zk_open is not None
+                                and state.pending_settlement_tickets is not None
+                            ):
+                                state.pending_settlement_tickets.enqueue(
+                                    ticket=_zt,
+                                    symbol=config.symbol,
+                                    side=str(
+                                        _zk_open.get("side", "") or getattr(_zk_pm, "side", "")
+                                    ),
+                                    entry_price=float(
+                                        _zk_open.get("entry_price", 0)
+                                        or getattr(_zk_pm, "entry_price", 0)
+                                    ),
+                                    volume=float(
+                                        _zk_open.get("volume", 0) or getattr(_zk_pm, "volume", 0)
+                                    ),
+                                    strategy=str(_zk_open.get("strategy", "")),
+                                    magic=int(_zk_open.get("magic", 0) or 0),
+                                    brain_ids=list(_zk_open.get("brain_ids", []) or []),
+                                    estimated_pnl=None,
+                                    estimated_close_price=None,
+                                    cycle=state.loop_iteration,
+                                )
                             if state.position_manager is not None:
                                 state.position_manager.clear_position(ticket=_zt)
                         print(
@@ -4311,6 +4475,23 @@ def execute_live_cycle(
                     _new_tkt = _tkt_update["new_ticket"]
                     _close_vol = _tkt_update.get("close_volume", 0.0)
                     _old_entry = state.known_open_tickets.pop(int(_old_tkt), None)
+                    if _old_entry:
+                        # ── FIX-20260730-011 (L3): Enqueue closed portion to settlement ──
+                        if state.pending_settlement_tickets is not None and _close_vol > 0:
+                            state.pending_settlement_tickets.enqueue(
+                                ticket=int(_old_tkt),
+                                symbol=config.symbol,
+                                side=str(_old_entry.get("side", "")),
+                                entry_price=float(_old_entry.get("entry_price", 0)),
+                                volume=float(_close_vol),
+                                strategy=str(_old_entry.get("strategy", "")),
+                                magic=int(_old_entry.get("magic", 0) or 0),
+                                brain_ids=list(_old_entry.get("brain_ids", []) or []),
+                                open_message_id=str(_old_entry.get("message_id", "")),
+                                estimated_pnl=None,
+                                estimated_close_price=None,
+                                cycle=state.loop_iteration,
+                            )
                     if _old_entry:
                         _old_vol = float(_old_entry.get("volume", 0.0))
                         _remaining = round(max(0.0, _old_vol - _close_vol), 2)

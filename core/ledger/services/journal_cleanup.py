@@ -190,6 +190,11 @@ def _append_journal(
             # Journal is append-only — corrections must write a new line.
             # Downstream consumers (label builder, calibrator) already
             # use the latest close per ticket.
+            #
+            # FIX-20260730-011 (L3): Settlement Queue Isolation extends this:
+            # settlement_queue_timeout and settlement_queue_terminal sources
+            # also supersede bridge entries.  The priority chain is:
+            #   mt5_reconciliation > settlement_queue_* > bridge > legacy
             if _action == "close" and _ticket is not None:
                 if (
                     _existing.get("action") == "close"
@@ -197,11 +202,27 @@ def _append_journal(
                 ):
                     _existing_source = _existing.get("_source", "")
                     _this_source = entry.get("_source", "")
+                    # Authoritative sources that supersede non-authoritative ones
+                    _authoritative_sources = (
+                        "mt5_reconciliation",
+                        "settlement_queue_timeout",
+                        "settlement_queue_terminal",
+                    )
                     if (
-                        _this_source == "mt5_reconciliation"
-                        and _existing_source != "mt5_reconciliation"
+                        _this_source in _authoritative_sources
+                        and _existing_source not in _authoritative_sources
                     ):
                         continue  # Allow correction to supersede original
+                    # FIX-20260730-011: Bridge pnl=null entries should be
+                    # superseded by ANY entry with a non-null pnl.
+                    _existing_pnl = _existing.get("pnl")
+                    _this_pnl = entry.get("pnl")
+                    if (
+                        _this_pnl is not None
+                        and _existing_pnl is None
+                        and _this_source != _existing_source
+                    ):
+                        continue  # Non-null PnL supersedes null PnL
                     return True  # Already recorded — skip duplicate
 
         return False

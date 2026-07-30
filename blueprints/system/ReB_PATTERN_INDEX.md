@@ -1195,3 +1195,18 @@
 - **Impact**: Higher-TF positions have no trailing stop protection. The Chandelier trail, breakeven, graduated lock, and ratchet floor are all gated behind an unreachable activation threshold.
 - **Detection**: Check position_snapshots.jsonl for positions with MFE≥2R but current_sl==initial_sl throughout → trail never fired.
 - **Status**: **CLOSED** (FIX-20260722-003)
+
+## ReB-20260730-011: Journal PnL Dual-Writer Race with Starved Correction Path
+
+- **Pattern**: `JOURNAL_PNL_DUAL_WRITER_RACE_WITH_STARVED_CORRECTION_PATH`
+- **Date Cataloged**: 2026-07-30
+- **Source Docket**: DQAF-20260730-011
+- **Related FIX**: FIX-20260730-011
+
+**Definition**: Two independent writers (Bridge + Reconciliation) compete to write the same journal field (`pnl`) with different data quality. Writer A (Bridge) writes immediately after execution with potentially estimated/incorrect data because the ground truth hasn't settled yet (async clearance). Writer B (Reconciliation) has access to authoritative ground truth but its correction path is starved because the tracking state (`known_open_tickets`) is cleared before Writer B runs. Writer A produces 99%+ of entries; Writer B produces <1%. The journal field's quality degrades to Writer A's estimate quality, and the `_pnl_status` provenance tag is absent from >60% of historical entries (added later by FIX-20260716-005).
+
+**Root mechanism**: (1) Async settlement window — MT5 deal.profit is populated asynchronously after order_send() returns. (2) Silent fallback — Bridge uses engine's mid-price estimate when deal.profit unavailable, writes without provenance tag. (3) Correction starvation — management phase clears known_open_tickets after dispatch before reconciliation can detect the close and write corrected PnL. (4) Committee architectural mandate: Broker state ("清算状态") and trading state ("交易状态") must never share the same memory pool.
+
+**Prevention**: Settlement Queue Isolation — three-state lifecycle with physical separation: `known_open_tickets` (active positions, engine-managed) → `pending_settlement_tickets` (awaiting settlement, engine MUST NOT touch) → settled (verified PnL written, removed from queue). Bridge writes `pnl=null` + `_pnl_status="pending_mt5_settlement"` as default; Reconciliation is SOLE authority for writing non-null PnL. Zombie protection: 4-tier timeout escalation with degraded writes and terminal alerts.
+
+**Detection**: Check `_pnl_status` distribution — if >5% of recent close entries have `pending_mt5_settlement` for >1hr, settlement queue is stalled. Monitor `pending_settlement_tickets` queue size — >10 pending = CRITICAL (MT5 connectivity likely lost). Cross-validate journal PnL vs MT5 broker report monthly.

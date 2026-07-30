@@ -1128,12 +1128,27 @@ def process_one(
             _strategy = _payload_strategy
     _open_msg_id = msg_payload.get("open_message_id", "")
     position_ticket = detail.get("order") or coerce_position_ticket(msg_payload)
-    # ── FIX-20260612-004: Prefer actual fill PnL over mid-price estimate ──
+    # ── FIX-20260730-011 (L3): Settlement Queue Isolation ──
+    # Bridge MUST NOT write estimated PnL as the journal "pnl" field.
+    # When deal.profit is unavailable (MT5 deal not yet settled), write
+    # pnl=null with _pnl_status="pending_mt5_settlement".  The engine's
+    # mid-price estimate is stored in detail.estimated_pnl for reference
+    # only.  The Reconciliation adapter (via SettlementQueue) is the SOLE
+    # authority for writing non-null PnL — it polls history_deals_get()
+    # until the exit deal settles, then writes verified PnL.
     _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
-    _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
-    _pnl_status = (
-        "verified_from_mt5_deal" if _actual_profit is not None else "pending_mt5_confirmation"
-    )
+    if _actual_profit is not None:
+        _pnl = _actual_profit
+        _pnl_status = "verified_from_mt5_deal"
+    else:
+        # NEVER fall back to engine's mid-price estimate as the journal pnl.
+        # Store it in detail.estimated_pnl for forensic reference only.
+        _pnl = None
+        _pnl_status = "pending_mt5_settlement"
+        if isinstance(detail, dict):
+            _engine_estimate = msg_payload.get("pnl")
+            if _engine_estimate is not None:
+                detail["estimated_pnl"] = _engine_estimate
     # ── FIX-20260716-005 §3: Bridge journal hardening ──
     # Tag every bridge-written journal entry with _source for audit trail.
     # Previously bridge entries had no _source field, making it impossible

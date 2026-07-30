@@ -1760,10 +1760,13 @@ def main(argv: list[str] | None = None) -> int:
                 pass
 
     # ── Initial state ──
+    from core.runtime.settlement_queue import SettlementQueue
+
     state = LiveCycleState(
         known_open_tickets=known_open_tickets,
         position_manager=position_manager,
         correlation_tracker=correlation_tracker,
+        pending_settlement_tickets=SettlementQueue(),
     )
 
     # ── Start event ──
@@ -2591,6 +2594,13 @@ def main(argv: list[str] | None = None) -> int:
                     circuit_breaker_trip_reason=getattr(state, "_circuit_breaker_trip_reason", ""),
                     # ── DQAF-20260615-004 ──
                     known_open_tickets=getattr(state, "known_open_tickets", None),
+                    # ── FIX-20260730-011 (L3): Settlement Queue persistence ──
+                    pending_settlement_tickets=(
+                        state.pending_settlement_tickets.to_dict()["entries"]
+                        if getattr(state, "pending_settlement_tickets", None) is not None
+                        and state.pending_settlement_tickets.pending_count > 0
+                        else None
+                    ),
                 )
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass

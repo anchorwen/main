@@ -22,7 +22,7 @@ def _ctx(**overrides: object) -> StrategyEvaluationContext:
         feature_vector=None, micro_feature_vector=None, mid_price=2000.0
     )
     kwargs.update(overrides)
-    return StrategyEvaluationContext(**kwargs)  # type: ignore[arg-type]
+    return StrategyEvaluationContext(**kwargs)
 
 
 # ── Concrete test double ──────────────────────────────────────────────────
@@ -548,7 +548,7 @@ class TestVolume:
         vol = line._compute_volume(
             confidence=0.8, current_atr=5.0, regime_info=None, regime_gate_mode="off"
         )
-        assert vol == 0.01  # clamped min (0.0 * factors = 0 → min 0.01)
+        assert vol == 0.0  # FIX-20260730-010: off gate → 0.0, no floor resurrection
 
     def test_volume_high_vol_regime_reduces(self):
         config = StrategyLineConfig(
