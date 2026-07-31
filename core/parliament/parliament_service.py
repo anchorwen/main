@@ -172,7 +172,10 @@ class ParliamentService:
             confidence = pred.get("confidence", 0.5)
             health = p.health or {}
             runtime_ok = not health.get("fallback_used", False)
-            vote_weight = getattr(p, "vote_weight", 1.0) or 1.0
+            # DQAF-20260731-004: Preserve explicit vote_weight=0.0 (muted/observation-only).
+            # The old "or 1.0" pattern silently upgraded 0.0→1.0 because 0.0 is falsy in Python.
+            _vw = getattr(p, "vote_weight", None)
+            vote_weight = float(_vw) if _vw is not None else 1.0
             weight = vote_weight * confidence * (1.0 if runtime_ok else 0.5)
             up_scores.append(up * weight)
             down_scores.append(down * weight)

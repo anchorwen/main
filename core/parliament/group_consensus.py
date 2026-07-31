@@ -76,7 +76,9 @@ def compute_contract_group_consensus(
             for p in raw_proposals:
                 _bid = getattr(p, "brain_id", "")
                 if _bid:
-                    _base_vote_weights[_bid] = float(getattr(p, "vote_weight", 1.0) or 1.0)
+                    # DQAF-20260731-004: Preserve explicit vote_weight=0.0 (muted/observation-only).
+                    _vw_raw = getattr(p, "vote_weight", None)
+                    _base_vote_weights[_bid] = float(_vw_raw) if _vw_raw is not None else 1.0
             _pnl_dynamic_weights = weighter.get_weights()
             brain_weights: dict[str, float] = {}
             for _bid, _pnl_w in _pnl_dynamic_weights.items():

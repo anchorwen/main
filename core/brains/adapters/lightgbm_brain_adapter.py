@@ -196,6 +196,9 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
             confidence_params=self._brain_entry.get("confidence_params"),
         )
 
+        # DQAF-20260731-004: Preserve explicit vote_weight=0.0 (muted/observation-only).
+        # The old "or 1.0" pattern silently upgraded 0.0→1.0 because 0.0 is falsy.
+        _vw = self._brain_entry.get("vote_weight")
         return BrainSignal(
             brain_id=self._brain_entry.get("brain_id", ""),
             direction=direction_bias,
@@ -208,7 +211,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
                 for k, v in raw_output.items()
                 if k not in ("raw_score", "runtime_ms", "fallback")
             },
-            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
+            vote_weight=float(_vw) if _vw is not None else 1.0,
         )
 
     def describe(self) -> dict[str, Any]:

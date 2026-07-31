@@ -98,6 +98,55 @@ BTC_MACRO_ENHANCED_41_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES
 # ordering (train_btc_swing_v9.py Order B).
 BTC_MACRO_ENHANCED_41_V2_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES
 
+# ── V4 Expected R 37-dim (2026-07-31): 41-dim minus 4 H4 zero-fill placeholders ──
+# H4_Trend_Strength, H4_ATR_Ratio, H4_RSI_Divergence, H4_vs_D1_Alignment PHYSICALLY DELETED.
+# Used by BTC_Expected_R_V4 Two-Tower regression models.
+BTC_EXPECTED_R_37_FEATURES = [
+    # D1 macro (8)
+    "D1_Ret_1",
+    "D1_Body_Ratio",
+    "D1_ATR_14",
+    "D1_RSI_14",
+    "D1_MACD",
+    "D1_Vol_ZScore",
+    "D1_Bollinger_Width",
+    "D1_ADX_14",
+    # Cross-asset + calendar (12) — 4 H4 placeholders DELETED
+    "XAUUSDc_return",
+    "Cross_DXY_Return",
+    "Cross_EURUSD_Return",
+    "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin",
+    "Derived_Weekday_Cos",
+    "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week",
+    "Derived_Weekend_Gap",
+    "Derived_Vol_Regime",
+    "Derived_Momentum_5D",
+    "Derived_Momentum_20D",
+    # Microstructure (9)
+    "tick_return",
+    "hl_ratio",
+    "co_ratio",
+    "avg_spread",
+    "OIM",
+    "tick_velocity",
+    "AUDJPYc_return",
+    "EURUSDc_return",
+    "USDJPYc_return",
+    # TF-specific (2)
+    "TF_OU_Theta",
+    "TF_Hurst",
+    # Regime derivatives (4)
+    "TF_delta_OU",
+    "TF_delta_Hurst",
+    "TF_OU_x_Hurst",
+    "TF_OU_div_ADX",
+    # BTC macro (2)
+    "Cross_BTC_Gold_Ratio",
+    "Cross_BTC_Gold_Ratio_ROC",
+]
+
 # ── DQAF-20260707-003: H1 directional features ──
 # The 41-dim schema lacks H1-timescale momentum.  These 7 features capture
 # 1-4 hour returns, volatility, acceleration, mean-reversion, and multi-scale
@@ -152,5 +201,9 @@ assert (
     len(BTC_MACRO_FLOW_46_FEATURES) == 46
 ), f"BTC Flow schema dimension mismatch: {len(BTC_MACRO_FLOW_46_FEATURES)} != 46"
 # ── Verify uniqueness ──
+assert (
+    len(BTC_EXPECTED_R_37_FEATURES) == 37
+), f"Expected R schema dimension mismatch: {len(BTC_EXPECTED_R_37_FEATURES)} != 37"
+assert len(set(BTC_EXPECTED_R_37_FEATURES)) == 37, "Expected R schema has duplicate feature names"
 assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 41, "BTC schema has duplicate feature names"
 assert len(set(BTC_MACRO_FLOW_46_FEATURES)) == 46, "BTC Flow schema has duplicate feature names"

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-31T09:23:43Z
-> **扫描模块数**: 753
+> **自动生成**: 2026-07-31T16:59:31Z
+> **扫描模块数**: 760
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -71,14 +71,14 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `base_adapter.py` | ✅ active | BaseBrainAdapter | 14 | 325 | — | |
-| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 219 | — | |
+| `base_adapter.py` | ✅ active | BaseBrainAdapter | 14 | 371 | — | |
+| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 222 | — | |
 | `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
-| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 596 | — | |
-| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 270 | — | |
-| `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 287 | — | |
-| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 315 | — | |
-| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 294 | — | |
+| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 597 | — | |
+| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 271 | — | |
+| `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 288 | — | |
+| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 316 | — | |
+| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 295 | — | |
 
 ## core/brains/services
 
@@ -323,10 +323,10 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 156 | — | |
+| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 209 | — | |
 | `daily_swing_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `microstructure_schema.py` | ✅ active | — | 1 | 57 | — | |
-| `registry.py` | ✅ active | — | 4 | 246 | — | |
+| `registry.py` | ✅ active | — | 4 | 253 | — | |
 | `swing_enhanced_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `v9_institutional_schema.py` | 📄 config | — | 0 | 42 | — | |
 | `v9_micro_schema.py` | ✅ active | — | 1 | 27 | — | |
@@ -452,9 +452,9 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 850 | — | |
-| `group_consensus.py` | ✅ active | — | 1 | 188 | — | |
-| `parliament_service.py` | ✅ active | ParliamentService | 11 | 312 | — | |
+| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 867 | — | |
+| `group_consensus.py` | ✅ active | — | 1 | 190 | — | |
+| `parliament_service.py` | ✅ active | ParliamentService | 11 | 315 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 
 ## core/protocol
@@ -554,7 +554,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 5 | 1203 | — | |
+| `strategy_builder.py` | ✅ active | — | 5 | 1257 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 5 | 1373 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
@@ -643,6 +643,9 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `_analyze_btc_brains_20260730.py` | ✅ active | — | 1 | 326 | — | |
+| `_analyze_btc_current_positions.py` | ✅ active | — | 2 | 130 | — | |
+| `_analyze_btc_current_v2.py` | ✅ active | — | 2 | 65 | — | |
+| `_analyze_btc_entry_quality.py` | ✅ active | — | 5 | 383 | — | |
 | `_analyze_btc_exits.py` | ✅ active | — | 2 | 337 | — | |
 | `_analyze_btc_improvement.py` | ✅ active | — | 1 | 217 | — | |
 | `_analyze_console_log.py` | ✅ active | — | 4 | 414 | — | |
@@ -667,6 +670,8 @@
 | `_diagnose_pnl_provenance.py` | 📄 config | — | 0 | 178 | — | |
 | `_diagnose_pnl_status.py` | 📄 config | — | 0 | 128 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
+| `_list_btc_brains.py` | 📄 config | — | 0 | 22 | — | |
+| `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 342 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_parse_mt5_text.py` | ✅ active | — | 2 | 83 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
@@ -928,6 +933,7 @@
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 7 | 258 | — | |
+| `build_btc_expected_r_dataset.py` | ✅ active | — | 12 | 704 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 771 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 251 | — | |
 | `build_meta_features.py` | ✅ active | — | 7 | 801 | — | |
@@ -976,6 +982,7 @@
 | `train_btc_binary_directional.py` | ✅ active | — | 5 | 385 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
+| `train_btc_expected_r.py` | ✅ active | — | 8 | 567 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1898 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |

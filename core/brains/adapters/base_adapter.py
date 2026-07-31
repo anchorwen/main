@@ -118,7 +118,8 @@ class BaseBrainAdapter(ABC):
             fallback=fallback,
             runtime_ms=runtime_ms,
             diagnostics=_extra,
-            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
+            # DQAF-20260731-004: Preserve explicit vote_weight=0.0 (muted/observation-only).
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0)),
         )
 
     # ------------------------------------------------------------------
@@ -247,8 +248,27 @@ class BaseBrainAdapter(ABC):
         FIX-20260704-002 — calibration_offset for multiclass prior correction.
         FIX-20260706-015 — binary_directional path with probability deadzone
         for B-path directional classifiers trained without NEUTRAL samples.
+        DQAF-20260731-004 — expected_r_long/expected_r_short paths for V4
+        Two-Tower Expected R regression.  Single-direction voting with
+        excess-based confidence (quantile_gaussian is unsuitable for the
+        negatively-skewed E[R] distribution).
 
-        **Path 1 — Trade-quality binary** (binary_logloss / binary):
+        ...
+
+        **Path 4 — Expected R LONG Tower** (expected_r_long):
+        - raw_score = E[R_long] ∈ [-1.0, +1.667]
+        - E[R] > threshold → LONG (NEVER votes SHORT)
+        - Confidence = min(0.90, 0.40 + excess / (2*threshold) * 0.50)
+        - Rationale: E[R] distribution is negatively skewed; quantile_gaussian
+          fails when p95 is near zero or negative.  Linear ramp from threshold
+          is physically meaningful (R-multiples are well-scaled).
+
+        **Path 5 — Expected R SHORT Tower** (expected_r_short):
+        - raw_score = E[R_short] ∈ [-1.0, +1.667]
+        - E[R] > threshold → SHORT (NEVER votes LONG)
+        - Same excess-based confidence as Path 4.
+
+        **Path 3 — Regression / Multiclass** (multi:softprob, multiclass, etc.):
         - raw_score = P(TP-hit | features) ∈ [0, 1]
         - LONG-ONLY quality classifier.  NEVER votes SHORT.
         - P > 0.55 → LONG,  else ABSTAIN (NEUTRAL).
@@ -293,6 +313,32 @@ class BaseBrainAdapter(ABC):
                 return "short", up, down
             else:
                 return "neutral", 0.5, 0.5
+
+        # ── Path 4: Expected R LONG Tower (V4 Two-Tower, DQAF-20260731-004) ──
+        # raw_score = E[R_long] — expected R-multiple if we go LONG.
+        # Positive E[R] → LONG, else NEUTRAL.  NEVER votes SHORT.
+        # Confidence derived from excess over threshold (not quantile_gaussian —
+        # E[R] distributions are skewed negative and p95-based calibration fails).
+        if objective == "expected_r_long":
+            if raw_score > threshold:
+                excess = raw_score - threshold
+                confidence = min(0.90, 0.40 + excess / (2.0 * threshold) * 0.50)
+                up = 0.5 + confidence / 2.0
+                down = 1.0 - up
+                return "long", up, down
+            return "neutral", 0.5, 0.5
+
+        # ── Path 5: Expected R SHORT Tower (V4 Two-Tower, DQAF-20260731-004) ──
+        # raw_score = E[R_short] — expected R-multiple if we go SHORT.
+        # Positive E[R] → SHORT, else NEUTRAL.  NEVER votes LONG.
+        if objective == "expected_r_short":
+            if raw_score > threshold:
+                excess = raw_score - threshold
+                confidence = min(0.90, 0.40 + excess / (2.0 * threshold) * 0.50)
+                down = 0.5 + confidence / 2.0
+                up = 1.0 - down
+                return "short", up, down
+            return "neutral", 0.5, 0.5
 
         # ── Path 3: Regression / Multiclass ──
         calibrated = raw_score + calibration_offset

@@ -272,7 +272,8 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 for k, v in raw_output.items()
                 if k not in ("raw_score", "runtime_ms", "fallback")
             },
-            vote_weight=float(self._brain_entry.get("vote_weight", 1.0) or 1.0),
+            # DQAF-20260731-004: Preserve explicit vote_weight=0.0 (muted/observation-only).
+            vote_weight=float(self._brain_entry.get("vote_weight", 1.0)),
         )
 
     # ------------------------------------------------------------------

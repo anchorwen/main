@@ -25,6 +25,7 @@ from core.parliament.contract_groups import (
     ARB_GROUP,
     BARRIER_12BAR_META_GROUP,
     BARRIER_GROUP,
+    BTC_EXPECTED_R_M15_GROUP,
     BTC_SWING_GROUP,
     BTC_SWING_H1_GROUP,
     BTC_SWING_H1_V2_GROUP,
@@ -180,6 +181,7 @@ def build_strategy_lines(
     btc_swing_m30_brains = _known_groups.get("btc_swing_m30", [])
     btc_swing_h1_v2_brains = _known_groups.get("btc_swing_h1_v2", [])
     btc_swing_h4_brains = _known_groups.get("btc_swing_h4", [])
+    btc_expected_r_m15_brains = _known_groups.get("btc_expected_r_m15", [])
     h1_directional_brains = _known_groups.get("h1_directional", [])
 
     # ── FIX-20260628-169: Per-asset reference ATR for dynamic SL/TP scaling ──
@@ -998,6 +1000,58 @@ def build_strategy_lines(
                     "max_consecutive_losses", 8
                 ),
                 cooldown_minutes=_cfg("btc_swing_h4", "budget", {}).get("cooldown_minutes", 0),
+            ),
+        )
+
+    # ── BTC Expected R V4 M15 Two-Tower (DQAF-20260731-004) ──
+    if btc_expected_r_m15_brains:
+        strategies["btc_expected_r_m15"] = SwingStrategy(
+            StrategyLineConfig(
+                symbol=config.symbol,
+                base_dir=config.base_dir,
+                contract_size=get_asset(config.symbol).contract_size,
+                name="btc_expected_r_m15",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("btc_expected_r_m15", "trend_following"),
+                magic=_cfg("btc_expected_r_m15", "magic", 90452),
+                brain_types=BTC_EXPECTED_R_M15_GROUP["brain_types"],
+                base_volume=_vol_cfg("btc_expected_r_m15"),
+                max_volume=_cfg("btc_expected_r_m15", "max_volume", 0.05),
+                base_sl_atr_mult=_cfg("btc_expected_r_m15", "sl", {}).get("base_atr_mult", 1.5),
+                base_tp_atr_mult=_cfg("btc_expected_r_m15", "tp", {}).get("base_atr_mult", 2.5),
+                hard_sl_ratio=_cfg("btc_expected_r_m15", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("btc_expected_r_m15", "sl", {}).get("min_sl_distance", 100.0),
+                min_rr_ratio=_cfg("btc_expected_r_m15", "sl", {}).get("min_rr_ratio", 0.85),
+                confidence_threshold=_cfg("btc_expected_r_m15", "confidence_threshold", 0.35),
+                spread_points=_cfg("btc_expected_r_m15", "spread_points", 200),
+                max_spread_points=_cfg("btc_expected_r_m15", "max_spread_points", 3000),
+                min_p_win=_cfg("btc_expected_r_m15", "min_p_win", 0.40),
+                long_bias_discount=_cfg("btc_expected_r_m15", "direction_balance", {}).get(
+                    "long_bias_discount", 0.0
+                ),
+                exit_flip_enabled=_exit_cfg("btc_expected_r_m15", "flip_exit_enabled", False),
+                exit_time_cycles=_exit_cfg("btc_expected_r_m15", "time_exit_cycles", 72),
+                exit_zscore_enabled=_exit_cfg("btc_expected_r_m15", "zscore_exit_enabled", False),
+                exit_min_r=_exit_cfg("btc_expected_r_m15", "min_r_for_hold", 0.3),
+                min_valid_brains=_cfg("btc_expected_r_m15", "min_valid_brains", 1),
+                timeframe=_cfg("btc_expected_r_m15", "timeframe", "M15"),
+                exit_hesitation_cycles=_exit_cfg("btc_expected_r_m15", "hesitation_cycles", 24),
+                exit_ev_trajectory_enabled=_exit_cfg(
+                    "btc_expected_r_m15", "ev_trajectory_enabled", False
+                ),
+                mode=_cfg("btc_expected_r_m15", "mode", "shadow"),
+            ),
+            btc_expected_r_m15_brains,
+            budget=StrategyBudget(
+                "btc_expected_r_m15",
+                daily_loss_limit_pct=_cfg("btc_expected_r_m15", "budget", {}).get(
+                    "daily_loss_limit_pct", -0.03
+                ),
+                max_consecutive_losses=_cfg("btc_expected_r_m15", "budget", {}).get(
+                    "max_consecutive_losses", 8
+                ),
+                cooldown_minutes=_cfg("btc_expected_r_m15", "budget", {}).get(
+                    "cooldown_minutes", 0
+                ),
             ),
         )
 

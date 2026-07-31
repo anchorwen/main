@@ -128,6 +128,8 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 | FIX-20260625-133 | 2026-06-25 | cursor-agent | — | **Tier 2 零覆盖歼灭 9/9 — 6/26 Checkpoint**: feature_assembler(0→88%), meta_feature_builder(0→100%), btc_feature_augmenter(0→90%), live_daily_provider(0→78%), brain_registry(0→98%), online_mlp_model(0→99%), schema_versions(1→100%), brain_attribution_service(0→96%), brain_promotion(0→89%). ~216 tests across 9 files. New dirs: tests/brains/services/, tests/features/computers/. All 14 original Tier 2 files now covered. | RC-12 |
 | FIX-20260708-002 | 2026-07-08 | cursor-agent | — | **DQAF-20260707-003 closure — btc_h1_directional_48 schema in _IMPLEMENTED_SCHEMAS.** `feature_service.py`: register `btc_h1_directional_48` (41 base + 7 H1 directional momentum) as an implemented schema. Schema symbol (`BTC_H1_DIRECTIONAL_48_FEATURES`), dimension (registry.py:56=48), assembly branch (registry.py:133) and router (feature_router.py:51) were already committed; this completes the serving-side gate. Schema is dormant (no live brain consumes it after btc_swing_h1 retirement) — retained for Path C horizon=4 retrain. | RC-12 |
 
+| FIX-20260731-004 | 2026-07-31 | cursor-agent | — | **V4 Expected R 37-dim schema registration**: (1) `BTC_EXPECTED_R_37_FEATURES` constant in `btc_macro_enhanced_schema.py` — 41-dim BTC macro minus 4 H4 zero-fill placeholders. (2) Registered `btc_expected_r_37 → 37` in SCHEMA_DIMENSIONS with feature name resolution in registry.py. | RC-12 — DQAF-20260731-004 |
+
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
 |----------|-----------|----------|

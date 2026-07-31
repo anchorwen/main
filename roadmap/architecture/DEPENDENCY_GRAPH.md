@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-31T09:23:43Z
+> **自动生成**: 2026-07-31T16:59:31Z
 
 ## Package-Level Dependencies
 
@@ -557,6 +557,9 @@
 ### `scripts/`
 
 - `_analyze_btc_brains_20260730.py` → (无内部依赖)
+- `_analyze_btc_current_positions.py` → (无内部依赖)
+- `_analyze_btc_current_v2.py` → (无内部依赖)
+- `_analyze_btc_entry_quality.py` → (无内部依赖)
 - `_analyze_btc_exits.py` → (无内部依赖)
 - `_analyze_btc_improvement.py` → (无内部依赖)
 - `_analyze_console_log.py` → (无内部依赖)
@@ -581,6 +584,8 @@
 - `_diagnose_pnl_provenance.py` → (无内部依赖)
 - `_diagnose_pnl_status.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
+- `_list_btc_brains.py` → (无内部依赖)
+- `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_parse_mt5_text.py` → (无内部依赖)
 - `_train_h1_binary_final.py` → (无内部依赖)
@@ -828,6 +833,7 @@
 - `batch_train_skeleton.py` → `scripts.training.crt_manifest`
 - `brain_leaderboard.py` → (无内部依赖)
 - `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`
+- `build_btc_expected_r_dataset.py` → (无内部依赖)
 - `build_calibrated_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_live_labeled_dataset.py` → (无内部依赖)
 - `build_meta_features.py` → `core.contracts.training.training_contract`
@@ -876,6 +882,7 @@
 - `train_btc_binary_directional.py` → (无内部依赖)
 - `train_btc_directional_v1.py` → `core.features.computers.v9_live_computer`
 - `train_btc_directional_v10.py` → (无内部依赖)
+- `train_btc_expected_r.py` → (无内部依赖)
 - `train_btc_swing_v9.py` → `core.features.computers.v9_live_computer`
 - `train_daily_swing.py` → (无内部依赖)
 - `train_exit_metamodel.py` → (无内部依赖)

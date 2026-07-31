@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.features.schemas.btc_macro_enhanced_schema import (
+    BTC_EXPECTED_R_37_FEATURES,  # noqa: F401 — V4 Expected R: 41-dim minus 4 H4 placeholders
     BTC_MACRO_ENHANCED_37_FEATURES,
     BTC_MACRO_ENHANCED_41_FEATURES,  # noqa: F401 — canonical name, imported for re-export
     BTC_MACRO_ENHANCED_41_V2_FEATURES,  # noqa: F401 — FIX-20260625-137: clean contract
@@ -56,6 +57,8 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
     "btc_h1_directional_48": 48,
     # DQAF-20260707-004: 46-dim Flow — 41 base + 5 OFI flow features
     "btc_macro_flow_46": 46,
+    # V4 Expected R (2026-07-31): 41-dim minus 4 H4 placeholders → 37-dim
+    "btc_expected_r_37": 37,
 }
 
 # Canonical name resolution (alias → canonical)
@@ -124,6 +127,10 @@ def get_schema_feature_names(schema_name: str) -> list[str]:
         from core.features.schemas.btc_macro_enhanced_schema import BTC_MACRO_ENHANCED_41_FEATURES
 
         names = list(BTC_MACRO_ENHANCED_41_FEATURES)
+    elif canonical == "btc_expected_r_37":
+        from core.features.schemas.btc_macro_enhanced_schema import BTC_EXPECTED_R_37_FEATURES
+
+        names = list(BTC_EXPECTED_R_37_FEATURES)
     elif canonical == "btc_macro_enhanced_41_v2":
         from core.features.schemas.btc_macro_enhanced_schema import (
             BTC_MACRO_ENHANCED_41_V2_FEATURES,

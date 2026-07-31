@@ -1,0 +1,90 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "BTC_Expected_R_V4_SHORT",
+  "brain_type": "expected_r_short",
+  "contract_group": "btc_expected_r_m15",
+  "training_contract": "btc_expected_r",
+  "feature_schema": "btc_expected_r_37",
+  "feature_schema_id": "btc_expected_r_37",
+  "model_path": "data_btc/models/btc_expected_r_v4_m15/tower_short_best.txt",
+  "artifact_path": "data_btc/models/btc_expected_r_v4_m15/tower_short_best.txt",
+  "model_version": "btc_expected_r_v4_m15_short",
+  "artifact_hash": "",
+  "status": "shadow",
+  "vote_weight": 1.0,
+  "magic": 90451,
+  "brain_role": "expected_r_tower",
+  "training_horizon": 24,
+  "strategy": "btc_expected_r",
+  "timeframe": "M15",
+  "activation_threshold": 0.15,
+  "training_params": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5,
+    "horizon": 24,
+    "n_estimators": 500,
+    "learning_rate": 0.03,
+    "max_depth": 6,
+    "num_leaves": 63,
+    "objective": "expected_r_short",
+    "overpred_penalty": 1.2,
+    "loss": "asymmetric_huber",
+    "timeframe_minutes": 15,
+    "n_features": 37,
+    "n_train_samples": 33921,
+    "n_val_samples": 7250,
+    "n_test_samples": 7275,
+    "curation": "ADX>=20 + exclude weekends + ATR p5-p95",
+    "label_method": "SL=1.5xATR, TP=2.5xATR, horizon=24 M15 bars"
+  },
+  "_note": "V4 Expected R Two-Tower SHORT tower. Trained with asymmetric Huber loss (overpred_penalty=1.2). Spearman ρ=0.0596 — first BTC Expected R model to cross 0.05 gate. Deployed SHADOW with vote_weight=1.0 — full signal authority. SHORT-only: never votes LONG. Confidence uses excess-based ramp (NOT quantile_gaussian — E[R_short] distribution has p95=-0.09, making quantile-based calibration infeasible).",
+  "training_metrics": {
+    "spearman_rho": 0.0596,
+    "spearman_pval": 0.0,
+    "sign_match": 0.5961,
+    "r2": -0.0694,
+    "mae": 1.0743,
+    "rmse": 1.2483,
+    "bias": -0.3141,
+    "mean_y_true": 0.0121,
+    "mean_y_pred": -0.3020,
+    "n_val_samples": 7250
+  },
+  "features": [
+    "D1_Ret_1", "D1_Body_Ratio", "D1_ATR_14", "D1_RSI_14",
+    "D1_MACD", "D1_Vol_ZScore", "D1_Bollinger_Width", "D1_ADX_14",
+    "XAUUSDc_return", "Cross_DXY_Return", "Cross_EURUSD_Return", "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin", "Derived_Weekday_Cos", "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week", "Derived_Weekend_Gap",
+    "Derived_Vol_Regime", "Derived_Momentum_5D", "Derived_Momentum_20D",
+    "tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM", "tick_velocity",
+    "AUDJPYc_return", "EURUSDc_return", "USDJPYc_return",
+    "TF_OU_Theta", "TF_Hurst", "TF_delta_OU", "TF_delta_Hurst",
+    "TF_OU_x_Hurst", "TF_OU_div_ADX",
+    "Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"
+  ],
+  "n_features": 37,
+  "n_train_samples": 33921,
+  "trained_at": "2026-07-31T14:47:07Z",
+  "governance": {
+    "min_confidence": 0.35,
+    "cooldown_cycles": 3
+  },
+  "confidence_params": {
+    "method": "excess_ramp",
+    "p95": -0.09,
+    "peak_conf": 0.60,
+    "lambda_decay": 0.21,
+    "_note": "DQAF-20260731-004: confidence_params are DOCUMENTATION-ONLY for expected_r paths. Actual confidence = min(0.90, 0.40 + (E[R] - threshold) / (2*threshold) * 0.50). SHORT tower p95=-0.09 (negatively skewed) — quantile_gaussian would assign higher confidence to more-negative predictions (larger |score|), which is exactly wrong."
+  },
+  "last_retrained": "2026-07-31T14:47:07Z",
+  "label_contract": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5,
+    "contract_type": "btc_expected_r"
+  },
+  "_intent": {
+    "trading": "shadow_only",
+    "note": "Investment Committee V4 Final Mandate: SHORT tower full signal authority — vote_weight=1.0, ρ=0.0596 crosses 0.05 gate. Strategy runs in shadow mode initially (zero real risk). After 3-5 day signal validation, strategy mode promoted to 'live' — SHORT tower will then execute real orders while LONG tower remains isolated via vote_weight=0.0."
+  }
+}

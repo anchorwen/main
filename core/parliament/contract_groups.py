@@ -247,6 +247,18 @@ BTC_SWING_H4_GROUP: dict[str, Any] = {
     "description": "BTC H4 swing — 12-bar (~2d) barrier, SL=2.5xATR, TP=3.0xATR, shadow tracer",
 }
 
+# Group 5k: BTC Expected R M15 (24-bar M15, SL=1.5×ATR, TP=2.5×ATR, ~6h)
+# V4 Two-Tower — asymmetric Huber regression, LONG tower (vote_weight=0.0)
+# + SHORT tower (vote_weight=1.0).  Shadow deployment Aug 2026.
+BTC_EXPECTED_R_M15_GROUP: dict[str, Any] = {
+    "name": "btc_expected_r_m15",
+    "horizon_cycles": 144,  # 24 M15 bars × 6 M5 cycles/M15
+    "brain_types": {"expected_r_long", "expected_r_short"},
+    "contract": "btc_expected_r_m15_24bar",
+    "voting_mode": "weighted",
+    "description": "BTC Expected R V4 M15 Two-Tower — regression E[R_long]/E[R_short], asymmetric Huber loss, shadow deployment",
+}
+
 # Group 5g: H1 directional XAU (24-bar H1, 2.0×ATR SL, 3.5×ATR TP, ~1d)
 # Bidirectional XGBoost regression — predicts direction + magnitude on H1 bars.
 # Swing_V10_H1_Directional (PF=81.10, +107.33R) — XAU's highest-performing brain.
@@ -279,6 +291,7 @@ ALL_GROUPS: tuple[dict[str, Any], ...] = (
     BTC_SWING_M30_GROUP,
     BTC_SWING_H1_V2_GROUP,
     BTC_SWING_H4_GROUP,
+    BTC_EXPECTED_R_M15_GROUP,
     H1_DIRECTIONAL_GROUP,
 )
 
@@ -434,7 +447,11 @@ class ContractGroupConsensus:
             #    If base_weight=0, the brain is PHYSICALLY MUTED regardless
             #    of PnL performance.  This prevents shadow brains from
             #    accumulating collective weight to override voting brains.
-            base_weight = float(getattr(p, "vote_weight", 1.0) or 1.0)
+            # DQAF-20260731-004: Preserve explicit vote_weight=0.0 (muted/observation-only).
+            # The old "or 1.0" pattern silently upgraded 0.0→1.0 because 0.0 is falsy,
+            # nullifying the base_weight <= 0.0 fail-fast gate below.
+            _vw_raw = getattr(p, "vote_weight", None)
+            base_weight = float(_vw_raw) if _vw_raw is not None else 1.0
             if base_weight <= 0.0:
                 # ── Fail-Fast Gate: muted brain cannot vote ──
                 directions.append("neutral")

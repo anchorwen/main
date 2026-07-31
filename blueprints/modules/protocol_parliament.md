@@ -59,6 +59,8 @@ BrainSignal[] → ContractGroupConsensus.compute_all_group_signals()
 | FIX-20260602-060 | 2026-06-02 | cursor-agent | — | M15_SWING_GROUP brain_types documented lightgbm_v1 but actual brain is xgboost_v9. Corrected. | RC-09 |
 | FIX-20260603-062 | 2026-06-03 | cursor-agent | — | **Unanimous consensus self-normalization**: FIX-052 only covered single-brain. Multi-brain unanimous (2/2 SHORT) still self-normalized to conf=1.0. Now uses weighted-average confidence across agreeing brains. | RC-06 |
 
+| FIX-20260731-004 | 2026-07-31 | cursor-agent | — | **V4 Expected R: contract group + vote_weight=0.0 systemic fix**: (1) Added `BTC_EXPECTED_R_M15_GROUP` (brain_types: expected_r_long/expected_r_short, contract: btc_expected_r_m15_24bar) to ALL_GROUPS. (2) Fixed vote_weight=0.0 preservation in `group_consensus.py:_compute_weighted()` and `parliament_service.py` — `or 1.0` pattern silently upgraded 0.0→1.0. (3) contract_groups.py `_compute_weighted()` base_weight computation fixed — fail-fast gate for base_weight<=0.0 now correctly mutes shadow brains. | RC-12 — DQAF-20260731-004 |
+
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
 |----------|-----------|----------|

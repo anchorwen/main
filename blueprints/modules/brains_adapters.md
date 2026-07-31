@@ -226,6 +226,8 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 | `BrainConfigValidator.validate(entry)` → `ValidationResult` | BrainFactory | Stable |
 | `ADAPTER_REGISTRY` dict format: `{registry_key: adapter_class}` | BrainFactory | Stable |
 
+| FIX-20260731-004 | 2026-07-31 | cursor-agent | — | **V4 Expected R Two-Tower Shadow Deployment — adapter extensions**: (1) Added `expected_r_long`/`expected_r_short` brain_type mappings to BRAIN_TYPE_MAP, both routing to `lightgbm_txt` adapter. (2) Added Path 4 (expected_r_long) and Path 5 (expected_r_short) to `_score_to_direction()` — single-direction voting with excess-based confidence ramp. (3) Systemic vote_weight=0.0 bug fix across all 7 adapters: `vote_weight or 1.0` silently upgraded 0.0→1.0 (falsy). Changed to `float(_vw) if _vw is not None else 1.0`. | RC-12 — DQAF-20260731-004 |
+
 ## Verification
 
 ```bash

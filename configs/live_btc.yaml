@@ -160,6 +160,14 @@ brains:
   #   Shadow observe — signals recorded, not executed. DQAF-20260706-015.
   - enabled: true
     path: configs/brains_btc/BTC_Swing_M5_Binary.json
+  # ── V4 Expected R Two-Tower M15 (2026-08-01, DQAF-20260731-004) ──
+  # SHORT tower ρ=0.0596 (vote_weight=1.0, full signal authority).
+  # LONG tower ρ=0.0445 (vote_weight=0.0, observation only — 30d OOS blind test).
+  # Both shadow status — zero real risk.  Strategy mode: shadow.
+  - enabled: true
+    path: configs/brains_btc/BTC_Expected_R_V4_LONG.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Expected_R_V4_SHORT.json
   # ── BTC Multi-TF Tracer Bullet Expansion (2026-07-13) ──
   # 41-dim V9 schema + DQAF-062 directional labels. All shadow — zero live risk.
   # Each TF has _intent.trading: shadow_only with dead-man switches.
@@ -582,6 +590,51 @@ strategy_lines:
     timeframe: H4
     tp:
       base_atr_mult: 3.0
+      partial_tp_enabled: false
+
+  # ── V4 Expected R Two-Tower M15 (2026-08-01, DQAF-20260731-004) ──
+  # SHORT tower ρ=0.0596 (vote_weight=1.0), LONG tower ρ=0.0445 (vote_weight=0.0).
+  # Shadow mode initially — signals recorded, not executed.
+  # After 3-5 day signal validation → promote mode to 'live' for SHORT execution.
+  btc_expected_r_m15:
+    enabled: true
+    mode: shadow
+    base_volume: 0.01
+    brain_types:
+    - expected_r_long
+    - expected_r_short
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 8
+      cooldown_minutes: 0
+    confidence_threshold: 0.35
+    direction_balance:
+      long_bias_discount: 0.0
+    exit:
+      confidence_decay_exit: true
+      flip_exit_enabled: false
+      hesitation_cycles: 24
+      time_exit_cycles: 72
+      ev_trajectory_enabled: false
+      trail_activation_atr: 0.5
+      trail_atr_mult: 2.0
+      trail_enabled: true
+    magic: 90452
+    max_spread_points: 3000
+    max_volume: 0.05
+    min_p_win: 0.40
+    min_valid_brains: 1
+    sl:
+      base_atr_mult: 1.5
+      dynamic: true
+      hard_sl_ratio: 1.5
+      min_rr_ratio: 0.85
+      min_sl_distance: 100.0
+    spread_points: 200
+    strategy_family: trend_following
+    timeframe: M15
+    tp:
+      base_atr_mult: 2.5
       partial_tp_enabled: false
 
 training:

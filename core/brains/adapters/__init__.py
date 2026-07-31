@@ -39,6 +39,8 @@ BRAIN_TYPE_MAP: dict[str, str] = {
     "xgboost_v4.5_h4": "xgboost_json",
     "xgboost_v9": "xgboost_json",
     "lightgbm_v1": "lightgbm_txt",
+    "expected_r_long": "lightgbm_txt",  # V4 Expected R Two-Tower: LONG tower (E[R_long] regression)
+    "expected_r_short": "lightgbm_txt",  # V4 Expected R Two-Tower: SHORT tower (E[R_short] regression)
     "ou_params_v6": "ou_params_json",
     "online_sgd": "online_sgd",
     "transformer_v4.3": "transformer_onnx",
