@@ -1,37 +1,37 @@
 {
   "schema_version": "brain_registry_entry.v1",
-  "brain_id": "Swing_V9_H1_V2",
+  "brain_id": "Swing_V9_M30_V2",
   "brain_type": "xgboost_v9",
-  "contract_group": "h1_swing",
-  "training_contract": "h1_swing",
+  "contract_group": "m30_swing",
+  "training_contract": "m30_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
-  "model_path": "data\\models\\swing\\Swing_V9_H1_V2_model.json",
-  "artifact_path": "data\\models\\swing\\Swing_V9_H1_V2_model.json",
-  "model_version": "swing_v9_h1_v2",
-  "artifact_hash": "83d5390688060b54b4faabef95266623342d4935a4a4169225398c2611edf1d7",
+  "model_path": "data\\models\\swing\\Swing_V9_M30_V2_model.json",
+  "artifact_path": "data\\models\\swing\\Swing_V9_M30_V2_model.json",
+  "model_version": "swing_v9_m30_v2",
+  "artifact_hash": "b490b556b0bb54793a8e7c1987e39c1fcb022000a7d4a20f8e745aa78106c61c",
   "status": "shadow",
   "vote_weight": 0.0,
-  "magic": 90330,
+  "magic": 90320,
   "brain_role": "alpha_brain",
-  "training_horizon": 24,
-  "strategy": "h1_swing",
-  "timeframe": "H1",
+  "training_horizon": 12,
+  "strategy": "m30_swing",
+  "timeframe": "M30",
   "training_params": {
     "sl_atr_mult": 2.0,
-    "tp_atr_mult": 3.5,
-    "horizon": 24,
+    "tp_atr_mult": 3.0,
+    "horizon": 12,
     "n_estimators": 300,
     "learning_rate": 0.05,
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.5534,
-    "val_accuracy": 0.5534,
-    "test_accuracy": 0.396,
-    "test_trade_win_rate": 0.3868,
-    "test_profit_factor": 1.175,
-    "test_sharpe": 7.5055
+    "train_accuracy": 0.3869,
+    "val_accuracy": 0.3869,
+    "test_accuracy": 0.3828,
+    "test_trade_win_rate": 0.3662,
+    "test_profit_factor": 1.7766,
+    "test_sharpe": 23.8116
   },
   "features": [
     "D1_Ret_1",
@@ -71,10 +71,11 @@
     "TF_Hurst"
   ],
   "n_features": 35,
-  "n_train_samples": 1060,
-  "trained_at": "2026-07-31T09:05:48.910471Z",
+  "n_train_samples": 2155,
+  "trained_at": "2026-07-31T09:02:11.186577Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "_note": " [FIXED: auto-registration set candidate+weight=1.0; corrected to shadow+weight=0.0 per quality gate]"
 }
