@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-30T17:19:27Z
-> **扫描模块数**: 748
+> **自动生成**: 2026-07-31T03:44:03Z
+> **扫描模块数**: 752
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -261,7 +261,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2376 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2381 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 5 | 645 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -529,7 +529,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5085 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2550 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2554 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -645,10 +645,14 @@
 | `_analyze_btc_brains_20260730.py` | ✅ active | — | 1 | 326 | — | |
 | `_analyze_btc_exits.py` | ✅ active | — | 2 | 337 | — | |
 | `_analyze_btc_improvement.py` | ✅ active | — | 1 | 217 | — | |
+| `_analyze_console_log.py` | ✅ active | — | 4 | 414 | — | |
+| `_analyze_dual_assassin_journal.py` | ✅ active | — | 3 | 320 | — | |
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
+| `_analyze_signal_close_audit.py` | ✅ active | — | 6 | 397 | — | |
 | `_analyze_v4_timeline.py` | 📄 config | — | 0 | 263 | — | |
+| `_analyze_xau_loss_exits.py` | ✅ active | — | 6 | 398 | — | |
 | `_assess_position_sizing.py` | ✅ active | — | 6 | 305 | — | |
 | `_audit_btc_brains_full.py` | ✅ active | — | 9 | 454 | — | |
 | `_audit_xau_brains_20260730.py` | ✅ active | — | 2 | 221 | — | |

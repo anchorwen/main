@@ -282,6 +282,7 @@ class ActivePositionManager:
         flip_confirm_count: int = 2,  # consecutive flips required before brain-flip exit
         min_hold_cycles: int = 3,  # minimum cycles before non-SL exit (toxicity veto can override)
         toxicity_velocity_mult: float = 3.0,  # tick-velocity multiplier for toxicity veto
+        kalman_velocity_threshold_bps: float = 3.0,  # DQAF-20260731-002: min |velocity| in bps for Kalman exit trigger
         pnl_store: Any = None,  # BrainPnLStore for brain-specific trail tuning
         meta_exit_engine: Any = None,  # MetaExitEngine for multi-factor exit scoring
         trail_policy: TrailPolicy | None = None,  # Phase C: default TrailPolicy for all positions
@@ -310,6 +311,7 @@ class ActivePositionManager:
         self.flip_confirm_count = flip_confirm_count
         self.min_hold_cycles = min_hold_cycles
         self.toxicity_velocity_mult = toxicity_velocity_mult
+        self.kalman_velocity_threshold_bps = kalman_velocity_threshold_bps  # DQAF-20260731-002
 
         self.pnl_store = pnl_store
         self.meta_exit_engine = meta_exit_engine
@@ -1005,11 +1007,14 @@ class ActivePositionManager:
         # level.  This is a LEADING indicator — price may still be moving in
         # the position's favor, but momentum has flipped.  Exiting here saves
         # spread + slippage vs waiting for the trail stop to fire.
-        # Threshold: |velocity| > 3 bps to reject noise.
-        if kalman_velocity_bps is not None and abs(kalman_velocity_bps) > 3.0:
-            if pos.side == "long" and kalman_velocity_bps < -3.0:
+        # Threshold: |velocity| > kalman_velocity_threshold_bps to reject noise.
+        # DQAF-20260731-002: made per-strategy configurable (default 3.0 bps,
+        # raised to 5.0 bps for XAU to reduce nervous triggering).
+        _kv_threshold = self.kalman_velocity_threshold_bps
+        if kalman_velocity_bps is not None and abs(kalman_velocity_bps) > _kv_threshold:
+            if pos.side == "long" and kalman_velocity_bps < -_kv_threshold:
                 return True, f"kalman_velocity_flip_long_v={kalman_velocity_bps:.1f}bps"
-            elif pos.side == "short" and kalman_velocity_bps > 3.0:
+            elif pos.side == "short" and kalman_velocity_bps > _kv_threshold:
                 return True, f"kalman_velocity_flip_short_v={kalman_velocity_bps:.1f}bps"
 
         # ── 1. Signal-reversal: full consensus opposes position ──

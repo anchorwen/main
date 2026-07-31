@@ -1858,6 +1858,10 @@ def execute_management_phase(
     _flip_threshold = _exit_cfg.get("flip_threshold")
     if _flip_threshold is not None:
         pm.flip_exit_threshold = float(_flip_threshold)
+    # DQAF-20260731-002: per-strategy Kalman velocity threshold
+    _kv_threshold = _exit_cfg.get("kalman_velocity_threshold_bps")
+    if _kv_threshold is not None:
+        pm.kalman_velocity_threshold_bps = float(_kv_threshold)
 
     # ── 6.6 Recovery grace period ──
     # After a restart, the position is recovered from MT5 but feature buffers

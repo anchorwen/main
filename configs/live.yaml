@@ -585,14 +585,16 @@ strategy_lines:
       trail_atr_mult_low: 1.3
       trail_atr_mult_high: 2.5
       breakeven_threshold_atr: 1.2
-      flip_exit_enabled: true
+      flip_exit_enabled: false
       flip_threshold: 0.4
       time_exit_cycles: 72
-      confidence_decay_exit: true
+      confidence_decay_exit: false
       min_r_for_hold: 0.15
       hesitation_cycles: 4
       trail_activation_atr: 0.4
+      kalman_velocity_threshold_bps: 5.0
       _comment_trail_activation: 'DQAF-005: short trend, above single-bar noise'
+      _comment_dqaf_20260731_002: 'DQAF-20260731-002: M15 DND — brain_flip + confidence_decay disabled (structural noise). Kalman 5bps.'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
@@ -625,13 +627,16 @@ strategy_lines:
     exit:
       trail_enabled: true
       trail_atr_mult: 1.5
-      flip_exit_enabled: true
+      flip_exit_enabled: false
       flip_threshold: 0.4
       time_exit_cycles: 36
+      confidence_decay_exit: false
       hesitation_cycles: 3
       trail_activation_atr: 0.4
+      kalman_velocity_threshold_bps: 5.0
       _comment_trail_activation: 'DQAF-005: medium trend, balance noise vs breathing
         room'
+      _comment_dqaf_20260731_002: 'DQAF-20260731-002: M30 DND — brain_flip + confidence_decay disabled (structural noise). Kalman 5bps.'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
@@ -709,7 +714,9 @@ strategy_lines:
       min_r_for_hold: 0.0
       hesitation_cycles: 3
       trail_activation_atr: 0.7
+      kalman_velocity_threshold_bps: 5.0
       _comment_trail_activation: 'DQAF-005: long trend, need 20+ bars to develop'
+      _comment_dqaf_20260731_002: 'DQAF-20260731-002: H1 DND ROLLED BACK per IC — active exits saved +$213. Kalman threshold raised to 5bps.'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 3
@@ -752,8 +759,10 @@ strategy_lines:
       min_r_for_hold: 0.0
       hesitation_cycles: 3
       trail_activation_atr: 0.7
+      kalman_velocity_threshold_bps: 5.0
       _comment_trail_activation: 'DQAF-051: V10 directional — trained SL=2.0/TP=3.5,
         symmetric to training contract'
+      _comment_dqaf_20260731_002: 'DQAF-20260731-002: H1 DND ROLLED BACK. Kalman threshold 5bps.'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 3

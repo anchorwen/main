@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-30T17:19:27Z
+> **自动生成**: 2026-07-31T03:44:03Z
 
 ## Package-Level Dependencies
 
@@ -559,10 +559,14 @@
 - `_analyze_btc_brains_20260730.py` → (无内部依赖)
 - `_analyze_btc_exits.py` → (无内部依赖)
 - `_analyze_btc_improvement.py` → (无内部依赖)
+- `_analyze_console_log.py` → (无内部依赖)
+- `_analyze_dual_assassin_journal.py` → (无内部依赖)
 - `_analyze_h1_swing_now.py` → (无内部依赖)
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
+- `_analyze_signal_close_audit.py` → (无内部依赖)
 - `_analyze_v4_timeline.py` → (无内部依赖)
+- `_analyze_xau_loss_exits.py` → (无内部依赖)
 - `_assess_position_sizing.py` → (无内部依赖)
 - `_audit_btc_brains_full.py` → (无内部依赖)
 - `_audit_xau_brains_20260730.py` → (无内部依赖)
