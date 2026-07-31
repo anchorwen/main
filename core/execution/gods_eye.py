@@ -200,21 +200,41 @@ class GodsEye:
         return v
 
     def _check_multi_tf_alignment(self) -> tuple[float, dict[str, float]]:
-        """Check if M5→M15→M30→H1→H4→D1 trends point in the same direction.
+        """Check if available TF trends point in the same direction (dynamic ladder).
 
-        Uses the full standard timeframe ladder. M15/M30 bridge the gap between
-        M5 microstructure and H1 tactical — their inclusion catches regime
-        transitions earlier than the M5→H1 jump alone.
+        Uses dynamic ladder contraction: only timeframes actually provided by
+        the bridge participate in alignment scoring. Missing TFs (not in the
+        primary instrument's regime snapshot) are EXCLUDED — they are NOT
+        equivalent to flat/ranging. This prevents the NaN-as-zero anti-pattern
+        where absent data is incorrectly modeled as a neutral market.
+
+        Standard hierarchy: M5 < M15 < M30 < H1 < H4 < D1.
+        Contracted example (M15/M30 unavailable): [M5, H1, H4, D1] → 3 pairs.
+        When M15/M30 TrendDetectors are wired in the future, they automatically
+        rejoin the ladder with zero code changes.
+
+        FIX-20260731-004: Dynamic ladder contraction replaces hardcoded 6-TF
+        ladder. Resolves permanent cautious_h=0.50 caused by M15/M30 data
+        starvation from gods_eye_bridge.
 
         Returns (alignment_score, per_pair_detail).
         """
         primary = self._instruments.get(self._primary, {})
-        all_tfs = ["M5", "M15", "M30", "H1", "H4", "D1"]
+        TF_HIERARCHY = ["M5", "M15", "M30", "H1", "H4", "D1"]
 
-        # Extract direction and strength for each TF
+        # Dynamic ladder: only TFs actually provided by the bridge.
+        # `tf in primary` distinguishes "missing" from "present but flat" —
+        # the former is excluded, the latter keeps its legitimate 0.5 alignment.
+        available_tfs = [tf for tf in TF_HIERARCHY if tf in primary]
+
+        if len(available_tfs) < 2:
+            # Not enough TFs to form a single adjacent pair
+            return 0.5, {}
+
+        # Build tf_info for available TFs only (no .get() fallback needed)
         tf_info: dict[str, dict[str, Any]] = {}
-        for tf in all_tfs:
-            info = primary.get(tf, {})
+        for tf in available_tfs:
+            info = primary[tf]
             direction = info.get("direction", "flat")
             strength = info.get("strength", 0.0)
             if direction in ("flat", "unknown", None):
@@ -222,15 +242,14 @@ class GodsEye:
                 strength = 0.0
             tf_info[tf] = {"direction": direction, "strength": strength}
 
-        # Compare adjacent TF pairs on the standard ladder
-        tf_ladder = ["M5", "M15", "M30", "H1", "H4", "D1"]
+        # Adjacent pairs on the contracted ladder
         alignments: dict[str, float] = {}
         total_weight = 0.0
         weighted_alignment = 0.0
 
-        for i in range(len(tf_ladder) - 1):
-            tf_high = tf_ladder[i]
-            tf_low = tf_ladder[i + 1]
+        for i in range(len(available_tfs) - 1):
+            tf_high = available_tfs[i]
+            tf_low = available_tfs[i + 1]
             d1 = tf_info[tf_high]["direction"]
             d2 = tf_info[tf_low]["direction"]
             s1 = tf_info[tf_high]["strength"]
@@ -244,9 +263,7 @@ class GodsEye:
             else:
                 pair_align = 0.0
 
-            # Weight by the average strength of the two TFs.
-            # Missing TFs (not provided by caller) have strength=0.0,
-            # contributing minimal weight — they don't skew the score.
+            # Weight by average strength, with a 0.1 floor per pair
             weight = (s1 + s2) / 2
             pair_key = f"{tf_high}/{tf_low}"
             alignments[pair_key] = pair_align

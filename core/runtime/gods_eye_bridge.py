@@ -27,8 +27,10 @@ def extract_gods_eye_snapshot(
 
     Direction mapping: RegimeGate "long"/"short"/"neutral" → God's Eye
     "up"/"down"/"flat".  M15 and M30 are not available from the current
-    RegimeGate (no intermediate-TF TrendDetectors); God's Eye handles
-    missing TFs by defaulting to neutral with strength=0.
+    RegimeGate (no intermediate-TF TrendDetectors); God's Eye dynamically
+    contracts the TF ladder to exclude missing TFs (FIX-20260731-004),
+    preventing the NaN-as-zero anti-pattern that previously caused
+    permanent multi_tf_alignment=0.5.
     """
     _DIR_MAP = {"long": "up", "short": "down", "neutral": "flat"}
     snapshot: dict[str, dict[str, Any]] = {}

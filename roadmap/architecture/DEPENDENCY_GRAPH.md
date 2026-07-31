@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-07-31T03:44:03Z
+> **自动生成**: 2026-07-31T07:47:14Z
 
 ## Package-Level Dependencies
 
@@ -589,6 +589,7 @@
 - `_validate_btc_july.py` → (无内部依赖)
 - `_validate_mt5_complete.py` → (无内部依赖)
 - `_validate_mt5_report.py` → (无内部依赖)
+- `_verify_post_restart_state.py` → (无内部依赖)
 - `_verify_xau_final.py` → (无内部依赖)
 - `_verify_xau_governance_anomalies.py` → (无内部依赖)
 - `_xau_account_check.py` → (无内部依赖)

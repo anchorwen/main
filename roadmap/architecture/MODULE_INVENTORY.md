@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-07-31T03:44:03Z
-> **扫描模块数**: 752
+> **自动生成**: 2026-07-31T07:47:14Z
+> **扫描模块数**: 753
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -238,7 +238,7 @@
 | `fix_message_builder.py` | ✅ active | FixMessageBuilder | 5 | 57 | — | |
 | `gate_reachability.py` | ✅ active | GateReachabilityReport | 4 | 461 | — | |
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
-| `gods_eye.py` | ✅ active | GodsEyeVerdict, GodsEye | 15 | 479 | — | |
+| `gods_eye.py` | ✅ active | GodsEyeVerdict, GodsEye | 15 | 496 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
 | `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 398 | — | |
@@ -521,7 +521,7 @@
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 466 | — | |
 | `feature_freshness.py` | ✅ active | — | 2 | 81 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
-| `gods_eye_bridge.py` | ✅ active | — | 2 | 148 | — | |
+| `gods_eye_bridge.py` | ✅ active | — | 2 | 150 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 309 | — | |
 | `h1_features.py` | ✅ active | — | 1 | 112 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
@@ -675,6 +675,7 @@
 | `_validate_btc_july.py` | 📄 config | — | 0 | 173 | — | |
 | `_validate_mt5_complete.py` | ✅ active | — | 7 | 469 | — | |
 | `_validate_mt5_report.py` | 📄 config | — | 0 | 247 | — | |
+| `_verify_post_restart_state.py` | 📄 config | — | 0 | 238 | — | |
 | `_verify_xau_final.py` | 📄 config | — | 0 | 353 | — | |
 | `_verify_xau_governance_anomalies.py` | ✅ active | — | 2 | 407 | — | |
 | `_xau_account_check.py` | ✅ active | — | 3 | 163 | — | |
