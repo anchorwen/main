@@ -637,6 +637,40 @@ strategy_lines:
       base_atr_mult: 2.5
       partial_tp_enabled: false
 
+  # ── Cross-asset strategies strictly disabled in BTC namespace (FIX-20260801-009) ──
+  # These contract groups are XAU-flavored (barrier/micro/statarb/daily_swing/H1-directional).
+  # Explicit enabled:false = deliberate policy, not an omission.  strategy_builder
+  # traverses ALL registered groups; without explicit disable it warns every cycle
+  # ("config key 'X.enabled' missing, using default=True").  Route A: explicit isolation.
+  barrier_12bar:
+    enabled: false
+  barrier_12bar_meta:
+    enabled: false
+  micro_3bar:
+    enabled: false
+  micro_m15:
+    enabled: false
+  micro_h1:
+    enabled: false
+  micro_h4:
+    enabled: false
+  statarb_dynamic:
+    enabled: false
+  statarb_m15:
+    enabled: false
+  daily_swing:
+    enabled: false
+  m15_swing:
+    enabled: false
+  m30_swing:
+    enabled: false
+  h1_swing:
+    enabled: false
+  h4_swing:
+    enabled: false
+  h1_directional:
+    enabled: false
+
 training:
   lanes_config: scripts/training/lane_trainers.json
   plan_generator: scripts/training/generate_batch_plan.py
