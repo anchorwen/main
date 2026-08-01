@@ -1210,3 +1210,19 @@
 **Prevention**: Settlement Queue Isolation — three-state lifecycle with physical separation: `known_open_tickets` (active positions, engine-managed) → `pending_settlement_tickets` (awaiting settlement, engine MUST NOT touch) → settled (verified PnL written, removed from queue). Bridge writes `pnl=null` + `_pnl_status="pending_mt5_settlement"` as default; Reconciliation is SOLE authority for writing non-null PnL. Zombie protection: 4-tier timeout escalation with degraded writes and terminal alerts.
 
 **Detection**: Check `_pnl_status` distribution — if >5% of recent close entries have `pending_mt5_settlement` for >1hr, settlement queue is stalled. Monitor `pending_settlement_tickets` queue size — >10 pending = CRITICAL (MT5 connectivity likely lost). Cross-validate journal PnL vs MT5 broker report monthly.
+
+---
+
+### ReB-20260801-SCHEMA_ROUTING_MISSING_NEW_SCHEMA
+- **Pattern Signature**: `SCHEMA_ROUTING_MISSING_NEW_SCHEMA`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-006
+- **Related**: FIX-20260801-007, FIX-20260731-004 (schema registration), FIX-20260801-001 (whitelist), FIX-20260610-009 (3 dispatch site unification), FIX-20260528-022 (swing_enhanced_35 capability)
+
+**Definition**: A new feature schema is registered in the SSOT registry (`SCHEMA_DIMENSIONS`) and possibly the FeatureService whitelist, but NOT wired into the runtime dispatch pipeline. Because schema routing is implemented as scattered string-matching conditions (`"btc_macro" in schema_id`) at multiple call sites, a schema name that matches none of the keywords silently falls back — for BTC brains to the raw 40-dim V9 vector, producing a dimension mismatch every cycle (model rejects → zero signals / brain goes blind) or, worse, silently-wrong-dimension vectors. The positional zip in `build_lake` (zipping subset schema names against the full 41-dim augmenter output) adds a second silent corruption mode: 29/37 features shifted by the number of deleted placeholder slots.
+
+**Root mechanism**: (1) Schema routing is N hardcoded string conditions across feature_assembler + live_cycle + management_phase + swing_strategy — adding a schema requires touching all sites or the new name falls through. (2) The feature router's lake is built by position-zipping the requested schema's name list against the canonical full-dim vector; subset schemas (37 = 41 minus 4 placeholders) misalign after the deletion point. (3) The btc_augment pass-through gates (`"btc_macro" in schema`) duplicate the routing conditions and miss the new schema independently. (4) No automated test asserts that every registered schema is reachable through the full dispatch chain.
+
+**Prevention**: (1) build_lake is now canonical — ALWAYS binds the full 41-dim canonical names → values; subset schemas extract BY NAME at dispatch (position-independent lake). (2) Schema dispatch conditions centralized: every new schema must be added to SCHEMA_CONTRACTS + the routing condition (documented in registry.py "Adding a new schema" checklist). (3) Regression guards: `scripts/_verify_expected_r_routing.py` (17 asserts: lake alignment, dispatch order vs training extraction, legacy shim/v2 bit-identical) + `_verify_expected_r_e2e.py` (real adapter inference, no dimension mismatch) — run after any schema change.
+
+**Detection**: Grep for `feature_dimension_mismatch` in live logs (expected=37 got=40 → schema fell to V9 fallback). Assert `len(SCHEMA_CONTRACTS) == count of active brain schemas`. Run the two verify scripts after any schema/routing change.

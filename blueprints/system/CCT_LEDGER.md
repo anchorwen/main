@@ -1401,3 +1401,18 @@
 - **Layer 3 (根因)**: L3架构缺陷 — Journal PnL字段无Single Source of Truth。双写者(Bridge + Reconciliation)竞争写入同一字段，Bridge在deal.profit异步清算窗口中静默回退到中价估算并写入无provenance条目，Reconciliation修正路径因`known_open_tickets`提前清除而饥饿 → 99.3%的journal PnL值来自中价估算而非MT5权威数据。
 - **Fix**: FIX-20260730-011 — Settlement Queue Isolation (委员会覆写): Bridge写`pnl=null`+`_pnl_status="pending_mt5_settlement"`; SettlementQueue三态隔离(`known_open_tickets→pending_settlement_tickets→settled`); Reconciliation消费`pending_settlement_tickets`通过`resolve_exit_deal()`轮询验证deal.profit; 四级超时上报(T1 5min→T2 1hr→T3 24hr→T4 terminal); 队列持久化+僵尸单告警; Journal dedup扩展权威来源白名单+null PnL自动被非null supersede。
 - **Status**: **CLOSED**
+
+### CCT-20260801-006
+- **Docket ID**: DQAF-20260801-006
+- **日期**: 2026-08-01
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 双塔每周期弹出 brain_alert `feature_dimension_mismatch expected: 37, got: 40` (live_launcher_20260801T032917Z.log, BTC_Expected_R_V4_SHORT + _LONG); btc_expected_r_m15 在 golden_master 9 条记录全 neutral, voter_count=0, confidence=0.0
+  - [Layer 2 — 中间异常]: feature_assembler.py:92-97 路由条件含 swing_enhanced/daily_swing/btc_macro/btc_h1 但不含 btc_expected_r → 落入 :108-115 fallback 返回原始 40-dim V9 向量 → lightgbm_brain_adapter.py:153 维度守卫 (num_feature=37) 打回零向量 → 双塔零投票
+  - [Layer 3 — 根因]: L2 逻辑缺陷 — btc_expected_r_37 仅注册于 SCHEMA_DIMENSIONS (FIX-20260731-004) + FeatureService._IMPLEMENTED_SCHEMAS (FIX-20260801-001), 漏同步 6 处分发点: feature_router SCHEMA_CONTRACTS 缺注册 + build_lake Source 7 对子集 schema 按位置 zip 41-dim (29/37 偏移) + live_cycle:4841/management_phase:478 路由条件 + management_phase:494/swing_strategy:103 btc_augment gating + swing_strategy _needs_daily
+- **证据引用**:
+  - Source 1: [日志] data_btc/logs/live_launcher_20260801T032917Z.log — brain_alert feature_dimension_mismatch expected=37 got=40 双塔每周期
+  - Source 2: [代码路径] core/features/feature_assembler.py:92-97 路由条件 → :108-115 V9 40-dim fallback → core/brains/adapters/lightgbm_brain_adapter.py:153 维度守卫
+  - Source 3: [复现脚本] scripts/_verify_expected_r_routing.py — build_lake 子集 zip 29/37 misaligned (XAUUSDc_return 取到 slot 8 而非 slot 12); 修复后 0/41
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: SCHEMA_ROUTING_MISSING_NEW_SCHEMA
