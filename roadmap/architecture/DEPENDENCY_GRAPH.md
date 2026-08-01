@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-01T03:18:00Z
+> **自动生成**: 2026-08-01T05:10:53Z
 
 ## Package-Level Dependencies
 
@@ -594,6 +594,8 @@
 - `_validate_btc_july.py` → (无内部依赖)
 - `_validate_mt5_complete.py` → (无内部依赖)
 - `_validate_mt5_report.py` → (无内部依赖)
+- `_verify_expected_r_e2e.py` → `core.brains.services.brain_factory`, `core.features.feature_assembler`, `core.features.schemas.registry`
+- `_verify_expected_r_routing.py` → `core.features.feature_assembler`, `core.features.feature_router`, `core.features.schemas.btc_macro_enhanced_schema`, `core.features.schemas.registry`
 - `_verify_post_restart_state.py` → (无内部依赖)
 - `_verify_xau_final.py` → (无内部依赖)
 - `_verify_xau_governance_anomalies.py` → (无内部依赖)

@@ -49,6 +49,7 @@ for _schema_id in [
     "btc_macro_enhanced_37",  # legacy alias → 41 dims (kept for backward compat)
     "btc_macro_flow_46",  # DQAF-20260707-004: 41 base + 5 OFI flow
     "btc_h1_directional_48",  # DQAF-20260707-003: 41 base + 7 H1 directional
+    "btc_expected_r_37",  # DQAF-20260801-006: 41-dim minus 4 H4 placeholders
     "swing_enhanced_35",
     "swing_enhanced_29",
     "swing_enhanced_21",
@@ -246,16 +247,19 @@ class FeatureRouter:
         # Source 7: BTC augmented vector (41-dim pre-computed with regime derivatives)
         if btc_augment is not None:
             _btc = np.asarray(btc_augment, dtype=np.float64).ravel()
-            # FIX-20260625-137: Select schema contract for name→position mapping.
-            # Legacy "btc_macro_enhanced_41" → apply reorder shim so V4 receives
-            # bit-identical tensor.  "btc_macro_enhanced_41_v2" → direct zip
-            # (augmenter already outputs in Schema Order B).
-            _btc_schema = schema_name if schema_name else "btc_macro_enhanced_41"
-            if _btc_schema == "btc_macro_enhanced_41":
-                _btc = _apply_legacy_btc_41_shim(_btc)
-            _btc_names = get_schema_feature_names(_btc_schema)
-            if _btc_names and len(_btc) >= len(_btc_names):
-                for name, val in zip(_btc_names, _btc, strict=False):
+            # DQAF-20260801-006 (IC Directive): canonical lake zipping.
+            # ALWAYS bind the FULL 41-dim canonical names → values so the lake is
+            # a position-independent superset.  Subset schemas (btc_expected_r_37)
+            # extract by NAME at dispatch — never by position — eliminating the
+            # 29/37 positional offset for subset contracts.
+            # FIX-20260625-137 preserved: legacy "btc_macro_enhanced_41" (or empty
+            # schema_name default) still applies the reorder shim for bit-identical
+            # V4 tensors; all newer contracts use canonical Order B directly.
+            _btc_canonical = get_schema_feature_names("btc_macro_enhanced_41")
+            if _btc_canonical and len(_btc) >= len(_btc_canonical):
+                if schema_name in ("", "btc_macro_enhanced_41"):
+                    _btc = _apply_legacy_btc_41_shim(_btc)
+                for name, val in zip(_btc_canonical, _btc, strict=False):
                     lake[name] = float(val)
 
         # Source 8: OFI Lite — reads bridge IPC file (FIX-20260616-099)

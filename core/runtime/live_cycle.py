@@ -4838,7 +4838,12 @@ def execute_live_cycle(
                             pass
                 else:
                     prop = None
-            elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
+            elif (
+                "swing" in schema_id
+                or "daily" in schema_id
+                or "btc_macro" in schema_id
+                or "btc_expected_r" in schema_id  # DQAF-20260801-006: Expected R two-tower
+            ):
                 # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
                 # btc_macro added 2026-06-10 — the 4th hardcoded schema check that
                 # FIX-022 missed.  BTC brains (btc_macro_enhanced_41) fell through

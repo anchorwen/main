@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-01T03:18:00Z
-> **扫描模块数**: 760
+> **自动生成**: 2026-08-01T05:10:53Z
+> **扫描模块数**: 762
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -279,7 +279,7 @@
 | `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2072 | — | |
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
-| `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 132 | — | |
+| `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 137 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 461 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | — | 1 | 234 | — | |
@@ -290,8 +290,8 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
-| `feature_assembler.py` | ✅ active | — | 3 | 290 | — | |
-| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 295 | — | |
+| `feature_assembler.py` | ✅ active | — | 3 | 310 | — | |
+| `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 299 | — | |
 | `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 407 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
@@ -527,9 +527,9 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5085 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5090 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2554 | — | |
+| `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -680,6 +680,8 @@
 | `_validate_btc_july.py` | 📄 config | — | 0 | 197 | — | |
 | `_validate_mt5_complete.py` | ✅ active | — | 7 | 536 | — | |
 | `_validate_mt5_report.py` | 📄 config | — | 0 | 266 | — | |
+| `_verify_expected_r_e2e.py` | ✅ active | — | 1 | 111 | — | |
+| `_verify_expected_r_routing.py` | ✅ active | — | 1 | 177 | — | |
 | `_verify_post_restart_state.py` | 📄 config | — | 0 | 248 | — | |
 | `_verify_xau_final.py` | 📄 config | — | 0 | 452 | — | |
 | `_verify_xau_governance_anomalies.py` | ✅ active | — | 2 | 435 | — | |

@@ -475,7 +475,12 @@ def _evaluate_brain_ensemble(
                         prop = b_info["adapter"].get_signal(raw)
                     else:
                         prop = None
-                elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
+                elif (
+                    "swing" in schema_id
+                    or "daily" in schema_id
+                    or "btc_macro" in schema_id
+                    or "btc_expected_r" in schema_id  # DQAF-20260801-006: Expected R two-tower
+                ):
                     # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
                     # btc_macro added 2026-06-10 — BTC brains fell to else → raw 40-dim.
                     # FIX-20260615-009d: Use state._btc_augmenter for btc_macro schema
@@ -491,7 +496,7 @@ def _evaluate_brain_ensemble(
 
                             # Compute btc_augment for management-phase inference
                             _mgmt_btc_aug: Any = None
-                            if "btc_macro" in str(schema_id):
+                            if "btc_macro" in str(schema_id) or "btc_expected_r" in str(schema_id):
                                 _mgmt_aug = getattr(state, "_btc_augmenter", None)
                                 if _mgmt_aug is not None:
                                     try:

@@ -94,6 +94,7 @@ def assemble_features_by_schema(
         or "daily_swing" in schema_name
         or "btc_macro" in schema_name
         or "btc_h1" in schema_name  # DQAF-20260707-003: H1 directional schema
+        or "btc_expected_r" in schema_name  # DQAF-20260801-006: Expected R two-tower
     ):
         return _build_swing_vector(
             schema_name,
@@ -249,6 +250,25 @@ def _build_swing_vector(
         # NaN guard
         _flow_vals = np.nan_to_num(_flow_vals, nan=0.0, posinf=0.0, neginf=0.0, copy=False)
         return np.concatenate([base, _flow_vals])
+
+    if canonical == "btc_expected_r_37":
+        # ── DQAF-20260801-006: Expected R two-tower fail-closed ──
+        # When the router dispatch above succeeded, this branch is unreachable
+        # (the canonical 37-dim is extracted by name from the lake).  It exists
+        # so that a missing/wrong-dim btc_augment NEVER silently falls through
+        # to the daily+micro+TF concatenation below — that would hand the tower
+        # a wrong-dim, wrong-order vector and corrupt signals.  Same policy as
+        # btc_macro_enhanced_41 (FIX-20260615-006/C4): a BTC brain without the
+        # augmenter is BLIND, not miswired.
+        if btc_augment is not None and len(btc_augment) == 41:
+            _base = np.asarray(btc_augment, dtype=np.float64)
+            # Training extraction (build_btc_expected_r_dataset.py): delete the
+            # 4 H4 placeholders at indices 8-11 → keep [0:8] + [12:41].
+            return _base[list(range(8)) + list(range(12, 41))]
+        raise RuntimeError(
+            f"BTC feature augmenter unavailable or wrong dim for btc_expected_r_37: "
+            f"btc_augment={'None' if btc_augment is None else f'len={len(btc_augment)}'}"
+        )
 
     fv_35 = np.concatenate([daily_arr[:24], micro_arr[:9], [_ou, _hur]])
 

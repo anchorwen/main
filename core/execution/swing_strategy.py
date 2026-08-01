@@ -57,6 +57,7 @@ class SwingStrategy(StrategyLine):
         _needs_daily = any(
             "swing_enhanced" in getattr(b.get("adapter", None), "feature_schema", "")
             or "daily_swing" in getattr(b.get("adapter", None), "feature_schema", "")
+            or "btc_expected_r" in getattr(b.get("adapter", None), "feature_schema", "")
             for b in self.brains
         )
         if _needs_daily and daily_feature_vector is None:
@@ -100,7 +101,11 @@ class SwingStrategy(StrategyLine):
                     micro_features=micro_feature_vector,
                     tf_ou=self._compute_tf_ou_theta(),
                     tf_hurst=self._compute_tf_hurst(),
-                    btc_augment=btc_augment if "btc_macro" in schema else None,
+                    btc_augment=(
+                        btc_augment
+                        if ("btc_macro" in schema or "btc_expected_r" in schema)
+                        else None
+                    ),
                     h1_features=_h1_feats if "btc_h1" in schema else None,
                 )
                 prop = adapter.inference(fv)
