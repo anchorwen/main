@@ -1268,3 +1268,31 @@
 **Prevention**: (1) `StateArtifact.producer_class` field: `batch` (subject to `TTL ≥ scheduler_max_age + buffer`) vs `telemetry` (excluded from batch contract; freshness enforced at runtime by `freshness_guard` against own TTL). (2) Any new real-time artifact must be declared `producer_class="telemetry"`. (3) A catalog test asserting every artifact with TTL < batch max_age is telemetry (or has a documented producer).
 
 **Detection**: `validate_freshness_contract(scheduler_max_age)` must return 0 violations — if it flags EXECUTION_STATE/MT5_BRIDGE_HEALTH/ALERT_COOLING, the telemetry/batch namespace split was lost.
+
+### ReB-20260801-POLICY_CONFLICT_THROTTLE_VS_CONFIG_FLOOR
+- **Pattern Signature**: `POLICY_CONFLICT_THROTTLE_VS_CONFIG_FLOOR`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-010
+- **Related**: FIX-20260801-011, FIX-20260801-012, FIX-20260628-162, FIX-20260611-001
+
+**Definition**: Two independent governance policies give contradictory verdicts on the same brain: a risk-control throttle (e.g. `profit_factor < throttle_pf=0.80` on window-100) correctly wants demotion, while Iron Law #14 config floor (human SSOT says live) + daily_ops all-time-healthy pull-back keep restoring live. Neither is "wrong" — the system lacks an arbitration/exemption layer. BTC_Swing_V4 oscillated live↔probation since 07-09; a dry-run proved even a SINGLE SSOT writer throttles V4 policy-correctly, disproving the "dual-track data source is the root cause" theory.
+
+**Root mechanism**: Risk machinery (short-window PF/WR gates) and strategic intent (IC observation window, config floor) are separate policy planes with no explicit priority rule. A single correct demotion engine firing on the right data still conflicts with a human-imposed observation hold.
+
+**Prevention**: (1) Express IC strategic observation windows as explicit `observation_hold_until` config contracts (L1 SSOT), honored at the SOLE WRITER choke point (`GovernanceRuleEngine.execute_transitions`). (2) Never "fix" a policy conflict by removing/weakening the risk rule — add an explicit exemption layer instead. (3) Before assuming a dual-writer race, dry-run the SSOT evaluator on real data to check whether the single writer would already make the disputed decision (Iron Law #11 script-first).
+
+**Detection**: `_verify_governance_evaluator.py` — asserts a held brain's throttle is refused at the sole writer; a recurring live↔probation oscillation in governance transition_log for one brain is the trigger symptom.
+
+### ReB-20260801-DUAL_TRACK_WRITER_OSCILLATION
+- **Pattern Signature**: `DUAL_TRACK_WRITER_OSCILLATION`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-010
+- **Related**: FIX-20260801-011, FIX-20260611-001, FIX-20260517-017, FIX-20260628-168
+
+**Definition**: Multiple independent governance writers (a patched direct-write in the runtime loop, a daily_ops scheduler, a startup reconciler) each evaluate the same brain on different data windows (last-20 BrainPnLStore vs window-100 brain_performance vs all-time PnL) and each writes `GovernanceService.transition()` directly — bypassing the rule engine. Contradictory transitions applied alternately → the brain oscillates between statuses.
+
+**Root mechanism**: A bridge patch (FIX-20260611-001) wired a direct writer into the launcher path because GovernanceRuleEngine wasn't available there; later the same pattern was duplicated (daily_ops third rail). Each writer is "correct" for its own data source; the conflict is structural (no single executor).
+
+**Prevention**: (1) ONE Auditor (brain_performance SSOT) + ONE Executor (`GovernanceRuleEngine.execute_transitions`) — Iron Law #14. (2) All deployment paths (container + bare-metal launcher + daily_ops) delegate to the shared `governance_evaluator.evaluate_governance_state()`. (3) Direct `GovernanceService.transition()` from runtime/scheduler code is forbidden except via the executor; grep `governance.transition(` outside governance_evaluator/rule_engine to catch stragglers.
+
+**Detection**: `grep -rn "\.transition(" core/ scripts/ --include="*.py"` filtered to non-rule-engine callers; governance transition_log showing rapid alternation for a single brain is the runtime signature.

@@ -1431,3 +1431,18 @@
   - Source 3: [配置] configs/brains_btc/*.json artifact_hash 空/过时/16字符截断 vs 磁盘模型 sha256 (H1_V2 9f7e9d6c, V12 a4f9eb8cde8a9915... 前缀截断)
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: WHITELIST_LAGGING_RUNTIME_KEYS, STRANGLER_FIG_CALLER_NOT_MIGRATED, TELEMETRY_TTL_VS_BATCH_CONTRACT
+
+### CCT-20260801-010
+- **Docket ID**: DQAF-20260801-010
+- **日期**: 2026-08-01
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: BTC_Swing_V4 自 07-09 起 live↔probation 振荡; governance transition_log 交替出现 `throttle live→probation` 与 `pnl:stable`/config-floor 拉回; 振荡期 V4 间歇性 vote_weight 惩罚 (0.5)。Brain_performance window-100 干跑实测: V4 41W/59L PF=0.695 (见 data_btc/brain_performance.json)。
+  - [Layer 2 — 中间异常]: 三个独立治理政策对同一大脑给出矛盾结论 — (1) BrainPromotionEvaluator throttle (PF=0.695 < throttle_pf=0.80, **政策正确**); (2) daily_ops governance_scheduler.py pnl:stable (all-time PnL 健康) 拉回 live; (3) Iron Law #14 config floor (V4 config status=live) 启动 reconcile 拉回 live。双轨数据源是帮凶非真凶: live_intent_loop apply_promotion_decisions (BrainPnLStore last-20, FIX-20260611-001) + daily_ops 直写 (governance_scheduler.py:664 绕过 rule engine)。
+  - [Layer 3 — 根因]: L3 架构缺陷 — **政策冲突无豁免机制**: 风控 throttle 与战略观察 (IC 8/3 终审) 无仲裁层。修复: SSOT 统一 (单一写入器) + Observation Hold (观察期豁免, 机器降级在人类战略观察窗口内显式让位)。
+- **证据引用**:
+  - Source 1: [状态] data_btc/governance_state.json BTC_Swing_V4 transition_log (throttle 与 pnl:stable 交替)
+  - Source 2: [性能] data_btc/brain_performance.json BTC_Swing_V4 window-100 (41W/59L PF=0.695) — SSOT 干跑输出 `profit_factor(0.69) < 0.80`
+  - Source 3: [代码] core/brains/services/brain_promotion.py:283-284 (throttle_pf=0.80) + scripts/training/governance_scheduler.py:664 (第三轨直写) + configs/brains_btc/BTC_Swing_V4.json (config floor=live)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: POLICY_CONFLICT_THROTTLE_VS_CONFIG_FLOOR, DUAL_TRACK_WRITER_OSCILLATION
