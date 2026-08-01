@@ -129,3 +129,15 @@
 - **Fix**: FIX-20260730-011 — Settlement Queue Isolation (L3架构修复): (1) Bridge deal.profit不可用时写pnl=null+_pnl_status="pending_mt5_settlement",估算值仅存detail.estimated_pnl供取证。(2) SettlementQueue(新模块core/runtime/settlement_queue.py)实现known_open_tickets→pending_settlement_tickets→settled三态隔离。(3) Reconciliation作为唯一PnL权威消费pending_settlement_tickets,通过resolve_exit_deal()轮询直到deal.profit可用→写journal(_source=mt5_reconciliation自动supersede bridge的pnl=null条目)。(4) 四级超时上报(Tier1 5min→Tier2 1hr→Tier3 24hr降级写入→Tier4 24hr终端超时),队列持久化+僵尸单告警。
 - **ReB**: JOURNAL_PNL_DUAL_WRITER_RACE_WITH_STARVED_CORRECTION_PATH
 - **Status**: **CLOSED**
+
+- **Docket ID**: DQAF-20260801-010
+- **Date**: 2026-08-01
+- **Severity**: Sev 2
+- **Title**: BTC_Swing_V4 live↔probation 振荡 — 双轨写入器 + V4 政策冲突
+- **Evidence**: V4 自 07-09 起 live↔probation 振荡。三个写入器竞争: (1) live_intent_loop `apply_promotion_decisions()` (BrainPnLStore last-20, FIX-20260611-001 补丁, 每 50 周期); (2) daily_ops governance_scheduler.py:664 直写 `governance.transition()` (BrainPnLStore all-time, 每周期); (3) 启动 reconcile (config floor)。SSOT 干跑 (brain_performance window-100: V4 41W/59L PF=0.695) 输出 `throttle live→probation reasons=['profit_factor(0.69) < 0.80']`。
+- **DA**: 6 源 ECoL (live_intent_loop.py:2470 块 / governance_scheduler.py:664 / brain_performance window-100 / governance_state 转场日志 / configs/brains_btc/BTC_Swing_V4.json / FIX_REGISTRY FIX-20260611-001)。干跑验证证明: 即使用唯一 SSOT 数据源, V4 也被 policy-correctly throttle (PF=0.695 < 0.80)。
+- **AR**: 推翻"双轨数据源是唯一根因" — 单 SSOT writer 干跑仍产生 throttle。真因是**政策冲突**: BrainPromotionEvaluator throttle (PF 风控) vs Iron Law #14 config floor (V4 config=live) vs daily_ops pnl:stable 拉回 (all-time 健康)。双轨写入器是帮凶非真凶。投委会终局裁决: 否决维持现状(C)与接受降级(B), 批准观察期豁免(A)。
+- **Root Cause**: L3 — 政策对峙 (三套政策对同一大脑矛盾结论)。P1-P4 全量执行会"合法枪决" V4 (SSOT throttle → 永久 probation, 撤销 7/27 live 观察决定)。
+- **Fix**: FIX-20260801-011 (SSOT 统一: governance_evaluator.py 共享 orchestrator + launcher 60s 治理线程 + live_intent_loop 双轨切除 + daily_ops 路由 execute_transitions + apply_promotion_decisions TODO) + FIX-20260801-012 (Observation Hold: `observation_hold_until` config 契约 + GovernanceRuleEngine 拦截器, V4 hold 至 2026-08-03T23:59:59Z)。
+- **ReB**: POLICY_CONFLICT_THROTTLE_VS_CONFIG_FLOOR; DUAL_TRACK_WRITER_OSCILLATION
+- **Status**: **CLOSED**

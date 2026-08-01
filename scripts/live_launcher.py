@@ -221,6 +221,100 @@ def _daily_ops_scheduler(
             remaining -= 5
 
 
+def _governance_scheduler_runner(
+    project_root: Path,
+    base_dir: str,
+    stop_event: threading.Event,
+    log_fh: TextIO | None = None,
+    interval_seconds: int = 60,
+):
+    """Run the SSOT governance evaluation every ~60s (FIX-20260801-011).
+
+    DQAF-20260801-010: The containerized path (apps/engine → scheduler_service)
+    was the only deployment running GovernanceRuleEngine governance.  The
+    bare-metal launcher path never started it, so live_intent_loop's DEPRECATED
+    apply_promotion_decisions (BrainPnLStore last-20 window) was the only runtime
+    governance writer → BTC_Swing_V4 live↔probation oscillation since 07-09.
+
+    This thread runs the SAME brain_performance.json SSOT evaluation as the
+    container path (core/deployment/governance_evaluator.py) and becomes the
+    sole writer for automated lifecycle transitions in this deployment
+    (Iron Law #14: No Siloed Reconciliation).
+    """
+    import time as _time
+
+    from core.deployment.governance_evaluator import evaluate_governance_state
+    from core.governance.governance_service import GovernanceService
+
+    _gov_path = project_root / base_dir / "governance_state.json"
+
+    while not stop_event.is_set():
+        try:
+            if not _gov_path.exists():
+                _msg = f"[gov-eval] governance_state.json missing at {_gov_path} — skipping"
+                print(_msg, flush=True)
+                if log_fh is not None:
+                    log_fh.write(_msg + "\n")
+                    log_fh.flush()
+            else:
+                _gov = GovernanceService.load(str(_gov_path))
+                _result = evaluate_governance_state(_gov, project_root / base_dir)
+                _changed = [c for c in _result["changes"] if c != "no_changes"]
+                _msg = (
+                    f"[gov-eval] SSOT cycle: live_data={_result['brains_with_live_data']} "
+                    f"decisions={len(_result['decisions'])} transitions={_changed}"
+                )
+                print(_msg, flush=True)
+                if log_fh is not None:
+                    log_fh.write(_msg + "\n")
+                    log_fh.flush()
+
+                # ── governance_events.jsonl: continue the promotion event stream
+                #    under the SSOT sole writer (was written by the REMOVED
+                #    live_intent_loop block, FIX-20260801-011).  Keeps the
+                #    append-only audit trail + health-check source alive.
+                _promoted = [
+                    d
+                    for d in _result["decisions"]
+                    if d.get("action") == "promote" and d.get("approved") and d.get("target_status")
+                ]
+                if _promoted:
+                    _gov_events_path = project_root / base_dir / "governance_events.jsonl"
+                    try:
+                        for _d in _promoted:
+                            _gevt = {
+                                "schema_version": "governance_event.v1",
+                                "event": "brain_promoted",
+                                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                                "brain_id": _d["brain_id"],
+                                "from_status": _d["current_status"],
+                                "to_status": _d["target_status"],
+                                "reasons": _d["reasons"],
+                            }
+                            with open(_gov_events_path, "a", encoding="utf-8") as _gf:
+                                _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                        pass  # event emission is non-critical
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+            _msg = f"[gov-eval] ERROR: {exc}"
+            print(_msg, flush=True)
+            if log_fh is not None:
+                log_fh.write(_msg + "\n")
+                log_fh.flush()
+        except Exception as exc:  # noqa: BLE001 — governance must never kill the launcher
+            _msg = f"[gov-eval] ERROR (unexpected): {exc}"
+            print(_msg, flush=True)
+            if log_fh is not None:
+                log_fh.write(_msg + "\n")
+                log_fh.flush()
+
+        # Responsive sleep — check every interval, but respond to stop_event
+        remaining = int(interval_seconds)
+        while remaining > 0 and not stop_event.is_set():
+            _time.sleep(min(5, remaining))
+            remaining -= 5
+
+
 def _feedback_loop_runner(
     python: str,
     project_root: Path,
@@ -804,6 +898,20 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         daemon=True,
     )
     _daily_ops_thread.start()
+
+    # ── FIX-20260801-011: SSOT governance scheduler thread ──
+    # DQAF-20260801-010: The containerized deployment runs governance_eval via
+    # SchedulerService, but the bare-metal launcher never started it — leaving
+    # live_intent_loop's DEPRECATED apply_promotion_decisions (BrainPnLStore
+    # last-20 window) as the only runtime governance writer → V4 live↔probation
+    # oscillation since 07-09.  Run the brain_performance SSOT evaluation here
+    # every 60s as the single governance writer (Iron Law #14).
+    _governance_thread = threading.Thread(
+        target=_governance_scheduler_runner,
+        args=(PROJECT_ROOT, cfg["base_dir"], stop_event, log_fh, 60),
+        daemon=True,
+    )
+    _governance_thread.start()
 
     # FIX-20260628-156 (L3): Validate Producer-Consumer Freshness Contract.
     # Guards against cross-fix drift: if the scheduler max_age is later

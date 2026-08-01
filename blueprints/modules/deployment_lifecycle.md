@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260801-011 | 2026-08-01 | cursor-agent | — | **MODULE_SOURCE_MAP: register `core/deployment/governance_evaluator.py` → deployment_config + `scripts/_verify_governance_evaluator.py` → protocol_governance** (FIX-20260801-011/012). New SSOT governance orchestrator + deterministic observation-hold verification script must be blueprint-compliant. | RC-12 — new module registration |
 | FIX-20260726-009 | 2026-07-26 | cursor-agent | — | **MODULE_SOURCE_MAP: add _train_h1_binary_final.py + _analyze_h1_swing_now.py → training**. DQAF-20260726-009 H1 binary_directional V1 operational scripts — training runner and live performance auditor. | RC-12 — new module registration |
 | FIX-20260726-008 | 2026-07-26 | cursor-agent | — | **MODULE_SOURCE_MAP: add _train_h4_binary_final.py + _analyze_h4_swing_now.py → training**. DQAF-20260726-008 H4 binary_directional V1 operational scripts — training runner and live performance auditor. | RC-12 — new module registration |
 | FIX-20260726-007 | 2026-07-26 | cursor-agent | — | **MODULE_SOURCE_MAP: add _train_m15_binary_final.py + _analyze_m15_swing_now.py → training**. DQAF-20260726-007 M15 binary_directional V7 operational scripts — training runner and live performance auditor. | RC-12 — new module registration |

@@ -175,7 +175,10 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/feedback/param_optimizer.py",
         "core/feedback/experience_replay.py",
     ],
-    "protocol_governance": ["core/governance/"],
+    "protocol_governance": [
+        "core/governance/",
+        "scripts/_verify_governance_evaluator.py",  # FIX-20260801-012: observation hold verification
+    ],
     "protocol_parliament": ["core/parliament/"],
     "protocol_services": [
         "core/protocol/",
@@ -228,6 +231,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/deployment/deployment_plan.py",
         "core/deployment/path_defaults.py",
         "core/deployment/scheduler_service.py",
+        "core/deployment/governance_evaluator.py",  # FIX-20260801-011: SSOT governance orchestrator
         "core/deployment/atomic_file_writer.py",
     ],
     "deployment_lifecycle": [

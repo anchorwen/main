@@ -388,6 +388,90 @@ def _promote_shadow_brains(
     return applied
 
 
+def _apply_daily_ops_transition(
+    governance: GovernanceService,
+    brain_id: str,
+    current_status: str,
+    target_status: str,
+    health: str,
+    metrics: BrainPnLMetrics,
+    base_dir: str,
+    engine: Any | None = None,
+) -> dict[str, Any]:
+    """Route a daily_ops PnL-based transition through the rule engine sole writer.
+
+    FIX-20260801-011 (P3): The direct ``governance.transition()`` here was the
+    hidden third-rail writer — it bypassed both the rule engine (Iron Law #14
+    sole executor) and the observation hold (FIX-20260801-012).  Build a
+    BrainPromotionDecision and delegate to ``execute_transitions()`` so
+    daily_ops demotions respect the SAME hold guard + sole-writer semantics as
+    the brain_performance SSOT path (governance_evaluator.py).  The call-site
+    last-live guard (DQAF-063) is preserved upstream of this helper.
+
+    Args:
+        governance: The GovernanceService owning the lifecycle state.
+        brain_id / current_status / target_status / health / metrics: the
+            PnL-first evaluation result for this brain.
+        base_dir: Data dir (used to resolve the brains config dir for holds).
+        engine: Pre-built GovernanceRuleEngine with holds attached (built once
+            per cycle by the caller).  When None, a fresh engine is built
+            (fail-open: holds may be stale).
+
+    Returns:
+        A result dict with an ``action`` key in
+        {"transitioned", "registered", "hold_throttle", "rejected",
+         "no_change"} plus the engine's change detail.
+    """
+    from core.brains.services.brain_promotion import BrainPromotionDecision
+
+    decision = BrainPromotionDecision(
+        brain_id=brain_id,
+        current_status=current_status,
+        action="daily_ops_pnl",
+        target_status=target_status,
+        approved=True,
+        reasons=[f"pnl:{health}"],
+        metrics_snapshot={
+            "win_rate": metrics.win_rate,
+            "profit_factor": metrics.profit_factor,
+            "signal_count": metrics.sample_count,
+        },
+    )
+    if engine is None:
+        from core.deployment.governance_evaluator import (
+            load_observation_holds,
+            resolve_brains_dir,
+        )
+        from core.governance.governance_rule_engine import GovernanceRuleEngine
+
+        engine = GovernanceRuleEngine.with_default_rules(governance)
+        try:  # BLE001:FOG — hold loading is a non-critical policy guard
+            engine.set_observation_holds(load_observation_holds(resolve_brains_dir(base_dir)))
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError, AttributeError):
+            pass
+
+    changes = engine.execute_transitions([decision])
+    first = changes[0] if changes and changes[0] != "no_changes" else ""
+    if "BLOCKED" in first:
+        return {
+            "action": "hold_throttle",
+            "brain_id": brain_id,
+            "reason": "observation_period_active",
+            "detail": first,
+        }
+    if "not registered" in first:
+        return {"action": "registered", "brain_id": brain_id, "detail": first}
+    if "→" in first:
+        return {
+            "action": "transitioned",
+            "brain_id": brain_id,
+            "from": current_status,
+            "to": target_status,
+            "detail": first,
+        }
+    return {"action": "no_change", "brain_id": brain_id, "detail": first or "no_transition"}
+
+
 def run_governance_cycle(
     tracker: BrainPerformanceTracker,
     governance: GovernanceService,
@@ -489,6 +573,20 @@ def run_governance_cycle(
             # Only brain IDs that exist as config files on disk are eligible.
             _brains_dir = _resolve_brains_dir(base_dir)
             _valid_bids: set[str] = set()
+
+            # ── FIX-20260801-011 (P3): rule engine for routing daily_ops
+            #    transitions through the sole writer (observation holds
+            #    attached once per cycle).  Demotions during an active hold
+            #    are refused by the Executor — same semantics as the SSOT
+            #    evaluator path.  Fail-open: engine=None → direct route.
+            try:
+                from core.deployment.governance_evaluator import load_observation_holds
+                from core.governance.governance_rule_engine import GovernanceRuleEngine
+
+                _daily_ops_engine = GovernanceRuleEngine.with_default_rules(governance)
+                _daily_ops_engine.set_observation_holds(load_observation_holds(_brains_dir))
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError, AttributeError):
+                _daily_ops_engine = None  # BLE001:FOG — hold guard unavailable
             for _cfg_path in Path(_brains_dir).glob("*.json"):
                 try:
                     _cfg = json.loads(_cfg_path.read_text(encoding="utf-8"))
@@ -661,7 +759,22 @@ def run_governance_cycle(
                             flagged.append(entry)
                             continue
 
-                    result = governance.transition(brain_id, target_status, reason=f"pnl:{health}")
+                    # ── FIX-20260801-011 (P3): route through the sole writer ──
+                    # Direct GovernanceService.transition() was the hidden
+                    # third-rail writer (bypassed rule engine + observation
+                    # hold).  Delegate to execute_transitions() so daily_ops
+                    # respects the same hold guard as the SSOT evaluator.
+                    # Holds are attached once per cycle via _daily_ops_engine.
+                    result = _apply_daily_ops_transition(
+                        governance,
+                        brain_id,
+                        current_status,
+                        target_status,
+                        health,
+                        metrics,
+                        base_dir,
+                        engine=_daily_ops_engine,
+                    )
                     entry["result"] = result
                     if result.get("action") in ("transitioned", "registered"):
                         applied.append(entry)

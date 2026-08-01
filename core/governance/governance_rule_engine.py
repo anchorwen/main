@@ -1,7 +1,21 @@
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# FIX-20260801-012: Status rank for observation-hold demotion detection.
+# A transition is a "demotion" when the target rank is strictly below the
+# current rank (e.g. live→probation throttle).  Promotions / lateral moves
+# pass through the observation hold untouched.
+_HOLD_STATUS_RANK: dict[str, int] = {
+    "live": 5,
+    "probation": 4,
+    "candidate": 3,
+    "shadow": 2,
+    "frozen": 1,
+    "retired": 0,
+}
 
 
 class GovernanceRule:
@@ -31,6 +45,43 @@ class GovernanceRuleEngine:
         self._governance = governance_service
         self._audit = audit_log
         self._rules: list[GovernanceRule] = []
+        # FIX-20260801-012: Observation holds (grace periods) — brain_id →
+        # naive-UTC expiry datetime.  Populated from brain config governance
+        # blocks (L1 human SSOT) by the governance evaluation orchestrator.
+        # During an active hold, this Executor refuses any automated demotion
+        # (e.g. throttle live→probation) — the IC's strategic observation
+        # period has explicit priority over machine demotion.
+        self._observation_holds: dict[str, datetime] = {}
+
+    def set_observation_holds(self, holds: dict[str, datetime]) -> None:
+        """Replace the active observation-hold map (brain_id → expiry).
+
+        Called once per evaluation cycle by the governance orchestrator.
+        Idempotent — safe to call every 60s cycle.
+        """
+        self._observation_holds = dict(holds) if holds else {}
+
+    def _hold_blocked(self, brain_id: str, current_status: str, target_status: str | None) -> bool:
+        """True when an active observation hold forbids this transition.
+
+        A transition is blocked only when BOTH:
+          1. The brain has a hold whose expiry is still in the future.
+          2. The transition is a demotion (target rank < current rank).
+
+        Promotions (probation→live) and lateral moves pass through — the hold
+        protects against automated *downgrades* during a strategic observation
+        window, it never blocks recovery/promotion.
+        """
+        if target_status is None:
+            return False
+        hold_until = self._observation_holds.get(brain_id)
+        if hold_until is None:
+            return False
+        if datetime.now(UTC).replace(tzinfo=None) >= hold_until:
+            return False  # hold expired — automated demotion resumes
+        cur_rank = _HOLD_STATUS_RANK.get(current_status, -1)
+        tgt_rank = _HOLD_STATUS_RANK.get(target_status, -1)
+        return tgt_rank < cur_rank
 
     def add_rule(self, rule: GovernanceRule) -> None:
         self._rules.append(rule)
@@ -64,7 +115,7 @@ class GovernanceRuleEngine:
 
         for brain_id, summary in brain_summaries.items():
             state = self._governance.get_brain_state(brain_id)
-            current_status = state.get("status") if state else None
+            current_status = str(state.get("status")) if state else "unknown"
             context = {
                 "brain_id": brain_id,
                 "current_status": current_status,
@@ -86,11 +137,28 @@ class GovernanceRuleEngine:
             chosen = self._most_severe(matches)
             assert chosen is not None, "matches non-empty → _most_severe always returns a result"
             if chosen.get("transition_to"):
-                result = self._governance.transition(
-                    brain_id,
-                    chosen["transition_to"],
-                    reason=f"rule:{chosen['rule_name']}",
-                )
+                # FIX-20260801-012: observation-hold intercept on the declarative
+                # rule path too — a held brain is never demoted by any rule.
+                # The firing is still audited + returned below (visibility), only
+                # the state write is suppressed.
+                if self._hold_blocked(brain_id, current_status, chosen["transition_to"]):
+                    _hold_until = self._observation_holds.get(brain_id)
+                    logger.warning(
+                        "[HOLD] action=hold_throttle reason=observation_period_active "
+                        "brain=%s %s→%s hold_until=%s rule=%s",
+                        brain_id,
+                        current_status,
+                        chosen["transition_to"],
+                        _hold_until.isoformat() if _hold_until else "?",
+                        chosen["rule_name"],
+                    )
+                    result = {}  # held — no state write; firing still audited below
+                else:
+                    result = self._governance.transition(
+                        brain_id,
+                        chosen["transition_to"],
+                        reason=f"rule:{chosen['rule_name']}",
+                    )
                 if result.get("action") == "rejected":
                     logger.warning(
                         "GovernanceRuleEngine: transition(%s → %s) rejected by state machine: %s",
@@ -141,6 +209,28 @@ class GovernanceRuleEngine:
                 continue
             old_status = current.get("status", "unknown")
             if old_status == d.target_status:
+                continue
+            # ── FIX-20260801-012: Observation hold (grace period) intercept ──
+            # The IC's strategic observation window has explicit priority over
+            # automated demotion.  A brain under an active observation hold is
+            # never demoted by the sole writer (live→probation throttle,
+            # live→frozen, probation→retired, ...).  Promotions pass through.
+            if self._hold_blocked(brain_id, old_status, d.target_status):
+                _hold_until = self._observation_holds.get(brain_id)
+                _h = _hold_until.isoformat() if _hold_until else "?"
+                logger.warning(
+                    "[HOLD] action=hold_throttle reason=observation_period_active "
+                    "brain=%s %s→%s hold_until=%s reasons=%s",
+                    brain_id,
+                    old_status,
+                    d.target_status,
+                    _h,
+                    "; ".join(d.reasons),
+                )
+                changes.append(
+                    f"{brain_id}: {old_status} → {d.target_status} BLOCKED "
+                    f"(observation_hold_until {_h})"
+                )
                 continue
             if not dry_run:
                 self._governance.transition(

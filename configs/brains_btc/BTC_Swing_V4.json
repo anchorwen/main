@@ -108,7 +108,8 @@
   "trained_at": "2026-07-17T05:17:00Z",
   "governance": {
     "min_confidence": 0.45,
-    "cooldown_cycles": 3
+    "cooldown_cycles": 3,
+    "observation_hold_until": "2026-08-03T23:59:59Z"
   },
   "confidence_params": {
     "method": "binary_directional_path2",

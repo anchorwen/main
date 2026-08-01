@@ -166,9 +166,7 @@ class BrainPromotionEvaluator:
                 action="hold",
                 target_status=None,
                 approved=False,
-                reasons=[
-                    f"insufficient_live_samples({signal_count} < {t.min_live_samples})"
-                ],
+                reasons=[f"insufficient_live_samples({signal_count} < {t.min_live_samples})"],
                 metrics_snapshot=metrics_snapshot,
             )
 
@@ -303,9 +301,9 @@ class BrainPromotionEvaluator:
                 )
 
         # ── Fallback: return the promotion decision (hold or demote) ──
-        if status == "probation" and 'decision' in locals():
+        if status == "probation" and "decision" in locals():
             return decision
-        elif status in ("active", "live") and 'decision' in locals():
+        elif status in ("active", "live") and "decision" in locals():
             return decision
         else:
             return BrainPromotionDecision(
@@ -429,9 +427,13 @@ class BrainPromotionEvaluator:
 
 
 def apply_promotion_decisions(
-    # DEPRECATED: use GovernanceRuleEngine.execute_transitions() for state writes.
-    # This function is kept for backward compatibility with scripts/ that call it
-    # directly.  New code should route through the Auditor→Executor pipeline.
+    # DEPRECATED — TODO: Remove in next cleanup (DQAF-20260801-010 / IC mandate).
+    # Use GovernanceRuleEngine.execute_transitions() for state writes (Iron Law
+    # #14 sole writer, observation-hold aware).  This function was the second
+    # writer in the live_intent_loop dual-track race (BrainPnLStore last-20
+    # window) that oscillated BTC_Swing_V4 live↔probation.  That caller was
+    # amputated (FIX-20260801-011); kept ONLY for brain_promotion_runner.py and
+    # tests.  New code MUST route through the Auditor→Executor pipeline.
     governance_path: Path,
     decisions: list[BrainPromotionDecision],
     *,

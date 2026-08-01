@@ -14,13 +14,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 from core.governance.governance_rule_engine import (
     GovernanceRule,
     GovernanceRuleEngine,
 )
-
 
 # ── GovernanceRule ──────────────────────────────────────────────────────────
 
@@ -210,6 +207,7 @@ def test_evaluate_multiple_rules_picks_most_severe():
 def test_evaluate_rejected_transition_logs_warning():
     """When transition is rejected by the state machine, only the most severe
     matching result appears in fired (one entry per brain)."""
+
     def _transition(bid, new_status, reason=""):
         return {"action": "rejected", "reason": "invalid"}
 
@@ -234,6 +232,7 @@ def test_evaluate_rejected_transition_logs_warning():
 def test_evaluate_with_audit_log():
     """When audit_log is provided, rule firings are logged."""
     audit = MagicMock()
+
     def _transition(bid, new_status, reason=""):
         return {"action": "transitioned", "from": "live", "to": new_status}
 
@@ -256,6 +255,7 @@ def test_evaluate_with_audit_log():
 
 def test_evaluate_brain_not_registered_skipped():
     """When get_brain_state returns None, the brain's current_status is None."""
+
     def _transition(bid, new_status, reason=""):
         return {"action": "transitioned"}
 
@@ -410,7 +410,16 @@ def _make_svc(states=None):
         old = current.get("status", "unknown") if current else "unknown"
         return {"action": "transitioned", "brain_id": bid, "from": old, "to": status}
 
-    svc = SimpleNamespace(get_brain_state=_get_state, transition=_transition)
+    def _get_all_states():
+        return dict(state_map)
+
+    # FIX-20260628-162's last-live guard calls get_all_states(); the mock must
+    # mirror the real GovernanceService interface for _demote_condition().
+    svc = SimpleNamespace(
+        get_brain_state=_get_state,
+        get_all_states=_get_all_states,
+        transition=_transition,
+    )
     return svc, transitions
 
 
@@ -478,8 +487,18 @@ def test_default_rules_auto_promote_low_composite_skipped():
 
 
 def test_default_rules_auto_demote_degraded():
-    """health_signal=degraded + status=live + ≥15 samples → probation."""
-    svc, transitions = _make_svc({"B1": {"status": "live", "freeze_count": 0}})
+    """health_signal=degraded + status=live + ≥15 samples → probation.
+
+    Requires ≥2 live brains: the last-live guard (FIX-20260628-162 / DQAF-059)
+    correctly refuses to demote the sole live brain, so a single-brain mock
+    can never fire auto_demote_degraded.
+    """
+    svc, transitions = _make_svc(
+        {
+            "B1": {"status": "live", "freeze_count": 0},
+            "B2": {"status": "live", "freeze_count": 0},
+        }
+    )
     engine = GovernanceRuleEngine.with_default_rules(svc)
     fired = engine.evaluate({"B1": {"health_signal": "degraded", "sample_count": 20}})
     assert any(r.get("rule_name") == "auto_demote_degraded" for r in fired)
@@ -513,9 +532,7 @@ def test_default_rules_unfreeze_recovered():
     """status=frozen + health=stable → probation (unfreeze)."""
     svc, transitions = _make_svc({"B1": {"status": "frozen", "freeze_count": 2}})
     engine = GovernanceRuleEngine.with_default_rules(svc)
-    fired = engine.evaluate(
-        {"B1": {"health_signal": "stable", "recommendation": "observe"}}
-    )
+    fired = engine.evaluate({"B1": {"health_signal": "stable", "recommendation": "observe"}})
     assert any(r.get("rule_name") == "unfreeze_recovered" for r in fired)
 
 

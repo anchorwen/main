@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-01T14:15:57Z
-> **扫描模块数**: 762
+> **自动生成**: 2026-08-01T18:07:38Z
+> **扫描模块数**: 764
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -88,7 +88,7 @@
 | `brain_attribution_service.py` | ✅ active | BrainAttribution, AttributionReport, BrainAttributionService | 11 | 327 | — | |
 | `brain_factory.py` | ✅ active | BrainFactory | 1 | 169 | — | |
 | `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 10 | 370 | — | |
-| `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 520 | — | |
+| `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 522 | — | |
 | `brain_registry_loader.py` | ✅ active | BrainRegistryLoader | 1 | 7 | — | |
 | `brain_registry_service.py` | ✅ active | BrainRegistryService | 7 | 141 | — | |
 | `brain_run_service.py` | ✅ active | BrainRunService | 15 | 281 | — | |
@@ -189,6 +189,7 @@
 | `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 288 | — | |
 | `feature_update_producer.py` | ✅ active | — | 2 | 67 | — | |
 | `final_audit.py` | ✅ active | FinalAuditService | 5 | 211 | — | |
+| `governance_evaluator.py` | ✅ active | — | 3 | 282 | — | |
 | `governance_summary.py` | ✅ active | — | 4 | 56 | — | |
 | `health_check.py` | ✅ active | HealthCheckService | 9 | 117 | — | |
 | `lifecycle_manager.py` | ✅ active | LifecycleManager | 7 | 166 | — | |
@@ -207,7 +208,7 @@
 | `rollback_drill.py` | ✅ active | RollbackDrillService | 8 | 304 | — | |
 | `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 664 | — | |
 | `scheduled_task_registry.py` | ✅ active | — | 4 | 36 | — | |
-| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 20 | 616 | — | |
+| `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 20 | 483 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
 | `service_container.py` | ✅ active | ServiceContainer | 41 | 638 | — | |
 | `startup_validator.py` | ✅ active | — | 1 | 113 | — | |
@@ -351,7 +352,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `governance_rule_engine.py` | ✅ active | GovernanceRule, GovernanceRuleEngine | 15 | 396 | — | |
+| `governance_rule_engine.py` | ✅ active | GovernanceRule, GovernanceRuleEngine | 17 | 486 | — | |
 | `governance_service.py` | ✅ active | GovernanceService | 19 | 372 | — | |
 | `shadow_tracker.py` | ✅ active | ShadowBrainMetrics, ShadowTracker | 9 | 132 | — | |
 
@@ -682,6 +683,7 @@
 | `_validate_mt5_report.py` | 📄 config | — | 0 | 266 | — | |
 | `_verify_expected_r_e2e.py` | ✅ active | — | 1 | 111 | — | |
 | `_verify_expected_r_routing.py` | ✅ active | — | 1 | 177 | — | |
+| `_verify_governance_evaluator.py` | ✅ active | — | 2 | 138 | — | |
 | `_verify_post_restart_state.py` | 📄 config | — | 0 | 248 | — | |
 | `_verify_xau_final.py` | 📄 config | — | 0 | 452 | — | |
 | `_verify_xau_governance_anomalies.py` | ✅ active | — | 2 | 435 | — | |
@@ -749,7 +751,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 734 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 738 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -809,8 +811,8 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2891 | — | |
-| `live_launcher.py` | ✅ active | — | 15 | 1163 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2817 | — | |
+| `live_launcher.py` | ✅ active | — | 16 | 1271 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |
@@ -965,7 +967,7 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 8 | 822 | — | |
+| `governance_scheduler.py` | ✅ active | — | 9 | 935 | — | |
 | `label_builder.py` | ✅ active | — | 19 | 1047 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |

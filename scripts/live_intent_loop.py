@@ -2463,88 +2463,14 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
 
-            # ── FIX-20260611-001: Brain promotion pipeline ──
-            # GovernanceRuleEngine was only wired into the containerized deployment
-            # path (scheduler_service.py), NOT live_intent_loop.  Brains stuck in
-            # "candidate" forever because nothing promoted them.  Run every 50 cycles.
-            if state.loop_iteration % 50 == 0:
-                try:
-                    from core.brains.services.brain_promotion import (
-                        BrainPromotionEvaluator,
-                        apply_promotion_decisions,
-                    )
-                    from core.feedback.brain_pnl_ledger import BrainPnLStore
-
-                    _pnl_path = Path(args.base_dir) / "brain_pnl_ledger.json"
-                    _gov_path = Path(args.base_dir) / "governance_state.json"
-                    if _pnl_path.exists() and _gov_path.exists():
-                        _pnl_store = BrainPnLStore.load(str(_pnl_path), event_writer=_event_writer)
-                        _all_metrics = _pnl_store.get_all_metrics()
-
-                        # Load brain_states from governance
-                        import json as _json_gov
-
-                        with open(_gov_path, encoding="utf-8") as _gf:
-                            _gov_data = _json_gov.load(_gf)
-                        _brain_states = _gov_data.get("brain_states", {})
-
-                        # Bridge BrainPnLMetrics → evaluator format
-                        _perf: dict[str, dict] = {}
-                        for _bid, _m in _all_metrics.items():
-                            _perf[_bid] = {
-                                "win_rate": _m.win_rate,
-                                "profit_factor": _m.profit_factor,
-                                "signal_count": _m.sample_count,
-                                "total_pnl": getattr(_m, "total_pnl", 0.0) or 0.0,
-                                "sharpe": getattr(_m, "sharpe", None) or 0.0,
-                                "recent_win_rate": getattr(_m, "recent_win_rate", None)
-                                or _m.win_rate,
-                                "consecutive_losses": getattr(_m, "consecutive_losses", None) or 0,
-                            }
-
-                        # Bug #1 fix: BrainPromotionEvaluator(thresholds=...), not (governance_service=...)
-                        _evaluator = BrainPromotionEvaluator()
-                        # Bug #2 fix: evaluate_all(brain_states, performance)
-                        _decisions = _evaluator.evaluate_all(_brain_states, _perf)
-
-                        # Bug #3 fix: apply decisions to governance_state.json
-                        _applied = apply_promotion_decisions(
-                            _gov_path,
-                            _decisions,
-                        )
-
-                        # Iterate over _decisions (BrainPromotionDecision objects),
-                        # NOT _applied (list[str] change descriptions).
-                        _promoted = [d for d in _decisions if d.approved and d.action == "promote"]
-                        if _promoted:
-                            _gov_events_path = Path(args.base_dir) / "governance_events.jsonl"
-                            for _d in _promoted:
-                                _gevt = {
-                                    "schema_version": "governance_event.v1",
-                                    "event": "brain_promoted",
-                                    "time": _utc_iso(),
-                                    "brain_id": _d.brain_id,
-                                    "from_status": _d.current_status,
-                                    "to_status": _d.target_status,
-                                    "reasons": _d.reasons,
-                                }
-                                print(json.dumps(_gevt, ensure_ascii=False), flush=True)
-                                try:  # BLE001:FOG (was: FOG/LAC)
-                                    with open(_gov_events_path, "a", encoding="utf-8") as _gf:
-                                        _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")
-                                except (
-                                    RuntimeError,
-                                    ValueError,
-                                    KeyError,
-                                    TypeError,
-                                    OSError,
-                                ):  # BLE001:FOG
-                                    pass
-                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                    try:  # BLE001:FOG (was: FOG/LAC)
-                        raise  # surface hidden bugs instead of silent pass
-                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                        pass
+            # ── Governance lifecycle: REMOVED — moved to SSOT thread (FIX-20260801-011/012) ──
+            # DQAF-20260801-010: The DEPRECATED apply_promotion_decisions block
+            # (BrainPnLStore last-20 window) was the second writer in the
+            # dual-track race that oscillated BTC_Swing_V4 live↔probation since
+            # 07-09.  Governance now runs in the launcher's 60s SSOT thread
+            # (_governance_scheduler_runner) on brain_performance.json via
+            # GovernanceRuleEngine.execute_transitions (Iron Law #14 sole
+            # writer), protected by observation holds (FIX-20260801-012).
             if hot_reload is not None and state.loop_iteration % 30 == 0:
                 try:  # BLE001:FOG (was: FOG/LAC)
                     changes = hot_reload.check_and_reload()

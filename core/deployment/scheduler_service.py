@@ -180,6 +180,23 @@ class SchedulerService:
                         OSError,
                     ):  # BLE001:FOG (fail-open)
                         pass  # graceful fallback — run governance anyway
+                # ── FIX-20260801-012: Attach observation holds to the rule
+                #    engine BEFORE any governance path runs this cycle (the
+                #    declarative rule path below AND the brain_performance
+                #    evaluator path).  Holds come from brain config governance
+                #    blocks (L1 SSOT); the Executor refuses demotions during
+                #    an active hold (IC strategic observation window priority).
+                try:
+                    from core.deployment.governance_evaluator import (
+                        load_observation_holds,
+                        resolve_brains_dir,
+                    )
+
+                    container.governance_rule_engine.set_observation_holds(
+                        load_observation_holds(resolve_brains_dir(str(container.config.base_dir)))
+                    )
+                except (RuntimeError, ValueError, KeyError, TypeError, OSError, AttributeError):
+                    pass  # BLE001:FOG (fail-open) — holds are a non-critical policy guard
                 summaries = container.brain_tracker.get_all_summaries()
                 summary_map = {s[PAYLOAD_KEY_BRAIN_ID]: s for s in summaries}
 
@@ -205,148 +222,33 @@ class SchedulerService:
                 if summary_map:
                     container.governance_rule_engine.evaluate(summary_map)
 
-                # ── Auditor→Executor pipeline (SSOT: BrainPnLStore) ──
+                # ── Auditor→Executor pipeline (SSOT: brain_performance) ──
+                # DQAF-20260801-010/FIX-20260801-011: The embedded evaluation is
+                # now delegated to core/deployment/governance_evaluator.py so the
+                # containerized path and the bare-metal launcher path run the
+                # IDENTICAL SSOT governance logic (single writer, Iron Law #14).
                 if container.governance_service and container.governance_rule_engine:
                     import logging
                     from pathlib import Path as _Path
 
-                    from core.brains.services.brain_promotion import (
-                        BrainPromotionEvaluator,
-                    )
                     from core.deployment.brain_alert import emit_brain_alert
+                    from core.deployment.governance_evaluator import (
+                        evaluate_governance_state,
+                    )
 
                     _logger = logging.getLogger(__name__)
 
-                    # ── FIX-20260617-001: Governance Data Source Migration ──
-                    # OLD: BrainPnLStore (brain_pnl_ledger.json) → backtest PnL
-                    #      was injected into governance performance_metrics.
-                    # NEW: brain_performance.json → live execution outcomes
-                    #      (win/loss from actual MT5 fills, window=100).
-                    #
-                    # Auto-transition is MANUAL (if True guard below) — decisions
-                    # are computed and logged but NOT executed.  Brain lifecycle
-                    # changes must be done via manual CLI until governance data
-                    # integrity is fully verified.
-                    _GOVERNANCE_MANUAL_MODE = False
-
-                    # ── FIX-20260617-001: Replace BrainPnLStore (backtest/shadow)
-                    #    with brain_performance.json (live execution SSOT).
-                    #    BrainPnLStore contains COUNTERFACTUAL PnL — what each
-                    #    brain WOULD have earned if traded.  This is backtest
-                    #    contamination when injected into live governance.
-                    #    brain_performance.json records actual execution outcomes
-                    #    (win/loss from MT5 fills), window_size=100.
+                    # FIX-20260617-001 data source: brain_performance.json
+                    # (live execution outcomes, window=100).  Auto-transition is
+                    # enabled (manual_mode=False) — decisions are applied via
+                    # GovernanceRuleEngine.execute_transitions (the sole writer).
                     try:
-                        import json as _json
-
-                        _bp_path = _Path(str(container.config.base_dir)) / "brain_performance.json"
-                        perf: dict[str, dict] = {}
-                        if _bp_path.exists():
-                            _bp_data = _json.loads(_bp_path.read_text(encoding="utf-8"))
-                            _bp_records = _bp_data.get("records", {})
-                            for _bid, _records in _bp_records.items():
-                                if not isinstance(_records, list):
-                                    continue
-                                _wins = sum(
-                                    1
-                                    for r in _records
-                                    if isinstance(r, dict) and r.get("execution_outcome") == "win"
-                                )
-                                _losses = sum(
-                                    1
-                                    for r in _records
-                                    if isinstance(r, dict) and r.get("execution_outcome") == "loss"
-                                )
-                                _total = _wins + _losses
-                                if _total == 0:
-                                    continue
-                                _wr = _wins / _total
-                                perf[_bid] = {
-                                    "win_rate": round(_wr, 4),
-                                    "profit_factor": (
-                                        round(_wins / max(_losses, 1), 2)
-                                        if _losses > 0
-                                        else round(_wins, 2)
-                                        if _wins > 0
-                                        else 0.0
-                                    ),
-                                    "signal_count": _total,
-                                    "consecutive_losses": 0,  # not in brain_performance
-                                    "recent_win_rate": round(_wr, 4),
-                                }
-                                # Auto-register brain if not in governance yet
-                                _existing = container.governance_service.get_brain_state(_bid)
-                                if _existing is None:
-                                    container.governance_service.register_brain(_bid, "candidate")
-
-                                # Inject LIVE execution metrics into governance
-                                container.governance_service.set_performance_metrics(
-                                    _bid,
-                                    {
-                                        "win_rate": round(_wr, 4),
-                                        "total_trades": _total,
-                                        "wins": _wins,
-                                        "losses": _losses,
-                                        "source": "brain_performance",
-                                        "updated_at": datetime.now(UTC).isoformat(),
-                                    },
-                                )
-
-                            # ── Purge backtest-contaminated metrics for brains NOT
-                            #    in brain_performance (they only have stale backtest data).
-                            #    DQAF-061: daily_ops-injected metrics carry _data_source
-                            #    ("live_journal" or "pnl_store") — these are trusted event-
-                            #    stream or journal-derived metrics, NOT backtest artifacts.
-                            #    Only purge metrics that lack BOTH source markers.
-                            _all_states = container.governance_service.get_all_states()
-                            for _bid, _state in _all_states.items():
-                                _pm = _state.get("performance_metrics") or {}
-                                _src = _pm.get("source", "")
-                                _alt_src = _pm.get("_data_source", "")
-                                # brain_performance marker → trusted
-                                if _src == "brain_performance":
-                                    continue
-                                # DQAF-061: daily_ops-injected metrics → trusted
-                                if _alt_src in ("live_journal", "pnl_store"):
-                                    continue
-                                if _pm.get("total_trades", 0) > 0:
-                                    # Replace stale backtest metrics with empty sentinel
-                                    container.governance_service.set_performance_metrics(
-                                        _bid,
-                                        {
-                                            "win_rate": 0.0,
-                                            "total_trades": 0,
-                                            "source": "cleared_backtest",
-                                            "updated_at": datetime.now(UTC).isoformat(),
-                                        },
-                                    )
-                                    _logger.info(
-                                        "[GOV_CLEAN] Purged backtest metrics for brain=%s "
-                                        "(had %d backtest trades)",
-                                        _bid,
-                                        _pm.get("total_trades", 0),
-                                    )
-
-                            _logger.info(
-                                "[GOV_LIVE] Injected brain_performance metrics: "
-                                "%d brains with live trade data",
-                                len(perf),
-                            )
-
-                            # ── Persist governance state to disk ──
-                            _gov_save_path = (
-                                _Path(str(container.config.base_dir)) / "governance_state.json"
-                            )
-                            container.governance_service.save(str(_gov_save_path), lock_timeout=1.0)
-                            _logger.info(
-                                "[GOV_LIVE] Governance state saved to %s",
-                                _gov_save_path,
-                            )
-                        else:
-                            _logger.warning(
-                                "[GOV_LIVE] brain_performance.json not found at %s",
-                                _bp_path,
-                            )
+                        evaluate_governance_state(
+                            container.governance_service,
+                            container.config.base_dir,
+                            manual_mode=False,
+                            rule_engine=container.governance_rule_engine,
+                        )
 
                         # ── FIX-20260611-022: Event stream projection ──
                         # Compute governance metrics from the immutable event
@@ -388,41 +290,6 @@ class SchedulerService:
                                 "[GOV_MANUAL] Event stream projection skipped "
                                 "(stream not available)"
                             )
-                        brain_states = container.governance_service.get_all_states()
-                        evaluator = BrainPromotionEvaluator()
-                        decisions = evaluator.evaluate_all(brain_states, perf)
-
-                        # ── FIX-20260611-020: Manual whitelist mode ──
-                        # Layer 2 (Decision): In manual mode, evaluate but don't
-                        # execute.  Log decisions for human review.
-                        # FIX-20260614-B0: Metrics injection enabled, auto-transition
-                        # stays manual until first cycle metrics are reviewed.
-                        if _GOVERNANCE_MANUAL_MODE:
-                            for d in decisions:
-                                if d.action != "hold":
-                                    _logger.warning(
-                                        "[GOV_MANUAL] Would %s brain=%s (%s→%s) "
-                                        "reasons=%s — NOT EXECUTED (manual mode)",
-                                        d.action,
-                                        d.brain_id,
-                                        d.current_status,
-                                        d.target_status,
-                                        d.reasons,
-                                    )
-                                    # Emit alert so humans see pending decisions
-                                    emit_brain_alert(
-                                        d.brain_id,
-                                        "governance_manual_blocked",
-                                        {
-                                            "action": d.action,
-                                            "current_status": d.current_status,
-                                            "target_status": d.target_status,
-                                            "reasons": d.reasons,
-                                            "metrics": d.metrics_snapshot,
-                                        },
-                                    )
-                        else:
-                            container.governance_rule_engine.execute_transitions(decisions)
                     except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                         _logger.exception(
                             "CRITICAL: PnL-based governance evaluation failed — "
