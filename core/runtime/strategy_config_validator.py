@@ -25,6 +25,10 @@ _EXPECTED_EXIT_KEYS: set[str] = {
     "trail_atr_mult_high",
     "trail_activation_atr",
     "breakeven_threshold_atr",
+    "max_hold_cycles",
+    "ev_trajectory_enabled",
+    "kalman_velocity_threshold_bps",
+    "grace_period_emergency_r",
 }
 
 

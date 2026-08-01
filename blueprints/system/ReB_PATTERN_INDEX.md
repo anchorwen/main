@@ -1226,3 +1226,45 @@
 **Prevention**: (1) build_lake is now canonical — ALWAYS binds the full 41-dim canonical names → values; subset schemas extract BY NAME at dispatch (position-independent lake). (2) Schema dispatch conditions centralized: every new schema must be added to SCHEMA_CONTRACTS + the routing condition (documented in registry.py "Adding a new schema" checklist). (3) Regression guards: `scripts/_verify_expected_r_routing.py` (17 asserts: lake alignment, dispatch order vs training extraction, legacy shim/v2 bit-identical) + `_verify_expected_r_e2e.py` (real adapter inference, no dimension mismatch) — run after any schema change.
 
 **Detection**: Grep for `feature_dimension_mismatch` in live logs (expected=37 got=40 → schema fell to V9 fallback). Assert `len(SCHEMA_CONTRACTS) == count of active brain schemas`. Run the two verify scripts after any schema/routing change.
+
+### ReB-20260801-WHITELIST_LAGGING_RUNTIME_KEYS
+- **Pattern Signature**: `WHITELIST_LAGGING_RUNTIME_KEYS`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-008
+- **Related**: FIX-20260801-008
+
+**Definition**: A static validation whitelist (allowed keys/values) drifts out of sync with the keys the runtime actually consumes. Runtime code adds a new config key (`ev_trajectory_enabled` gating `should_exit_time_based()`), the runtime reads it, but the validator's `_EXPECTED_EXIT_KEYS` is never extended → every strategy line setting that key triggers a spurious `unknown keys` startup warning (or worse, a spurious reject). Symptom: `strategy_lines.<name>.exit: unknown keys ['ev_trajectory_enabled']` while `management_phase.py` demonstrably reads the same key. The whitelist is a contract that must be kept in lockstep with runtime consumption — the failure mode is a validator that penalizes valid configuration.
+
+**Root mechanism**: Whitelists are manually maintained literal sets. Any runtime feature addition that introduces a config knob is a 2-site change (runtime read + whitelist) — if the second site is missed, the system reports healthy config as invalid.
+
+**Prevention**: (1) When adding a runtime config key, grep `_EXPECTED_EXIT_KEYS` and update it in the same change (the validator even tells you the missing key — the warning string is the TODO list). (2) A unit test that asserts every `_exit_cfg.get(...)` key in runtime has a corresponding whitelist entry. (3) Run `validate_strategy_exit_configs(live.yaml strategy_lines)` after any exit-feature change — it must be empty.
+
+**Detection**: Grep `_EXPECTED_EXIT_KEYS` vs `_exit_cfg.get(`/`exit_cfg.get(` across core/runtime — the diff is the missing set. Or simply run the validator against live yaml.
+
+### ReB-20260801-STRANGLER_FIG_CALLER_NOT_MIGRATED
+- **Pattern Signature**: `STRANGLER_FIG_CALLER_NOT_MIGRATED`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-008
+- **Related**: FIX-20260801-008, FIX-20260619-022 (Strangler Fig #22 extraction)
+
+**Definition**: A Strangler Fig refactor extracts a function/module to a canonical home, but the actual runtime call sites still import the OLD location, where a duplicate definition lingers. The extraction created `strategy_config_validator.py` with the improved whitelist, but `live_intent_loop.py:442` kept importing `validate_strategy_exit_configs` from `core.runtime.live_cycle` — which retained its own stale `_EXPECTED_EXIT_KEYS` and old function body. Fixing only the canonical module fixes nothing at runtime; the divergence is invisible until someone edits the canonical copy and the behavior doesn't change. It is the Iterability anti-pattern (同一逻辑分散多文件) materialized.
+
+**Root mechanism**: Strangler Fig "keep the old entry working" creates a re-export or leaves the old definition; if the migration step (pointing callers at the new home) is deferred, the codebase permanently carries two copies that drift apart.
+
+**Prevention**: (1) Strangler Fig completion checklist MUST include migrating all callers to the new module and deleting the old definition — verified by `grep -r "from <old_module> import <symbol>"`. (2) After extraction, grep the symbol name and confirm exactly one definition site. (3) A static check that the canonical module's public symbol is imported by callers, not the duplicate.
+
+**Detection**: `grep -rn "from core.runtime.live_cycle import.*validate"` → should be empty (callers import from `strategy_config_validator`). Duplicate definitions of the same function name in two modules is the trigger.
+
+### ReB-20260801-TELEMETRY_TTL_VS_BATCH_CONTRACT
+- **Pattern Signature**: `TELEMETRY_TTL_VS_BATCH_CONTRACT`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-008
+- **Related**: FIX-20260801-008, FIX-20260628-156 (freshness contract), FIX-20260622-057a (TTL tightening)
+
+**Definition**: A freshness contract intended for batch-produced artifacts (TTL ≥ scheduler max_age + buffer) is applied uniformly to ALL catalog artifacts, including real-time telemetry produced every live cycle (`EXECUTION_STATE` 30min, `MT5_BRIDGE_HEALTH` 15min, `ALERT_COOLING` 2h). Telemetry TTLs are deliberately SHORT (tightened by DQAF-057 for fast staleness detection) and their producers run far more often than the batch scheduler — so the batch contract's premise ("artifact can legally age past TTL before next producer run") is false for them. Result: 3 false-positive `Freshness Contract VIOLATION` warnings at every startup, permanently, until the namespace is split.
+
+**Root mechanism**: A single producer model (one daily_ops scheduler governs all) was assumed for all artifacts. Real-time artifacts have per-cycle producers with different cadence — they need their own freshness namespace (TTL vs own producer interval), not the batch max_age contract.
+
+**Prevention**: (1) `StateArtifact.producer_class` field: `batch` (subject to `TTL ≥ scheduler_max_age + buffer`) vs `telemetry` (excluded from batch contract; freshness enforced at runtime by `freshness_guard` against own TTL). (2) Any new real-time artifact must be declared `producer_class="telemetry"`. (3) A catalog test asserting every artifact with TTL < batch max_age is telemetry (or has a documented producer).
+
+**Detection**: `validate_freshness_contract(scheduler_max_age)` must return 0 violations — if it flags EXECUTION_STATE/MT5_BRIDGE_HEALTH/ALERT_COOLING, the telemetry/batch namespace split was lost.

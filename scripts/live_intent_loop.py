@@ -439,7 +439,9 @@ def main(argv: list[str] | None = None) -> int:
             # Validate per-strategy exit configs for unknown keys (RC-09 config drift)
             if strategy_configs:
                 try:  # BLE001:FOG (was: FOG/LAC)
-                    from core.runtime.live_cycle import validate_strategy_exit_configs
+                    from core.runtime.strategy_config_validator import (
+                        validate_strategy_exit_configs,
+                    )
 
                     exit_warnings = validate_strategy_exit_configs(strategy_configs)
                     if exit_warnings:

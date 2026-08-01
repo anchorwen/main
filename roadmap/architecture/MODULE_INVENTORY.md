@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-01T05:10:53Z
+> **自动生成**: 2026-08-01T08:09:55Z
 > **扫描模块数**: 762
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -527,7 +527,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5090 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5056 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -555,7 +555,7 @@
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 5 | 1259 | — | |
-| `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
+| `strategy_config_validator.py` | ✅ active | — | 1 | 48 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 5 | 1373 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
@@ -581,7 +581,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `catalog.py` | ✅ active | DataIntegrityError, CrossSymbolContaminationError, StateArtifact | 22 | 563 | — | |
+| `catalog.py` | ✅ active | DataIntegrityError, CrossSymbolContaminationError, StateArtifact | 22 | 593 | — | |
 | `freshness_guard.py` | ✅ active | FreshnessEntry | 8 | 458 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `writer.py` | ✅ active | StateWriter | 13 | 326 | — | |
@@ -809,7 +809,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2889 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2891 | — | |
 | `live_launcher.py` | ✅ active | — | 15 | 1163 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |

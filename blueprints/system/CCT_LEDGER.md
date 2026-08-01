@@ -1416,3 +1416,18 @@
   - Source 3: [复现脚本] scripts/_verify_expected_r_routing.py — build_lake 子集 zip 29/37 misaligned (XAUUSDc_return 取到 slot 8 而非 slot 12); 修复后 0/41
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: SCHEMA_ROUTING_MISSING_NEW_SCHEMA
+
+### CCT-20260801-008
+- **Docket ID**: DQAF-20260801-008
+- **日期**: 2026-08-01
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 重启后 live_launcher_20260801T060541Z.log 8 类告警: Freshness Contract 3 VIOLATION / exit_config_validation_warning ev_trajectory_enabled ×5 策略线 / SSOT drift M15+V4_LGB / startup_integrity missing artifact_hash(3) + artifact_hash mismatch(H1_V2,V12) / conformal_ou_gate disabled / 7 python 进程
+  - [Layer 2 — 中间异常]: (a) strategy_config_validator.py:14 `_EXPECTED_EXIT_KEYS` 缺 ev_trajectory_enabled 但 management_phase.py:1853 实际读取 → 5 条 BTC 策略线 ev_trajectory_enabled:false 全误报; live_intent_loop.py:442 从 live_cycle.py:797 旧重复副本导入 (Strangler Fig #22 提取后 caller 未迁移); (b) catalog.py:508 validate_freshness_contract 将 telemetry 产物 (EXECUTION_STATE 30min/MT5_BRIDGE_HEALTH 15min/ALERT_COOLING 2h) TTL 与 daily_ops batch max_age 6h 比较 → 3 误报; (c) brain config artifact_hash 为空/过时/截断; (d) M15 config=retired 但 governance 残留 probation
+  - [Layer 3 — 根因]: L2 分类学错误 + L1 副本残留 — (a) validator 白名单滞后运行时消费 key 且 strangler fig 提取后 caller 未迁移 (同逻辑双文件, Iterability 违规); (b) 实时遥测产物 TTL 强行套用批处理产物 freshness contract; (c) artifact_hash 无完整 64 位校验准入 (幽灵更新风险); (d) 治理状态未随 config 退役同步
+- **证据引用**:
+  - Source 1: [日志] data_btc/logs/live_launcher_20260801T060541Z.log L21/25/27/29/31/47-49/75 — 8 类告警证据包
+  - Source 2: [代码路径] core/runtime/strategy_config_validator.py:14 (白名单) vs core/runtime/management_phase.py:1853 (运行时读取); core/state/catalog.py:508-552 (contract) + L411/433/452 (telemetry TTL)
+  - Source 3: [配置] configs/brains_btc/*.json artifact_hash 空/过时/16字符截断 vs 磁盘模型 sha256 (H1_V2 9f7e9d6c, V12 a4f9eb8cde8a9915... 前缀截断)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: WHITELIST_LAGGING_RUNTIME_KEYS, STRANGLER_FIG_CALLER_NOT_MIGRATED, TELEMETRY_TTL_VS_BATCH_CONTRACT

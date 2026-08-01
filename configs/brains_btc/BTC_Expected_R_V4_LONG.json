@@ -9,7 +9,7 @@
   "model_path": "data_btc/models/btc_expected_r_v4_m15/tower_long_best.txt",
   "artifact_path": "data_btc/models/btc_expected_r_v4_m15/tower_long_best.txt",
   "model_version": "btc_expected_r_v4_m15_long",
-  "artifact_hash": "",
+  "artifact_hash": "fe161981e763ac58a478c769d71b67d2511e2cdb476fbd519f08b78cc3a257be",
   "status": "shadow",
   "vote_weight": 0.0,
   "magic": 90450,

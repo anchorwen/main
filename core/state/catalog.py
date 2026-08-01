@@ -32,6 +32,12 @@ from typing import Any, Literal
 SymbolDir = Literal["data", "data_btc"]
 SymbolName = Literal["XAUUSDc", "BTCUSDc"]
 
+# Producer namespace for the Freshness Contract (FIX-20260801-008):
+#   batch     → governed by the daily_ops scheduler max_age; TTL >= max_age + buffer
+#   telemetry → written by per-cycle real-time producers; excluded from the batch
+#               contract (freshness enforced by their own TTL + per-cycle writes)
+ProducerClass = Literal["batch", "telemetry"]
+
 
 # ── Error types ────────────────────────────────────────────────────────
 
@@ -133,6 +139,17 @@ class StateArtifact:
     # ── Lineage ──
     generator: str = ""
     """Human-readable description of which module(s) produce this artifact."""
+
+    # ── Producer namespace ──
+    producer_class: ProducerClass = "batch"
+    """Which freshness-contract namespace this artifact belongs to.
+
+    ``batch``: refreshed by the daily_ops scheduler — the startup contract
+    asserts TTL >= scheduler max_age + buffer.  ``telemetry``: refreshed by
+    per-cycle real-time producers (execution_service / bridge_health / alert
+    system), so it is excluded from the batch max_age contract — its freshness
+    is enforced at runtime against its own TTL.
+    """
 
     required_fields: tuple[str, ...] = ()
     """Fields that MUST be present and non-None in the data dict."""
@@ -414,6 +431,7 @@ CATALOG: dict[str, StateArtifact] = {
         schema_validator=validate_execution_state,
         ttl_seconds=1800,  # 30min (DQAF-057: tightened from 1h — execution changes every cycle)
         generator="daily_ops + execution_service",
+        producer_class="telemetry",  # refreshed every live cycle by execution_service
     ),
     "DATA_HEALTH_STATE": StateArtifact(
         logical_id="DATA_HEALTH_STATE",
@@ -436,6 +454,7 @@ CATALOG: dict[str, StateArtifact] = {
         schema_validator=validate_mt5_bridge_health,
         ttl_seconds=900,  # 15min (DQAF-057: tightened from 1h — bridge health is critical)
         generator="daily_ops + bridge_health",
+        producer_class="telemetry",  # refreshed by bridge_health every cycle
     ),
     # ── DQAF-20260622-057: CATALOG_COVERAGE_GAP closure ──
     # These files existed outside the State Governance Protocol perimeter.
@@ -455,6 +474,7 @@ CATALOG: dict[str, StateArtifact] = {
         schema_validator=validate_alert_cooling,
         ttl_seconds=7200,  # 2h — cooling state must be recent
         generator="execution exit_watchdog / alert system",
+        producer_class="telemetry",  # refreshed on-demand by the alert system
     ),
 }
 
@@ -523,6 +543,12 @@ def validate_freshness_contract(
     max_age=6h.  TTL(4h) < max_age(6h) → 100% probability of false-positive
     STALE for all 10 batch-produced artifacts.
 
+    FIX-20260801-008: The contract only governs ``batch`` artifacts (refreshed
+    by the daily_ops scheduler).  ``telemetry`` artifacts (producer_class)
+    are written every live cycle by their own real-time producers, so the
+    batch max_age comparison does not apply to them — they are skipped here
+    and their freshness is enforced at runtime against their own TTL.
+
     Args:
         scheduler_max_age_seconds: The producer's max_age in seconds
             (e.g. 21600 for 6h from live_launcher._daily_ops_scheduler).
@@ -535,6 +561,10 @@ def validate_freshness_contract(
     for artifact in CATALOG.values():
         if artifact.ttl_seconds <= 0:
             continue  # TTL=0 means no freshness check
+        if artifact.producer_class == "telemetry":
+            # Real-time artifact refreshed by its own per-cycle producer; the
+            # daily_ops batch max_age contract does not govern it.
+            continue
         if artifact.ttl_seconds < scheduler_max_age_seconds:
             msg = (
                 f"Freshness Contract VIOLATION: {artifact.logical_id} "
