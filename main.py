@@ -232,7 +232,7 @@ def _probe_mt5(config: Any, args: argparse.Namespace) -> dict[str, Any] | None:
     """Probe MT5 for live position/account data. Returns None if unavailable."""
     try:
         import MetaTrader5 as mt5
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:REVIEWED  # noqa: BLE001
         return {"error": "MetaTrader5 package not installed"}
 
     # Resolve terminal path
@@ -250,7 +250,7 @@ def _probe_mt5(config: Any, args: argparse.Namespace) -> dict[str, Any] | None:
             terminal_path = cfg.get("live_trading", {}).get("mt5_terminal_path", "") or cfg.get(
                 "mt5", {}
             ).get("terminal_path", "")
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:REVIEWED  # noqa: BLE001
             pass
 
     if not terminal_path:
@@ -392,7 +392,7 @@ def _probe_journal(config: Any, args: argparse.Namespace) -> dict[str, Any] | No
                 pnl_ledger_path=pnl_path if pnl_path.exists() else None,
             )
             attribution = attr_svc.quick_summary()
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:REVIEWED  # noqa: BLE001
             pass
 
         return {
@@ -405,7 +405,7 @@ def _probe_journal(config: Any, args: argparse.Namespace) -> dict[str, Any] | No
             "open_positions_in_journal": len(opens),
             "brain_attribution": attribution,
         }
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:REVIEWED  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -440,7 +440,7 @@ def _probe_governance(config: Any, args: argparse.Namespace) -> dict[str, Any] |
             "brain_summary": summary,
             "transition_log": gov.get("transition_log", [])[-5:],
         }
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:REVIEWED  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -626,6 +626,7 @@ def cmd_auto_recover(args: argparse.Namespace) -> int:
     cycles = int(auto_recovery.get("consecutive_pass_cycles", 3))
     current_pass = 0
     import contextlib
+
     with contextlib.suppress(Exception):
         current_pass = int(state_path.read_text(encoding="utf-8").strip())
 
@@ -741,7 +742,14 @@ def cmd_live(args: argparse.Namespace) -> int:
     # ── Multi-symbol support: auto-detect BTC config ──
     configs_to_launch: list[str] = [args.config]
     _btc_config = PROJECT_ROOT / "configs" / "live_btc.yaml"
-    if _btc_config.exists() and str(_btc_config) != str(args.config):
+    # DQAF-20260801-002: resolve both paths before comparing.  The old
+    # str() comparison matched the absolute form (D:\future\configs\live_btc.yaml)
+    # against the raw relative form (configs/live_btc.yaml) — NEVER equal for
+    # the same file → the hub double-launched the config (2x journal cleanup,
+    # 2x bridge on the same outbox) → file-lock clash → Ctrl+C cascade.
+    _arg_resolved = str(Path(args.config).resolve()) if args.config else ""
+    _btc_resolved = str(_btc_config.resolve())
+    if _btc_config.exists() and _btc_resolved != _arg_resolved:
         configs_to_launch.append(str(_btc_config))
 
     print("[hub] Starting live trading pipeline...")
@@ -763,7 +771,8 @@ def cmd_live(args: argparse.Namespace) -> int:
         while not _shutdown.is_set():
             _proc = subprocess.Popen(
                 [sys.executable, str(launcher), _cfg],
-                stdout=None, stderr=None,
+                stdout=None,
+                stderr=None,
             )
             print(f"[hub] Launcher[{_cfg}] started (pid={_proc.pid})", flush=True)
             _retcode = _proc.wait()
@@ -774,7 +783,10 @@ def cmd_live(args: argparse.Namespace) -> int:
             _crash_times.append(_now)
             _crash_times[:] = [t for t in _crash_times if _now - t < 60]
             if len(_crash_times) >= MAX_CONSECUTIVE_CRASHES:
-                print(f"[hub] Launcher[{_cfg}] {MAX_CONSECUTIVE_CRASHES} crashes/60s — pausing {ESCALATION_SLEEP}s", flush=True)
+                print(
+                    f"[hub] Launcher[{_cfg}] {MAX_CONSECUTIVE_CRASHES} crashes/60s — pausing {ESCALATION_SLEEP}s",
+                    flush=True,
+                )
                 _time.sleep(ESCALATION_SLEEP)
                 _crash_times.clear()
             else:
@@ -792,11 +804,14 @@ def cmd_live(args: argparse.Namespace) -> int:
                 _time.sleep(10)
             except KeyboardInterrupt:
                 raise
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:REVIEWED  # noqa: BLE001
                 # Windows console events (child process exit signals, etc.)
                 # can interrupt sleep — ignore and continue monitoring.
                 pass
-            print(f"[hub] alive — {sum(1 for _t in _threads if _t.is_alive())} launcher(s)", flush=True)
+            print(
+                f"[hub] alive — {sum(1 for _t in _threads if _t.is_alive())} launcher(s)",
+                flush=True,
+            )
     except KeyboardInterrupt:
         pass
 
