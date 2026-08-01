@@ -129,6 +129,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 | FIX-20260708-002 | 2026-07-08 | cursor-agent | — | **DQAF-20260707-003 closure — btc_h1_directional_48 schema in _IMPLEMENTED_SCHEMAS.** `feature_service.py`: register `btc_h1_directional_48` (41 base + 7 H1 directional momentum) as an implemented schema. Schema symbol (`BTC_H1_DIRECTIONAL_48_FEATURES`), dimension (registry.py:56=48), assembly branch (registry.py:133) and router (feature_router.py:51) were already committed; this completes the serving-side gate. Schema is dormant (no live brain consumes it after btc_swing_h1 retirement) — retained for Path C horizon=4 retrain. | RC-12 |
 
 | FIX-20260731-004 | 2026-07-31 | cursor-agent | — | **V4 Expected R 37-dim schema registration**: (1) `BTC_EXPECTED_R_37_FEATURES` constant in `btc_macro_enhanced_schema.py` — 41-dim BTC macro minus 4 H4 zero-fill placeholders. (2) Registered `btc_expected_r_37 → 37` in SCHEMA_DIMENSIONS with feature name resolution in registry.py. | RC-12 — DQAF-20260731-004 |
+| FIX-20260801-001 | 2026-08-01 | cursor-agent | — | **L1: btc_expected_r_37 absent from FeatureService._IMPLEMENTED_SCHEMAS.** FIX-20260731-004 registered the schema in registry.py but missed the runtime whitelist gate in `feature_service.py` → both V4.2 Expected R brains silently dropped at startup by `startup_validator.py:71`. Impact: 8+ hours of zero signal recording. Fix: add `btc_expected_r_37` to `_IMPLEMENTED_SCHEMAS` set. | RC-12 — DQAF-20260731-004 continuation |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
