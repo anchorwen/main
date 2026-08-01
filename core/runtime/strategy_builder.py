@@ -1035,9 +1035,11 @@ def build_strategy_lines(
                 min_valid_brains=_cfg("btc_expected_r_m15", "min_valid_brains", 1),
                 timeframe=_cfg("btc_expected_r_m15", "timeframe", "M15"),
                 exit_hesitation_cycles=_exit_cfg("btc_expected_r_m15", "hesitation_cycles", 24),
-                exit_ev_trajectory_enabled=_exit_cfg(
-                    "btc_expected_r_m15", "ev_trajectory_enabled", False
-                ),
+                # DQAF-20260801-003: ev_trajectory is read DIRECTLY by
+                # management_phase.py:1848 from the yaml exit block — no
+                # StrategyLineConfig field exists.  Passing the kwarg here
+                # raised TypeError at build time (latent since DQAF-20260731-004,
+                # masked by the brain-dropout that kept this block unreachable).
                 mode=_cfg("btc_expected_r_m15", "mode", "shadow"),
             ),
             btc_expected_r_m15_brains,

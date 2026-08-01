@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-01T03:12:53Z
+> **自动生成**: 2026-08-01T03:18:00Z
 > **扫描模块数**: 760
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -554,7 +554,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 5 | 1257 | — | |
+| `strategy_builder.py` | ✅ active | — | 5 | 1259 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 44 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 5 | 1373 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
