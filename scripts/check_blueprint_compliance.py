@@ -307,6 +307,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/feature_store_maintenance.py",
         "scripts/augment_journal_strategy.py",
         "scripts/inspect_ofi_history.py",  # DQAF-20260707-005: OFI history monitor
+        "scripts/scan_ofi_wasserstein.py",  # FIX-20260802-005: T21 Gate-1 OFI Wasserstein scan
     ],
     "market_mtf": [
         "core/market/mtf_price_service.py",

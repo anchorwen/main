@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-02T14:45:57Z
+> **自动生成**: 2026-08-02T17:31:21Z
 
 ## Package-Level Dependencies
 
@@ -558,54 +558,15 @@
 
 ### `scripts/`
 
-- `_analyze_btc_brains_20260730.py` → (无内部依赖)
-- `_analyze_btc_current_positions.py` → (无内部依赖)
-- `_analyze_btc_current_v2.py` → (无内部依赖)
-- `_analyze_btc_entry_quality.py` → (无内部依赖)
-- `_analyze_btc_exits.py` → (无内部依赖)
-- `_analyze_btc_improvement.py` → (无内部依赖)
-- `_analyze_console_log.py` → (无内部依赖)
-- `_analyze_dual_assassin_journal.py` → (无内部依赖)
 - `_analyze_h1_swing_now.py` → (无内部依赖)
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
-- `_analyze_signal_close_audit.py` → (无内部依赖)
-- `_analyze_v4_timeline.py` → (无内部依赖)
-- `_analyze_xau_loss_exits.py` → (无内部依赖)
-- `_assess_position_sizing.py` → (无内部依赖)
-- `_audit_btc_brains_full.py` → (无内部依赖)
-- `_audit_pwin_routing_20260802.py` → (无内部依赖)
-- `_audit_v4_attribution_20260802.py` → (无内部依赖)
-- `_audit_xau_brains_20260730.py` → (无内部依赖)
-- `_btc_audit_20260730_v2.py` → (无内部依赖)
-- `_calibrate_thresholds.py` → (无内部依赖)
-- `_check_live_entries_now.py` → (无内部依赖)
-- `_check_post_restart.py` → (无内部依赖)
-- `_commit_dqaf_011.py` → (无内部依赖)
-- `_cross_validate_mt5.py` → (无内部依赖)
-- `_diagnose_h1_v4_degradation.py` → (无内部依赖)
-- `_diagnose_pnl_mismatch.py` → (无内部依赖)
-- `_diagnose_pnl_provenance.py` → (无内部依赖)
-- `_diagnose_pnl_status.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
-- `_list_btc_brains.py` → (无内部依赖)
-- `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
-- `_parse_mt5_text.py` → (无内部依赖)
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)
-- `_validate_btc_july.py` → (无内部依赖)
-- `_validate_mt5_complete.py` → (无内部依赖)
-- `_validate_mt5_report.py` → (无内部依赖)
-- `_verify_expected_r_e2e.py` → `core.brains.services.brain_factory`, `core.features.feature_assembler`, `core.features.schemas.registry`
-- `_verify_expected_r_routing.py` → `core.features.feature_assembler`, `core.features.feature_router`, `core.features.schemas.btc_macro_enhanced_schema`, `core.features.schemas.registry`
 - `_verify_governance_evaluator.py` → `core.brains.services.brain_promotion`, `core.deployment.governance_evaluator`, `core.governance.governance_rule_engine`, `core.governance.governance_service`
-- `_verify_post_restart_state.py` → (无内部依赖)
-- `_verify_xau_final.py` → (无内部依赖)
-- `_verify_xau_governance_anomalies.py` → (无内部依赖)
-- `_xau_account_check.py` → (无内部依赖)
-- `_xau_full_audit.py` → (无内部依赖)
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)
@@ -767,6 +728,7 @@
 - `run_data_health.py` → `core.observability.data_health_service`
 - `runtime_protection_guard.py` → `scripts.guards.journal_quality`
 - `scan_barrier_params.py` → (无内部依赖)
+- `scan_ofi_wasserstein.py` → (无内部依赖)
 - `send_data_health_alert.py` → `core.observability.data_health_service`
 - `send_live_order.py` → `core.contracts.domain.dispatch_context`, `core.execution.live_order_sender`, `core.execution.mt5_broker_adapter`
 - `shadow_decision_recorder.py` → `core.contracts.domain.decision_record`, `core.contracts.ids`, `core.ledger.storage.jsonl_ledger_store`, `core.runtime.shadow_recorder`, `core.schemas.trading_contracts`
@@ -804,6 +766,48 @@
 - `verify_pnl_data_integrity.py` → (无内部依赖)
 - `verify_training_serving_parity.py` → `scripts.build_btc_metafilter_v2_dataset`
 - `watchdog_daily_ops.py` → (无内部依赖)
+
+### `scripts/archive/`
+
+- `_analyze_btc_brains_20260730.py` → (无内部依赖)
+- `_analyze_btc_current_positions.py` → (无内部依赖)
+- `_analyze_btc_current_v2.py` → (无内部依赖)
+- `_analyze_btc_entry_quality.py` → (无内部依赖)
+- `_analyze_btc_exits.py` → (无内部依赖)
+- `_analyze_btc_improvement.py` → (无内部依赖)
+- `_analyze_console_log.py` → (无内部依赖)
+- `_analyze_dual_assassin_journal.py` → (无内部依赖)
+- `_analyze_signal_close_audit.py` → (无内部依赖)
+- `_analyze_v4_timeline.py` → (无内部依赖)
+- `_analyze_xau_loss_exits.py` → (无内部依赖)
+- `_assess_position_sizing.py` → (无内部依赖)
+- `_audit_btc_brains_full.py` → (无内部依赖)
+- `_audit_pwin_routing_20260802.py` → (无内部依赖)
+- `_audit_v4_attribution_20260802.py` → (无内部依赖)
+- `_audit_xau_brains_20260730.py` → (无内部依赖)
+- `_btc_audit_20260730_v2.py` → (无内部依赖)
+- `_calibrate_thresholds.py` → (无内部依赖)
+- `_check_live_entries_now.py` → (无内部依赖)
+- `_check_post_restart.py` → (无内部依赖)
+- `_commit_dqaf_011.py` → (无内部依赖)
+- `_cross_validate_mt5.py` → (无内部依赖)
+- `_diagnose_h1_v4_degradation.py` → (无内部依赖)
+- `_diagnose_pnl_mismatch.py` → (无内部依赖)
+- `_diagnose_pnl_provenance.py` → (无内部依赖)
+- `_diagnose_pnl_status.py` → (无内部依赖)
+- `_list_btc_brains.py` → (无内部依赖)
+- `_merge_aligned_multitf_data.py` → (无内部依赖)
+- `_parse_mt5_text.py` → (无内部依赖)
+- `_validate_btc_july.py` → (无内部依赖)
+- `_validate_mt5_complete.py` → (无内部依赖)
+- `_validate_mt5_report.py` → (无内部依赖)
+- `_verify_expected_r_e2e.py` → `core.brains.services.brain_factory`, `core.features.feature_assembler`, `core.features.schemas.registry`
+- `_verify_expected_r_routing.py` → `core.features.feature_assembler`, `core.features.feature_router`, `core.features.schemas.btc_macro_enhanced_schema`, `core.features.schemas.registry`
+- `_verify_post_restart_state.py` → (无内部依赖)
+- `_verify_xau_final.py` → (无内部依赖)
+- `_verify_xau_governance_anomalies.py` → (无内部依赖)
+- `_xau_account_check.py` → (无内部依赖)
+- `_xau_full_audit.py` → (无内部依赖)
 
 ### `scripts/audit/`
 

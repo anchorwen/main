@@ -35,6 +35,9 @@ batch_plans/
 cline_chat_backup/
 *.backup.*.md
 
+# One-off audit / diagnostic scripts (archived locally, not for VCS)
+scripts/archive/
+
 # BTC runtime data (same principle as data/)
 data_btc/
 !core/data_btc/

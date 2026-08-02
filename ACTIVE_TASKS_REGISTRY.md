@@ -39,18 +39,18 @@
 
 | 字段 | 值 |
 |:---|:---|
-| **状态** | 🟡 ACCUMULATING (前向积累中, 双闸门口径已就位) |
+| **状态** | 🟢 GATE1 PASSED (2026-08-03) — Wasserstein 扫描 PROCEED, 等闸门2 |
 | **创建时间** | 2026-07-07T14:41Z |
 | **关联 Fix** | FIX-004 (OFICollector +3 特征) · FIX-005 (ofi_history 记录器) · **FIX-006 (双计数闸门)** |
 | **⚙️ 双闸门口径 (FIX-006)** | monitor 分别计 raw settle 与 distinct H1 window, 已消除 "raw=可重训" 误导 |
 | **闸门1 (筛查)** | ≥2,000 raw settles **且** 跨度 ≥7 天 → Wasserstein 特征判别力扫描 (便宜 GO/NO-GO) |
 | **闸门2 (重训)** | ≥1,000 distinct H1 windows → H1 粒度迁移重训 (冻结 41-dim 学 OFI 增量) |
-| **当前值** | **55 settles / 2 H1 windows / 存活 3/5 → 有效 44-dim** (14:35–15:02Z) |
+| **当前值** | **74,264 settles / 627 H1 windows / 存活 3/5 → 有效 44-dim** (2026-08-03) |
 | **实测节奏** | **~30s/settle ≈ 2,880/day**; H1 窗口 = **24/day** (二者差 120×, 已核实训练集 timestamps 恒定 3600s) |
 | **特征存活实测** | OFI_M5=100% · OFI_ZScore_20=89% · OFI_Cumulative_Delta=100% · **Delta_Divergence=0%** (稀疏) · **Volume_Real_Ratio=0%** (BTC 结构性死特征) |
 | **采集命令** | `python scripts/inspect_ofi_history.py --data-dir data_btc` |
-| **预计达标 (闸门1)** | **~2026-07-15** (raw 数 <1 天即够, 但需 ≥7 天行情覆盖) |
-| **预计达标 (闸门2)** | **~2026-08-18** (1,000 H1 窗口 ÷ 24/day ≈ 42 天, 迁移重训最小量) |
+| **预计达标 (闸门1)** | ✅ **PASSED 2026-08-03** — `scripts/scan_ofi_wasserstein.py` (19,231 前向1H标签, 18.03d): **BEST W1=0.1701 (OFI_Cumulative_Delta) ≥ 0.02 → PROCEED** (41-dim 基线 0.0084 的 20×; 非重叠子样本 0.2368 排除自相关) |
+| **预计达标 (闸门2)** | **~2026-08-19** (627/1,000 H1 窗口, 373 ÷ 24/day ≈ 15.5 天) |
 | **检查频率** | 每日 1 次 |
 | **裁决路径** | 闸门1: 最优 OFI 特征 Wasserstein <0.01 → 停(转 liquidation/funding); ≥0.02 → 等闸门2 → 迁移重训 → 影子部署 |
 | **异常阈值** | 积累 48h 后 live_flow_features 仍 <3 → 重评 OFI 方案有效性 |
