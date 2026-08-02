@@ -2018,6 +2018,17 @@ def execute_live_cycle(
             component="PriceFetch:broker",
         ):
             mid_price, _bid, _ask = broker.fetch_prices(config.symbol)
+            # FIX-20260802-004: successful broker.fetch_prices() IS liveness
+            # proof — stamp the ACK here to honor the L382 contract ("Unix ts
+            # of last successful broker.fetch_prices()"). Was only stamped in
+            # degraded/management branches (live_cycle.py:1310,
+            # management_phase.py:1306/1312), so the healthy idle normal path
+            # (0 positions) never refreshed it → _bridge_silence grew
+            # ~300s/cycle → false bridge_silence trip oscillation every
+            # ~35min (BTC) / ~22.5min (XAU). Exception path is swallowed by
+            # FaultTolerantContext DEGRADE above → ACK only advances on success
+            # (mirrors management_phase.py:1306 pattern).
+            state._last_bridge_ack_time = time.time()  # bridge liveness heartbeat
     # ── FIX-20260619-001: L3 fallback — broker→direct MT5 ──
     # When the broker ZMQ tick channel fails (single point of failure),
     # fall back to direct MT5 via mt5_worker.  The worker has built-in
@@ -2026,6 +2037,11 @@ def execute_live_cycle(
     # MT5 has live prices (observed: 60+ min XAU outage, 2026-06-18).
     if mid_price is None and not config.no_mt5:
         mid_price, _bid, _ask, _tick_time = _mid_and_prices(mt5_worker, config.symbol)
+        # FIX-20260802-004: L3 fallback success is also liveness proof —
+        # direct MT5 fetch via the self-healing worker succeeded.  Mirrors
+        # management_phase.py:1312 pattern (stamp only when price > 0).
+        if mid_price > 0:
+            state._last_bridge_ack_time = time.time()  # bridge liveness heartbeat
 
     # ── FIX-20260613-048: Staleness Contract (Iron Law #11 Data Analytics) ──
     # Data pipeline freeze detection: if MT5 returns the same stale tick for

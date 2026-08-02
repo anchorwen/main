@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-02T10:32:37Z
+> **自动生成**: 2026-08-02T14:45:57Z
 > **扫描模块数**: 767
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -529,7 +529,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5097 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5113 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
