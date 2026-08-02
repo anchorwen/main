@@ -153,3 +153,27 @@
 - **Fix**: FIX-20260801-013 (StaleFeatureException 推理守卫 — 新模块 stale_feature_guard.py + FeatureService 时间戳跟踪 + live_cycle 转 management_only) + FIX-20260801-014 (reconcile retired-as-ceiling, 15 幽灵状态清理, 独立异常但同 docket 关联)。
 - **ReB**: FEED_STALL_MISCLASSIFIED_AS_MARKET_CLOSED; LIVENESS_ACK_CIRCULAR_DEPENDENCY
 - **Status**: **CLOSED**
+
+- **Docket ID**: DQAF-20260802-002
+- **Date**: 2026-08-02
+- **Severity**: Sev 2
+- **Title**: Zero-vote brain pollutes ensemble p_win pool — Voting Boundary != EV Boundary
+- **Evidence**: btc_swing trio cold_explore p_win 锚定 0.4141 = BTC_Swing_V4_LGB 治理 WR (probation, vote_weight=0.0)。`scripts/_audit_pwin_routing_20260802.py` 实证 TRIO 中位池含 V4_LGB 0.4141; live_launcher_20260802T021000Z.log 每周期负 EV 拦截; data_btc/governance_state.json V4_LGB vote_weight=0.0。
+- **DA**: `pwin_chain.resolve_p_win_from_brains()` 治理冷启动池与 PnL 池仅按 live_brain_ids 过滤, 未过滤 vote_weight<=0 的 mute 脑 → 其历史 WR 入中位池 → "短板穿透" (weakest-link) 锚定 ensemble EV 下限。
+- **AR**: 推翻"0.5 是配置值"重诊 — vote_weight 双层语义 (config SSOT vs 治理惩罚派生) 已由 FIX-20260731-004 处理; 本 docket 对象是显式 0.0 (contract-muted), 非 0.5 惩罚。
+- **Root Cause**: L3 — 架构边界错误: Voting Boundary != EV Boundary。vote_weight<=0 的脑不能投票却仍贡献 EV 估计。
+- **Fix**: FIX-20260802-001 — `_has_voting_rights()` (fail-open, 镜像 count_valid_voters) 过滤双池 (PnL 池 + 治理冷启动池) + `_compute_live_sample_total`。新池 = median([0.41, 0.4948]) = 0.4524。IC 终局裁决: Voting Boundary == EV Boundary。
+- **ReB**: ZERO_VOTE_WR_POOL_PENETRATION
+- **Status**: **CLOSED** — committed 58b0194f
+
+- **Docket ID**: DQAF-20260802-003
+- **Date**: 2026-08-02
+- **Severity**: Sev 2
+- **Title**: btc_swing RR 坍缩 — 对称 SL=TP + spread 不等式 → 结构性负 EV
+- **Evidence**: live_launcher_20260802T021000Z.log btc_swing trio rr_ratio=0.9786 (对照 h1_v2=1.2428/h4=1.1977/m30=1.24 均>1.0); live_btc.yaml:413-423 sl/tp.base_atr_mult=1.5/1.5 (对称); BTC_Swing_V4.json label_contract sl=1.5/tp=1.5 (train-serve 对齐); dynamic_sl_tp.py:254-267 spread 不对称施加 (TP 收窄, SL 放宽)。
+- **DA**: RR=(d−spread)/(d+spread), spread_cost=200×0.01=$2, d=184.9 → (182.9)/(186.9)=0.9786 精确复现。盈亏平衡 WR=1/(1+0.9786)=50.5% > 所有脑 WR (V4 36-48.5%, ensemble 43.6%, CV 49.8%) → 结构性负 EV → 拦截正确。
+- **AR**: 推翻跨周期 ATR (M5/M5, FIX-20260706-027 已修); 推翻"滑点是主因" (spread=$2 是放大器, 对称 1.5/1.5 才是根); 推翻"train-serve 对齐所以没问题" (对齐 ≠ 盈利)。
+- **Root Cause**: L3 — 设计致错: 训练/服务合约对称 1.5/1.5 SL=TP 几何, 对 <50.5% 精度模型 (CV 49.8%) 数学无解; strategy_builder 默认 2.0/2.5 与真实配置 1.5/1.5 分叉掩盖设计 (RC-06 config-taxonomy)。
+- **Fix**: IC 终局裁决 D+C (维持拦截 + 战略退役, 零代码止血)。FIX-20260802-002 — builder 默认值对齐 SSOT (2.0/2.5→1.5/1.5, 行为中性)。V4 在 observation_hold 过期后 (8/3 23:59:59Z) 由治理依法降级。资本聚焦 H1_V2 (WR 66.7%) + Expected R 双塔。
+- **ReB**: SYMMETRIC_SL_TP_PLUS_SPREAD_INEQUALITY; EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG
+- **Status**: **CLOSED** — committed 58b0194f

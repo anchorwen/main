@@ -1461,3 +1461,33 @@
   - Source 3: [代码] core/features/feature_service.py (兜底路径) + core/runtime/live_cycle.py:3153/3330 + core/runtime/management_phase.py:1300-1313 (ack 更新) + core/execution/session_detector.py (动态探针)
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: FEED_STALL_MISCLASSIFIED_AS_MARKET_CLOSED, LIVENESS_ACK_CIRCULAR_DEPENDENCY
+
+### CCT-20260802-002
+- **Docket ID**: DQAF-20260802-002
+- **日期**: 2026-08-02
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: btc_swing trio 每周期 p_win 锚定 0.4141 (V4_LGB 治理 WR) + 负 EV 拦截; 94 笔 ensemble 结算 WR 43.6%, PnL -$16.46。
+  - [Layer 2 — 中间异常]: 治理冷启动池与 PnL 池按 live_brain_ids 过滤但不过滤 vote_weight; V4_LGB (probation, vote=0.0) 的 WR 0.4141 入中位池, 拖低 ensemble EV 至最弱脑水平。
+  - [Layer 3 — 根因]: L3 边界错误 — Voting Boundary != EV Boundary。vote_weight<=0 的 mute 脑 (observation-only) 不能投票却仍贡献 EV 估计。修复: `_has_voting_rights()` fail-open 过滤双池。
+- **证据引用**:
+  - Source 1: [代码] core/execution/pwin_chain.py resolve_p_win_from_brains (治理池/PnL 池过滤链)
+  - Source 2: [状态] data_btc/governance_state.json BTC_Swing_V4_LGB (vote_weight=0.0, WR=0.4141)
+  - Source 3: [日志] live_launcher_20260802T021000Z.log (rr=0.9786 + 负 EV 拦截) + scripts/_audit_pwin_routing_20260802.py
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ZERO_VOTE_WR_POOL_PENETRATION
+
+### CCT-20260802-003
+- **Docket ID**: DQAF-20260802-003
+- **日期**: 2026-08-02
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: btc_swing trio 每周期 rr_ratio=0.9786 (h1_v2/h4/m30 均>1.0), 交易被负 EV veto / min_economic_volume 拦截。
+  - [Layer 2 — 中间异常]: 对称 SL=TP (1.5/1.5) + spread 不对称 (TP 收窄 SL 放宽) → post-spread RR=(d−2)/(d+2)<1.0 恒成立 → 盈亏平衡 WR=50.5% > 所有脑 WR (36-49%)。
+  - [Layer 3 — 根因]: L3 设计致错 — 训练合约对称几何对亚 50% 精度模型 (CV 49.8%) 数学无解; builder 默认 2.0/2.5 掩盖真实 1.5/1.5 (config-taxonomy SSOT 分叉)。IC 裁决 D+C: 维持拦截 + 战略退役 + 聚焦 H1_V2/Expected R。
+- **证据引用**:
+  - Source 1: [配置] configs/live_btc.yaml:413-423 (sl/tp.base_atr_mult=1.5/1.5) + configs/brains_btc/BTC_Swing_V4.json label_contract (1.5/1.5 train-serve 对齐)
+  - Source 2: [代码] core/execution/dynamic_sl_tp.py:254-267 (spread 不对称) + core/runtime/strategy_builder.py:730-731 (默认 2.0/2.5 分叉)
+  - Source 3: [日志] live_launcher_20260802T021000Z.log (rr=0.9786 精确, 数学复现 (182.9)/(186.9))
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: SYMMETRIC_SL_TP_PLUS_SPREAD_INEQUALITY, EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG

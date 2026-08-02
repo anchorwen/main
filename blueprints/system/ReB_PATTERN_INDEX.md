@@ -1324,3 +1324,31 @@
 **Prevention**: (1) Update the liveness ack from a path that is NOT gated by the circuit breaker (e.g., the bridge/fetch layer itself, independent of phase sequencing). (2) Session-aware breaker: skip silence-trip during scheduled market close (weekend/daily break) — the ack staleness is expected there. (3) A stuck breaker should auto-expire (max cooldown) rather than require ack refresh.
 
 **Detection**: `circuit_breaker_bridge_silence_trip` followed by `circuit_breaker_reset` cycling >3× in one session while `_last_bridge_ack_time` stays frozen; management_only_mode persisting through scheduled-open hours.
+
+### ReB-20260802-ZERO_VOTE_WR_POOL_PENETRATION
+- **Pattern Signature**: `ZERO_VOTE_WR_POOL_PENETRATION`
+- **Date Cataloged**: 2026-08-02
+- **Source Docket**: DQAF-20260802-002
+- **Related**: FIX-20260802-001
+
+**Definition**: A brain stripped of voting rights (governance `vote_weight<=0` — muted / observation-only) still contributes its historical win rate to the strategy-line's EV/win-rate pool, anchoring the ensemble EV estimate to the weakest link ("短板穿透"). A brain that cannot issue buy/sell orders must not drag the EV estimate of the brains that can.
+
+**Root mechanism**: The p_win pool filter used `live_brain_ids` (status-based) but not the voting-weight contract. Vote weight and EV contribution were treated as independent axes when they are the same boundary: a muted brain is observation-only, so its historical WR is not a valid EV source.
+
+**Prevention**: (1) EV pools (rolling WR + governance cold-start + sample-significance) MUST filter by `vote_weight > 0` via a single shared helper (fail-open on missing/malformed weight, mirroring `brain_gates.count_valid_voters`). (2) Any new brain-aggregation layer (ensemble EV, consensus, sample counting) applies the same voting-boundary filter. (3) Diagnostic log on exclusion count for observability.
+
+**Detection**: cold_explore/rolling_wr p_win resolves exactly to a muted brain's governance WR; governance_state has `brain_states[*].vote_weight <= 0` while that brain's WR appears in the pool.
+
+### ReB-20260802-SYMMETRIC_SL_TP_PLUS_SPREAD_INEQUALITY
+- **Pattern Signature**: `SYMMETRIC_SL_TP_PLUS_SPREAD_INEQUALITY`
+- **Date Cataloged**: 2026-08-02
+- **Source Docket**: DQAF-20260802-003
+- **Related**: FIX-20260802-002, DQAF-20260709-003 (XAU TP collapse — same family, different mechanism)
+
+**Definition**: A symmetric SL=TP exit geometry (`base_sl_atr_mult == base_tp_atr_mult`) combined with spread asymmetry (TP narrowed, SL widened by spread_cost) makes the post-spread RR = (d−spread)/(d+spread) < 1.0 mathematically unavoidable. Breakeven WR = 1/(1+RR) rises above any realistic model accuracy, making the strategy line structurally unprofitable regardless of signal quality.
+
+**Root mechanism**: Training/serving labels are generated against symmetric barriers, so the model's achievable accuracy is calibrated to RR≈1.0. Spread then makes the effective payoff worse than the model was trained on. Unlike the XAU TP collapse (per-TF ATR mismatch, DQAF-20260709-003), this is a config/geometry design defect, not a computation bug.
+
+**Prevention**: (1) Any symmetric SL=TP contract must be audited for post-spread RR<1.0 (breakeven check: model accuracy must exceed 1/(1+RR)). (2) builder defaults MUST equal the serving yaml SSOT (`EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG`) so the real geometry is visible. (3) For sub-50% accuracy models, prefer asymmetric geometry (TP>SL) or strategic retirement over re-training with symmetric barriers.
+
+**Detection**: runtime `rr_ratio` resolves to a value < 1.0 whose decimal matches (d−spread)/(d+spread) for the configured SL/TP distances; breakeven WR 1/(1+rr) exceeds all constituent brains' win rates.
