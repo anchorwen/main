@@ -278,3 +278,23 @@ Sev 1-2 诊断请求若未提供 ECoL 证据包 → 必须输出 `🛑 [DQAF_HAL
 > **🔴 命令参考**: 所有验证命令(`verify.py --quick/--full/--stamp`, `pre_commit_mypy.py`, `validate_blueprints.py`, `analyze_deps.py`, `register_fix.py`) 的精确语法见:
 > `docs/verification_commands.md`
 > CLAUDE.md 仅保留行为约束(必须验证), 命令语法以该文件为准。
+
+---
+
+## [OPERATIONAL HYGIENE] Toolchain & Classifier Bypass Protocol (工具链防抖契约)
+
+> **目的**: 消除 auto-mode Shell 安全分类器 (模型端点过载抖动) 对任务执行的无效拦截。
+> **事实基线**: 分类器只卡"经 Bash 改变系统状态的可变操作"; 原生工具 Read/Write/Edit/Grep/Glob
+> 不经安全分类器 → 免疫抖动; 纯只读 Bash 命令在抖动期仍放行。
+
+1. **API First (原生工具优先)** — 任何文件的查阅/创建/修改, 强制使用原生 `Read/Write/Edit/Grep/Glob` 工具。
+   禁止用 Bash 容器执行 `cat/echo/sed` **作为文件读写手段**。
+2. **Read-Only Bash (只读命令免拦截)** — `git status` / `git diff` / `git log` / `python --version`
+   等纯只读探测命令可随时执行, 分类器抖动时仍放行。
+3. **Atomic Commit (原子化收口)** — 状态变更 (`git add` / `git commit` / `git push`) 压缩至任务收口阶段
+   单次成型。严禁"改一处提一次"的碎步操作。
+4. **Air-gap Override (人机接管)** — 当 `git commit` 被分类器持续 (>2分钟) 拦截时, 停止重试。
+   先以只读命令确认暂存区 (`git status` + `git diff --cached`), 输出目标命令,
+   由人类开发者在本地终端手动接管执行。
+5. **No Complex Bash (禁复杂长链)** — 严禁为绕过拦截编写 `&&`/`|` 拼接的复杂长链 Bash。
+   复杂命令提高启发式拦截率且难排障。多步逻辑 → 拆为原子命令或写入脚本文件。
