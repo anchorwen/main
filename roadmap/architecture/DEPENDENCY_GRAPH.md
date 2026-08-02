@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-02T06:40:15Z
+> **自动生成**: 2026-08-02T09:15:59Z
 
 ## Package-Level Dependencies
 
@@ -574,6 +574,8 @@
 - `_analyze_xau_loss_exits.py` → (无内部依赖)
 - `_assess_position_sizing.py` → (无内部依赖)
 - `_audit_btc_brains_full.py` → (无内部依赖)
+- `_audit_pwin_routing_20260802.py` → (无内部依赖)
+- `_audit_v4_attribution_20260802.py` → (无内部依赖)
 - `_audit_xau_brains_20260730.py` → (无内部依赖)
 - `_btc_audit_20260730_v2.py` → (无内部依赖)
 - `_calibrate_thresholds.py` → (无内部依赖)

@@ -32,24 +32,65 @@ logger = logging.getLogger(__name__)
 # ── resolve_p_win_from_brains ──────────────────────────────────────────────
 
 
+def _has_voting_rights(
+    brain_id: str,
+    gov_brain_states: dict[str, Any] | None,
+) -> bool:
+    """Whether a brain retains voting rights (vote_weight > 0).
+
+    **DQAF-20260802-002 / IC Ruling — Voting Boundary == EV Boundary:**
+    A brain stripped of voting rights (``vote_weight <= 0`` — muted or
+    observation-only, e.g. BTC_Swing_V4_LGB probation vote_weight=0.0) must
+    not contribute its win rate to the strategy's p_win pool.  It cannot
+    issue buy/sell orders, so its historical WR must not anchor (or drag)
+    the ensemble EV estimate — the "短板穿透" (weakest-link penetration)
+    mechanism the IC ordered removed.
+
+    Mirrors ``brain_gates.count_valid_voters`` default semantics:
+      - missing ``vote_weight`` → defaults to 1.0 (voting) — never silently
+        drop brains whose weight is absent (fail-open on malformed state).
+      - explicit ``vote_weight <= 0`` → excluded.
+    """
+    if not gov_brain_states:
+        return True
+    _bs = gov_brain_states.get(str(brain_id), {})
+    if not isinstance(_bs, dict):
+        return True
+    _vw = _bs.get("vote_weight")
+    if _vw is None:
+        return True  # registry default vote_weight=1.0
+    try:
+        return float(_vw) > 0.0
+    except (TypeError, ValueError):
+        return True  # malformed weight — fail-open, do not drop the brain
+
+
 def _compute_live_sample_total(
     brains: list[Any],
     pnl_store: Any | None,
     live_brain_ids: set[str] | None = None,
+    governance_state: dict[str, Any] | None = None,
 ) -> int:
     """Sum sample_count across qualifying LIVE brains from the PnL store.
 
     Uses the same filter as resolve_p_win_from_brains():
-    brain_id must be in *live_brain_ids*, sample_count >= 10.
+    brain_id must be in *live_brain_ids*, sample_count >= 10, and the brain
+    must retain voting rights (DQAF-20260802-002 — a zero-vote brain's
+    samples must not inflate the EV estimate's statistical significance).
     """
     if pnl_store is None:
         return 0
+    _gov_brain_states = (
+        governance_state.get("brain_states", {}) if isinstance(governance_state, dict) else {}
+    )
     total = 0
     for b in brains:
         brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
         if not brain_id:
             continue
         if live_brain_ids is not None and brain_id not in live_brain_ids:
+            continue
+        if not _has_voting_rights(brain_id, _gov_brain_states):
             continue
         try:
             m = pnl_store.get_metrics(str(brain_id), window=100)
@@ -108,6 +149,15 @@ def resolve_p_win_from_brains(
     Bayesian priority: prior defense first; posterior correction only after
     statistical significance is established.
 
+    DQAF-20260802-002 (IC Ruling): **Voting Boundary == EV Boundary**.
+    Brains with governance ``vote_weight <= 0`` (muted / observation-only —
+    e.g. BTC_Swing_V4_LGB probation vote_weight=0.0) are excluded from the
+    win-rate pool.  A brain that cannot vote must not anchor or drag the
+    ensemble's EV estimate via its historical WR (the "短板穿透"
+    weakest-link penetration the IC ordered removed).  Applies to BOTH the
+    PnL store pool and the governance cold-start pool.  Missing vote_weight
+    defaults to voting (registry default 1.0) — fail-open on absent state.
+
     Trap 3 fix: Static historical win rate is a fixed multiplier in disguise.
     Rolling PnL win rate is dynamic and reflects current model performance.
     Alpha decays, regimes shift — all-time WR drags stale history into today.
@@ -146,7 +196,11 @@ def resolve_p_win_from_brains(
 
     # ── DQAF-20260622-059 (P0-1): governance-gated brain filter ──
     _filtered_out: int = 0
+    _zero_vote_out: int = 0
     valid_rates: list[float] = []
+    _gov_brain_states = (
+        governance_state.get("brain_states", {}) if isinstance(governance_state, dict) else {}
+    )
     if not prefer_governance and pnl_store is not None:
         for b in brains:
             brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
@@ -155,6 +209,10 @@ def resolve_p_win_from_brains(
             # ── DQAF-20260622-059: LIVE-only gate ──
             if live_brain_ids is not None and brain_id not in live_brain_ids:
                 _filtered_out += 1
+                continue
+            # ── DQAF-20260802-002 / IC Ruling: Voting Boundary == EV Boundary ──
+            if not _has_voting_rights(brain_id, _gov_brain_states):
+                _zero_vote_out += 1
                 continue
             try:
                 m = pnl_store.get_metrics(str(brain_id), window=100)
@@ -188,6 +246,14 @@ def resolve_p_win_from_brains(
             len(valid_rates),
         )
 
+    if _zero_vote_out > 0:
+        logger.info(
+            "[pwin_chain:DQAF-20260802-002] Zero-vote brain(s) excluded from p_win "
+            "pool: %d (vote_weight <= 0 — muted/observation-only; "
+            "Voting Boundary == EV Boundary).",
+            _zero_vote_out,
+        )
+
     if valid_rates:
         _median = float(statistics.median(valid_rates))
         logger.debug(
@@ -205,15 +271,16 @@ def resolve_p_win_from_brains(
     #   PnL store empty → p_win=0.40 → all trades rejected → PnL stays empty.
     if governance_state is not None:
         _gov_rates: list[float] = []
-        _gov_brain_states = (
-            governance_state.get("brain_states", {}) if isinstance(governance_state, dict) else {}
-        )
         for b in brains:
             brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
             if not brain_id:
                 continue
             # DQAF-059: only LIVE brains
             if live_brain_ids is not None and brain_id not in live_brain_ids:
+                continue
+            # ── DQAF-20260802-002 / IC Ruling: zero-vote brains excluded ──
+            if not _has_voting_rights(brain_id, _gov_brain_states):
+                _zero_vote_out += 1
                 continue
             _bs = _gov_brain_states.get(str(brain_id), {})
             if not isinstance(_bs, dict):
@@ -535,7 +602,7 @@ def resolve_p_win(
         # brain_confidence to smooth the transition.
         # Terminal Epoch analysis: brain_confidence WR=72.4% (well-calibrated)
         # vs rolling_wr WR=41.2% (small-N noise, N≈20 per strategy).
-        _total_n = _compute_live_sample_total(brains, pnl_store, live_brain_ids)
+        _total_n = _compute_live_sample_total(brains, pnl_store, live_brain_ids, governance_state)
         if _total_n < 30:
             logger.warning(
                 "[pwin_chain:SMALL_N_DEGRADE] total_n=%d < 30 — "

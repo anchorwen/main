@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-02T06:40:15Z
-> **扫描模块数**: 765
+> **自动生成**: 2026-08-02T09:15:59Z
+> **扫描模块数**: 767
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -264,7 +264,7 @@
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
 | `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2381 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
-| `pwin_chain.py` | ✅ active | PWinResolution | 5 | 645 | — | |
+| `pwin_chain.py` | ✅ active | PWinResolution | 6 | 712 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 589 | — | |
@@ -556,7 +556,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 5 | 1259 | — | |
+| `strategy_builder.py` | ✅ active | — | 5 | 1263 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 48 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 5 | 1373 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
@@ -660,6 +660,8 @@
 | `_analyze_xau_loss_exits.py` | ✅ active | — | 6 | 419 | — | |
 | `_assess_position_sizing.py` | ✅ active | — | 6 | 339 | — | |
 | `_audit_btc_brains_full.py` | ✅ active | — | 9 | 502 | — | |
+| `_audit_pwin_routing_20260802.py` | ✅ active | — | 1 | 131 | — | |
+| `_audit_v4_attribution_20260802.py` | ✅ active | — | 2 | 197 | — | |
 | `_audit_xau_brains_20260730.py` | ✅ active | — | 2 | 236 | — | |
 | `_btc_audit_20260730_v2.py` | ✅ active | — | 2 | 352 | — | |
 | `_calibrate_thresholds.py` | 📄 config | — | 0 | 133 | — | |

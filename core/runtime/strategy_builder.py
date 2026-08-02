@@ -727,8 +727,12 @@ def build_strategy_lines(
                 brain_types=BTC_SWING_GROUP["brain_types"],
                 base_volume=_vol_cfg("btc_swing"),
                 max_volume=_cfg("btc_swing", "max_volume", 0.05),
-                base_sl_atr_mult=_cfg("btc_swing", "sl", {}).get("base_atr_mult", 2.0),
-                base_tp_atr_mult=_cfg("btc_swing", "tp", {}).get("base_atr_mult", 2.5),
+                # DQAF-20260802-003 (R2 / IC ruling): align builder DEFAULTS with the
+                # SSOT — live_btc.yaml btc_swing overrides both to 1.5×ATR (symmetric).
+                # The old 2.0/2.5 defaults masked the symmetric SL=TP design and implied
+                # a nonexistent RR 1.25 (EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG).
+                base_sl_atr_mult=_cfg("btc_swing", "sl", {}).get("base_atr_mult", 1.5),
+                base_tp_atr_mult=_cfg("btc_swing", "tp", {}).get("base_atr_mult", 1.5),
                 hard_sl_ratio=_cfg("btc_swing", "sl", {}).get("hard_sl_ratio", 1.5),
                 min_sl_distance=_cfg("btc_swing", "sl", {}).get("min_sl_distance", 200.0),
                 min_rr_ratio=_cfg("btc_swing", "sl", {}).get("min_rr_ratio", 0.85),

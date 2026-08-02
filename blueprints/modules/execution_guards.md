@@ -49,6 +49,12 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260802-001 — Zero-Vote Brain Exclusion from p_win Pool (DQAF-20260802-002 / IC Ruling) (2026-08-02)
+
+**Root Cause**: RC-05 — boundary-error. A brain stripped of voting rights (governance `vote_weight<=0`, e.g. BTC_Swing_V4_LGB probation vote=0.0, WR=0.4141) still contributed its historical WR to the strategy-line p_win median pool — the "短板穿透" (weakest-link penetration) mechanism anchoring ensemble EV to the muted brain's floor.
+
+**Change**: `pwin_chain.py` — new `_has_voting_rights()` helper (fail-open: missing/malformed `vote_weight` defaults to voting, mirroring `brain_gates.count_valid_voters`). Applied to BOTH the PnL-store rolling pool and the governance cold-start pool + `_compute_live_sample_total()`. Diagnostic log emitted when zero-vote brain(s) are excluded. IC Ruling: **Voting Boundary == EV Boundary** — a brain that cannot vote must not pollute ensemble EV.
+
 ### FIX-20260722-002 (P2) — p_win Small-N Degradation (DQAF-20260722-002) (2026-07-22)
 
 **Root Cause**: L2 — `rolling_wr` source produces p_win from PnL store at any sample size. When N<30, the rolling WR is a random walk (law of large numbers not in effect). Terminal Epoch analysis: rolling_wr WR=41.2% vs brain_confidence WR=72.4%.

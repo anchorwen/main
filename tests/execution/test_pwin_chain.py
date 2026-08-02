@@ -267,6 +267,100 @@ def test_cold_explore_not_degraded():
     assert not res.p_win_degraded
 
 
+# ── DQAF-20260802-002: Zero-vote brain exclusion ─────────────────────────────
+# IC Ruling: Voting Boundary == EV Boundary.  A brain with vote_weight=0
+# (muted / observation-only) must not contribute its WR to the p_win pool.
+
+
+def test_cold_explore_governance_excludes_zero_vote_brain():
+    """Zero-vote brain (V4_LGB vote=0.0) must NOT anchor the cold_explore pool.
+
+    TRIO pool median([0.41, 0.4948, 0.4141]) = 0.4141 (the zero-vote floor).
+    After exclusion: median([0.41, 0.4948]) = 0.4524.
+    """
+    gov = {
+        "brain_states": {
+            "BTC_Swing_M5_Binary": {
+                "status": "probation",
+                "vote_weight": 1.0,
+                "performance_metrics": {"win_rate": 0.4948, "total_trades": 97},
+            },
+            "BTC_Swing_V4": {
+                "status": "live",
+                "vote_weight": 1.0,
+                "performance_metrics": {"win_rate": 0.41, "total_trades": 100},
+            },
+            "BTC_Swing_V4_LGB": {
+                "status": "probation",
+                "vote_weight": 0.0,  # ZERO-VOTE — muted / observation-only
+                "performance_metrics": {"win_rate": 0.4141, "total_trades": 99},
+            },
+        }
+    }
+    kwargs = _default_kwargs()
+    kwargs.update(
+        {
+            "is_cold_explore": True,
+            "strategy_name": "btc_swing",
+            "brains": [
+                {"brain_id": "BTC_Swing_M5_Binary"},
+                {"brain_id": "BTC_Swing_V4"},
+                {"brain_id": "BTC_Swing_V4_LGB"},
+            ],
+            "live_brain_ids": {"BTC_Swing_M5_Binary", "BTC_Swing_V4", "BTC_Swing_V4_LGB"},
+            "governance_state": gov,
+        }
+    )
+
+    res = resolve_p_win(**kwargs)
+
+    assert res.p_win_source == "cold_explore_governance"
+    assert res.p_win == 0.4524  # median of VOTING brains only — NOT 0.4141
+    assert res.p_win != 0.4141
+
+
+def test_rolling_wr_pool_excludes_zero_vote_brain():
+    """Zero-vote brain excluded from the rolling_wr pool AND sample significance.
+
+    If V4_LGB's 50 samples entered, total_n=50 → rolling_wr (WR=0.4141).
+    Excluded: total_n=0 → brain_confidence_small_n override (0.51).  A muted
+    brain's WR must never be a valid EV estimate source.
+    """
+    mock_store = MagicMock()
+    mock_metric = MagicMock()
+    mock_metric.sample_count = 50
+    mock_metric.win_rate = 0.4141
+    mock_store.get_metrics.return_value = mock_metric
+
+    gov = {
+        "brain_states": {
+            "BTC_Swing_V4_LGB": {
+                "status": "probation",
+                "vote_weight": 0.0,
+                "performance_metrics": {"win_rate": 0.4141, "total_trades": 99},
+            },
+        }
+    }
+    kwargs = _default_kwargs()
+    kwargs.update(
+        {
+            "is_cold_explore": False,
+            "strategy_name": "btc_swing",
+            "pnl_store": mock_store,
+            "brains": [{"brain_id": "BTC_Swing_V4_LGB"}],
+            "live_brain_ids": {"BTC_Swing_V4_LGB"},
+            "governance_state": gov,
+            "meta_filter": MagicMock(),
+            "confidence": 0.55,
+        }
+    )
+
+    res = resolve_p_win(**kwargs)
+
+    assert res.p_win_source == "brain_confidence_small_n"  # V4_LGB samples excluded
+    assert res.p_win == 0.51  # 0.40 + 0.55 * 0.20 — zero-vote WR did NOT enter
+
+
 # ── Type validation ──────────────────────────────────────────────────────────
 
 
