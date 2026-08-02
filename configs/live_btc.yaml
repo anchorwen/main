@@ -160,6 +160,13 @@ brains:
   #   Shadow observe — signals recorded, not executed. DQAF-20260706-015.
   - enabled: true
     path: configs/brains_btc/BTC_Swing_M5_Binary.json
+  # ── V4_LGB RETIRED (DQAF-20260802-002 R1): vote_weight=0.0 contract-muted brain.
+  #   Excluded from p_win pool (Voting Boundary == EV Boundary).  btc_swing line
+  #   retired via 方案X (DQAF-20260802-003, IC D+C ruling) — this brain follows
+  #   the M5 stack into retirement.  enabled:false = explicit registry isolation
+  #   (was never in allowlist → default-participates; now declared retired).
+  - enabled: false
+    path: configs/brains_btc/BTC_Swing_V4_LGB.json
   # ── V4 Expected R Two-Tower M15 (2026-08-01, DQAF-20260731-004) ──
   # SHORT tower ρ=0.0596 (vote_weight=1.0, full signal authority).
   # LONG tower ρ=0.0445 (vote_weight=0.0, observation only — 30d OOS blind test).
@@ -393,7 +400,12 @@ strategy_lines:
     #   recent 100 golden_master records. Manifold shift self-corrected. (2) Portfolio-
     #   NettingGate active (swallow mode, 0.20 threshold) provides systemic protection.
     #   (3) All 3 brains currently agree on LONG — no hedging.
-    enabled: true
+    # ── 方案X 战略退役 (2026-08-02, DQAF-20260802-003 / IC D+C 裁决) ──
+    # btc_swing 对称 1.5/1.5 SL=TP + spread 不对称 → post-spread RR=0.9786,
+    # 盈亏平衡 50.5% > V4 CV 49.8% = 结构性负 EV. EV veto 已拦截全部信号 (零新亏).
+    # 8/3 observation_hold 过期后治理自动降级 V4; 本线 disabled 使 M5 彻底让位,
+    # 资本聚焦 H1_V2 (WR 66.7%) + Expected R 双塔. 重启后生效.
+    enabled: false
     exit:
       confidence_decay_exit: true
       flip_exit_enabled: true
