@@ -177,3 +177,15 @@
 - **Fix**: IC 终局裁决 D+C (维持拦截 + 战略退役, 零代码止血)。FIX-20260802-002 — builder 默认值对齐 SSOT (2.0/2.5→1.5/1.5, 行为中性)。V4 在 observation_hold 过期后 (8/3 23:59:59Z) 由治理依法降级。资本聚焦 H1_V2 (WR 66.7%) + Expected R 双塔。
 - **ReB**: SYMMETRIC_SL_TP_PLUS_SPREAD_INEQUALITY; EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG
 - **Status**: **CLOSED** — committed 58b0194f
+
+- **Docket ID**: DQAF-20260802-004
+- **Date**: 2026-08-02
+- **Severity**: Sev 2
+- **Title**: bridge_silence 假熔断振荡 — 生命周期探针仅在降级/管理分支盖章, 健康空转路径永不刷新
+- **Evidence**: live_cycle.py:382 (L382 契约 "Unix ts of last successful broker.fetch_prices()") / L1207-1208 (一次性初始化) / L1216-1236 (熔断判定) / L1310 (仅熔断分支盖章, FIX-20260608-006); management_phase.py:1305-1306/1311-1312 (持仓门控盖章, live_cycle.py:2708 门控); circuit_breaker_reset.py:65-67 (复位要求 ACK 新鲜); 今日 11:57 全新重启后实证 — BTC 熔断 4 次 (12:19:59/12:54:59/13:29:59/14:09:59, silence 1347-1500s) + XAU 6 次 (12:09:59→14:02:15, ~735s); 周五 07-31 交易时段 20 次; 熔断期间 mt5_bridge_health 心跳新鲜 (14:10:02) + 实时价持续。
+- **DA**: 正常路径 broker.fetch_prices() (live_cycle.py:2020) + _mid_and_prices 回退 (L2027-2028) 每周期成功但从不盖章 ACK → _bridge_silence 每周期 +300s 单调增长越 600s → consecutive_degraded>=3 → 假熔断 (management_only) → 熔断分支才盖章 (L1310) → 600s 冷却复位 → 正常路径 ACK 再次冻结 → 无限振荡 (BTC 每 ~35min / XAU 每 ~22.5min, 实盘时间 ~30% 被压制)。
+- **AR**: 推翻 H1 "桥真死" (心跳新鲜 + 实时价 100% 假警报); H2 "仅持仓门控" 部分成立但周五 20 次交易时段实证振荡照常; 推翻 H3 "011 已修" (FIX-20260801-013 是 StaleFeatureException 防御响应, 未触碰 ACK 接线 — 011 记录熔断态自我维持半环, 本案卷为健康态从不盖章基座半环); 部分推翻 H4 "假熔断是安全边际" (熔断分支 Fail-Safe Exit Gateway L1273-1330 可市价强平在持仓位, 假警报实际降低安全性)。
+- **Root Cause**: L2 — 接线缺陷: 探针被文档化为 fetch_prices 成功即盖章 (L382), 但 4 处 fetch_prices 调用点仅受门控的 2 处盖章, 且全部藏在降级分支后 (RC-06 contract-violation)。FIX-20260608-006 只补熔断分支属不完整修复。
+- **Fix**: FIX-20260802-004 (L2 接线, 2 处) — 正常路径 broker.fetch_prices() 成功即盖章 (FaultTolerantContext 异常吞掉不盖章 → 真桥死检测保留) + L3 _mid_and_prices() 回退成功 (mid>0) 即盖章, 镜像 management_phase:1306/1312 模式。验证: verify.py --quick 全 PASS + runtime 定向 331 passed + 熔断器 8 passed (--full pytest 环境性超时, -x 零失败, 如实记录)。
+- **ReB**: LIVENESS_PROXY_STAMPED_ONLY_IN_DEGRADED_PATHS (互补 ReB-20260801-LIVENESS_ACK_CIRCULAR_DEPENDENCY — 本案卷为其基座半环)
+- **Status**: **CLOSED** — committed 4fada06b

@@ -1352,3 +1352,17 @@
 **Prevention**: (1) Any symmetric SL=TP contract must be audited for post-spread RR<1.0 (breakeven check: model accuracy must exceed 1/(1+RR)). (2) builder defaults MUST equal the serving yaml SSOT (`EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG`) so the real geometry is visible. (3) For sub-50% accuracy models, prefer asymmetric geometry (TP>SL) or strategic retirement over re-training with symmetric barriers.
 
 **Detection**: runtime `rr_ratio` resolves to a value < 1.0 whose decimal matches (d−spread)/(d+spread) for the configured SL/TP distances; breakeven WR 1/(1+rr) exceeds all constituent brains' win rates.
+
+### ReB-20260802-LIVENESS_PROXY_STAMPED_ONLY_IN_DEGRADED_PATHS
+- **Pattern Signature**: `LIVENESS_PROXY_STAMPED_ONLY_IN_DEGRADED_PATHS`
+- **Date Cataloged**: 2026-08-02
+- **Source Docket**: DQAF-20260802-004
+- **Related**: FIX-20260802-004, FIX-20260608-006, ReB-20260801-LIVENESS_ACK_CIRCULAR_DEPENDENCY (base half-ring — fixing this docket also resolves 011's self-sustaining loop)
+
+**Definition**: A liveness/heartbeat timestamp that is documented as "last successful <probe>" (live_cycle.py:382: `_last_bridge_ack_time` = "Unix ts of last successful broker.fetch_prices()") is only ever stamped inside degraded or management-gated branches (live_cycle.py:1310 tripped-branch, management_phase.py:1306/1312 position-gated). The healthy idle normal path — the state a live system occupies most often (0 open positions) — calls the probe every cycle and succeeds, but never refreshes the ACK. The silence counter grows monotonically (~300s/M5-cycle) until it crosses `max_bridge_silence_seconds` (600s) → false `bridge_silence` trip → management_only → the tripped branch finally stamps → cooldown reset → normal path freezes again → infinite oscillation (BTC every ~35min / XAU every ~22.5min; 20 trips in Friday trading hours).
+
+**Root mechanism**: The probe's write sites are placed at the *failure* endpoints rather than the *success* path of the probe's own contract. The documented semantics ("last successful fetch") and the actual semantics ("last time a degraded branch ran") diverge, so the probe measures degraded-branch activity, not liveness. This is the complement of ReB-20260801-LIVENESS_ACK_CIRCULAR_DEPENDENCY (which catalogs the stuck-in-trip half of the same field's failure).
+
+**Prevention**: (1) Stamp the liveness ACK at the probe's success path itself (the normal-path `broker.fetch_prices()` success and the L3 `_mid_and_prices()` fallback success), mirroring the management_phase pattern — success-only, exception paths leave the ACK stale so true bridge-death detection is preserved. (2) After wiring any heartbeat/ack field, audit ALL call sites of the probe it documents against the field's stated contract — a probe with write sites gated behind the very condition it monitors is a smell. (3) Session-aware silence-trip exemption for scheduled market close (deferred).
+
+**Detection**: `circuit_breaker_bridge_silence_trip` cycling with near-constant cadence (~35min for M5 cycles) while `mt5_bridge_health.json` heartbeat stays fresh and live prices keep flowing; trip count spikes during trading hours with 0 positions open.

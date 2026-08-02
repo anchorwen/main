@@ -1491,3 +1491,18 @@
   - Source 3: [日志] live_launcher_20260802T021000Z.log (rr=0.9786 精确, 数学复现 (182.9)/(186.9))
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: SYMMETRIC_SL_TP_PLUS_SPREAD_INEQUALITY, EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG
+
+### CCT-20260802-004
+- **Docket ID**: DQAF-20260802-004
+- **日期**: 2026-08-02
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: circuit_breaker_bridge_silence_trip 振荡 — BTC 每 ~35min (12:19:59/12:54:59/13:29:59/14:09:59, silence 1347-1500s) / XAU 每 ~22.5min (12:09:59→14:02:15 共 6 次, ~735s); 周五 07-31 交易时段 20 次; management_only 压制 ~10min (实盘 ~30% 时间)。
+  - [Layer 2 — 中间异常]: 正常路径 ACK 冻结 — _bridge_silence = now − _last_bridge_ack_time 每周期 +300s (M5 周期) 单调增长越 600s 阈值 (max_bridge_silence_seconds) → _consecutive_degraded_cycles>=3 → 熔断 (live_cycle.py:1216-1236); 熔断分支才盖章 (L1310) → 600s 冷却复位 (circuit_breaker_reset.py:65-67) → 正常路径 ACK 再次冻结 → 无限振荡。桥全程存活 (mt5_bridge_health 心跳新鲜 + 实时价持续)。
+  - [Layer 3 — 根因]: L2 接线缺陷 — _last_bridge_ack_time 被文档化为 "last successful broker.fetch_prices()" (L382), 但 4 处 fetch_prices 调用点 (live_cycle.py:2020 正常路径 + live_order_sender.py:215 + execution_queue.py:248 + management_phase.py:1305) 中仅 2 处盖章且全部门控于降级分支 (live_cycle.py:1310 熔断分支 / management_phase.py:1306/1312 持仓门控) — 健康空转路径 (0 持仓, 交易系统最常处状态) 永不刷新 → 探针实际测量"上次进降级分支的时间"而非"上次成功取价"。FIX-20260608-006 仅补熔断分支属不完整修复。修复 FIX-20260802-004: 正常路径 fetch_prices 成功 + L3 _mid_and_prices 回退成功 (mid>0) 即盖章, 镜像 management_phase 模式。
+- **证据引用**:
+  - Source 1: [代码] core/runtime/live_cycle.py:382/1207-1208/1216-1236/1310/2020/2027-2028/2708 (契约 + 判定 + 门控 + 未盖章点)
+  - Source 2: [代码] core/runtime/management_phase.py:1305-1306/1311-1312 (持仓门控盖章基准) + core/runtime/circuit_breaker_reset.py:65-67 (复位门控)
+  - Source 3: [日志] data_btc/logs/intent_20260802T115729Z.log (BTC/XAU 熔断原始事件行 + silence 值) + data_btc/state/execution_state.json (BTC tripped 14:09:59Z)
+- **是否被推翻**: 否 (AR H1-H4 已全部处理: H1 桥死=推翻, H2 持仓门控=部分成立, H3 011 已修=推翻, H4 假熔断可接受=推翻)
+- **关联 ReB Pattern**: LIVENESS_PROXY_STAMPED_ONLY_IN_DEGRADED_PATHS (互补 ReB-20260801-LIVENESS_ACK_CIRCULAR_DEPENDENCY)
