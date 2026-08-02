@@ -1296,3 +1296,31 @@
 **Prevention**: (1) ONE Auditor (brain_performance SSOT) + ONE Executor (`GovernanceRuleEngine.execute_transitions`) — Iron Law #14. (2) All deployment paths (container + bare-metal launcher + daily_ops) delegate to the shared `governance_evaluator.evaluate_governance_state()`. (3) Direct `GovernanceService.transition()` from runtime/scheduler code is forbidden except via the executor; grep `governance.transition(` outside governance_evaluator/rule_engine to catch stragglers.
 
 **Detection**: `grep -rn "\.transition(" core/ scripts/ --include="*.py"` filtered to non-rule-engine callers; governance transition_log showing rapid alternation for a single brain is the runtime signature.
+
+### ReB-20260801-FEED_STALL_MISCLASSIFIED_AS_MARKET_CLOSED
+- **Pattern Signature**: `FEED_STALL_MISCLASSIFIED_AS_MARKET_CLOSED`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-011
+- **Related**: FIX-20260801-013, FIX-20260629-172, FIX-20260601-042
+
+**Definition**: A dynamic market-open detector (tick-timestamp probe) classifies a mid-session data-feed stall as "market closed" because both present as zero fresh ticks. The system then degrades silently (synthetic bars, session-off gate, all-zero feature guard) instead of alerting on the real fault. XAU 2026-08-01: MT5 feed died at 00:41:25Z during an open trading day; the probe returned risk_tier=off for 20 hours; bar sync ran 810/811 synthetic; feature store froze; bridge_silence tripped the circuit breaker into management_only for the whole session.
+
+**Root mechanism**: The probe measures *physical tick activity* but collapses two distinct states — "market legitimately closed" (benign, weekend/scheduled close) and "feed dead mid-session" (fault) — into the single `risk_tier=off` signal, with no cross-check against wall-clock market schedule.
+
+**Prevention**: (1) Distinguish the two states: session-off should be cross-validated against the calendar schedule (weekday+hour) before classifying as closed; a stall during scheduled-open hours must raise a distinct FEED_STALL alert. (2) Feature freshness must be a hard inference gate (StaleFeatureException, 3-bar threshold) rather than silent last-known fallback. (3) Do not let the feature-write exception handler swallow errors (`except...pass` at live_cycle.py:3330) — log and alert.
+
+**Detection**: `bar_sync_synthetic` ratio → 1.0 during scheduled market-open hours; `BAR_SESSION_OFF` events during weekday open hours; feature store last event_time freezing while intent loop cycles continue.
+
+### ReB-20260801-LIVENESS_ACK_CIRCULAR_DEPENDENCY
+- **Pattern Signature**: `LIVENESS_ACK_CIRCULAR_DEPENDENCY`
+- **Date Cataloged**: 2026-08-01
+- **Source Docket**: DQAF-20260801-011
+- **Related**: FIX-20260801-013, FIX-20260608-008
+
+**Definition**: A liveness/heartbeat timestamp is updated inside the very phase the circuit breaker it feeds is allowed to skip. `_last_bridge_ack_time` is only refreshed by `management_phase` (fetch_prices success / mid>0); when bridge_silence trips the breaker, management_phase is bypassed → the ack never refreshes → the breaker cannot reset → the system is stuck in management_only until an unrelated path happens to refresh the ack. Observed as 37 trips + 36 resets across the 08-01 XAU session.
+
+**Root mechanism**: The ack producer and the ack consumer share a single downstream control-flow gate, so the failure the consumer guards against also suppresses the producer — a self-sustaining trip state.
+
+**Prevention**: (1) Update the liveness ack from a path that is NOT gated by the circuit breaker (e.g., the bridge/fetch layer itself, independent of phase sequencing). (2) Session-aware breaker: skip silence-trip during scheduled market close (weekend/daily break) — the ack staleness is expected there. (3) A stuck breaker should auto-expire (max cooldown) rather than require ack refresh.
+
+**Detection**: `circuit_breaker_bridge_silence_trip` followed by `circuit_breaker_reset` cycling >3× in one session while `_last_bridge_ack_time` stays frozen; management_only_mode persisting through scheduled-open hours.

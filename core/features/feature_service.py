@@ -8,6 +8,10 @@ import numpy as np
 _logger = logging.getLogger(__name__)
 
 from core.contracts.ids import new_snapshot_id
+from core.features.stale_feature_guard import (
+    feature_max_age_seconds,
+    validate_feature_timestamp,
+)
 
 # Schemas that the current runtime environment can compute.
 # Updated when new feature computer implementations are added.
@@ -75,6 +79,12 @@ class FeatureService:
         self._store_schema_name = store_schema_name
         self._store_timeframe = store_timeframe
         self._last_known_vector: np.ndarray | None = None
+        # FIX-20260801-013 (DQAF-20260801-011): timestamp of the last feature
+        # vector served.  Used by the stale-feature inference guard — when
+        # fresh computation fails and the last served vector is older than
+        # 3 bars, inference is rejected instead of silently degrading.
+        self._last_feature_ts: float | None = None
+        self._last_feature_source: str = ""
 
     def build_snapshot(self, trigger: dict):
         from apps.engine.runtime_loop import SimpleFeatureSnapshot
@@ -94,6 +104,8 @@ class FeatureService:
         trigger: dict | None = None,
         schema_name: str | None = None,
         timeout_seconds: float = 3.0,
+        *,
+        stale_guard: bool = False,
     ) -> np.ndarray:
         """Compute the normalized feature vector via tiered resolution.
 
@@ -111,6 +123,14 @@ class FeatureService:
 
         Tier 3 — Zero-vector stub:
           Returns np.zeros(n_features) as a safe no-op.
+
+        *stale_guard* (FIX-20260801-013): when True, the fallback paths
+        (timeout / compute error / zero-vector) refuse to serve a feature
+        vector whose last known timestamp is older than 3 bars of the store
+        timeframe.  A :class:`StaleFeatureException` is raised instead of
+        silently degrading — the caller converts it to management-only mode.
+        Live entry-path callers pass True; position-management and non-live
+        callers keep the default False so they are never blocked.
         """
         schema = schema_name or self._store_schema_name
         n_features = _schema_dimension(schema)
@@ -172,6 +192,20 @@ class FeatureService:
                             )
                             _stale = True
                     if not _stale:
+                        # FIX-20260801-013: record the served cache timestamp
+                        # for the stale-feature inference guard.
+                        if feature_ts is not None:
+                            if hasattr(feature_ts, "timestamp"):
+                                _cache_ft = feature_ts
+                                if _cache_ft.tzinfo is None:
+                                    _cache_ft = _cache_ft.replace(tzinfo=UTC)
+                                self._last_feature_ts = _cache_ft.timestamp()
+                            else:
+                                try:
+                                    self._last_feature_ts = float(feature_ts)
+                                except (TypeError, ValueError):
+                                    self._last_feature_ts = None
+                            self._last_feature_source = "cache"
                         if self._adapter is not None:
                             vec = self._adapter.build_model_input(record.values)[0]
                             self._last_known_vector = np.asarray(vec, dtype=np.float32).copy()
@@ -233,24 +267,29 @@ class FeatureService:
                     ),
                     flush=True,
                 )
-                if self._last_known_vector is not None:
-                    return self._last_known_vector.copy()
-                return np.zeros(n_features, dtype=np.float64)
+                return self._stale_fallback_vector(
+                    n_features, symbol=symbol, source="timeout", stale_guard=stale_guard
+                )
 
             if _compute_error[0] is not None:
                 logging.exception(
                     "FeatureService live compute failed: %s",
                     _compute_error[0],
                 )
-                if self._last_known_vector is not None:
-                    return self._last_known_vector.copy()
-                return np.zeros(n_features, dtype=np.float64)
+                return self._stale_fallback_vector(
+                    n_features, symbol=symbol, source="compute_error", stale_guard=stale_guard
+                )
 
             features = _compute_result[0]
             if features is None:
-                if self._last_known_vector is not None:
-                    return self._last_known_vector.copy()
-                return np.zeros(n_features, dtype=np.float64)
+                return self._stale_fallback_vector(
+                    n_features, symbol=symbol, source="compute_none", stale_guard=stale_guard
+                )
+
+            # FIX-20260801-013: a fresh live computation is the newest
+            # timestamp we can serve — record it for the stale guard.
+            self._last_feature_ts = time.time()
+            self._last_feature_source = "live_compute"
 
             # ── Log compute duration for ops visibility ──
             _dur_ms = round(_elapsed * 1000)
@@ -340,6 +379,38 @@ class FeatureService:
             )
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass
+        return self._stale_fallback_vector(
+            n_features, symbol=symbol, source="zero_vector", stale_guard=stale_guard
+        )
+
+    def _stale_fallback_vector(
+        self,
+        n_features: int,
+        *,
+        symbol: str,
+        source: str,
+        stale_guard: bool,
+    ) -> np.ndarray:
+        """Return the degraded fallback vector, enforcing the stale guard.
+
+        FIX-20260801-013 (DQAF-20260801-011): when *stale_guard* is active
+        and the last served feature vector is older than 3 bars of the store
+        timeframe (or never existed), raise :class:`StaleFeatureException`
+        instead of silently returning stale data.  Otherwise preserve the
+        legacy last-known/zeros fallback.
+        """
+        max_age = feature_max_age_seconds(self._store_timeframe, bars=3)
+        if stale_guard:
+            validate_feature_timestamp(
+                self._last_feature_ts,
+                max_age_seconds=max_age,
+                symbol=symbol,
+                source=self._last_feature_source or source,
+            )
+        if self._last_known_vector is not None:
+            return self._last_known_vector.copy()
+        # float32 matches the adapter model_input contract (and the legacy
+        # Tier 3 zero-vector stub dtype).
         return np.zeros(n_features, dtype=np.float32)
 
 

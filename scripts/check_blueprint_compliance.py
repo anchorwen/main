@@ -280,6 +280,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "features_service": [
         "core/features/feature_service.py",
+        "core/features/stale_feature_guard.py",  # FIX-20260801-013: stale-feature inference guard
         "core/features/local_feature_store.py",
         "core/features/feature_snapshot.py",
         "core/features/computers/v9_micro_computer.py",

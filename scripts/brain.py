@@ -554,7 +554,27 @@ def cmd_reconcile(
         elif gov_status != cfg_status:
             cfg_rank = _status_rank(cfg_status)
             gov_rank = _status_rank(gov_status)
-            if gov_rank < cfg_rank:
+            if cfg_status == "retired":
+                # ── FIX-20260801-014 (DQAF-20260801-011): retired-as-ceiling ──
+                # A retired model is physically quarantined.  Config=retired is
+                # an ABSOLUTE terminal state: governance must never retain a
+                # higher status (live/probation/candidate/shadow) for a retired
+                # brain — that is a dormant re-activation landmine.  This
+                # overrides the "governance may promote above config floor"
+                # exception: retired acts as BOTH floor AND ceiling.
+                print(
+                    f"  FIX: {bid} gov={gov_status} cfg=retired ↓ — retired is terminal; "
+                    f"overriding governance to retired"
+                )
+                if auto_fix:
+                    gov_states[bid]["status"] = "retired"
+                    gov_states[bid]["vote_weight"] = 0.0
+                    gov_states[bid]["last_transition_at"] = _utc_now_iso()
+                    gov_states[bid]["transition_count"] = (
+                        gov_states[bid].get("transition_count", 0) + 1
+                    )
+                    issues_fixed += 1
+            elif gov_rank < cfg_rank:
                 # Governance is BELOW config floor — restore to config.
                 # Config is human SSOT; automated demotion must respect
                 # the floor the human set.

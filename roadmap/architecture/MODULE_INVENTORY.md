@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-01T18:07:38Z
-> **扫描模块数**: 764
+> **自动生成**: 2026-08-02T06:40:15Z
+> **扫描模块数**: 765
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -293,12 +293,13 @@
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
 | `feature_assembler.py` | ✅ active | — | 3 | 310 | — | |
 | `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 299 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 407 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 14 | 478 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
 | `meta_feature_builder.py` | ✅ active | — | 1 | 135 | — | |
 | `ofi_collector.py` | ✅ active | OFICollector | 5 | 250 | — | |
 | `rolling_normalizer.py` | ✅ active | RollingNormalizer | 15 | 234 | — | |
+| `stale_feature_guard.py` | ✅ active | StaleFeatureException | 4 | 125 | — | |
 | `store_contracts.py` | ✅ active | FeatureSchema, FeatureRecord, FeatureQuery, FeatureStore | 8 | 87 | — | |
 | `update_job.py` | ✅ active | FeatureUpdateResult, IncrementalFeatureUpdateJob | 3 | 63 | — | |
 
@@ -528,7 +529,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5056 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5097 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -745,13 +746,13 @@
 | `ble001_phase3c_fog_wrap.py` | ✅ active | — | 4 | 159 | — | |
 | `ble001_phase3d_coldpath_fog_wrap.py` | ✅ active | — | 5 | 227 | — | |
 | `ble001_phase3e_deferred_fog_wrap.py` | ✅ active | — | 4 | 231 | — | |
-| `brain.py` | ✅ active | — | 13 | 841 | — | |
+| `brain.py` | ✅ active | — | 13 | 861 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 121 | — | |
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 738 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 739 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |

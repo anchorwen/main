@@ -22,6 +22,7 @@ import numpy as np
 from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController
 from core.execution.regime_gate import RegimeGate
+from core.features.stale_feature_guard import StaleFeatureException
 from core.market.mtf_price_service import MTFPriceService
 from core.parliament.contract_groups import (
     ARB_GROUP,
@@ -3150,7 +3151,47 @@ def execute_live_cycle(
         micro_feature_vector: Any = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
     else:
         trigger = {"symbol": config.symbol, "venue": "MT5"}
-        feature_vector = feature_service.build_feature_vector(trigger)
+        try:
+            # FIX-20260801-013 (DQAF-20260801-011): the live entry path is the
+            # inference boundary.  If fresh features cannot be served and the
+            # last known vector is older than 3 bars, StaleFeatureException is
+            # raised → convert to management-only instead of scoring new entry
+            # signals on frozen features (XAU freeze: 2026-08-01T00:41:25Z).
+            feature_vector = feature_service.build_feature_vector(trigger, stale_guard=True)
+        except StaleFeatureException as _stale_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "stale_feature_inference_rejected",
+                        "time": _utc_iso(),
+                        "iteration": state.loop_iteration,
+                        "symbol": config.symbol,
+                        "age_seconds": _stale_exc.age_seconds,
+                        "max_age_seconds": _stale_exc.max_age_seconds,
+                        "source": _stale_exc.source,
+                        "action": "management_only_mode",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            try:
+                from core.deployment.brain_alert import emit_brain_alert
+
+                emit_brain_alert(
+                    "feature_service",
+                    "stale_feature_inference_rejected",
+                    {
+                        "symbol": config.symbol,
+                        "age_seconds": _stale_exc.age_seconds,
+                        "max_age_seconds": _stale_exc.max_age_seconds,
+                        "source": _stale_exc.source,
+                    },
+                )
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+                pass
+            _log_cycle_end(state.loop_iteration)
+            return state, True
 
         # Compute microstructure 9-feature vector for Transformer/XGBoost brains
         if micro_feature_computer is not None and micro_feature_adapter is not None:

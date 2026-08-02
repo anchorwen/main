@@ -1446,3 +1446,18 @@
   - Source 3: [代码] core/brains/services/brain_promotion.py:283-284 (throttle_pf=0.80) + scripts/training/governance_scheduler.py:664 (第三轨直写) + configs/brains_btc/BTC_Swing_V4.json (config floor=live)
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: POLICY_CONFLICT_THROTTLE_VS_CONFIG_FLOOR, DUAL_TRACK_WRITER_OSCILLATION
+
+### CCT-20260801-011
+- **Docket ID**: DQAF-20260801-011
+- **日期**: 2026-08-01
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU `data/feature_store/.../timeframe=M5/features.jsonl` 冻结在 `2026-08-01T00:41:25Z` (当日仅 2 条 vs 正常周五 150+); intent_20260801T081238Z.log `bar_sync_synthetic=810/811`; `circuit_breaker_active=403`; phase_transition 仅到 `2_reconcile_positions` (811×1, 810×2), **从未到达 `4_feature_computation`**; `bridge_silence_degraded=111` + `circuit_breaker_bridge_silence_trip=37` + `circuit_breaker_reset=36` (反复跳闸/复位)。
+  - [Layer 2 — 中间异常]: (a) 00:42:40 重启后 XAU MT5 tick/价格 feed 停摆 → 动态 tick 探针 (session_detector.probe, TECH_DEBT-005) 将"feed 死亡"误判为"市场关闭" → `risk_tier=off` → BAR_SESSION_OFF 全天 1405 次 (07-31 正常日仅 111, 从收盘 22:07 才出现); (b) bar sync 走合成 bar → `_last_bridge_ack_time` 不更新 (management_phase.py:1306/1312 仅在 fetch_prices 成功 / mid>0 时更新) → bridge_silence > max_bridge_silence_seconds → `_consecutive_degraded_cycles≥3` → circuit_breaker_bridge_silence_trip → management_only_mode; (c) 熔断后循环在 Phase 2 短路, 特征计算块 live_cycle.py:3330 永不执行, 且该块 `except...pass` 静默吞错 → 特征库冻结。
+  - [Layer 3 — 根因]: L2 探针缺陷 + L3 架构缺陷 — (1) liveness 探针 `_last_bridge_ack_time` 是 price-ack 代理, 无法区分"市场关闭"(良性) 与 "feed 死亡"(真故障); (2) ack 更新路径在下游, 熔断跳闸后 management phase 被跳过 → ack 永远不更新 → 熔断无法复位 (循环依赖, 靠 reset 期偶发 fetch 才恢复); (3) 动态 tick 探针把 feed 停摆静默降级为 session off, 无告警分级; (4) FeatureService 兜底静默返回 last-known/zeros, 无硬失败 → 盲推理缺口。防御修复: FIX-20260801-013 StaleFeatureException 推理守卫 (3 bars 硬拒绝) + live_cycle 转 management_only。
+- **证据引用**:
+  - Source 1: [日志] data/logs/intent_20260801T081238Z.log (bar_sync_synthetic 810/811, circuit_breaker_active 403, phase 1/2 only) + data/logs/live_launcher_20260801T004240Z.log (00:42:40 重启, "9 other Python processes")
+  - Source 2: [数据] data/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl (最后 event_time 00:41:25, 48295 行) + data/reports/bar_sync_events.jsonl (BAR_SESSION_OFF 08-01 1405 vs 07-31 111)
+  - Source 3: [代码] core/features/feature_service.py (兜底路径) + core/runtime/live_cycle.py:3153/3330 + core/runtime/management_phase.py:1300-1313 (ack 更新) + core/execution/session_detector.py (动态探针)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: FEED_STALL_MISCLASSIFIED_AS_MARKET_CLOSED, LIVENESS_ACK_CIRCULAR_DEPENDENCY

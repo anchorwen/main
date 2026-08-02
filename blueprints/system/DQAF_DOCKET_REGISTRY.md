@@ -141,3 +141,15 @@
 - **Fix**: FIX-20260801-011 (SSOT 统一: governance_evaluator.py 共享 orchestrator + launcher 60s 治理线程 + live_intent_loop 双轨切除 + daily_ops 路由 execute_transitions + apply_promotion_decisions TODO) + FIX-20260801-012 (Observation Hold: `observation_hold_until` config 契约 + GovernanceRuleEngine 拦截器, V4 hold 至 2026-08-03T23:59:59Z)。
 - **ReB**: POLICY_CONFLICT_THROTTLE_VS_CONFIG_FLOOR; DUAL_TRACK_WRITER_OSCILLATION
 - **Status**: **CLOSED**
+
+- **Docket ID**: DQAF-20260801-011
+- **Date**: 2026-08-01
+- **Severity**: Sev 2
+- **Title**: XAU 特征管线冻结 + bridge_silence 假阳性 — 单一根因 (feed 停摆 → session-off 误判 → 熔断短路 → 特征冻结)
+- **Evidence**: (1) XAU `data/feature_store/.../timeframe=M5/features.jsonl` 最后记录 `event_time=2026-08-01T00:41:25Z`, 当日仅 2 条 (正常周五 150+ 直到 20:55 UTC); (2) intent_20260801T081238Z.log: `bar_sync_synthetic=810/811`, phase 仅到 `2_reconcile_positions` (811×1_startup_bootstrap, 810×2_reconcile_positions), **从未到达 `4_feature_computation`**; `circuit_breaker_active=403`, `bridge_silence_degraded=111`, `circuit_breaker_bridge_silence_trip=37`; (3) bar_sync_events.jsonl: BAR_SESSION_OFF 08-01 共 1405 (07-31 正常日仅 111, 从 22:07 收盘后才开始); (4) bridge_20260801T004240Z.log: 00:42:40 重启后 MT5 initialized + OFI TickPoller started 但无真实 bar; (5) 07-31 正常日特征写入 04:10–20:55。
+- **DA**: 根因链: 重启 (00:42:40, SIGINT 外部触发) 后 XAU MT5 tick/价格 feed 停摆 → 动态 tick 探针 (session_detector, TECH_DEBT-005) 将"feed 死亡"误判为"市场关闭" (risk_tier=off) → bar sync 走合成 bar (BAR_SYNTHETIC) → `_last_bridge_ack_time` 不更新 (ack 仅在 management_phase:1306 fetch_prices 成功 / :1312 mid>0 时更新) → bridge_silence > 600s → `_consecutive_degraded_cycles ≥ 3` → circuit_breaker_bridge_silence_trip → **management_only_mode 短路整个 alpha 路径** → Phase 4 特征计算永不执行 → feature store 冻结在 00:41:25 → 任何到达推理的 brain 都会用冻结特征打分 (投委会盲推恐惧)。
+- **AR**: 推翻"特征写入器自身故障" — 特征写入块 live_cycle.py:3330 异常处理静默 (except...pass), 但根因是循环在 Phase 2 后被熔断短路, 从未到达写入块。推翻"纯周末伪警" — 08-01 是周五正常交易日 (市场 00:00–22:00 UTC), 且 07-31 盘中无 BAR_SESSION_OFF。推翻"桥接真断流" — 08-02 当前进程 mt5_bridge_health age 0.9s connected, 桥接进程存活。
+- **Root Cause**: L2/L3 — (L2) liveness 探针 `_last_bridge_ack_time` 是 price-ack 代理, 无法区分"市场关闭"(良性)与"feed 死亡"(真故障); 且 ack 更新路径在下游, 被熔断短路后形成循环依赖 (breaker trip → management 跳过 → ack 不更新 → breaker 保持)。(L3) 动态 tick 探针将 feed 停摆误分类为 session off, 静默降级而非告警; FeatureService 兜底静默返回 last-known/zeros, 无硬失败。
+- **Fix**: FIX-20260801-013 (StaleFeatureException 推理守卫 — 新模块 stale_feature_guard.py + FeatureService 时间戳跟踪 + live_cycle 转 management_only) + FIX-20260801-014 (reconcile retired-as-ceiling, 15 幽灵状态清理, 独立异常但同 docket 关联)。
+- **ReB**: FEED_STALL_MISCLASSIFIED_AS_MARKET_CLOSED; LIVENESS_ACK_CIRCULAR_DEPENDENCY
+- **Status**: **CLOSED**
