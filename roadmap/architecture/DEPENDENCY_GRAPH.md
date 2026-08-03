@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-03T06:43:55Z
+> **自动生成**: 2026-08-03T09:30:15Z
 
 ## Package-Level Dependencies
 
@@ -548,6 +548,7 @@
 - `dataset.py` → (无内部依赖)
 - `evaluation_report.py` → (无内部依赖)
 - `experiment_tracker.py` → (无内部依赖)
+- `feature_replay.py` → `core.features.computers.btc_feature_augmenter`, `core.features.schemas.registry`
 - `model_card.py` → (无内部依赖)
 - `model_hashing.py` → (无内部依赖)
 - `profitability_calibrator.py` → `core.contracts.training.label_contract`
@@ -845,6 +846,7 @@
 - `batch_train_skeleton.py` → `scripts.training.crt_manifest`
 - `brain_leaderboard.py` → (无内部依赖)
 - `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`
+- `build_btc_dataset_from_ssot.py` → `core.training.feature_replay`
 - `build_btc_expected_r_dataset.py` → (无内部依赖)
 - `build_calibrated_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_live_labeled_dataset.py` → (无内部依赖)

@@ -32,6 +32,7 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
     "btc_macro_enhanced_41_v2",  # FIX-20260625-137: clean contract — same features, no legacy shim
     "btc_h1_directional_48",  # DQAF-20260707-003: 41 base + 7 H1 directional momentum
     "btc_expected_r_37",  # DQAF-20260731-004: 41-dim minus 4 H4 placeholders → 37-dim V4 Expected R
+    "btc_macro_flow_46",  # DQAF-20260707-004 / Phase 6: 41 base + 5 OFI flow (M1 注册)
     "v6_price_series_1",  # OU Params Z-Score
 }
 

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-03T06:43:55Z
-> **扫描模块数**: 769
+> **自动生成**: 2026-08-03T09:30:15Z
+> **扫描模块数**: 771
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -293,7 +293,7 @@
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
 | `feature_assembler.py` | ✅ active | — | 3 | 310 | — | |
 | `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 299 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 14 | 478 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 14 | 479 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
 | `meta_feature_builder.py` | ✅ active | — | 1 | 135 | — | |
@@ -314,7 +314,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 429 | — | |
+| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 13 | 667 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 223 | — | |
 | `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 687 | — | |
@@ -632,6 +632,7 @@
 | `dataset.py` | ✅ active | TrainingDataset | 17 | 429 | — | |
 | `evaluation_report.py` | ✅ active | SHAPReport, TrainingEvalReport | 11 | 454 | — | |
 | `experiment_tracker.py` | ✅ active | RunInfo, ExperimentTracker | 13 | 265 | — | |
+| `feature_replay.py` | ✅ active | ReplayComponents | 19 | 468 | — | |
 | `model_card.py` | ✅ active | ModelCard, ModelCardGenerator | 6 | 225 | — | |
 | `model_hashing.py` | ✅ active | — | 3 | 45 | — | |
 | `profitability_calibrator.py` | ✅ active | BarrierConfig, ProfitabilityPoint, ProfitabilitySurface | 8 | 413 | — | |
@@ -947,6 +948,7 @@
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 7 | 258 | — | |
+| `build_btc_dataset_from_ssot.py` | ✅ active | — | 1 | 165 | — | |
 | `build_btc_expected_r_dataset.py` | ✅ active | — | 12 | 799 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 771 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 251 | — | |
