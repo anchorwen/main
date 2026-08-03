@@ -162,12 +162,6 @@ brains:
     path: configs/brains_btc/BTC_Swing_H1_V2.json
   - enabled: true
     path: configs/brains_btc/BTC_Swing_H4.json
-  - path: configs/brains_btc/BTC_Expected_R_V5_LONG_20260803_115120.json
-    enabled: true
-  - path: configs/brains_btc/BTC_Expected_R_V5_SHORT_20260803_115121.json
-    enabled: true
-  - path: configs/brains_btc/BTC_Flow46_V1_SHORT_20260803_115933.json
-    enabled: false
   - path: configs/brains_btc/BTC_Expected_R_V5_LONG_20260803_120849.json
     enabled: true
   - path: configs/brains_btc/BTC_Expected_R_V5_SHORT_20260803_120850.json
