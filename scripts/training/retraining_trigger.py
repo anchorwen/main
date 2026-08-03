@@ -44,6 +44,8 @@ DIRECTION_COLLAPSE_THRESHOLD = 0.85  # >85% in one direction = lost discriminati
 MIN_SIGNAL_COUNT = 3  # fewer signals than this = starvation
 
 # brain_id prefix → lane mapping (for retraining)
+# Phase 4 / M2 (FIX-20260803-005): BTC brains route to the "btc" lane, whose
+# dataset rebuild uses build_btc_dataset_from_ssot.py (shared pure assembly).
 BRAIN_TO_LANE: dict[str, str] = {
     "V9": "sur",
     "CRT": "sur",
@@ -56,6 +58,7 @@ BRAIN_TO_LANE: dict[str, str] = {
     "DeepResMLP": "dl",
     "Online_SGD": "online_sgd",
     "Online_MLP": "online_sgd",
+    "BTC": "btc",
 }
 
 
@@ -243,10 +246,15 @@ def execute_retraining(
     output_dir: Path,
     labels_path: Path | None = None,
     dry_run: bool = False,
+    btc_dataset_csv: Path | None = None,
 ) -> dict[str, Any]:
     """Execute the retraining pipeline for each degraded lane.
 
     Pipeline: dataset_builder → run_train_batch → register_brain
+
+    Phase 4 / M2 (FIX-20260803-005): the "btc" lane rebuilds its dataset via
+    ``build_btc_dataset_from_ssot.py`` (shared pure assembly — Phase 1 SSOT)
+    instead of the XAU-centric dataset_builder.py.
     """
     results: list[dict[str, Any]] = []
     lanes = list({s["lane"] for s in signals if s["lane"] != "unknown"})
@@ -273,21 +281,46 @@ def execute_retraining(
             continue
 
         # Step 1: Build dataset
-        resolved_labels = labels_path or Path("data/reports/live_labels.jsonl")
-        step1 = _run_step(
-            [
-                sys.executable,
-                "scripts/training/dataset_builder.py",
-                "--labels",
-                str(resolved_labels),
-                "--feature-store-dir",
-                str(feature_store_dir),
-                "--output-dir",
-                str(output_dir),
-                "--format",
-                "parquet",
-            ]
-        )
+        if lane == "btc":
+            # BTC lane: Phase 1 SSOT dataset builder (shared pure assembly).
+            if btc_dataset_csv is None or not btc_dataset_csv.exists():
+                step1 = {
+                    "step": "build_btc_dataset_from_ssot",
+                    "status": "skipped",
+                    "reason": "no_btc_dataset_csv",
+                    "hint": "pass --btc-dataset-csv <aligned_multitf.csv>",
+                }
+            else:
+                step1 = _run_step(
+                    [
+                        sys.executable,
+                        "scripts/training/build_btc_dataset_from_ssot.py",
+                        "--input",
+                        str(btc_dataset_csv),
+                        "--output-dir",
+                        str(output_dir / "btc_ssot_v2"),
+                        "--schema",
+                        "btc_macro_enhanced_41_v2",
+                        "--tf-minutes",
+                        "5",
+                    ]
+                )
+        else:
+            resolved_labels = labels_path or Path("data/reports/live_labels.jsonl")
+            step1 = _run_step(
+                [
+                    sys.executable,
+                    "scripts/training/dataset_builder.py",
+                    "--labels",
+                    str(resolved_labels),
+                    "--feature-store-dir",
+                    str(feature_store_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--format",
+                    "parquet",
+                ]
+            )
         result["steps"].append(step1)
 
         if step1["status"] != "ok":
@@ -419,6 +452,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Execute retraining pipeline (default: dry-run detection only)",
     )
     p.add_argument(
+        "--btc-dataset-csv",
+        type=Path,
+        default=None,
+        help="Aligned multi-TF CSV for the BTC lane dataset rebuild "
+        "(build_btc_dataset_from_ssot.py — Phase 1 SSOT)",
+    )
+    p.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -452,6 +492,7 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             labels_path=args.labels,
             dry_run=False,
+            btc_dataset_csv=args.btc_dataset_csv,
         )
         report["execution"] = exec_result
     elif args.execute:

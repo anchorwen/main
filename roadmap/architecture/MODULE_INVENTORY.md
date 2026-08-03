@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-03T10:05:44Z
-> **扫描模块数**: 775
+> **自动生成**: 2026-08-03T10:11:46Z
+> **扫描模块数**: 777
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -188,7 +188,7 @@
 | `domain_keys.py` | ⬜ empty | — | 0 | 7 | — | |
 | `environment_config.py` | ✅ active | Environment, EnvironmentConfig | 7 | 126 | — | |
 | `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 288 | — | |
-| `feature_update_producer.py` | ✅ active | — | 2 | 67 | — | |
+| `feature_update_producer.py` | ✅ active | — | 2 | 80 | — | |
 | `final_audit.py` | ✅ active | FinalAuditService | 5 | 211 | — | |
 | `governance_evaluator.py` | ✅ active | — | 3 | 282 | — | |
 | `governance_summary.py` | ✅ active | — | 4 | 56 | — | |
@@ -507,6 +507,7 @@
 | `alpha_budget_usage_store.py` | ✅ active | AlphaBudgetUsageStore | 9 | 57 | — | |
 | `alpha_risk_budget_gate.py` | ✅ active | AlphaRiskBudgetGate | 9 | 111 | — | |
 | `approval_contracts.py` | ✅ active | ExecutionApproval | 4 | 76 | — | |
+| `btc_feature_persist.py` | ✅ active | — | 1 | 117 | — | |
 | `circuit_breaker_reset.py` | ✅ active | — | 2 | 103 | — | |
 | `cooldown.py` | ✅ active | — | 1 | 21 | — | |
 | `cycle_replay.py` | ✅ active | RuntimeReplayReport, RuntimeCycleReplay | 4 | 124 | — | |
@@ -530,7 +531,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5113 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5122 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -719,7 +720,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 740 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 741 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -929,6 +930,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `feature_store_warmer.py` | ✅ active | — | 14 | 383 | — | |
+| `reconcile_store_schemas.py` | ✅ active | — | 2 | 160 | — | |
 
 ## scripts/guards
 
@@ -993,7 +995,7 @@
 | `recipe_diff.py` | ✅ active | — | 5 | 195 | — | |
 | `recipe_search.py` | ✅ active | — | 9 | 518 | — | |
 | `register_brain.py` | ✅ active | — | 6 | 171 | — | |
-| `retraining_trigger.py` | ✅ active | — | 9 | 474 | — | |
+| `retraining_trigger.py` | ✅ active | — | 9 | 515 | — | |
 | `run_promotion.py` | ✅ active | — | 6 | 285 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |

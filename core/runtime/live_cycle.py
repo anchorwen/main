@@ -4057,6 +4057,15 @@ def execute_live_cycle(
                     tf_ou=tf_ou,
                     tf_hurst=tf_hurst,
                 )
+            # ── Phase 4 / M2 (FIX-20260803-005): BTC feature persist ──
+            # Write the live 41-dim inference vector to the feature store so the
+            # shadow-accumulate → retrain flywheel can spin.  Fail-open: a write
+            # failure must never block the cycle (mirrors micro_persist).
+            if _btc_aug is not None:
+                with fail_open_guard("BTCFeaturePersist"):
+                    from core.runtime.btc_feature_persist import persist_btc_features
+
+                    persist_btc_features(config, _btc_aug)
 
         # ── FIX-20260609-011 / FIX-20260715-015: load governance state ──
         # Read once per cycle so the governance degradation gate sees the
