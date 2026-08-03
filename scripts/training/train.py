@@ -504,7 +504,13 @@ def compute_financial_metrics(
         # Zero out flat positions
         positions = np.where(np.abs(y_pred) < 1e-8, 0, positions)
         returns = positions * y_true.astype(np.float64)
+        # Phase 3 / M2 (FIX-20260803-004): spearman between prediction and
+        # realized label — the Expected-R skill measure (V4.2 ρ gates).
+        from core.training.utils import spearman_rho
+
+        _spearman = spearman_rho(y_pred, y_true)
     else:
+        _spearman = 0.0
         # Guard: detect degenerate models with no discriminative power.
         # When all predictions are near-identical (e.g. 0.5001–0.5036),
         # the threshold-based classifier always picks one class and any
@@ -622,6 +628,7 @@ def compute_financial_metrics(
         "profit_factor": round(profit_factor, 4),
         "max_drawdown": round(max_drawdown, 4),
         "expectancy": round(expectancy, 6),
+        "spearman_rho": round(_spearman, 4),
         "sortino_ratio": round(sortino, 4),
         "calmar_ratio": round(calmar, 4),
         "max_vol_scaled_dd": round(max_vol_scaled_dd, 2),
@@ -651,6 +658,12 @@ def check_quality_gates(
     results["train_win_rate"] = (
         True if is_regression else train_metrics.get("win_rate", 0.0) >= gates.min_train_win_rate
     )
+    # Phase 3 / M2 (FIX-20260803-004): regression spearman floor (0 = disabled).
+    # Expected-R models must show monotone skill between E[R] and realized R.
+    if gates.min_spearman_rho > 0:
+        results["train_spearman"] = train_metrics.get("spearman_rho", 0.0) >= gates.min_spearman_rho
+    else:
+        results["train_spearman"] = True
     results["train_sortino"] = train_metrics.get("sortino_ratio", -999.0) >= gates.min_sortino_ratio
     results["train_calmar"] = train_metrics.get("calmar_ratio", -999.0) >= gates.min_calmar_ratio
     results["vol_scaled_dd"] = (
@@ -1280,23 +1293,29 @@ def run_pipeline(
         try:
             dirty = subprocess.run(
                 ["git", "status", "--porcelain"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
                 cwd=str(Path(__file__).resolve().parents[2]),
             )
             if dirty.returncode == 0:
                 dirty_files = [
-                    line[2:].strip() for line in dirty.stdout.strip().split("\n")
+                    line[2:].strip()
+                    for line in dirty.stdout.strip().split("\n")
                     if line.strip() and not line.startswith("??")  # untracked files allowed
                 ]
                 # Only block for source code changes (.py, .yaml, .json)
                 source_dirty = [
-                    f for f in dirty_files
+                    f
+                    for f in dirty_files
                     if f.endswith((".py", ".yaml", ".yml", ".json"))
                     and not Path(f).parts[0].startswith("data")  # exclude data/ data_btc/ etc.
                 ]
                 if source_dirty:
                     print("[train] [HASH-LOCK] DIRTY WORKING TREE", flush=True)
-                    print("[train] The following source files have uncommitted changes:", flush=True)
+                    print(
+                        "[train] The following source files have uncommitted changes:", flush=True
+                    )
                     for f in sorted(source_dirty):
                         print(f"  - {f}", flush=True)
                     print(
@@ -1499,7 +1518,11 @@ def run_pipeline(
 
             # Handle pre-split PnL (train only; eval uses label-based returns)
             n_train_pre = len(X_train)
-            train_pnl = pnl_array[:n_train_pre] if pnl_array is not None and len(pnl_array) >= n_train_pre else pnl_array
+            train_pnl = (
+                pnl_array[:n_train_pre]
+                if pnl_array is not None and len(pnl_array) >= n_train_pre
+                else pnl_array
+            )
 
             # Recompute sample weights for train (after label remapping)
             if contract.dataset.sample_weighting != "none":
@@ -1740,6 +1763,7 @@ def run_pipeline(
     except (ValueError, RuntimeError, ImportError, OSError, MemoryError) as e:
         result.errors = [f"Training failed: {e}"]
         import traceback
+
         traceback.print_exc()
         print(f"[train] ERROR during training: {e}")
         import traceback
@@ -1887,8 +1911,10 @@ def run_pipeline(
         model_path = model_dir / f"{contract.contract_id}_{ts}.pkl"
         import pickle
 
-        with open(model_path, "wb") as f:
-            pickle.dump(best_model, f)
+        # mypy hygiene: `f` is inferred str elsewhere in run_pipeline scope;
+        # use a distinct handle name for the binary pickle stream.
+        with open(model_path, "wb") as _pkl_fh:
+            pickle.dump(best_model, _pkl_fh)
 
     result.model_path = str(model_path)
     print(f"[train] Model saved: {model_path}")
@@ -1903,6 +1929,67 @@ def run_pipeline(
         print(f"[train] Model hash: {model_hash}")
     except OSError as e:
         print(f"[train] WARNING: Model hashing failed: {e}")
+
+    # ── OOS blind test (Phase 3 / M2 / FIX-20260803-004) ──
+    # The hard gate that kills hopes before a model ships.  Runs AFTER quality
+    # gates pass and BEFORE any registry write / brain config.  Failure raises
+    # ModelQualityException (the same hard-veto path as failed quality gates) —
+    # no human may waive it.  A configured but missing blind NPZ is itself a
+    # hard veto (fail-closed): the contract promised an OOS check, it must run.
+    oos_blind_path = contract.validation.oos_blind_path
+    if oos_blind_path:
+        blind_path = Path(oos_blind_path)
+        if not blind_path.exists():
+            raise ModelQualityException(
+                f"Hard veto: oos_blind_path '{oos_blind_path}' configured but missing. "
+                f"Model {contract.contract_id} must not be deployed without a blind test."
+            )
+        from core.contracts.training.label_from_live_yaml import label_params_from_live_yaml
+        from core.training.breakeven import compute_breakeven_from_params
+        from scripts.training.oos_blind_test import run_blind_test
+
+        gates = contract.quality_gates
+        breakeven_wr: float | None = None
+        if gates.enforce_breakeven:
+            breakeven_wr = compute_breakeven_from_params(
+                contract.label.sl_atr_mult,
+                contract.label.tp_atr_mult,
+                spread_points=contract.label.spread_points,
+                slippage_points=contract.label.slippage_points,
+                tick_size=contract.label.tick_size,
+                friction_model=(
+                    "expected_r"
+                    if "expected_r" in (contract.label.contract_id or "")
+                    else "barrier"
+                ),
+            ).breakeven_win_rate
+            print(f"[train] OOS breakeven WR (physical friction): {breakeven_wr:.4f}")
+
+        blind_result = run_blind_test(
+            model_path,
+            blind_path,
+            y_key="y_long",
+            min_rho=gates.min_oos_rho,
+            min_win_rate=gates.min_oos_win_rate,
+            min_expectancy=gates.min_oos_expectancy,
+            breakeven_win_rate=breakeven_wr,
+            min_samples=gates.min_oos_samples,
+        )
+        print(
+            f"[train] OOS blind verdict: {blind_result['verdict']} "
+            f"(rho={blind_result['spearman_rho']:.4f}, "
+            f"wr={blind_result['win_rate']:.4f}, n={blind_result['n_active']})"
+        )
+        result.metrics["oos_spearman_rho"] = blind_result["spearman_rho"]
+        result.metrics["oos_win_rate"] = blind_result["win_rate"]
+        result.metrics["oos_expectancy"] = blind_result["expectancy"]
+        result.metrics["oos_blind_verdict"] = blind_result["verdict"]
+        if blind_result["verdict"] == "FAIL":
+            raise ModelQualityException(
+                f"Hard veto: OOS blind test FAILED for {contract.contract_id}: "
+                + "; ".join(blind_result["failures"])
+                + " Model must NOT enter the candidate pool."
+            )
 
     # ── Registry ──
     try:

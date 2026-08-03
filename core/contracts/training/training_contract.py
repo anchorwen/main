@@ -156,6 +156,10 @@ class ValidationSpec:
     embargo_bars: int = 5
     val_ratio: float = 0.15
     test_ratio: float = 0.10
+    # Phase 3 / M2 (FIX-20260803-004): optional OOS blind-test NPZ.  When set,
+    # train.py runs the blind test after quality gates pass and hard-vetoes the
+    # model (ModelQualityException) before any registry write / brain config.
+    oos_blind_path: str = ""
 
     def validate(self) -> list[str]:
         issues: list[str] = []
@@ -194,6 +198,15 @@ class QualityGateSpec:
     require_shap_stability: bool = True
     model_type: str = "tree"  # "tree", "deep_learning", "online"
 
+    # Phase 3 / M2 (FIX-20260803-004): OOS blind-test + breakeven gates.
+    # Defaults keep legacy contracts behavior-identical (all disabled at 0).
+    min_spearman_rho: float = 0.0  # regression: train spearman floor (0 = disabled)
+    min_oos_rho: float = 0.0  # OOS blind-test spearman floor (0 = disabled)
+    min_oos_win_rate: float = 0.0  # OOS directional win-rate floor (0 = disabled)
+    min_oos_expectancy: float = 0.0  # OOS expectancy floor in R units (0 = disabled)
+    enforce_breakeven: bool = False  # OOS win rate must cover spread+slippage physical wear
+    min_oos_samples: int = 100  # active trades below this → INSUFFICIENT_OOS
+
     def validate(self) -> list[str]:
         issues: list[str] = []
         if self.min_train_sharpe < 0:
@@ -210,6 +223,14 @@ class QualityGateSpec:
             issues.append("min_calmar_ratio must be >= 0")
         if not 0 < self.max_vol_scaled_dd_pct <= 100:
             issues.append("max_vol_scaled_dd_pct must be in (0, 100]")
+        if not 0 <= self.min_spearman_rho <= 1:
+            issues.append("min_spearman_rho must be in [0, 1]")
+        if not 0 <= self.min_oos_rho <= 1:
+            issues.append("min_oos_rho must be in [0, 1]")
+        if not 0 <= self.min_oos_win_rate <= 1:
+            issues.append("min_oos_win_rate must be in [0, 1]")
+        if self.min_oos_samples < 1:
+            issues.append("min_oos_samples must be >= 1")
 
         # Tiered quality gate validation
         if self.model_type == "deep_learning":
@@ -426,6 +447,9 @@ class TrainingContract:
                 n_test_groups=val.get("n_test_groups", 2),
                 purge_bars=val.get("purge_bars", 12),
                 embargo_bars=val.get("embargo_bars", 5),
+                val_ratio=val.get("val_ratio", 0.15),
+                test_ratio=val.get("test_ratio", 0.10),
+                oos_blind_path=val.get("oos_blind_path", ""),
             ),
             quality_gates=QualityGateSpec(
                 min_train_sharpe=gates.get("min_train_sharpe", 1.0),
@@ -438,6 +462,12 @@ class TrainingContract:
                 max_vol_scaled_dd_pct=gates.get("max_vol_scaled_dd_pct", 30.0),
                 require_shap_stability=gates.get("require_shap_stability", True),
                 model_type=gates.get("model_type", "tree"),
+                min_spearman_rho=gates.get("min_spearman_rho", 0.0),
+                min_oos_rho=gates.get("min_oos_rho", 0.0),
+                min_oos_win_rate=gates.get("min_oos_win_rate", 0.0),
+                min_oos_expectancy=gates.get("min_oos_expectancy", 0.0),
+                enforce_breakeven=gates.get("enforce_breakeven", False),
+                min_oos_samples=gates.get("min_oos_samples", 100),
             ),
             output=OutputSpec(
                 brain_id_template=out.get("brain_id_template", "{arch}_{contract}_{timestamp}"),

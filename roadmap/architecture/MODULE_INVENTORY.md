@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-03T09:38:20Z
-> **扫描模块数**: 773
+> **自动生成**: 2026-08-03T10:05:44Z
+> **扫描模块数**: 775
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -155,7 +155,7 @@
 |------|------|----|------|------|------|------|
 | `label_contract.py` | ✅ active | BarrierResult, LabelContract | 12 | 641 | — | |
 | `label_from_live_yaml.py` | ✅ active | LiveLabelParams | 4 | 140 | — | |
-| `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 474 | — | |
+| `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 504 | — | |
 | `training_recipe.py` | ✅ active | ModelIdentity, LabelContractRef, DataAugmentation, DataConfig, TrainingConfig, EvaluationConfig, TrainingRecipe | 6 | 386 | — | |
 
 ## core/data
@@ -627,6 +627,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `brain_config.py` | ✅ active | — | 4 | 188 | — | |
+| `breakeven.py` | ✅ active | BreakevenResult | 6 | 190 | — | |
 | `checkpoint.py` | ✅ active | CheckpointInfo, CheckpointManager | 13 | 199 | — | |
 | `cpcv.py` | ✅ active | CPCVFold, CPCVResult | 9 | 252 | — | |
 | `custom_objectives.py` | ✅ active | — | 11 | 338 | — | |
@@ -640,7 +641,7 @@
 | `registries.py` | ✅ active | — | 32 | 287 | — | |
 | `trainer_protocol.py` | ✅ active | TrainResult, TrainerProtocol | 5 | 110 | — | |
 | `training_registry.py` | ✅ active | Base, TrainingRunRecord, TrainingRegistry | 16 | 295 | — | |
-| `utils.py` | ✅ active | — | 2 | 41 | — | |
+| `utils.py` | ✅ active | — | 4 | 90 | — | |
 
 ## scripts
 
@@ -984,6 +985,7 @@
 | `label_builder.py` | ✅ active | — | 19 | 1047 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |
+| `oos_blind_test.py` | ✅ active | OOSBlindError | 4 | 288 | — | |
 | `optimize_ensemble_weights.py` | ✅ active | — | 4 | 164 | — | |
 | `optimize_meta_threshold.py` | ✅ active | — | 4 | 242 | — | |
 | `quality_gate.py` | ✅ active | — | 9 | 318 | — | |
@@ -995,7 +997,7 @@
 | `run_promotion.py` | ✅ active | — | 6 | 285 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
-| `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2075 | — | |
+| `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2162 | — | |
 | `train_btc_binary_directional.py` | ✅ active | — | 5 | 385 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |

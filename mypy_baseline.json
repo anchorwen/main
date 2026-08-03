@@ -9,7 +9,6 @@
   "scripts/hook_pre_push.py": 1,
   "scripts/live_audit_realtime.py": 6,
   "scripts/reconcile_fix_registry.py": 4,
-  "scripts/training/train.py": 2,
   "scripts/tuning/tune_btc_kalman_h4.py": 3,
   "scripts/verify_pnl_data_integrity.py": 10,
   "scripts/verify_training_serving_parity.py": 2,

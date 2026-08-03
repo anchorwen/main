@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-03T09:38:20Z
+> **自动生成**: 2026-08-03T10:05:44Z
 
 ## Package-Level Dependencies
 
@@ -543,6 +543,7 @@
 ### `core/training/`
 
 - `brain_config.py` → `core.features.schemas.registry`
+- `breakeven.py` → `core.contracts.training.label_contract`
 - `checkpoint.py` → (无内部依赖)
 - `cpcv.py` → (无内部依赖)
 - `custom_objectives.py` → (无内部依赖)
@@ -882,6 +883,7 @@
 - `label_builder.py` → `core.contracts.training.label_contract`, `core.data.ticket_resolver`
 - `label_builder_d1.py` → (无内部依赖)
 - `monitor_training.py` → (无内部依赖)
+- `oos_blind_test.py` → `core.contracts.training.label_contract`, `core.contracts.training.label_from_live_yaml`, `core.training.breakeven`, `core.training.utils`, `scripts.training.validate_label_vs_live`
 - `optimize_ensemble_weights.py` → (无内部依赖)
 - `optimize_meta_threshold.py` → `core.contracts.training.training_contract`
 - `quality_gate.py` → `scripts.training.trainers.xgb_trainer`
@@ -893,7 +895,7 @@
 - `run_promotion.py` → `core.brains.services.brain_promotion`, `core.governance.governance_service`
 - `run_train_batch.py` → (无内部依赖)
 - `scan_profitability_surface.py` → `core.training.profitability_calibrator`
-- `train.py` → `core.contracts.training.training_contract`, `core.deployment.brain_registration_gate`, `core.training.brain_config`, `core.training.cpcv`, `core.training.custom_objectives`, `core.training.dataset`, `core.training.model_hashing`, `core.training.profitability_calibrator`, `core.training.training_registry`, `scripts.training.trainers.deep_res_mlp_trainer`, `scripts.training.trainers.lgb_trainer`, `scripts.training.trainers.online_mlp_trainer`, `scripts.training.trainers.transformer_trainer`, `scripts.training.trainers.xgb_trainer`
+- `train.py` → `core.contracts.training.label_from_live_yaml`, `core.contracts.training.training_contract`, `core.deployment.brain_registration_gate`, `core.training.brain_config`, `core.training.breakeven`, `core.training.cpcv`, `core.training.custom_objectives`, `core.training.dataset`, `core.training.model_hashing`, `core.training.profitability_calibrator`, `core.training.training_registry`, `core.training.utils`, `scripts.training.oos_blind_test`, `scripts.training.trainers.deep_res_mlp_trainer`, `scripts.training.trainers.lgb_trainer`, `scripts.training.trainers.online_mlp_trainer`, `scripts.training.trainers.transformer_trainer`, `scripts.training.trainers.xgb_trainer`
 - `train_btc_binary_directional.py` → (无内部依赖)
 - `train_btc_directional_v1.py` → `core.features.computers.v9_live_computer`
 - `train_btc_directional_v10.py` → (无内部依赖)

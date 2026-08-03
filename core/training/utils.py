@@ -7,8 +7,57 @@ should import from this module instead of defining its own copies.
 
 from __future__ import annotations
 
+import math
 import subprocess
 from datetime import UTC, datetime
+
+
+def spearman_rho(x, y) -> float:
+    """Spearman rank correlation (numpy-only, with scipy fast path).
+
+    Phase 3 / M2 (FIX-20260803-004): single shared implementation used by
+    ``compute_financial_metrics`` (train.py), ``oos_blind_test.py``, and any
+    Expected-R two-tower evaluation.  Returns 0.0 when the sample is too small
+    or degenerate (constant input) — a degenerate model cannot pass a rho gate.
+    """
+    import numpy as np
+
+    x = np.asarray(x, dtype=np.float64).ravel()
+    y = np.asarray(y, dtype=np.float64).ravel()
+    n = len(x)
+    if n < 3 or np.all(x == x[0]) or np.all(y == y[0]):
+        return 0.0
+    try:
+        from scipy.stats import spearmanr
+
+        rho, _ = spearmanr(x, y)
+        return float(rho) if math.isfinite(float(rho)) else 0.0
+    except ImportError:
+        pass
+
+    # Manual rank correlation (average-rank for ties).
+    def _rank(a) -> np.ndarray:
+        order = a.argsort(kind="stable")
+        ranks = np.empty(n, dtype=np.float64)
+        ranks[order] = np.arange(n, dtype=np.float64)
+        i = 0
+        while i < n:
+            j = i
+            while j < n and a[order[j]] == a[order[i]]:
+                j += 1
+            if j > i + 1:
+                avg = float((i + j - 1) / 2.0)
+                for k in range(i, j):
+                    ranks[order[k]] = avg
+            i = j
+        return ranks
+
+    rx = _rank(x) - (n - 1) / 2.0
+    ry = _rank(y) - (n - 1) / 2.0
+    denom = math.sqrt(float(np.sum(rx * rx)) * float(np.sum(ry * ry)))
+    if denom == 0.0:
+        return 0.0
+    return float(np.sum(rx * ry) / denom)
 
 
 def utc_now_iso() -> str:
