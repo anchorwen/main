@@ -1,0 +1,107 @@
+schema_version: "training_contract.v2.1"
+contract_id: "btc_flow_46_transfer"
+
+# ── FIX-20260803-007: OFI 46-dim residual transfer — M4 Phase 6.1 (IC 终局裁决) ──
+# Freeze the institutional 41-dim Expected-R base towers (btc_expected_r_m15_41d_v2),
+# fit a residual LightGBM on the 5 OFI flow features only (dead dims zero-padded),
+# and emit TWO 46-dim shadow brains (LONG/SHORT) with full Phase 5 lineage.
+#
+#   y = y_A (frozen 41-dim base) + r (OFI flow residual, schema btc_macro_flow_46)
+#
+# The transfer-specific wiring lives in metadata.transfer (unknown top-level
+# keys are ignored by TrainingContract.from_dict — metadata is the passthrough).
+#
+# Consumes: data_btc/training/btc_flow46_v1/btc_flow46_aligned.npz (the M5 leak-
+# audited 46-dim alignment produced by build_btc_flow46_dataset.py).
+
+dataset:
+  path: "data_btc/training/btc_flow46_v1/btc_flow46_aligned.npz"
+  feature_schema: "btc_macro_flow_46"
+  min_samples_per_class: 100
+  sample_weighting: "none"
+
+label:
+  contract_id: "label-expected-r-btc-m15"
+  sl_atr_mult: 1.5
+  tp_atr_mult: 2.5
+  horizon_bars: 12
+  profitability_calibrated: true
+  spread_points: 200
+  slippage_points: 10
+  tick_size: 0.01
+  tick_value: 0.01
+  output_unit: "bps"
+
+architecture:
+  type: "lightgbm"
+  objective_function: "huber"
+  search_space: "default"
+  optuna_trials: 0
+  n_seeds: 1
+  custom_params:
+    num_leaves: 15
+    max_depth: 4
+    learning_rate: 0.05
+    n_estimators: 300
+    min_data_in_leaf: 30
+    lambda_l1: 0.1
+    lambda_l2: 0.5
+    feature_fraction: 1.0
+    bagging_fraction: 0.8
+    bagging_freq: 1
+
+validation:
+  method: "temporal_split"
+  val_ratio: 0.15
+  test_ratio: 0.15
+  # Residual OOS = the temporally-last 15% of aligned rows (post-07-30 fresh
+  # region) — the residual learner trains on earlier aligned rows only.
+  oos_blind_path: ""
+
+quality_gates:
+  model_type: tree
+  # Institutional ρ is the RESIDUAL layer's mandate (the base was relaxed to
+  # 0.02 in btc_expected_r_m15_41d_v2.yaml — see M4 Phase 6.0).
+  min_spearman_rho: 0.02
+  min_oos_rho: 0.05
+  min_oos_win_rate: 0.0
+  min_oos_expectancy: 0.0
+  enforce_breakeven: true
+  min_oos_samples: 100
+  min_train_sharpe: 0.0
+  min_train_win_rate: 0.0
+  min_sortino_ratio: 0.0
+  min_calmar_ratio: 0.0
+  max_vol_scaled_dd_pct: 100.0
+  min_forward_sharpe: -0.5
+  min_forward_win_rate: 0.0
+  max_overfit_gap: 10.0
+  require_shap_stability: false
+
+output:
+  brain_id_template: "BTC_Flow46_V1_{tower}_{timestamp}"
+  model_dir: "data_btc/models/btc_flow46_v1"
+  config_dir: "configs/brains_btc"
+  registry_db: "data_btc/training/registry.db"
+  auto_register: true
+  initial_status: "shadow"
+
+metadata:
+  transfer:
+    # Frozen base towers (Phase 6.0) — the residual learner never touches them.
+    base_model_dir: "data_btc/models/btc_expected_r_v5_m15"
+    base_model_long: "tower_long_best.txt"
+    base_model_short: "tower_short_best.txt"
+    base_brain_id_long: "BTC_Expected_R_V5_LONG_20260803_120849"
+    base_brain_id_short: "BTC_Expected_R_V5_SHORT_20260803_120850"
+    # IC 终局裁决 hard gate: effective_flow_dim >= min_flow_dim (live today = 3).
+    # A residual learner with fewer live flow features is refused (TransferDataError).
+    min_flow_dim: 2
+    live_flow_min_coverage: 0.05
+    # Shadow brain runtime wiring: enabled=False — the frozen-base + residual
+    # chain has no runtime evaluator yet (feature_service has btc_macro_flow_46,
+    # but StrategyLine does not combine base+residual).  Full lineage + governance
+    # candidate status are recorded; live wiring lands with the deployment task.
+    live_yaml_enabled: false
+    vote_weight: 0.0
+    early_stopping_rounds: 50

@@ -74,8 +74,13 @@ validation:
 quality_gates:
   model_type: tree
   # Phase 3 gates: ρ floor + OOS blind + breakeven physical-wear coverage.
+  # M4 Phase 6.0 (IC 终局裁决, 2026-08-03): min_oos_rho 0.05 → 0.02 — this is the
+  # FROZEN BASE model (y_A provider) for the OFI residual transfer.  The base
+  # only needs positive ρ + breakeven-covering directional WR (both towers:
+  # OOS WR 55.6%/57.6% >> breakeven 37.5%).  Institutional-grade ρ is the
+  # RESIDUAL layer's mandate (train_btc_flow_46_transfer.py enforces it).
   min_spearman_rho: 0.05
-  min_oos_rho: 0.05
+  min_oos_rho: 0.02
   min_oos_win_rate: 0.0
   min_oos_expectancy: 0.0
   enforce_breakeven: true

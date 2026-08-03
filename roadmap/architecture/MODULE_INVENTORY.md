@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-03T10:59:38Z
-> **扫描模块数**: 779
+> **自动生成**: 2026-08-03T12:10:23Z
+> **扫描模块数**: 782
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -627,7 +627,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `brain_config.py` | ✅ active | — | 4 | 221 | — | |
+| `brain_config.py` | ✅ active | — | 4 | 231 | — | |
 | `breakeven.py` | ✅ active | BreakevenResult | 6 | 190 | — | |
 | `checkpoint.py` | ✅ active | CheckpointInfo, CheckpointManager | 13 | 199 | — | |
 | `cpcv.py` | ✅ active | CPCVFold, CPCVResult | 9 | 252 | — | |
@@ -642,6 +642,7 @@
 | `registries.py` | ✅ active | — | 32 | 287 | — | |
 | `trainer_protocol.py` | ✅ active | TrainResult, TrainerProtocol | 5 | 110 | — | |
 | `training_registry.py` | ✅ active | Base, TrainingRunRecord, TrainingRegistry | 16 | 303 | — | |
+| `transfer_adapter.py` | ✅ active | TransferDataError, FrozenBaseModel, ResidualTransferLearner | 12 | 255 | — | |
 | `utils.py` | ✅ active | — | 4 | 90 | — | |
 
 ## scripts
@@ -771,7 +772,7 @@
 | `hook_pre_push.py` | ✅ active | — | 6 | 284 | — | |
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
-| `inspect_ofi_history.py` | ✅ active | — | 5 | 221 | ✅ | |
+| `inspect_ofi_history.py` | ✅ active | — | 5 | 224 | ✅ | |
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
 | `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
@@ -954,6 +955,7 @@
 | `brain_promotion_runner.py` | ✅ active | — | 7 | 258 | — | |
 | `build_btc_dataset_from_ssot.py` | ✅ active | — | 1 | 221 | — | |
 | `build_btc_expected_r_dataset.py` | ✅ active | — | 12 | 799 | — | |
+| `build_btc_flow46_dataset.py` | ✅ active | — | 6 | 301 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 771 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 251 | — | |
 | `build_meta_features.py` | ✅ active | — | 7 | 801 | — | |
@@ -999,12 +1001,13 @@
 | `run_promotion.py` | ✅ active | — | 6 | 285 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
-| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 2208 | — | |
+| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 2215 | — | |
 | `train_btc_binary_directional.py` | ✅ active | — | 5 | 385 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
 | `train_btc_expected_r.py` | ✅ active | — | 8 | 634 | — | |
-| `train_btc_expected_r_institutional.py` | ✅ active | — | 5 | 480 | — | |
+| `train_btc_expected_r_institutional.py` | ✅ active | — | 6 | 503 | — | |
+| `train_btc_flow_46_transfer.py` | ✅ active | — | 6 | 509 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1898 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |

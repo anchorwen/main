@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-03T10:59:38Z
+> **自动生成**: 2026-08-03T12:10:23Z
 
 ## Package-Level Dependencies
 
@@ -558,6 +558,7 @@
 - `registries.py` → (无内部依赖)
 - `trainer_protocol.py` → (无内部依赖)
 - `training_registry.py` → `core.training.model_hashing`
+- `transfer_adapter.py` → `core.training.utils`
 - `utils.py` → (无内部依赖)
 
 ### `scripts/`
@@ -852,6 +853,7 @@
 - `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`
 - `build_btc_dataset_from_ssot.py` → `core.contracts.training.label_contract`, `core.contracts.training.label_from_live_yaml`, `core.training.feature_replay`, `scripts.training.validate_label_vs_live`
 - `build_btc_expected_r_dataset.py` → (无内部依赖)
+- `build_btc_flow46_dataset.py` → `core.features.schemas.registry`, `core.training.model_hashing`, `scripts.inspect_ofi_history`
 - `build_calibrated_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_live_labeled_dataset.py` → (无内部依赖)
 - `build_meta_features.py` → `core.contracts.training.training_contract`
@@ -903,6 +905,7 @@
 - `train_btc_directional_v10.py` → (无内部依赖)
 - `train_btc_expected_r.py` → (无内部依赖)
 - `train_btc_expected_r_institutional.py` → `core.contracts.training.label_from_live_yaml`, `core.contracts.training.training_contract`, `core.deployment.brain_registration_gate`, `core.training.brain_config`, `core.training.breakeven`, `core.training.model_hashing`, `core.training.training_registry`, `scripts.training.oos_blind_test`, `scripts.training.train`, `scripts.training.train_btc_expected_r`
+- `train_btc_flow_46_transfer.py` → `core.contracts.training.training_contract`, `core.deployment.brain_registration_gate`, `core.features.schemas.registry`, `core.training.brain_config`, `core.training.breakeven`, `core.training.model_hashing`, `core.training.training_registry`, `core.training.transfer_adapter`, `scripts.training.oos_blind_test`, `scripts.training.train`, `scripts.training.train_btc_expected_r_institutional`
 - `train_btc_swing_v9.py` → `core.features.computers.v9_live_computer`
 - `train_daily_swing.py` → (无内部依赖)
 - `train_exit_metamodel.py` → (无内部依赖)

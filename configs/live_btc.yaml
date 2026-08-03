@@ -140,45 +140,21 @@ alert_system:
     threshold: 0
 brains:
   registry_entries:
-  # ── FIX-20260616-095: V4 RE-ENABLED — model verified 41-dim (num_feature=41)
-  #   +$64 across 105 trades.  Router serves btc_macro_enhanced_41 contract.
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V4.json
-  # ── V9_H1 RETIRED (FIX-20260625-136): -34.7R, WR=39.7%, vote_weight=0.0 ghost node → archive ──
-  # ── V10_M15 REMOVED (DQAF-20260615-009g): stale 37-dim model, magic collision, artifact_hash mismatch ──
-  # ── V12_H1_Survival RETIRED (FIX-20260626-140): SL=3.0/TP=2.0 → 87.1% TP degenerate labels → constant model (σ=0.014). Replaced by V12_H1_15. ──
   - enabled: false
     path: configs/brains_btc/BTC_Swing_V12_H1_Survival.json
-  # ── RETIRED (DQAF-20260707-003): V12_H1_15 kill-switch — Wasserstein=0.0084
-  #   zero directional discrimination, 48-dim H1 feature engineering failed
-  #   (Wasserstein worsened to 0.0019).  Strategy line btc_swing_h1 also retired.
-  #   Path C pending: horizon=4 retrain with 48-dim features.
   - enabled: false
     path: configs/brains_btc/BTC_Swing_V12_H1_15.json
-  # ── FIX-20260706-015: B-path binary directional classifier (M5, probation)
-  #   43,613 samples, WR=51.1%, XGBoost binary:logistic → binary_directional deadzone.
-  #   Shadow observe — signals recorded, not executed. DQAF-20260706-015.
   - enabled: true
     path: configs/brains_btc/BTC_Swing_M5_Binary.json
-  # ── V4_LGB RETIRED (DQAF-20260802-002 R1): vote_weight=0.0 contract-muted brain.
-  #   Excluded from p_win pool (Voting Boundary == EV Boundary).  btc_swing line
-  #   retired via 方案X (DQAF-20260802-003, IC D+C ruling) — this brain follows
-  #   the M5 stack into retirement.  enabled:false = explicit registry isolation
-  #   (was never in allowlist → default-participates; now declared retired).
   - enabled: false
     path: configs/brains_btc/BTC_Swing_V4_LGB.json
-  # ── V4 Expected R Two-Tower M15 (2026-08-01, DQAF-20260731-004) ──
-  # SHORT tower ρ=0.0596 (vote_weight=1.0, full signal authority).
-  # LONG tower ρ=0.0445 (vote_weight=0.0, observation only — 30d OOS blind test).
-  # Both shadow status — zero real risk.  Strategy mode: shadow.
   - enabled: true
     path: configs/brains_btc/BTC_Expected_R_V4_LONG.json
   - enabled: true
     path: configs/brains_btc/BTC_Expected_R_V4_SHORT.json
-  # ── BTC Multi-TF Tracer Bullet Expansion (2026-07-13) ──
-  # 41-dim V9 schema + DQAF-062 directional labels. All shadow — zero live risk.
-  # Each TF has _intent.trading: shadow_only with dead-man switches.
-  - enabled: false  # RETIRED FIX-20260715-011
+  - enabled: false
     path: configs/brains_btc/BTC_Swing_M15.json
   - enabled: true
     path: configs/brains_btc/BTC_Swing_M30.json
@@ -186,8 +162,18 @@ brains:
     path: configs/brains_btc/BTC_Swing_H1_V2.json
   - enabled: true
     path: configs/brains_btc/BTC_Swing_H4.json
-  # ── DLR-001 config drift fix (2026-06-17): Retired fleet removed from registry.
-  #   Archive brain configs preserved in configs/brains_btc/archive/ for reference.
+  - path: configs/brains_btc/BTC_Expected_R_V5_LONG_20260803_115120.json
+    enabled: true
+  - path: configs/brains_btc/BTC_Expected_R_V5_SHORT_20260803_115121.json
+    enabled: true
+  - path: configs/brains_btc/BTC_Flow46_V1_SHORT_20260803_115933.json
+    enabled: false
+  - path: configs/brains_btc/BTC_Expected_R_V5_LONG_20260803_120849.json
+    enabled: true
+  - path: configs/brains_btc/BTC_Expected_R_V5_SHORT_20260803_120850.json
+    enabled: true
+  - path: configs/brains_btc/BTC_Flow46_V1_SHORT_20260803_120909.json
+    enabled: false
 capital_allocator:
   base_volume: 0.01
   max_volume: 0.1
@@ -300,18 +286,11 @@ pipeline:
 portfolio_max_gross: 0.5
 portfolio_max_net: 0.3
 reentry:
-  # ── FIX-20260705-008: bleed_confidence_penalty is DEPRECATED ──
-  # Replaced by _BLEED_ABSOLUTE_CONFIDENCE=0.50 in reentry_guard.py.
-  # The old "confidence must improve from exit" logic caused adverse selection.
-  # This field is retained for config schema backward compatibility only.
   bleed_confidence_penalty: 0.15
   bleed_cooldown_seconds: 600
   sl_confidence_penalty: 0.15
   sl_cooldown_seconds: 300
 regime_gate:
-  # DQAF-20260622-059 (P0-3): ADX filter THERMALLY FUSED — thresholds set to
-  # unrealistically high values to disable counter-trend blocking.
-  # RESTORE: set trending_threshold back to 30, mild_trend_threshold to 20.
   adx:
     mild_trend_threshold: 999
     trending_threshold: 999
@@ -331,18 +310,11 @@ regime_gate:
       btc_swing: full
 schema_version: live_config.v2
 strategy_lines:
-  # ── FIX-20260626-142: Re-aligned to V12_H1_15 training contract (SL=1.5/TP=1.5, horizon=12) ──
-  # Originally DQAF-20260615-002: SL=3.0/TP=2.0 Survival line for V9_H1/V12_H1_Survival.
-  # V12_H1_Survival retired (FIX-20260626-140, L3 degenerate contract). V12_H1_15 is
-  # now the sole brain: LightGBM, SL=1.5/TP=1.5 symmetric, 47% TP balanced labels.
   btc_swing_h1:
-    # ── RETIRED (DQAF-20260707-003): Kill-switch — Wasserstein=0.0084 zero directional
-    #   discrimination, 48-dim feature engineering failed (Wasserstein worsened to 0.0019).
-    #   Path C pending: horizon=4 retrain with 48-dim features.
     enabled: false
     mode: retired
     base_volume: 0.01
-    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
+    min_economic_volume: 0.01
     brain_types:
     - lightgbm_v1
     budget:
@@ -380,33 +352,18 @@ strategy_lines:
       partial_tp_enabled: false
       partial_tp_r: 0.0
       partial_tp_ratio: 0.0
-
   btc_swing:
     base_volume: 0.01
-    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
+    min_economic_volume: 0.01
     brain_types:
     - xgboost_v9
-    # lightgbm_v1 moved to btc_swing_h1 (DQAF-20260615-002)
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 5
-      cooldown_minutes: 0  # FIX-20260613-090: fail-closed latch, never auto-unpause
+      cooldown_minutes: 0
     confidence_threshold: 0.35
     direction_balance:
       long_bias_discount: 0.15
-    # ── DQAF-20260705-064 KILL SWITCH LIFTED (2026-07-05) ──
-    # Kill switch reason: V4 flipped SHORT-only since June 28 (0 LONG post-June28),
-    #   feature manifold shift (fv[2] halved 135.7→67.5, fv[4] collapsed 15.5→2.9) →
-    #   model in OOD zone. Together with V12_H1_15 locked LONG → cross-strategy hedge.
-    # Resolution: (1) V4 direction recovered — 54% LONG, 13% SHORT, 27% NEUTRAL in
-    #   recent 100 golden_master records. Manifold shift self-corrected. (2) Portfolio-
-    #   NettingGate active (swallow mode, 0.20 threshold) provides systemic protection.
-    #   (3) All 3 brains currently agree on LONG — no hedging.
-    # ── 方案X 战略退役 (2026-08-02, DQAF-20260802-003 / IC D+C 裁决) ──
-    # btc_swing 对称 1.5/1.5 SL=TP + spread 不对称 → post-spread RR=0.9786,
-    # 盈亏平衡 50.5% > V4 CV 49.8% = 结构性负 EV. EV veto 已拦截全部信号 (零新亏).
-    # 8/3 observation_hold 过期后治理自动降级 V4; 本线 disabled 使 M5 彻底让位,
-    # 资本聚焦 H1_V2 (WR 66.7%) + Expected R 双塔. 重启后生效.
     enabled: false
     exit:
       confidence_decay_exit: true
@@ -415,7 +372,7 @@ strategy_lines:
       hesitation_cycles: 12
       time_exit_cycles: 72
       ev_trajectory_enabled: false
-      trail_activation_atr: 0.5   # FIX-20260620-004: 0.3→0.5 — reduce premature trail activation, lower breakeven rate
+      trail_activation_atr: 0.5
       trail_atr_mult: 2.0
       trail_enabled: true
     magic: 90410
@@ -423,7 +380,7 @@ strategy_lines:
     max_volume: 0.1
     min_p_win: 0.45
     min_valid_brains: 1
-    mode: live  # FIX-20260625-136: probation→live — fleet audit confirmed +49.4R top profit engine
+    mode: live
     sl:
       base_atr_mult: 1.5
       dynamic: true
@@ -438,16 +395,11 @@ strategy_lines:
       partial_tp_enabled: true
       partial_tp_r: 1.0
       partial_tp_ratio: 0.5
-
-  # ── BTC Multi-TF Probation (2026-07-13) ──
-  # M15 RETIRED 2026-07-15 (FIX-20260715-011): p_win=0.446 below 0.45 floor.
-  # M30/H1_V2: probation. H4: probation. Evaluation: 50 trades → PF>1.0 + WR>48% → live.
-
   btc_swing_m15:
     enabled: false
     mode: retired
     base_volume: 0.01
-    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
+    min_economic_volume: 0.01
     brain_types:
     - xgboost_v9
     budget:
@@ -483,12 +435,11 @@ strategy_lines:
     tp:
       base_atr_mult: 2.0
       partial_tp_enabled: false
-
   btc_swing_m30:
     enabled: true
     mode: probation
     base_volume: 0.01
-    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
+    min_economic_volume: 0.01
     brain_types:
     - xgboost_v9
     budget:
@@ -525,12 +476,11 @@ strategy_lines:
     tp:
       base_atr_mult: 2.5
       partial_tp_enabled: false
-
   btc_swing_h1_v2:
     enabled: true
     mode: probation
     base_volume: 0.01
-    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
+    min_economic_volume: 0.01
     brain_types:
     - lightgbm_v1
     budget:
@@ -567,12 +517,11 @@ strategy_lines:
     tp:
       base_atr_mult: 2.5
       partial_tp_enabled: false
-
   btc_swing_h4:
     enabled: true
     mode: probation
     base_volume: 0.01
-    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
+    min_economic_volume: 0.01
     brain_types:
     - xgboost_v9
     budget:
@@ -609,11 +558,6 @@ strategy_lines:
     tp:
       base_atr_mult: 3.0
       partial_tp_enabled: false
-
-  # ── V4 Expected R Two-Tower M15 (2026-08-01, DQAF-20260731-004) ──
-  # SHORT tower ρ=0.0596 (vote_weight=1.0), LONG tower ρ=0.0445 (vote_weight=0.0).
-  # Shadow mode initially — signals recorded, not executed.
-  # After 3-5 day signal validation → promote mode to 'live' for SHORT execution.
   btc_expected_r_m15:
     enabled: true
     mode: shadow
@@ -640,7 +584,7 @@ strategy_lines:
     magic: 90452
     max_spread_points: 3000
     max_volume: 0.05
-    min_p_win: 0.40
+    min_p_win: 0.4
     min_valid_brains: 1
     sl:
       base_atr_mult: 1.5
@@ -654,12 +598,6 @@ strategy_lines:
     tp:
       base_atr_mult: 2.5
       partial_tp_enabled: false
-
-  # ── Cross-asset strategies strictly disabled in BTC namespace (FIX-20260801-009) ──
-  # These contract groups are XAU-flavored (barrier/micro/statarb/daily_swing/H1-directional).
-  # Explicit enabled:false = deliberate policy, not an omission.  strategy_builder
-  # traverses ALL registered groups; without explicit disable it warns every cycle
-  # ("config key 'X.enabled' missing, using default=True").  Route A: explicit isolation.
   barrier_12bar:
     enabled: false
   barrier_12bar_meta:
@@ -688,7 +626,6 @@ strategy_lines:
     enabled: false
   h1_directional:
     enabled: false
-
 training:
   lanes_config: scripts/training/lane_trainers.json
   plan_generator: scripts/training/generate_batch_plan.py

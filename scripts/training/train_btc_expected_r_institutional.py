@@ -62,6 +62,28 @@ Y_KEY = {"LONG": "y_long", "SHORT": "y_short"}
 BRAIN_TYPE = {"LONG": "expected_r_long", "SHORT": "expected_r_short"}
 
 
+def label_contract_block(contract) -> dict[str, Any]:
+    """The label_contract block an enabled brain must carry (verify.py Check 3).
+
+    FIX-20260803-007: config-consistency gate (DQAF-20260622-051) requires every
+    ENABLED brain to declare its training label contract so train-serve SL/TP
+    alignment is auditable.  Values come from the training contract's LabelSpec
+    (the single source of truth — aligned via validate_label_vs_live hard gate).
+    """
+    return {
+        "contract_id": contract.label.contract_id,
+        "aligned_with": "live_btc.yaml",
+        "sl_atr_mult": contract.label.sl_atr_mult,
+        "tp_atr_mult": contract.label.tp_atr_mult,
+        "horizon_bars": contract.label.horizon_bars,
+        "spread_points": contract.label.spread_points,
+        "slippage_points": contract.label.slippage_points,
+        "tick_size": contract.label.tick_size,
+        "tick_value": contract.label.tick_value,
+        "output_unit": contract.label.output_unit,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Hash-lock (reproducible lineage — identical guard to train.py)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -243,6 +265,7 @@ def _register_tower(
         model_version=f"{contract.contract_id}_{tower.lower()}",
         dataset_hash=dataset_hash,
         label_contract_id=contract.label.contract_id,
+        label_contract=label_contract_block(contract),
         extra={
             "strategy": "btc_expected_r",
             "timeframe": "M15",

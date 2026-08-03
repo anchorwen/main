@@ -703,6 +703,7 @@ def _auto_register_in_live_yaml(
     brain_config: dict[str, Any],
     config_path: Path,
     live_yaml_path: str | Path | None = None,
+    enabled: bool = True,
 ) -> None:
     """Add a registry_entry for the new brain to live.yaml.
 
@@ -710,6 +711,12 @@ def _auto_register_in_live_yaml(
         live_yaml_path: Override the target live config.  Defaults to
             ``configs/live.yaml`` (XAU).  BTC contracts point at
             ``configs/live_btc.yaml`` (FIX-20260803-006 parameterization).
+        enabled: Runtime wiring switch.  M4 Phase 6.1 (FIX-20260803-007):
+            OFI 46-dim transfer shadow brains register ``enabled: False`` —
+            the frozen-base + residual prediction chain has no runtime
+            evaluator yet, so wiring them live would risk the strategy line.
+            Shadow models carry full lineage + governance candidate status but
+            are NOT evaluated until the deployment integration lands.
     """
     import yaml as _yaml
 
@@ -737,7 +744,7 @@ def _auto_register_in_live_yaml(
 
     entry = {
         "path": rel_path,
-        "enabled": True,
+        "enabled": enabled,
     }
     entries.append(entry)
     live["brains"]["registry_entries"] = entries

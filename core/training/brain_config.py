@@ -123,6 +123,7 @@ def build_brain_config(
     model_version: str = "",
     dataset_hash: str = "",
     label_contract_id: str = "",
+    label_contract: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a complete ``brain_registry_entry.v1`` config dict.
@@ -201,6 +202,15 @@ def build_brain_config(
         "_quality_gate_passed": metrics.get("quality_gate_passed", False),
         "_shadow_target_trades": 50,
     }
+
+    # ── label_contract block (FIX-20260803-007): the config-consistency gate
+    # (verify.py Check 3 / DQAF-20260622-051) requires every ENABLED brain to
+    # declare its training label contract so train-serve SL/TP alignment can be
+    # audited.  Institutional brains must carry the block the factory was given;
+    # callers that omit it (legacy XAU path, backward-compat) get no block and
+    # remain exempt — XAU behavior is unchanged.
+    if label_contract is not None:
+        config["label_contract"] = label_contract
 
     if extra:
         config.update(extra)

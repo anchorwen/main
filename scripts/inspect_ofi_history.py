@@ -103,7 +103,7 @@ def inspect(data_dir: Path) -> dict[str, Any]:
     }
 
     if n == 0:
-        result["verdict"] = "NO_DATA — bridge has not settled any OFI bar yet"
+        result["verdict"] = "NO_DATA - bridge has not settled any OFI bar yet"
         return result
 
     # ── Wall-clock span ──
@@ -157,16 +157,16 @@ def inspect(data_dir: Path) -> dict[str, Any]:
 
     # ── Overall verdict ──
     if retrain_ready:
-        verdict = f"RETRAIN_READY — {h1_windows:,} H1 windows ≥ {_RETRAIN_H1_THRESHOLD:,}"
+        verdict = f"RETRAIN_READY - {h1_windows:,} H1 windows >= {_RETRAIN_H1_THRESHOLD:,}"
     elif eval_ready:
         verdict = (
-            f"EVAL_READY — Gate 1 met ({n:,} settles / {span_days:.1f}d); "
+            f"EVAL_READY - Gate 1 met ({n:,} settles / {span_days:.1f}d); "
             f"Gate 2 at {h1_windows:,}/{_RETRAIN_H1_THRESHOLD:,} H1 windows"
         )
     else:
         pct = 100 * n / _EVAL_RAW_THRESHOLD
         verdict = (
-            f"ACCUMULATING — {n:,}/{_EVAL_RAW_THRESHOLD:,} settles ({pct:.0f}%), "
+            f"ACCUMULATING - {n:,}/{_EVAL_RAW_THRESHOLD:,} settles ({pct:.0f}%), "
             f"{span_days:.1f}/{_EVAL_SPAN_DAYS:.0f}d span, {h1_windows:,} H1 windows"
         )
     result["verdict"] = verdict
@@ -196,7 +196,7 @@ def main() -> None:
         print(f"\n  {stats['verdict']}")
         return
 
-    print(f"  Span:    {stats['first_ts']} → {stats['last_ts']}")
+    print(f"  Span:    {stats['first_ts']} -> {stats['last_ts']}")
     print(
         f"           ({stats['span_days']:.2f} days, {stats['distinct_h1_windows']:,} distinct H1 windows)"
     )
@@ -207,13 +207,16 @@ def main() -> None:
     print(f"\n  Divergence fire rate:  {stats['divergence_fire_rate'] * 100:.1f}%")
     print(f"  real_volume available: {stats['volume_real_available']}")
     print(
-        f"  Live flow features:    {stats['effective_flow_dim']}/5 → "
+        f"  Live flow features:    {stats['effective_flow_dim']}/5 -> "
         f"effective schema = {stats['effective_schema_dim']}-dim"
     )
     g1, g2 = stats["gate1_screening"], stats["gate2_retrain"]
+    # ASCII-only markers — Windows GBK console cannot encode U+2713 (✓).
     print("\n  Gates:")
-    print(f"    [{'✓' if g1['ready'] else ' '}] Gate 1 (Wasserstein scan):  {g1['detail']}")
-    print(f"    [{'✓' if g2['ready'] else ' '}] Gate 2 (H1 retrain):        {g2['detail']}")
+    g1_mark = "READY" if g1["ready"] else "----"
+    g2_mark = "READY" if g2["ready"] else "----"
+    print(f"    [{g1_mark:5s}] Gate 1 (Wasserstein scan):  {g1['detail']}")
+    print(f"    [{g2_mark:5s}] Gate 2 (H1 retrain):        {g2['detail']}")
     print(f"\n  VERDICT: {stats['verdict']}")
 
 

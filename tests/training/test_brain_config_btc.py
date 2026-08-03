@@ -110,6 +110,28 @@ class TestBuildBrainConfigLineage:
         with pytest.raises(ValueError, match="artifact_hash"):
             _build_cfg(artifact_hash="")
 
+    def test_label_contract_block_emitted_when_provided(self) -> None:
+        # FIX-20260803-007: the config-consistency gate (verify.py Check 3 /
+        # DQAF-20260622-051) requires every enabled brain to carry a
+        # label_contract block.  The institutional factory must emit it.
+        cfg = _build_cfg(
+            label_contract={
+                "contract_id": "label-expected-r-btc-m15",
+                "aligned_with": "live_btc.yaml",
+                "sl_atr_mult": 1.5,
+                "tp_atr_mult": 2.5,
+            }
+        )
+        assert cfg["label_contract"]["contract_id"] == "label-expected-r-btc-m15"
+        assert cfg["label_contract"]["aligned_with"] == "live_btc.yaml"
+        assert cfg["label_contract"]["sl_atr_mult"] == 1.5
+
+    def test_no_label_contract_block_by_default(self) -> None:
+        # Backward-compat: callers that omit label_contract (legacy XAU path)
+        # get no block — zero behavior change.
+        cfg = _build_cfg()
+        assert "label_contract" not in cfg
+
 
 # ── 3. TrainingRunRecord lineage columns ────────────────────────────────────
 
