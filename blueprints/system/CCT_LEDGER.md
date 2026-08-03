@@ -1506,3 +1506,19 @@
   - Source 3: [日志] data_btc/logs/intent_20260802T115729Z.log (BTC/XAU 熔断原始事件行 + silence 值) + data_btc/state/execution_state.json (BTC tripped 14:09:59Z)
 - **是否被推翻**: 否 (AR H1-H4 已全部处理: H1 桥死=推翻, H2 持仓门控=部分成立, H3 011 已修=推翻, H4 假熔断可接受=推翻)
 - **关联 ReB Pattern**: LIVENESS_PROXY_STAMPED_ONLY_IN_DEGRADED_PATHS (互补 ReB-20260801-LIVENESS_ACK_CIRCULAR_DEPENDENCY)
+
+### CCT-20260803-001
+- **Docket ID**: DQAF-20260803-001
+- **日期**: 2026-08-03
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 双品种防护性零开单 (08-03 00:00Z) — BTC h1_v2 volume 0.0033 / h4 0.0033, XAU m30_swing 0.0066 / h1_swing 0.0066, 全部 `volume_degraded_below_economic_minimum: X < 0.02`; BTC kelly 步进 0.01 × 健康分 1.0 = 0.01 < 0.02 → **即使健康满分也永久封杀** (结构性植物人状态)。
+  - [Layer 2 — 中间异常]: GodsEye 健康分低下 (BTC 0.327 SHADOW / XAU 0.438 CAUTIOUS) → strategy_evaluator.py `volume ×= max(0.25, health)` → 成交量坍缩 → 终态闸门 `_MIN_ECONOMIC_VOLUME = 0.02` (strategy_evaluator.py:1144) 击杀。
+  - [Layer 3 — 根因]: L3 架构异味 — 基于 XAU lot_step 定尺的 0.02 (注释 "For XAU: lot_step=0.01, 2× lot_step") 硬编码为**全局唯一** volume 下限, 对 BTC (base_volume 0.01) 形成结构性封杀; 单品种过度拟合残留 (Iron Law #14 同族: per-symbol 操作参数未下沉)。修复 FIX-20260803-001: `StrategyLineConfig.min_economic_volume` 字段 + `resolved_min_economic_volume` property (显式配置优先, BTC→base_volume floor 0.01, 其他→2×lot_step 0.02) + builder 20 策略线透传 + `_validate_min_economic_floors` 静态校验 + evaluator 终态闸门 per-strategy floor。**否决全局降级**: IC 拒绝 0.02→0.01 全局 hack (拆 XAU 盈亏平衡地板)。
+- **证据引用**:
+  - Source 1: [代码] core/execution/strategy_line.py StrategyLineConfig.resolved_min_economic_volume (per-symbol 派生 SSOT) + core/runtime/strategy_evaluator.py:1145-1148 (per-strategy floor) + core/runtime/strategy_builder.py:1295 _validate_min_economic_floors
+  - Source 2: [配置] configs/live_btc.yaml 6 策略线 `min_economic_volume: 0.01` (btc_swing/m15/m30/h1_v2/h4 + btc_swing_h1) — BTC 自有合法下限
+  - Source 3: [日志] data_btc/logs/intent_20260802T180823Z.log (0.0025 < 0.02) + data/logs/live_launcher_20260802T180824Z.log (0.0120/0.0150 < 0.02, defensive_confidence_floor conf=0.323)
+  - Source 4: [测试] tests/execution/test_min_economic_per_symbol.py (5 用例: BTC 0.01 / XAU 0.02 / 显式覆盖 / base_volume scale / 静态校验 warning-not-raise)
+- **是否被推翻**: 否 (AR 全部处理: 系统崩溃=推翻, OU 冷启动=推翻, 桥接断流=推翻)
+- **关联 ReB Pattern**: XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD, EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG

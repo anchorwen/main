@@ -342,6 +342,7 @@ strategy_lines:
     enabled: false
     mode: retired
     base_volume: 0.01
+    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
     brain_types:
     - lightgbm_v1
     budget:
@@ -382,6 +383,7 @@ strategy_lines:
 
   btc_swing:
     base_volume: 0.01
+    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
     brain_types:
     - xgboost_v9
     # lightgbm_v1 moved to btc_swing_h1 (DQAF-20260615-002)
@@ -445,6 +447,7 @@ strategy_lines:
     enabled: false
     mode: retired
     base_volume: 0.01
+    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
     brain_types:
     - xgboost_v9
     budget:
@@ -485,6 +488,7 @@ strategy_lines:
     enabled: true
     mode: probation
     base_volume: 0.01
+    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
     brain_types:
     - xgboost_v9
     budget:
@@ -526,6 +530,7 @@ strategy_lines:
     enabled: true
     mode: probation
     base_volume: 0.01
+    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
     brain_types:
     - lightgbm_v1
     budget:
@@ -567,6 +572,7 @@ strategy_lines:
     enabled: true
     mode: probation
     base_volume: 0.01
+    min_economic_volume: 0.01  # TECH_DEBT-006: BTC own legal floor (IC 2026-08-03); XAU keeps 0.02
     brain_types:
     - xgboost_v9
     budget:

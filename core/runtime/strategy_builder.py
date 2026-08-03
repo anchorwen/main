@@ -266,6 +266,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="barrier_12bar",
+                min_economic_volume=_cfg("barrier_12bar", "min_economic_volume", None),
                 strategy_family=_cfg("barrier_12bar", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("barrier_12bar", "trend_following"),
                 magic=90001,
@@ -317,6 +318,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="micro_3bar",
+                min_economic_volume=_cfg("micro_3bar", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("micro_3bar", "trend_following"),
                 magic=90002,
                 brain_types=MICRO_GROUP["brain_types"],
@@ -362,6 +364,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="micro_m15",
+                min_economic_volume=_cfg("micro_m15", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("micro_m15", "trend_following"),
                 magic=90101,
                 brain_types=MICRO_M15_GROUP["brain_types"],
@@ -407,6 +410,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="micro_h1",
+                min_economic_volume=_cfg("micro_h1", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("micro_h1", "trend_following"),
                 magic=90201,
                 brain_types=MICRO_H1_GROUP["brain_types"],
@@ -452,6 +456,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="statarb_dynamic",
+                min_economic_volume=_cfg("statarb_dynamic", "min_economic_volume", None),
                 strategy_family=_cfg("statarb_dynamic", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("statarb_dynamic", "trend_following"),
                 magic=90003,
@@ -499,6 +504,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="statarb_m15",
+                min_economic_volume=_cfg("statarb_m15", "min_economic_volume", None),
                 strategy_family=_cfg("statarb_m15", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("statarb_m15", "trend_following"),
                 magic=90103,
@@ -546,6 +552,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="barrier_12bar_meta",
+                min_economic_volume=_cfg("barrier_12bar_meta", "min_economic_volume", None),
                 strategy_family=_cfg("barrier_12bar_meta", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("barrier_12bar_meta", "trend_following"),
                 magic=90014,
@@ -591,6 +598,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="daily_swing",
+                min_economic_volume=_cfg("daily_swing", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("daily_swing", "trend_following"),
                 magic=90301,
                 brain_types=DAILY_SWING_GROUP["brain_types"],
@@ -634,6 +642,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="m15_swing",
+                min_economic_volume=_cfg("m15_swing", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("m15_swing", "trend_following"),
                 magic=90310,
                 brain_types=M15_SWING_GROUP["brain_types"],
@@ -678,6 +687,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="m30_swing",
+                min_economic_volume=_cfg("m30_swing", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("m30_swing", "trend_following"),
                 magic=90320,
                 brain_types=M30_SWING_GROUP["brain_types"],
@@ -722,6 +732,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="btc_swing",
+                min_economic_volume=_cfg("btc_swing", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing", "trend_following"),
                 magic=90410,
                 brain_types=BTC_SWING_GROUP["brain_types"],
@@ -776,6 +787,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="btc_swing_h1",
+                min_economic_volume=_cfg("btc_swing_h1", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing_h1", "trend_following"),
                 magic=90411,
                 brain_types=BTC_SWING_H1_GROUP["brain_types"],
@@ -826,6 +838,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="btc_swing_m15",
+                min_economic_volume=_cfg("btc_swing_m15", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing_m15", "trend_following"),
                 magic=90415,
                 brain_types=BTC_SWING_M15_GROUP["brain_types"],
@@ -873,6 +886,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="btc_swing_m30",
+                min_economic_volume=_cfg("btc_swing_m30", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing_m30", "trend_following"),
                 magic=90430,
                 brain_types=BTC_SWING_M30_GROUP["brain_types"],
@@ -920,6 +934,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="btc_swing_h1_v2",
+                min_economic_volume=_cfg("btc_swing_h1_v2", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing_h1_v2", "trend_following"),
                 magic=90460,
                 brain_types=BTC_SWING_H1_V2_GROUP["brain_types"],
@@ -967,6 +982,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="btc_swing_h4",
+                min_economic_volume=_cfg("btc_swing_h4", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing_h4", "trend_following"),
                 magic=904240,
                 brain_types=BTC_SWING_H4_GROUP["brain_types"],
@@ -1015,6 +1031,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="btc_expected_r_m15",
+                min_economic_volume=_cfg("btc_expected_r_m15", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("btc_expected_r_m15", "trend_following"),
                 magic=_cfg("btc_expected_r_m15", "magic", 90452),
                 brain_types=BTC_EXPECTED_R_M15_GROUP["brain_types"],
@@ -1068,6 +1085,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="h1_directional",
+                min_economic_volume=_cfg("h1_directional", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("h1_directional", "trend_following"),
                 magic=90303,
                 brain_types=H1_DIRECTIONAL_GROUP["brain_types"],
@@ -1112,6 +1130,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="h1_swing",
+                min_economic_volume=_cfg("h1_swing", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("h1_swing", "trend_following"),
                 magic=90330,
                 brain_types=H1_SWING_GROUP["brain_types"],
@@ -1156,6 +1175,7 @@ def build_strategy_lines(
                 base_dir=config.base_dir,
                 contract_size=get_asset(config.symbol).contract_size,
                 name="h4_swing",
+                min_economic_volume=_cfg("h4_swing", "min_economic_volume", None),
                 strategy_family=_STRATEGY_FAMILY_MAP.get("h4_swing", "trend_following"),
                 magic=90340,
                 brain_types=H4_SWING_GROUP["brain_types"],
@@ -1260,4 +1280,34 @@ def build_strategy_lines(
                 flush=True,
             )
 
+    _validate_min_economic_floors(strategies)
+
     return strategies
+
+
+def _validate_min_economic_floors(strategies: dict[str, Any]) -> None:
+    """TECH_DEBT-006 (DQAF-20260803-001): static cross-symbol validation.
+
+    ReB-XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD prevention — flag any strategy
+    line whose standard size sits below its per-symbol minimum economic floor
+    (structurally un-tradeable regardless of health).  Warning only; the
+    floor may be intentional (documented) per IC ruling.
+    """
+    for _name, _sl in strategies.items():
+        _c = getattr(_sl, "config", None)
+        # RuleEngineStrategyWrapper.config is a plain dict ({name, timeframe})
+        # — pure-rule strategies bypass the Kelly volume pipeline and have no
+        # per-symbol floor; skip them.
+        if _c is None or not hasattr(_c, "resolved_min_economic_volume"):
+            continue
+        _floor = _c.resolved_min_economic_volume
+        if _c.base_volume < _floor:
+            logger.warning(
+                "STRATEGY [%s] base_volume=%.4f < min_economic_volume=%.4f "
+                "— structurally un-tradeable at standard size regardless of health "
+                "(per-symbol floor: %s)",
+                _name,
+                _c.base_volume,
+                _floor,
+                _c.symbol,
+            )

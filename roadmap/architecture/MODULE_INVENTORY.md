@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-02T17:31:21Z
-> **扫描模块数**: 768
+> **自动生成**: 2026-08-03T06:43:55Z
+> **扫描模块数**: 769
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -277,7 +277,7 @@
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_context.py` | ✅ active | StrategyEvaluationContext | 0 | 85 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 18 | 2072 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 19 | 2096 | — | |
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 137 | — | |
@@ -556,9 +556,9 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 5 | 1263 | — | |
+| `strategy_builder.py` | ✅ active | — | 6 | 1313 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 48 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 5 | 1373 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 5 | 1379 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -652,6 +652,7 @@
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
+| `_v4_obs_final_audit.py` | ✅ active | — | 3 | 209 | — | |
 | `_verify_governance_evaluator.py` | ✅ active | — | 2 | 138 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |

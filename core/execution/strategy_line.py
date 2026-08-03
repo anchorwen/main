@@ -263,6 +263,23 @@ class StrategyLineConfig:
         """M5-bar multiplier derived from timeframe label (e.g. H1→12)."""
         return self._TIMEFRAME_TO_M5.get(self.timeframe, 1)
 
+    @property
+    def resolved_min_economic_volume(self) -> float:
+        """Per-symbol minimum economic volume — the ONLY volume floor in the pipeline.
+
+        TECH_DEBT-006 (DQAF-20260803-001 / IC 最高执行令, 2026-08-03):
+        explicit config wins; otherwise symbol-aware default —
+        - BTC (base_volume 0.01, lot_step 0.01): max(lot_step, base_volume) = 0.01
+          (IC ruling: BTC owns its legal floor 0.01 — removes the structural
+          plant-state where 0.01 × health 1.0 = 0.01 < 0.02 forever)
+        - all others (XAU): 2 × lot_step = 0.02 (preserves FIX-20260730-010 status quo)
+        """
+        if self.min_economic_volume is not None and self.min_economic_volume > 0:
+            return round(float(self.min_economic_volume), 4)
+        if self.symbol.startswith("BTC"):
+            return round(max(self.lot_step, self.base_volume), 4)
+        return round(2 * self.lot_step, 4)
+
     # Lot granularity
     lot_step: float = 0.01
 
@@ -293,6 +310,13 @@ class StrategyLineConfig:
 
     # FIX-20260531-008: contract_size from ASSET_REGISTRY (Defense 1)
     contract_size: float = 100.0  # overridden per symbol via builder
+
+    # ── TECH_DEBT-006 (DQAF-20260803-001 / IC 最高执行令): per-symbol minimum
+    # economic volume.  Overrides the global _MIN_ECONOMIC_VOLUME hardcode
+    # (strategy_evaluator.py final settlement gate).  None = resolved by
+    # resolved_min_economic_volume symbol-aware default (BTC → base_volume floor,
+    # others → 2×lot_step).  Explicit live.yaml config always wins.
+    min_economic_volume: float | None = None
 
     def __post_init__(self) -> None:
         """Architectural Defense 2: fail-fast on unregistered or mismatched assets."""

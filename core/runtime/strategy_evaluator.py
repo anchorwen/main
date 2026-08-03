@@ -1128,26 +1128,32 @@ def evaluate_strategy_lines(
         # ═══════════════════════════════════════════════════════════════
         # Ω Final Settlement Gate: Minimum Economic Volume
         # FIX-20260730-010 — Phase 2 Architecture Refactoring.
+        # TECH_DEBT-006 (DQAF-20260803-001 / IC 最高执行令, 2026-08-03):
+        # per-symbol floor — explicit config wins, otherwise symbol-aware
+        # default via StrategyLineConfig.resolved_min_economic_volume
+        # (BTC → own base_volume floor 0.01; XAU → 2× lot_step = 0.02).
         #
         # This is the ONLY volume floor in the entire pipeline.  All
         # upstream degradation gates (governance, God's Eye health,
         # session multiplier) apply multiplicative factors WITHOUT
         # individual floors.  The raw product flows through to here.
         #
-        # Below MIN_ECONOMIC_VOLUME the trade is KILLED — not silently
+        # Below the per-symbol floor the trade is KILLED — not silently
         # forced to an uneconomic lot size.  The system honestly reports
         # "conditions too degraded to trade at viable size."
-        #
-        # For XAU: lot_step=0.01, 2× lot_step = 0.02 minimum economic.
-        # 0.01 lots (~$1/pip) cannot absorb spread friction + risk decay.
         # ═══════════════════════════════════════════════════════════════
-        _MIN_ECONOMIC_VOLUME = 0.02
-        if decision.should_trade and decision.volume < _MIN_ECONOMIC_VOLUME:
+        _floor = 0.02  # last-resort fallback (XAU-calibrated, never lower)
+        _cfg_ = getattr(strategy, "config", None)
+        # RuleEngineStrategyWrapper.config is a plain dict ({name, timeframe})
+        # — pure-rule strategies bypass the Kelly pipeline; keep XAU fallback.
+        if _cfg_ is not None and hasattr(_cfg_, "resolved_min_economic_volume"):
+            _floor = _cfg_.resolved_min_economic_volume
+        if decision.should_trade and decision.volume < _floor:
             decision.should_trade = False
             decision.reason = (
                 (decision.reason or "")
                 + " [volume_degraded_below_economic_minimum: "
-                + f"{decision.volume:.4f} < {_MIN_ECONOMIC_VOLUME}]"
+                + f"{decision.volume:.4f} < {_floor}]"
             )
             print(
                 json.dumps(
@@ -1157,7 +1163,7 @@ def evaluate_strategy_lines(
                         "strategy": sname,
                         "direction": decision.direction,
                         "volume": decision.volume,
-                        "min_economic": _MIN_ECONOMIC_VOLUME,
+                        "min_economic": _floor,
                         "confidence": round(decision.confidence, 4),
                         "reason": decision.reason,
                     },
@@ -1168,7 +1174,7 @@ def evaluate_strategy_lines(
         elif decision.should_trade:
             # Final rounding to nearest lot_step (0.01) — the only place
             # this happens after all degradation factors.  No floor needed:
-            # MIN_ECONOMIC_VOLUME already guarantees volume >= 0.02.
+            # the per-symbol floor already guarantees volume >= _floor.
             _ticks = int(decision.volume / 0.01 + 0.5)
             decision.volume = round(_ticks * 0.01, 2)
 
