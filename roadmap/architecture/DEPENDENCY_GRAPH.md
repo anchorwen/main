@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-03T09:30:15Z
+> **自动生成**: 2026-08-03T09:38:20Z
 
 ## Package-Level Dependencies
 
@@ -128,6 +128,7 @@
 ### `core/contracts/training/`
 
 - `label_contract.py` → (无内部依赖)
+- `label_from_live_yaml.py` → (无内部依赖)
 - `training_contract.py` → (无内部依赖)
 - `training_recipe.py` → (无内部依赖)
 
@@ -846,7 +847,7 @@
 - `batch_train_skeleton.py` → `scripts.training.crt_manifest`
 - `brain_leaderboard.py` → (无内部依赖)
 - `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`
-- `build_btc_dataset_from_ssot.py` → `core.training.feature_replay`
+- `build_btc_dataset_from_ssot.py` → `core.contracts.training.label_contract`, `core.contracts.training.label_from_live_yaml`, `core.training.feature_replay`, `scripts.training.validate_label_vs_live`
 - `build_btc_expected_r_dataset.py` → (无内部依赖)
 - `build_calibrated_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_live_labeled_dataset.py` → (无内部依赖)
@@ -910,6 +911,7 @@
 - `train_swing_v9.py` → (无内部依赖)
 - `train_xau_directional_v1.py` → (无内部依赖)
 - `train_xau_directional_v2.py` → `core.features.schemas.swing_enhanced_schema`
+- `validate_label_vs_live.py` → `core.contracts.training.label_contract`, `core.contracts.training.label_from_live_yaml`
 - `write_manifest_stub.py` → `scripts.training.crt_manifest`
 - `your_trainer.py` → `scripts.training.crt_manifest`
 

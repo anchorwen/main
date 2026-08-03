@@ -60,6 +60,13 @@ def main() -> None:
     parser.add_argument("--train-ratio", type=float, default=0.70)
     parser.add_argument("--val-ratio", type=float, default=0.15)
     parser.add_argument("--purge-bars", type=int, default=0, help="Purge gap at split boundaries")
+    parser.add_argument(
+        "--label-contract",
+        default="configs/training/label_contracts/label-expected-r-btc-m15.json",
+        help="Label contract JSON (expected_r two-tower labels; None disables labels)",
+    )
+    parser.add_argument("--strategy", default="btc_expected_r_m15", help="Live strategy line")
+    parser.add_argument("--live", default="configs/live_btc.yaml", help="Live YAML path")
     args = parser.parse_args()
 
     input_path = PROJECT_ROOT / args.input
@@ -90,11 +97,48 @@ def main() -> None:
     print(f"    Feature matrix: {X.shape}  (NaN: {int(np.isnan(X).sum())})")
     print(f"    micro_zeros_frac: {replay_meta['micro_zeros_frac']}")
 
+    # ── Labels via LabelContract (Phase 2 — label SSOT, hard-gate validated) ──
+    print(f"\n[2b] Labels ({args.label_contract}, strategy={args.strategy})...")
+    from core.contracts.training.label_contract import LabelContract
+    from core.contracts.training.label_from_live_yaml import label_params_from_live_yaml
+    from scripts.training.validate_label_vs_live import validate_label_contract_vs_live
+
+    contract = LabelContract.from_file(PROJECT_ROOT / args.label_contract)
+    live = label_params_from_live_yaml(args.strategy, PROJECT_ROOT / args.live)
+    issues = validate_label_contract_vs_live(contract, args.strategy, PROJECT_ROOT / args.live)
+    if issues:
+        raise RuntimeError(
+            "[FUSE] LabelLiveMismatch — label contract diverges from live strategy line: "
+            + "; ".join(issues)
+        )
+    print(
+        f"    gate PASSED: live SL={live.sl_atr_mult} TP={live.tp_atr_mult} "
+        f"spread={live.spread_points}"
+    )
+
+    o = df["open"].values.astype(np.float64)
+    h = df["high"].values.astype(np.float64)
+    l = df["low"].values.astype(np.float64)
+    c = df["close"].values.astype(np.float64)
+    n_all = len(df)
+    y_long = np.full(n_all, np.nan, dtype=np.float64)
+    y_short = np.full(n_all, np.nan, dtype=np.float64)
+    for i in range(args.warmup_bars, n_all - contract.horizon_bars - 1):
+        y_long[i] = contract.build_expected_r(o, h, l, c, entry_idx=i, side="long")
+        y_short[i] = contract.build_expected_r(o, h, l, c, entry_idx=i, side="short")
+    n_valid = int(np.sum(~np.isnan(y_long)))
+    print(f"    y_long valid: {n_valid:,} / {n_all:,} (mean={np.nanmean(y_long):+.4f})")
+    print(
+        f"    y_short valid: {int(np.sum(~np.isnan(y_short))):,} (mean={np.nanmean(y_short):+.4f})"
+    )
+
     # ── Warmup drop ──
     print(f"\n[3] Warmup drop (first {args.warmup_bars} bars)...")
     n_before = len(X)
     X = X[args.warmup_bars :]
     timestamps = timestamps[args.warmup_bars :]
+    y_long = y_long[args.warmup_bars :]
+    y_short = y_short[args.warmup_bars :]
     print(f"    {n_before:,} → {len(X):,}")
 
     # ── Time-based split (no look-ahead) + purge gap ──
@@ -121,14 +165,18 @@ def main() -> None:
     for name, (lo, hi) in splits.items():
         _X = X[lo:hi]
         _ts = timestamps[lo:hi]
+        _yl = y_long[lo:hi]
+        _ys = y_short[lo:hi]
         np.savez_compressed(
             output_dir / f"{name}.npz",
             X=_X,
+            y_long=_yl,
+            y_short=_ys,
             timestamps=_ts,
             feature_names=np.array(replay_meta["feature_names"], dtype=object),
             schema_id=np.array([args.schema], dtype=object),
         )
-        print(f"    {name}.npz: {_X.shape}")
+        print(f"    {name}.npz: {_X.shape} (y_long valid: {int(np.sum(~np.isnan(_yl))):,})")
 
     meta = {
         "builder": "build_btc_dataset_from_ssot.py",
@@ -151,7 +199,15 @@ def main() -> None:
         "micro_zeros_frac": replay_meta["micro_zeros_frac"],
         "min_warmup": replay_meta["min_warmup"],
         "assembly": replay_meta["assembly"],
-        "labels": "Phase 2 — LabelContract (label_from_live_yaml.py SSOT)",
+        "labels": {
+            "contract": str(args.label_contract),
+            "strategy_line": args.strategy,
+            "gate": "validate_label_vs_live.py PASSED",
+            "type": contract.type,
+            "sl_atr_mult": contract.sl_atr_mult,
+            "tp_atr_mult": contract.tp_atr_mult,
+            "horizon_bars": contract.horizon_bars,
+        },
     }
     with open(output_dir / "meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)

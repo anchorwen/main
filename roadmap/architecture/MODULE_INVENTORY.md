@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-03T09:30:15Z
-> **扫描模块数**: 771
+> **自动生成**: 2026-08-03T09:38:20Z
+> **扫描模块数**: 773
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -153,7 +153,8 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `label_contract.py` | ✅ active | BarrierResult, LabelContract | 11 | 549 | — | |
+| `label_contract.py` | ✅ active | BarrierResult, LabelContract | 12 | 641 | — | |
+| `label_from_live_yaml.py` | ✅ active | LiveLabelParams | 4 | 140 | — | |
 | `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 474 | — | |
 | `training_recipe.py` | ✅ active | ModelIdentity, LabelContractRef, DataAugmentation, DataConfig, TrainingConfig, EvaluationConfig, TrainingRecipe | 6 | 386 | — | |
 
@@ -948,7 +949,7 @@
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 7 | 258 | — | |
-| `build_btc_dataset_from_ssot.py` | ✅ active | — | 1 | 165 | — | |
+| `build_btc_dataset_from_ssot.py` | ✅ active | — | 1 | 221 | — | |
 | `build_btc_expected_r_dataset.py` | ✅ active | — | 12 | 799 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 771 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 251 | — | |
@@ -1012,6 +1013,7 @@
 | `train_swing_v9.py` | ✅ active | — | 4 | 491 | — | |
 | `train_xau_directional_v1.py` | ✅ active | — | 6 | 293 | — | |
 | `train_xau_directional_v2.py` | ✅ active | — | 18 | 923 | — | |
+| `validate_label_vs_live.py` | ✅ active | LabelLiveMismatchError | 2 | 130 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |
 | `your_trainer.py` | ✅ active | — | 7 | 223 | — | |
 

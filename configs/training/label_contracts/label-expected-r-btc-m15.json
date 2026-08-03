@@ -1,0 +1,27 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-expected-r-btc-m15",
+  "type": "expected_r",
+  "horizon_bars": 12,
+  "bar_timeframe": "M15",
+  "barriers": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5
+  },
+  "atr_config": {
+    "timeframe": "M15",
+    "period": 14
+  },
+  "label_classes": {},
+  "spread_points": 200,
+  "slippage_points": 10,
+  "tick_value": 0.01,
+  "tick_size": 0.01,
+  "metadata": {
+    "description": "BTC Expected-R two-tower label contract (FIX-20260803-003 / 战役二). open-next-bar entry, TP-before-SL canon, continuous R-multiple target. SL/TP/spread aligned to live_btc.yaml btc_expected_r_m15 (validate_label_vs_live.py hard gate).",
+    "author": "cursor-agent",
+    "created": "2026-08-03",
+    "version": "1.0.0",
+    "barrier_order": "tp_before_sl"
+  }
+}

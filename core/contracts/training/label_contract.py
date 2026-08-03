@@ -268,7 +268,7 @@ class LabelContract:
     def __post_init__(self) -> None:
         if self.schema_version != SCHEMA_VERSION:
             raise ValueError(f"Expected schema_version={SCHEMA_VERSION}, got {self.schema_version}")
-        if self.type not in ("survival_barrier", "regression", "binary_class"):
+        if self.type not in ("survival_barrier", "regression", "binary_class", "expected_r"):
             raise ValueError(f"Unknown label contract type: {self.type}")
         if self.horizon_bars < 1:
             raise ValueError(f"horizon_bars must be >= 1, got {self.horizon_bars}")
@@ -521,6 +521,98 @@ class LabelContract:
         raw_atr_mult = raw_bps / atr_val
 
         return float(apply_friction_deadband(np.array([raw_atr_mult]), friction_atr)[0])
+
+    # ── Expected-R two-tower label builder (Phase 2 / FIX-20260803-003) ──
+    #
+    # CANON SEMANTICS (matches build_btc_expected_r_dataset.simulate_trade):
+    #   - entry = open[entry_idx+1] ± (half spread + slippage)  [next-bar open, costs-in]
+    #   - TP checked BEFORE SL (favorable first)
+    #   - same-bar TP+SL hit → 0 (ambiguous, excluded from supervision)
+    #   - TP hit → +R | SL hit → -1.0 | timeout → partial R at horizon close
+    #
+    # This is DIFFERENT from build_barrier_labels (which is SL-before-TP on
+    # close-price entry).  The divergence is intentional and pinned:
+    #   - barrier path: close entry, SL-first, `barrier_order="sl_before_tp"`
+    #   - expected-r path: open entry, TP-first, `barrier_order="tp_before_sl"`
+    # Both semantics are needed by different brain families (XAU barrier vs
+    # BTC two-tower Expected R) — never "unify" them without a ReB analysis.
+
+    def build_expected_r(
+        self,
+        opens: np.ndarray,
+        highs: np.ndarray,
+        lows: np.ndarray,
+        closes: np.ndarray,
+        *,
+        entry_idx: int,
+        side: str,
+    ) -> float:
+        """Build a continuous Expected-R label for a directional trade.
+
+        Returns the realized R-multiple for the given entry (or 0.0 when the
+        outcome is ambiguous / ATR cannot be computed / out of range).
+
+        Friction (half spread + slippage) is applied to the entry price per
+        side — consistent with the two-tower training's transaction-cost
+        modeling.  R-multiple: TP hit → positive; SL hit → -1.0; timeout →
+        partial R at the horizon close.
+        """
+        if self.type != "expected_r":
+            raise ValueError(f"build_expected_r requires type='expected_r', got '{self.type}'")
+        n = len(closes)
+        if n < entry_idx + 2:
+            return 0.0
+
+        atr_val = _compute_atr(
+            highs[: entry_idx + 1],
+            lows[: entry_idx + 1],
+            closes[: entry_idx + 1],
+            period=self.atr_period,
+        )
+        if atr_val <= 0:
+            return 0.0
+
+        sl_dist = self.sl_atr_mult * atr_val
+        tp_dist = max(self.tp_atr_mult * atr_val, sl_dist * 0.3)
+
+        half_spread = (self.spread_points * self.tick_size) / 2.0
+        slippage_cost = self.slippage_points * self.tick_size
+
+        if side == "long":
+            entry = float(opens[entry_idx + 1]) + half_spread + slippage_cost
+            sl_price = entry - sl_dist
+            tp_price = entry + tp_dist
+        else:
+            entry = float(opens[entry_idx + 1]) - half_spread - slippage_cost
+            sl_price = entry + sl_dist
+            tp_price = entry - tp_dist
+
+        end_bar = min(entry_idx + 1 + self.horizon_bars, n)
+        for j in range(entry_idx + 1, end_bar):
+            cur_h = float(highs[j])
+            cur_l = float(lows[j])
+
+            if side == "long":
+                tp_ok = cur_h >= tp_price
+                sl_ok = cur_l <= sl_price
+            else:
+                tp_ok = cur_l <= tp_price
+                sl_ok = cur_h >= sl_price
+
+            # Same-bar both → ambiguous → 0 (exclude from supervision)
+            if tp_ok and sl_ok:
+                return 0.0
+            if tp_ok:
+                return abs(tp_price - entry) / max(abs(entry - sl_price), 1e-9)
+            if sl_ok:
+                return -1.0
+
+        # Timeout: partial outcome at horizon close
+        close_at_end = float(closes[min(entry_idx + self.horizon_bars, n - 1)])
+        denom = max(abs(entry - sl_price), 1e-9)
+        if side == "long":
+            return (close_at_end - entry) / denom
+        return (entry - close_at_end) / denom
 
     # ── Self-consistency checks ──
 
