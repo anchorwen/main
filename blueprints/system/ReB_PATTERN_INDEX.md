@@ -20,6 +20,20 @@
 
 ---
 
+### ReB-20260803-XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD
+- **Pattern Signature**: `XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD`
+- **Date Cataloged**: 2026-08-03
+- **Source Docket**: DQAF-20260803-001
+- **Related**: TECH_DEBT-006
+
+**Definition**: A per-symbol operational threshold (MIN_ECONOMIC_VOLUME=0.02, derived from XAU lot_step) hardcoded as the global-only volume floor in the pipeline, structurally barring another symbol (BTC, lot_step 0.01, base_volume 0.01) from trading even at full health. The signature: a global constant whose derivation comment names one specific symbol ("For XAU: lot_step=0.01, 2× lot_step"), yet is applied unconditionally to all assets. The affected symbol's standard trade size sits below the floor by design, so any degradation factor (GodsEye health `max(0.25, health)`, session multiplier) pushes volume under the floor → protective zero-open (08-03: BTC 0.0033 / XAU 0.0066 both killed at the final settlement gate).
+
+**Prevention**: Symbol- and strategy-specific operational thresholds should be config-driven (live.yaml budget or symbol registry), defaulting from the symbol's own lot_step/base_volume — never hardcoded globally. Add a static cross-symbol validation: for each enabled strategy line, assert `base_volume * worst_case_factor >= min_economic(asset)` or document the intentional floor.
+
+**Detection**: Grep for global constants whose derivation comment names a single symbol. Static audit: for every enabled strategy line, flag any asset where `config.base_volume < _MIN_ECONOMIC_VOLUME` — that asset is structurally un-tradeable at standard size regardless of health.
+
+---
+
 ### ReB-20260726-GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION
 - **Pattern Signature**: `GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION`
 - **Date Cataloged**: 2026-07-26

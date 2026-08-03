@@ -13,6 +13,7 @@
 | TECH_DEBT-002 | 2026-06-15 | L2/L3 | runtime-live | **Journal 全量扫描 O(N) 性能炸弹**: MIA Dedup 2 每次刷盘全量读取 `live_trade_journal.jsonl` 做 ticket 去重。journal >10,000 行时单次扫描 100-500ms → 主循环卡顿 → MIA 超时雪崩。应引入内存 Journal Index `set(closed_tickets)` O(1) 替代 O(N)。 | journal 行数 > 10,000 |
 | TECH_DEBT-003 | 2026-06-15 | L2 | runtime-live | **三层去重过度设计**: MIA Dedup 1+2+3 (内存 set + journal 扫描 + bridge 已写检测) 是历史补丁堆叠产物。应建立 SSOT 仓位状态机引擎统一去重入口。 | 下次大版本重构 MIA 管线 |
 | TECH_DEBT-004 | 2026-06-15 | ~~L3~~ **RESOLVED** | features, brains | ~~**btc_macro_enhanced_37 schema 维度分裂**~~ → **2026-06-15 清偿**: V4/V9/V12 全部用 41 维特征重训练完毕。H1: 60,545 samples, LGB WR=88.85%. M15: 83,016 samples, XGB WR=49.14%. Registry 37→41, configs 37→41. 沙箱推理通过。Commit 8741e23。 | ✅ RESOLVED |
+| TECH_DEBT-006 | 2026-08-03 | L3 | runtime-live | **MIN_ECONOMIC_VOLUME=0.02 XAU 定制全局硬编码 (解除 XAU 霸权)**: 全局唯一 volume 下限 (strategy_evaluator.py:1144) 注释 "For XAU: lot_step=0.01, 2× lot_step" 却全局适用 → BTC (base_volume 0.01) 标准手结构性低于下限, 健康分下滑即被终态闸门击杀 → 08-03 双品种防护性零开单 (BTC 0.0033 / XAU 0.0066)。IC 裁决 HOLD THE LINE (零改动)。 | 未来 Sprint: L3 重构为 per-symbol / per-strategy-line 可配置 (live.yaml budget 或 symbol registry) — DQAF-20260803-001 |
 
 ---
 
@@ -71,3 +72,11 @@
 - **关联**: DQAF-20260615-006/C5, DQAF-20260615-009, FIX-B3-feat
 - **补丁豁免 (PATCH_NOT_ARCHITECTURE)**: 回滚 registry 至 37 是 L1 补丁。L3 修复需重训练 3 个大脑模型 (41 维)。
 - **✅ 2026-06-15 RESOLVED**: V4/V9/V12 全部用 41 维重训练 + 部署 + 沙箱推理通过 + 实盘 BTC 重启验证通过 (brain_count=3, 0 dimension_mismatch, 0 BrainFactory errors, brain predictions active). Commit 8741e23.
+
+## TECH_DEBT-006 Detail — MIN_ECONOMIC_VOLUME XAU 定制全局硬编码
+
+- **文件**: `core/runtime/strategy_evaluator.py:1141-1145`
+- **现状**: `_MIN_ECONOMIC_VOLUME = 0.02` 全局常量 (FIX-20260730-010 Ω Phase 2), L1141 注释 "For XAU: lot_step=0.01, 2× lot_step = 0.02 minimum economic" — 全管线唯一 volume 下限
+- **影响**: BTC config base_volume=0.01 → 标准手 0.01 结构性 < 0.02 → 任何降级因子 (GodsEye health `×max(0.25, health)`, session/regime mult) 使 volume 跌破下限 → 终态闸门击杀 → 08-03 双品种防护性零开单实证 (BTC 0.0033 / XAU 0.0066)
+- **修复方案**: 下沉为 per-symbol / per-strategy-line 可配置 (live.yaml budget 或 symbol registry), 按资产自身 lot_step 派生默认下限
+- **关联**: DQAF-20260803-001, ReB-20260803-XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD, Iron Law #14 (per-symbol SSOT 同族)

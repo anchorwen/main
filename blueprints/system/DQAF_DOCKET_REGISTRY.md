@@ -189,3 +189,15 @@
 - **Fix**: FIX-20260802-004 (L2 接线, 2 处) — 正常路径 broker.fetch_prices() 成功即盖章 (FaultTolerantContext 异常吞掉不盖章 → 真桥死检测保留) + L3 _mid_and_prices() 回退成功 (mid>0) 即盖章, 镜像 management_phase:1306/1312 模式。验证: verify.py --quick 全 PASS + runtime 定向 331 passed + 熔断器 8 passed (--full pytest 环境性超时, -x 零失败, 如实记录)。
 - **ReB**: LIVENESS_PROXY_STAMPED_ONLY_IN_DEGRADED_PATHS (互补 ReB-20260801-LIVENESS_ACK_CIRCULAR_DEPENDENCY — 本案卷为其基座半环)
 - **Status**: **CLOSED** — committed 4fada06b
+
+- **Docket ID**: DQAF-20260803-001
+- **Date**: 2026-08-03
+- **Severity**: Sev 3
+- **Title**: MIN_ECONOMIC_VOLUME XAU 定制全局硬编码 — BTC 结构性不可交易 (解除 XAU 霸权 / MIN_ECONOMIC Refactor)
+- **Evidence**: 周一开盘 (08-03 00:00Z) 双品种零开单。BTC intent_20260802T180823Z.log cycle 72: h1_v2 LONG conf=0.26 → volume 0.0033, h4 SHORT conf=0.31 → 0.0033, 均 `volume_degraded_below_economic_minimum: 0.0033 < 0.02`; XAU live_launcher_20260802T180824Z.log: m30_swing SHORT conf=0.616 → 0.0066, h1_swing SHORT conf=0.607 → 0.0066, 12-brain consensus 0.866 仍被击杀。strategy_evaluator.py:1144 `_MIN_ECONOMIC_VOLUME = 0.02` 全局唯一 volume 下限, L1141 注释 "For XAU: lot_step=0.01, 2× lot_step = 0.02 minimum economic"。两品种 bridge_health mt5_connected=true, outbox_pending=0, 进程全存活, feature_store age 0.0min。
+- **DA**: GodsEye 健康分低下 (BTC 0.327 SHADOW = alignment 0.653 × (1-chop 0.5); XAU 0.438 CAUTIOUS = alignment 0.5 × consensus 1.0) → strategy_evaluator.py:1109 `volume ×= max(0.25, health)` → 成交量坍至 0.0033/0.0066 → 终态闸门 L1145 `volume < 0.02` 击杀。FIX-20260730-010 (Ω Phase 2) 设计 fail-closed: 低信任市况如实报告"条件退化不宜开单"。BTC 结构性缺陷: 配置 base_volume=0.01 (L3 接线层), 标准手 0.01 结构性低于 0.02 下限 → 即使健康分 1.0 也被判不经济 (BTC 历史全部以 0.01 成交)。
+- **AR**: 推翻"系统崩溃/挂起" — 双 loop 每 5min 循环 (BTC cycle 72 at 00:00Z), 信号持续产生, dispatch 无 block 标志, outbox 0 积压; 推翻"OU 冷启动锁仓" — 双品种 conformal_calibrator_state 均 500 samples (HOT), force_min_volume=False, 日志零 COLD override; 推翻"桥接断流" — 心跳新鲜 + 实时价持续 (XAU spike health 0.724 at 23:30Z)。
+- **Root Cause**: L3 架构异味 — 基于 XAU lot_step 定尺的 0.02 硬编码为全局唯一 volume 下限, 对 BTC (lot_step 0.01, base 0.01) 形成结构性封杀; 单品种过度拟合残留 (Iron Law #14 同族: per-symbol 操作参数未下沉到 symbol registry)。
+- **Fix**: IC 终局裁决 (2026-08-03): 🟢 **HOLD THE LINE** — 零代码修改, fail-closed 是正确保护行为, 等健康分 ≥0.60 自然放行合法订单。🔴 **L3 重构立项 (DEFERRED)**: MIN_ECONOMIC_VOLUME 从全局硬编码重构为 per-symbol / per-strategy-line 可配置 (live.yaml budget 或 symbol registry)。登记 TECH_DEBT-006。
+- **ReB**: XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD
+- **Status**: **REGISTERED (DEFERRED)** — IC Mandate 2026-08-03, 未来 Sprint 执行, 当前零代码修改
