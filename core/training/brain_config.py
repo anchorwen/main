@@ -42,7 +42,11 @@ ARCH_TO_BRAIN_TYPE: dict[str, str] = {
 }
 
 # ── Contract group → magic number mapping ──
+# BTC groups mirror the strategy-line magic in configs/live_btc.yaml — the
+# magic written into a brain config MUST equal its strategy line's magic so
+# the broker fills are attributable to the right line (Phase 5 lineage gate).
 CONTRACT_GROUP_MAGIC: dict[str, int] = {
+    # XAU (legacy, unchanged)
     "barrier_12bar": 90001,
     "micro_3bar": 90002,
     "statarb_dynamic": 90003,
@@ -53,15 +57,29 @@ CONTRACT_GROUP_MAGIC: dict[str, int] = {
     "m30_swing": 90320,
     "h1_swing": 90330,
     "h4_swing": 90340,
+    # BTC (FIX-20260803-006 — must equal live_btc.yaml strategy_line magic)
+    "btc_swing": 90410,
+    "btc_swing_h1": 90411,
+    "btc_swing_m15": 90415,
+    "btc_swing_m30": 90430,
+    "btc_swing_h1_v2": 90460,
+    "btc_swing_h4": 904240,
+    "btc_expected_r_m15": 90452,
 }
 
 
 def _derive_contract_group(contract_id: str) -> str:
-    """Derive contract_group from contract_id by matching known prefixes."""
+    """Derive contract_group from contract_id by LONGEST matching prefix.
+
+    Longest-prefix wins so that ``btc_swing_h1_v2`` resolves to
+    ``btc_swing_h1_v2`` — never the shorter ``btc_swing`` prefix.  The XAU
+    group set has no overlapping prefixes, so legacy behaviour is unchanged.
+    """
+    best = ""
     for group in CONTRACT_GROUP_MAGIC:
-        if contract_id.startswith(group):
-            return group
-    return contract_id
+        if contract_id.startswith(group) and len(group) > len(best):
+            best = group
+    return best or contract_id
 
 
 def get_git_commit_hash(repo_root: str | Path | None = None) -> str:
@@ -103,6 +121,8 @@ def build_brain_config(
     initial_status: str = "shadow",
     brain_role: str = "alpha_brain",
     model_version: str = "",
+    dataset_hash: str = "",
+    label_contract_id: str = "",
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a complete ``brain_registry_entry.v1`` config dict.
@@ -124,6 +144,16 @@ def build_brain_config(
         raise ValueError(
             f"features list is empty for schema {feature_schema_id!r} — "
             "resolve feature names from canonical schema SSOT before calling build_brain_config()"
+        )
+    if not dataset_hash:
+        raise ValueError(
+            "dataset_hash is required (Phase 5 lineage) — compute SHA256 of the "
+            "training dataset NPZ before calling build_brain_config()"
+        )
+    if not label_contract_id:
+        raise ValueError(
+            "label_contract_id is required (Phase 5 lineage) — the label contract "
+            "that produced the training labels"
         )
 
     metrics = metrics or {}
@@ -150,6 +180,9 @@ def build_brain_config(
         "training_horizon": label_horizon_bars,
         "feature_schema": feature_schema_id,
         "trained_by_commit_hash": trained_by_hash,
+        # Phase 5 lineage — the model's "birth certificate" (FIX-20260803-006)
+        "dataset_hash": dataset_hash,
+        "label_contract_id": label_contract_id,
         "deployment_scope": {
             "symbols": ["XAUUSDc", "XAUUSD"],
             "sessions": ["all"],

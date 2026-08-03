@@ -52,8 +52,9 @@ from core.training.custom_objectives import (
     lightgbm_sharpe_obj,
     make_xgb_sharpe_obj,
 )
+from core.training.brain_config import get_git_commit_hash
 from core.training.dataset import TrainingDataset
-from core.training.model_hashing import hash_model_file
+from core.training.model_hashing import hash_file, hash_model_file
 from core.training.training_registry import TrainingRunRecord, create_registry
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -697,33 +698,22 @@ ARCH_TO_BRAIN_TYPE: dict[str, str] = {
     "online_learner": "online_sgd",
 }
 
-CONTRACT_GROUP_MAGIC: dict[str, int] = {
-    "barrier_12bar": 90001,
-    "micro_3bar": 90002,
-    "statarb_dynamic": 90003,
-    "daily_swing": 90301,
-    "micro_m15": 90101,
-    "micro_h1": 90201,
-    "m15_swing": 90310,
-    "m30_swing": 90320,
-    "h1_swing": 90330,
-    "h4_swing": 90340,
-}
 
+def _auto_register_in_live_yaml(
+    brain_config: dict[str, Any],
+    config_path: Path,
+    live_yaml_path: str | Path | None = None,
+) -> None:
+    """Add a registry_entry for the new brain to live.yaml.
 
-def _derive_contract_group(contract_id: str) -> str:
-    """Derive contract_group from contract_id by stripping arch/version suffix."""
-    for group in CONTRACT_GROUP_MAGIC:
-        if contract_id.startswith(group):
-            return group
-    return contract_id
-
-
-def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path) -> None:
-    """Add a registry_entry for the new brain to live.yaml."""
+    Args:
+        live_yaml_path: Override the target live config.  Defaults to
+            ``configs/live.yaml`` (XAU).  BTC contracts point at
+            ``configs/live_btc.yaml`` (FIX-20260803-006 parameterization).
+    """
     import yaml as _yaml
 
-    live_yaml_path = Path("configs/live.yaml")
+    live_yaml_path = Path(live_yaml_path or "configs/live.yaml")
     if not live_yaml_path.exists():
         print("[train] WARNING: live.yaml not found, skip auto-register")
         return
@@ -760,9 +750,18 @@ def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path)
         print(f"[train] WARNING: Failed to update live.yaml: {e}")
 
 
-def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
-    """Register the new brain as candidate in governance_state.json."""
-    gov_path = Path("data/governance_state.json")
+def _auto_register_in_governance(
+    brain_config: dict[str, Any],
+    gov_path: str | Path | None = None,
+) -> None:
+    """Register the new brain as candidate in governance_state.json.
+
+    Args:
+        gov_path: Override the governance state path.  Defaults to
+            ``data/governance_state.json`` (XAU).  BTC contracts point at
+            ``data_btc/governance_state.json`` (FIX-20260803-006).
+    """
+    gov_path = Path(gov_path or "data/governance_state.json")
     brain_id = brain_config["brain_id"]
 
     try:
@@ -870,12 +869,14 @@ def generate_brain_config(
     model_path: str,
     model_hash: str,
     metrics: dict[str, Any],
+    *,
+    dataset_hash: str,
 ) -> dict[str, Any]:
     """Generate a brain_registry_entry.v1 config dict for live deployment.
 
     Delegates to the shared ``core.training.brain_config.build_brain_config()``
     which enforces the institutional contract (artifact_hash, git commit hash,
-    magic, features from SSOT).
+    magic, features from SSOT, dataset_hash, label_contract_id).
     """
     from core.training.brain_config import (
         ARCH_TO_BRAIN_TYPE,
@@ -914,6 +915,8 @@ def generate_brain_config(
         metrics=metrics,
         initial_status=contract.output.initial_status,
         model_version=contract.contract_id,
+        dataset_hash=dataset_hash,
+        label_contract_id=contract.label.contract_id,
     )
 
 
@@ -1265,6 +1268,8 @@ def run_pipeline(
     smoke: bool = False,
     price_data_path: str | Path | None = None,
     allow_dirty: bool = False,
+    live_yaml_path: str | Path | None = None,
+    governance_path: str | Path | None = None,
 ) -> PipelineResult:
     """Execute the full training pipeline from contract.
 
@@ -1277,6 +1282,11 @@ def run_pipeline(
             runs calibrate_label_contract() before training.
         allow_dirty: If True, allow training with uncommitted source changes
             (DEVELOPMENT ONLY — never in production).
+        live_yaml_path: Target live config for auto-registration.  Defaults to
+            ``configs/live.yaml`` (XAU); BTC contracts pass ``configs/live_btc.yaml``.
+        governance_path: Target governance state for auto-registration.
+            Defaults to ``data/governance_state.json`` (XAU); BTC contracts pass
+            ``data_btc/governance_state.json``.
 
     Returns:
         PipelineResult with status, metrics, model path, and errors.
@@ -1397,6 +1407,17 @@ def run_pipeline(
         ds = load_dataset(contract)
     except (FileNotFoundError, ValueError, KeyError) as e:
         result.errors = [f"Dataset loading failed: {e}"]
+        print(f"[train] ERROR: {e}")
+        return result
+
+    # ── Dataset hash (Phase 5 lineage — FIX-20260803-006) ──
+    # SHA256 of the exact dataset NPZ this model is trained on.  Written into
+    # the training registry AND the brain config so provenance is unforgeable.
+    try:
+        dataset_hash = hash_file(Path(contract.dataset.path))
+        print(f"[train] Dataset hash: {dataset_hash}")
+    except (OSError, ValueError) as e:
+        result.errors = [f"Dataset hashing failed: {e}"]
         print(f"[train] ERROR: {e}")
         return result
 
@@ -2014,6 +2035,11 @@ def run_pipeline(
         record.status = contract.output.initial_status if gate_passed else "FAILED"
         record.model_path = str(model_path)
         record.model_hash = model_hash
+        # Phase 5 lineage (FIX-20260803-006)
+        record.dataset_hash = dataset_hash
+        record.label_contract_id = contract.label.contract_id
+        record.trained_by_commit_hash = get_git_commit_hash()
+        record.oos_verdict = result.metrics.get("oos_blind_verdict")
 
         registry.add_or_update(record)
         result.run_id = record.run_id
@@ -2025,7 +2051,11 @@ def run_pipeline(
     if gate_passed and contract.output.auto_register:
         try:
             brain_config = generate_brain_config(
-                contract, str(model_path), model_hash or "", result.metrics
+                contract,
+                str(model_path),
+                model_hash or "",
+                result.metrics,
+                dataset_hash=dataset_hash,
             )
 
             # Registration gate — block deployment if any check fails
@@ -2051,10 +2081,10 @@ def run_pipeline(
             )
             print(f"[train] Brain config: {config_path}")
 
-            # Auto-register in live.yaml
-            _auto_register_in_live_yaml(brain_config, config_path)
-            # Auto-register in governance_state.json
-            _auto_register_in_governance(brain_config)
+            # Auto-register in live.yaml (FIX-20260803-006: BTC → live_btc.yaml)
+            _auto_register_in_live_yaml(brain_config, config_path, live_yaml_path)
+            # Auto-register in governance_state.json (BTC → data_btc/governance_state.json)
+            _auto_register_in_governance(brain_config, governance_path)
             _print_register_reminder(config_path.name)
         except (ValueError, RuntimeError, KeyError, OSError) as e:
             print(f"[train] WARNING: Brain config generation failed: {e}")
@@ -2116,6 +2146,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Override registry database path",
     )
+    p.add_argument(
+        "--live-yaml",
+        type=Path,
+        default=None,
+        help="Live config for auto-registration (default configs/live.yaml; "
+        "BTC contracts pass configs/live_btc.yaml)",
+    )
+    p.add_argument(
+        "--governance-path",
+        type=Path,
+        default=None,
+        help="Governance state for auto-registration (default data/governance_state.json; "
+        "BTC contracts pass data_btc/governance_state.json)",
+    )
     return p
 
 
@@ -2131,6 +2175,8 @@ def main(argv: list[str] | None = None) -> int:
         smoke=args.smoke,
         price_data_path=args.price_data,
         allow_dirty=args.allow_dirty,
+        live_yaml_path=args.live_yaml,
+        governance_path=args.governance_path,
     )
 
     # Print summary

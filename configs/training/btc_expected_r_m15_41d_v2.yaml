@@ -1,0 +1,101 @@
+schema_version: "training_contract.v2.1"
+contract_id: "btc_expected_r_m15_41d_v2"
+
+# ── FIX-20260803-006: BTC Expected-R Twin-Tower institutional contract ──
+# Phase 5 (血缘/版本化 — M3 战役五 / IC 最高批准).
+#
+#   Consumes the Phase 1/2 SSOT dataset btc_ssot_v2 — 41-dim
+#   btc_macro_enhanced_41_v2 features, expected_r labels (y_long / y_short),
+#   SL=1.5 / TP=2.5 / horizon=12 aligned to live_btc.yaml strategy_line
+#   btc_expected_r_m15 (magic 90452).
+#
+#   Trained by scripts/training/train_btc_expected_r_institutional.py — the
+#   dual-model / single-contract special form.  Reuses build_brain_config()
+#   (hash-lock + artifact_hash + dataset_hash + label_contract_id + magic),
+#   TrainingRunRecord registry, and the Phase 3 OOS blind gate — one config
+#   per tower (LONG/SHORT), both auto-registered.
+#
+#   The twin-tower trainer drives its own LightGBM training loop (fixed
+#   params, asymmetric-Huber objective); Optuna is intentionally NOT used
+#   here (optuna_trials=0).
+
+dataset:
+  path: "data_btc/training/btc_ssot_v2/train.npz"
+  feature_schema: "btc_macro_enhanced_41_v2"
+  min_samples_per_class: 100
+  # The twin-tower trainer applies time-decay weights itself (from dataset
+  # timestamps); the contract-level weighting stays 'none'.
+  sample_weighting: "none"
+
+label:
+  contract_id: "label-expected-r-btc-m15"
+  sl_atr_mult: 1.5
+  tp_atr_mult: 2.5
+  horizon_bars: 12
+  profitability_calibrated: true   # aligned via validate_label_vs_live.py hard gate
+  spread_points: 200
+  slippage_points: 10
+  tick_size: 0.01
+  tick_value: 0.01
+  output_unit: "bps"
+
+architecture:
+  type: "lightgbm"
+  # Semantic placeholder only — the twin-tower trainer wires the asymmetric
+  # Huber objective directly; train.py's objective dispatch is not used here.
+  objective_function: "reg_huber"
+  search_space: "default"
+  optuna_trials: 0
+  n_seeds: 3
+  custom_params:
+    num_leaves: 63
+    max_depth: 6
+    learning_rate: 0.03
+    n_estimators: 500
+    min_data_in_leaf: 50
+    feature_fraction: 0.7
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    lambda_l1: 0.1
+    lambda_l2: 0.1
+    overpred_penalty: 1.2
+
+validation:
+  method: "purged_wfo"
+  n_groups: 5
+  n_test_groups: 1
+  purge_bars: 12
+  embargo_bars: 6
+  val_ratio: 0.15
+  test_ratio: 0.15
+  # Phase 3 OOS blind gate — test split is temporally disjoint from train.
+  oos_blind_path: "data_btc/training/btc_ssot_v2/test.npz"
+
+quality_gates:
+  model_type: tree
+  # Phase 3 gates: ρ floor + OOS blind + breakeven physical-wear coverage.
+  min_spearman_rho: 0.05
+  min_oos_rho: 0.05
+  min_oos_win_rate: 0.0
+  min_oos_expectancy: 0.0
+  enforce_breakeven: true
+  min_oos_samples: 100
+  # Lenient core gates — E[R] regression towers are validated on ρ/OOS, not
+  # on Sharpe (which is near-meaningless for directional E[R] targets).
+  min_train_sharpe: 0.0
+  min_train_win_rate: 0.0
+  min_sortino_ratio: 0.0
+  min_calmar_ratio: 0.0
+  max_vol_scaled_dd_pct: 100.0
+  min_forward_sharpe: -0.5
+  min_forward_win_rate: 0.0
+  max_overfit_gap: 10.0
+  require_shap_stability: false
+
+output:
+  brain_id_template: "BTC_Expected_R_V5_{tower}_{timestamp}"
+  model_dir: "data_btc/models/btc_expected_r_v5_m15"
+  config_dir: "configs/brains_btc"
+  registry_db: "data_btc/training/registry.db"
+  auto_register: true
+  initial_status: "shadow"

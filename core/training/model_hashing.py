@@ -25,6 +25,20 @@ def hash_model_file(path: Path) -> str:
     return sha.hexdigest()
 
 
+def hash_file(path: Path) -> str:
+    """SHA256 of an arbitrary file (e.g. training dataset NPZ).
+
+    Reads in 64 KB chunks.  Returns hex-encoded digest string.  Phase 5
+    lineage: every model's brain config carries ``dataset_hash`` = SHA256 of
+    the exact dataset it was trained on.
+    """
+    sha = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            sha.update(chunk)
+    return sha.hexdigest()
+
+
 def hash_models_ensemble(paths: list[Path]) -> str:
     """Combined SHA256 for a multi-seed ensemble.
 

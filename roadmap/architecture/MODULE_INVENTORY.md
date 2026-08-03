@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-03T10:11:46Z
-> **扫描模块数**: 777
+> **自动生成**: 2026-08-03T10:59:38Z
+> **扫描模块数**: 779
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -627,7 +627,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `brain_config.py` | ✅ active | — | 4 | 188 | — | |
+| `brain_config.py` | ✅ active | — | 4 | 221 | — | |
 | `breakeven.py` | ✅ active | BreakevenResult | 6 | 190 | — | |
 | `checkpoint.py` | ✅ active | CheckpointInfo, CheckpointManager | 13 | 199 | — | |
 | `cpcv.py` | ✅ active | CPCVFold, CPCVResult | 9 | 252 | — | |
@@ -637,11 +637,11 @@
 | `experiment_tracker.py` | ✅ active | RunInfo, ExperimentTracker | 13 | 265 | — | |
 | `feature_replay.py` | ✅ active | ReplayComponents | 19 | 468 | — | |
 | `model_card.py` | ✅ active | ModelCard, ModelCardGenerator | 6 | 225 | — | |
-| `model_hashing.py` | ✅ active | — | 3 | 45 | — | |
+| `model_hashing.py` | ✅ active | — | 4 | 59 | — | |
 | `profitability_calibrator.py` | ✅ active | BarrierConfig, ProfitabilityPoint, ProfitabilitySurface | 8 | 413 | — | |
 | `registries.py` | ✅ active | — | 32 | 287 | — | |
 | `trainer_protocol.py` | ✅ active | TrainResult, TrainerProtocol | 5 | 110 | — | |
-| `training_registry.py` | ✅ active | Base, TrainingRunRecord, TrainingRegistry | 16 | 295 | — | |
+| `training_registry.py` | ✅ active | Base, TrainingRunRecord, TrainingRegistry | 16 | 303 | — | |
 | `utils.py` | ✅ active | — | 4 | 90 | — | |
 
 ## scripts
@@ -999,11 +999,12 @@
 | `run_promotion.py` | ✅ active | — | 6 | 285 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
-| `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2162 | — | |
+| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 2208 | — | |
 | `train_btc_binary_directional.py` | ✅ active | — | 5 | 385 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
 | `train_btc_expected_r.py` | ✅ active | — | 8 | 634 | — | |
+| `train_btc_expected_r_institutional.py` | ✅ active | — | 5 | 480 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1898 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |
@@ -1018,6 +1019,7 @@
 | `train_xau_directional_v1.py` | ✅ active | — | 6 | 293 | — | |
 | `train_xau_directional_v2.py` | ✅ active | — | 18 | 923 | — | |
 | `validate_label_vs_live.py` | ✅ active | LabelLiveMismatchError | 2 | 130 | — | |
+| `verify_lineage.py` | ✅ active | — | 10 | 383 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |
 | `your_trainer.py` | ✅ active | — | 7 | 223 | — | |
 

@@ -72,6 +72,14 @@ class TrainingRunRecord(Base):
         String(32), default="FAILED", nullable=False
     )  # FAILED | SHADOW | LIVE | RETIRED
 
+    # Phase 5 lineage (FIX-20260803-006) — the model's birth certificate.
+    # Cross-checked by scripts/training/verify_lineage.py against each enabled
+    # brain config.  NULL on legacy pre-FIX rows = MISSING lineage.
+    dataset_hash = Column(String(64), nullable=True)  # SHA256 of training NPZ
+    label_contract_id = Column(String(128), nullable=True)  # label contract SSOT
+    trained_by_commit_hash = Column(String(64), nullable=True)  # git HEAD at train time
+    oos_verdict = Column(String(32), nullable=True)  # PASS | FAIL | INSUFFICIENT_OOS | None
+
     # File references
     config_path = Column(String(512), nullable=True)
     model_path = Column(String(512), nullable=True)

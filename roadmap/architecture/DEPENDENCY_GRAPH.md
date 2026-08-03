@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-03T10:11:46Z
+> **自动生成**: 2026-08-03T10:59:38Z
 
 ## Package-Level Dependencies
 
@@ -902,6 +902,7 @@
 - `train_btc_directional_v1.py` → `core.features.computers.v9_live_computer`
 - `train_btc_directional_v10.py` → (无内部依赖)
 - `train_btc_expected_r.py` → (无内部依赖)
+- `train_btc_expected_r_institutional.py` → `core.contracts.training.label_from_live_yaml`, `core.contracts.training.training_contract`, `core.deployment.brain_registration_gate`, `core.training.brain_config`, `core.training.breakeven`, `core.training.model_hashing`, `core.training.training_registry`, `scripts.training.oos_blind_test`, `scripts.training.train`, `scripts.training.train_btc_expected_r`
 - `train_btc_swing_v9.py` → `core.features.computers.v9_live_computer`
 - `train_daily_swing.py` → (无内部依赖)
 - `train_exit_metamodel.py` → (无内部依赖)
@@ -916,6 +917,7 @@
 - `train_xau_directional_v1.py` → (无内部依赖)
 - `train_xau_directional_v2.py` → `core.features.schemas.swing_enhanced_schema`
 - `validate_label_vs_live.py` → `core.contracts.training.label_contract`, `core.contracts.training.label_from_live_yaml`
+- `verify_lineage.py` → `core.deployment.brain_config_validator`, `core.training.training_registry`
 - `write_manifest_stub.py` → `scripts.training.crt_manifest`
 - `your_trainer.py` → `scripts.training.crt_manifest`
 
