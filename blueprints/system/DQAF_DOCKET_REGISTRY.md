@@ -201,3 +201,31 @@
 - **Fix**: IC 终局裁决 (2026-08-03): 🟢 **HOLD THE LINE** — fail-closed 是正确保护行为。🔴 **L3 重构立项**: MIN_ECONOMIC_VOLUME 从全局硬编码重构为 per-symbol / per-strategy-line 可配置。登记 TECH_DEBT-006。**2026-08-03 执行 (IC 最高执行令, TECH_DEBT-006 → Active Sprint P0)**: FIX-20260803-001 — `StrategyLineConfig.min_economic_volume` 字段 + `resolved_min_economic_volume` property (显式配置优先, BTC→base_volume floor 0.01, 其他→2×lot_step 0.02); strategy_builder 20 策略线 `_cfg` 透传 + `_validate_min_economic_floors` 静态跨品种校验; strategy_evaluator 终态闸门改 per-strategy floor (RuleEngine dict-config 防护); live_btc.yaml 6 策略线显式 `min_economic_volume: 0.01`。验证: 60 相关单测全绿 + ruff clean + mypy baseline clean (--full pytest 300s 环境性超时, 定向套件零失败如实记录)。**否决全局降级**: IC 拒绝 0.02→0.01 全局 hack (会拆 XAU 盈亏平衡地板)。
 - **ReB**: XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD
 - **Status**: **CLOSED** — FIX-20260803-001 (L3 重构完成, BTC 结构性封杀解除, 验证通过)
+
+---
+
+- **Docket ID**: DQAF-20260804-001
+- **Date**: 2026-08-04
+- **Severity**: Sev 1
+- **Title**: 治理持久化顺序缺陷 — save BEFORE execute_transitions → 自动 transitions 永不落盘 (V4 IC D+C 退役裁决未执行)
+- **Evidence**: gov-eval 日志 1243 次 `transitions=['BTC_Swing_V4: live → probation (throttle)']` (live_launcher.py:263) 但 governance_state.json V4 仍 live/vote_weight=1.0; evaluate_governance_state.py:208-211 save() 在 line 263 execute_transitions() **之前**, 之后无 save; 双部署路径 (container scheduler_service.py:246 + bare-metal live_launcher.py:261) 同调; observation_hold_until 2026-08-03T23:59:59Z 已过期但降级从未生效。
+- **DA**: 60s gov-eval 循环: load(disk V4=live) → 注入 brain_performance → **save (V4=live 落盘)** → 内存执行 V4→probation → 返回。下轮重载磁盘 V4=live → throttle 决策每 60s 系统性丢弃。V4 负 EV (35 笔 EV -$0.73/笔, WR 34.3% < breakeven 58.6%) 以 vote_weight=1.0 持续在 live 接线。
+- **AR**: 推翻"daily_ops 是真正写者且判定 V4 stable" — gov-eval throttle 决策独立于 pnl 算法, 日志证明 execute_transitions 已应用; 推翻"last-live guard 拦截" — 两个 guard (governance_rule_engine.py:291 / governance_scheduler.py:732) 均不在 gov-eval execute_transitions 路径上; 推翻"文件是旧缓存" — mtime 03:49:11.742 == perf updated_at, V4 仍 live。
+- **Root Cause**: L3 — 架构缺陷 (RC-12): 持久化顺序错误 — save 在 Executor 副作用之前, 之后无 save → 内存 transitions 每次重载即丢弃。
+- **Fix**: FIX-20260804-001 (L3, commit 73a17820) — 移除前置 save, execute_transitions 之后单次落盘 (manual_mode 分支同覆盖); 双部署路径同享单点. `_verify_governance_evaluator.py` Assert 6 语义翻转为确定性持久化断言 (TestPersist live→probation 落盘重载). 验证: 6/6 断言 VERIFY OK + mypy/ruff clean + 175 governance pytest PASS + pre-commit 全链 PASS.
+- **ReB**: PERSISTENCE_BEFORE_EXECUTOR
+- **Status**: **CLOSED** — FIX-20260804-001 (commit 73a17820, V4 将在下一 60s 循环依法降级并持久化)
+
+---
+
+- **Docket ID**: DQAF-20260804-002
+- **Date**: 2026-08-04
+- **Severity**: Sev 2
+- **Title**: BTC 跨资产特征零填充 — numpy.void 结构化行误用 + 不存在 API 契约 (slots [12]/[30]/[39-40] 自启动污染特征仓)
+- **Evidence**: live_launcher 日志 1600+ 次 `'numpy.void' object has no attribute 'get'` (btc_feature_augmenter.py:639-640 BTC/XAU ratio + 585-586 AUDJPYc) + `'FeatureService' object has no attribute 'get_latest'` (:500 XAUUSDc_return); 特征仓 XAU M5 记录存在 53 条 (数据可用, 代码读不出); live_cycle.py:2558 构造点传 FeatureService (另两处 4042/4903 传 LocalFeatureStore)。
+- **DA**: (a) MT5 `copy_rates_from_pos` 返回 numpy 结构化数组, 行是 numpy.void 无 `.get()` → 零填充; (b) `_store.get_latest("XAUUSDc")` API 不存在, FeatureRecord 是 dataclass 非 dict → 零填充; (c) 构造点类型不一致。三缺陷被 except 吞掉 → slots [12]/[30]/[39-40] 持续 0.0 → 污染持久化 v2 特征仓 → 未来重训数据集带系统性零填充。
+- **AR**: 推翻"XAU 本就不在 BTC store 是设计" — 53 条 XAU 记录存在 + numpy.void 错误证明 MT5 行情可获取; 推翻"MagicMock 测试证明 API 设计如此" — MagicMock 吸收任意调用, 测试不验证真实 API 形状 (测试盲区)。
+- **Root Cause**: L3 — 边界错误 (RC-03): 结构化数组行当 dict 用 `.get()` + 跨符号读取 API 契约缺失 + MagicMock 掩盖测试盲区。
+- **Fix**: FIX-20260804-002 (L3, commit ca2c4db9) — 单收敛点: `_coerce_feature_store()` (unwrap FeatureService._store) + `_latest_cross_record()` (latest()+to_dict() 归一 dict) + `_bar_close()` (dict/numpy.void 统一读 close, 负索引归一). 测试契约纠正 (spec=LocalFeatureStore 防 MagicMock 误判) + 3 根因回归锁. 验证: 46 tests PASS + mypy/ruff clean + 296 features/training 全绿 + pre-commit 全链 PASS.
+- **ReB**: STRUCTURED_ARRAY_ROW_AS_DICT / API_CONTRACT_MAGICMOCK_BLINDSPOT
+- **Status**: **CLOSED** — FIX-20260804-002 (commit ca2c4db9, 零填充停止, 新 v2 特征记录纯净)

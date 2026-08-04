@@ -1381,3 +1381,45 @@
 **Prevention**: (1) Stamp the liveness ACK at the probe's success path itself (the normal-path `broker.fetch_prices()` success and the L3 `_mid_and_prices()` fallback success), mirroring the management_phase pattern — success-only, exception paths leave the ACK stale so true bridge-death detection is preserved. (2) After wiring any heartbeat/ack field, audit ALL call sites of the probe it documents against the field's stated contract — a probe with write sites gated behind the very condition it monitors is a smell. (3) Session-aware silence-trip exemption for scheduled market close (deferred).
 
 **Detection**: `circuit_breaker_bridge_silence_trip` cycling with near-constant cadence (~35min for M5 cycles) while `mt5_bridge_health.json` heartbeat stays fresh and live prices keep flowing; trip count spikes during trading hours with 0 positions open.
+
+### ReB-20260804-PERSISTENCE_BEFORE_EXECUTOR
+- **Pattern Signature**: `PERSISTENCE_BEFORE_EXECUTOR`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-001
+- **Related**: FIX-20260804-001, FIX-20260801-011, FIX-20260801-012
+
+**Definition**: A state-persistence `save()` call is placed BEFORE the executor that applies in-memory side effects (`execute_transitions`), with NO save after. Every cycle the "before" snapshot is written (perf metrics injected), then the executor mutates the in-memory object graph, then the cycle ends — the next reload reads the pre-executor snapshot and discards the transitions. The system *computes* the correct outcome every cycle but never *commits* it: governance_state.json never converges, and a human reading the file concludes the automation is broken when in fact the automation ran 1243 times. DQAF-20260804-001 evidence: 1243× `BTC_Swing_V4: live → probation (throttle)` in logs vs V4=live in state.
+
+**Root mechanism**: The save site was placed at the *auditor output* stage (after metrics injection) rather than the *executor completion* stage. The cycle's durable boundary was chosen before the mutation boundary. Any orchestrator that (1) loads state, (2) injects derived data, (3) saves, (4) executes transitions, (5) returns — without a save after (4) — reproduces it.
+
+**Prevention**: (1) In any audit→executor cycle, the save must come AFTER the executor, covering BOTH the injected data AND the transitions (a single post-transition save subsumes the pre-save). (2) When closing a loop that "runs but never converges", diff the file's mtime/contents against the executor's log — a live log of transitions with an unchanged state file is the signature. (3) State-mutation loops need an assertion/verification that the written file reflects the executed outcome (a reload-and-check), not just that a save was called.
+
+**Detection**: A governance/state log shows transitions firing every cycle while the corresponding state file's status field never changes; file mtime equals the pre-executor save time (perf-injection window), not the post-executor time.
+
+### ReB-20260804-STRUCTURED_ARRAY_ROW_AS_DICT
+- **Pattern Signature**: `STRUCTURED_ARRAY_ROW_AS_DICT`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-002
+- **Related**: FIX-20260804-002, FIX-20260625-137
+
+**Definition**: Code calls `.get("close", default)` on the row of a library-returned structured array (numpy dtype), treating `rates[i]` as a dict. `rates[i]` is a `numpy.void` scalar which has no `.get()` → AttributeError, caught by a broad `except` → silent zero-fill. Because the failure is swallowed and the code "works" (returns 0.0), the defect runs for thousands of cycles while persisted feature-store records accumulate zeroed slots. DQAF-20260804-002 evidence: 1600+ `'numpy.void' object has no attribute 'get'` on BTC/XAU ratio + AUDJPYc paths.
+
+**Root mechanism**: The row-return shape of the data source (numpy structured array) diverges from the dict-shaped assumption baked into the accessor. The `except Exception` around it converts a loud crash into a silent wrong value — the degradation path hides the bug's existence.
+
+**Prevention**: (1) Access structured-array rows by field name (`row["close"]`), not `.get()`; write a single `_bar_close(rates, idx)` helper that normalizes dict-row AND numpy.void-row access (with negative-index normalization) — one convergent point for all cross-asset rate reads. (2) Add a regression lock that feeds the ACTUAL production shape (numpy structured array) through the exact code path — the mock must reflect the real source's return type. (3) Never let a degradation path silently swallow the first N occurrences: the root-cause class (attribute mismatch) deserves a distinct log/alert so it surfaces early.
+
+**Detection**: A log line like `failed to fetch <SYMBOL>: 'numpy.void' object has no attribute 'get'` repeating thousands of times while the corresponding feature slots are persistently 0.0 in persisted records.
+
+### ReB-20260804-API_CONTRACT_MAGICMOCK_BLINDSPOT
+- **Pattern Signature**: `API_CONTRACT_MAGICMOCK_BLINDSPOT`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-002
+- **Related**: FIX-20260804-002
+
+**Definition**: Unit tests mock a dependency with bare `MagicMock()` and assert behavior through `.get_latest(...)` — a method that does not exist on the real dependency. `MagicMock` absorbs ANY method call and returns a child mock, so the test passes while production fails with `AttributeError: 'FeatureService' object has no attribute 'get_latest'`. The mock encodes the *buggy* API contract, creating a test blind spot: the suite is green, the pipeline is broken, and the divergence survives for 1600+ cycles.
+
+**Root mechanism**: The mock's API shape is invented by the test author rather than derived from the real type. MagicMock's permissive interface never validates that the mocked method exists on the real object.
+
+**Prevention**: (1) Mock with `spec=<RealType>` so only genuine attributes are allowed (`MagicMock(spec=LocalFeatureStore)`) — the mock fails fast when the test calls a nonexistent API. (2) Test helpers must return the REAL data shapes (FeatureRecord dataclass, numpy structured arrays), not dict look-alikes. (3) When a method "can't be found" on the real type, fix the code or the mock — never both silently diverge.
+
+**Detection**: A production `AttributeError`/`TypeError` for an API that unit tests call freely without error — the test suite's pass/fail never exercised the real interface.

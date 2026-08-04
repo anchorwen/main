@@ -1522,3 +1522,39 @@
   - Source 4: [测试] tests/execution/test_min_economic_per_symbol.py (5 用例: BTC 0.01 / XAU 0.02 / 显式覆盖 / base_volume scale / 静态校验 warning-not-raise)
 - **是否被推翻**: 否 (AR 全部处理: 系统崩溃=推翻, OU 冷启动=推翻, 桥接断流=推翻)
 - **关联 ReB Pattern**: XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD, EXPLICIT_BETTER_THAN_IMPLICIT_CONFIG
+
+---
+
+### CCT-20260804-001
+- **Docket ID**: DQAF-20260804-001
+- **日期**: 2026-08-04
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: gov-eval 日志 1243 次 `transitions=['BTC_Swing_V4: live → probation (throttle)']` (live_launcher.py:263) 但 governance_state.json V4 仍 live/vote_weight=1.0 — IC D+C 退役裁决 (observation_hold 2026-08-03T23:59:59Z 过期) 从未执行。
+  - [Layer 2 — 中间异常]: 60s gov-eval 循环在内存执行 V4→probation, 但每次重载磁盘 V4=live — throttle 降级决策被系统性丢弃 (data_btc/governance_state.json 永不收敛)。
+  - [Layer 3 — 根因]: L3 架构缺陷 (RC-12) — `evaluate_governance_state()` 持久化顺序: save() 在 execute_transitions() 之前 (governance_evaluator.py:208-211), 之后无 save → 仅 perf 注入落盘, transitions 永不持久化。修复 FIX-20260804-001 (commit 73a17820): 移除前置 save, execute_transitions 之后单次落盘 (manual_mode 同覆盖), 双部署路径 (container scheduler_service.py:246 + launcher:261) 同享单点。
+- **证据引用**:
+  - Source 1: [代码] core/deployment/governance_evaluator.py (save-after-transition) + core/governance/governance_rule_engine.py:218-236 (_hold_blocked + transition)
+  - Source 2: [状态] data_btc/governance_state.json (V4 live, mtime 03:49:11.742 == perf updated_at — 前置 save 落盘实况)
+  - Source 3: [日志] data_btc/logs/live_launcher_20260803T070355Z.log (1243 gov-eval transitions 行)
+  - Source 4: [验证] scripts/_verify_governance_evaluator.py Assert 6 (确定性持久化断言 VERIFY OK) + 175 governance pytest PASS
+- **是否被推翻**: 否 (AR 处理: daily_ops 写者=推翻, last-live guard=推翻, 旧缓存=推翻)
+- **关联 ReB Pattern**: PERSISTENCE_BEFORE_EXECUTOR
+
+---
+
+### CCT-20260804-002
+- **Docket ID**: DQAF-20260804-002
+- **日期**: 2026-08-04
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: BTC 跨资产特征 slots 持续零填充 — XAUUSDc_return [12] / AUDJPYc_return [30] / BTC/XAU ratio [39-40], 日志 1600+ 次 `'numpy.void' object has no attribute 'get'` + `'FeatureService' object has no attribute 'get_latest'` → 污染持久化 v2 特征仓。
+  - [Layer 2 — 中间异常]: `_compute_btc_xau_ratio`/`_compute_audjpyc_return` 对 numpy 结构化数组行 (numpy.void) 调 `.get()` → AttributeError; `_compute_xauusdc_return` 调不存在的 `get_latest()` + FeatureRecord dataclass 非 dict → 全部被 except 吞掉 → 返回 0.0。
+  - [Layer 3 — 根因]: L3 边界错误 (RC-03) — 结构化数组行当 dict 用 `.get()` + 跨符号读取 API 契约缺失 + 构造点 (live_cycle.py:2558) 传 FeatureService + MagicMock 测试盲区。修复 FIX-20260804-002 (commit ca2c4db9): 单收敛点 `_coerce_feature_store()` + `_latest_cross_record()` (latest()+to_dict()) + `_bar_close()` (dict/numpy.void 统一, 负索引归一)。
+- **证据引用**:
+  - Source 1: [代码] core/features/computers/btc_feature_augmenter.py (_latest_cross_record/_bar_close helpers) + core/runtime/live_cycle.py:2558 (FeatureService 构造点同享 unwrap)
+  - Source 2: [数据] data_btc/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl (53 条 XAU 记录存在 — 数据可用代码读不出)
+  - Source 3: [日志] data_btc/logs/live_launcher_20260803T070355Z.log (numpy.void / get_latest AttributeError 行)
+  - Source 4: [测试] tests/features/computers/test_btc_feature_augmenter.py::TestCrossAssetRootCauseFixes (3 根因回归锁) + 46 tests PASS
+- **是否被推翻**: 否 (AR 处理: 设计如此=推翻 (53 条记录存在), MagicMock 证明设计=推翻 (测试盲区))
+- **关联 ReB Pattern**: STRUCTURED_ARRAY_ROW_AS_DICT, API_CONTRACT_MAGICMOCK_BLINDSPOT
