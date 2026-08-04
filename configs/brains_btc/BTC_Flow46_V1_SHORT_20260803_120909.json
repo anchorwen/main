@@ -98,9 +98,18 @@
   },
   "strategy": "btc_expected_r",
   "timeframe": "M5",
+  "activation_threshold": 0.15,
+  "training_params": {
+    "objective": "expected_r_short",
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5,
+    "horizon": 12,
+    "activation_threshold": 0.15
+  },
   "transfer": {
     "kind": "freeze_and_residual",
     "frozen_base_brain_id": "BTC_Expected_R_V5_SHORT_20260803_120850",
+    "frozen_base_artifact_path": "data_btc\\models\\btc_expected_r_v5_m15\\tower_short_best.txt",
     "frozen_base_artifact_hash": "d4f6a35870e5b69dae94ac3dd4a721e4feec2d48e965ec8e6d84fa600d9b5c73",
     "frozen_base_schema": "btc_macro_enhanced_41_v2",
     "residual_target": "y - y_A",
@@ -121,7 +130,7 @@
     "zero_pad_dead_dims": true,
     "deployment": {
       "live_yaml_enabled": false,
-      "reason": "runtime base+residual evaluator not yet wired; shadow brain carries lineage + governance candidate only"
+      "reason": "runtime base+residual evaluator wired (FIX-20260804-005); shadow brain carries lineage + governance candidate only — explicitly disabled in live.yaml until activation decision"
     }
   }
 }

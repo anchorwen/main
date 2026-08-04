@@ -29,12 +29,28 @@ V9_BRAIN_TYPES = {"onnx_v9", "deepresmlp", "lightgbm_v1", "xgboost_v9"}
 class BrainFactory:
     def build(self, brain_entry: dict):
         brain_type = brain_entry["brain_type"]
-        registry_key = BRAIN_TYPE_MAP.get(brain_type)
-        if registry_key is None:
-            raise ValueError(
-                f"Unsupported brain_type: {brain_type!r}. " f"Known types: {list(BRAIN_TYPE_MAP)}"
+
+        # ── Method A dispatch (IC 2026-08-04): the transfer block describes the
+        # PHYSICAL structure (freeze_and_residual → base+residual composition),
+        # while brain_type keeps its SIGNAL semantics (expected_r_short → Path 5).
+        # No new brain_type is invented — this branch is metadata-gated, so brains
+        # without a transfer block (all XAU, V4/V5 expected-r towers) are untouched.
+        transfer_meta = brain_entry.get("transfer")
+        adapter_cls: type  # both branches assign an adapter class
+        if isinstance(transfer_meta, dict) and transfer_meta.get("kind") == "freeze_and_residual":
+            from core.brains.adapters.transfer_residual_brain_adapter import (
+                TransferResidualBrainAdapter,
             )
-        adapter_cls = ADAPTER_REGISTRY[registry_key]
+
+            adapter_cls = TransferResidualBrainAdapter
+        else:
+            registry_key = BRAIN_TYPE_MAP.get(brain_type)
+            if registry_key is None:
+                raise ValueError(
+                    f"Unsupported brain_type: {brain_type!r}. "
+                    f"Known types: {list(BRAIN_TYPE_MAP)}"
+                )
+            adapter_cls = ADAPTER_REGISTRY[registry_key]
 
         if brain_type in V9_BRAIN_TYPES:
             normalization_path = brain_entry.get("normalization_config_path", "")

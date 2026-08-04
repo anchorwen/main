@@ -125,6 +125,11 @@ def build_brain_config(
     label_contract_id: str = "",
     label_contract: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
+    # FIX-20260804-005 (T30②): first-class emission for the runtime evaluator.
+    #   training_params — signal semantics (objective/activation_threshold/etc.)
+    #   transfer        — physical structure (freeze_and_residual base+residual)
+    training_params: dict[str, Any] | None = None,
+    transfer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a complete ``brain_registry_entry.v1`` config dict.
 
@@ -214,6 +219,12 @@ def build_brain_config(
 
     if extra:
         config.update(extra)
+
+    # Explicit params override the extra escape hatch (deterministic emission).
+    if training_params:
+        config["training_params"] = training_params
+    if transfer:
+        config["transfer"] = transfer
 
     return config
 

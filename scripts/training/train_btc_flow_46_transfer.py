@@ -256,6 +256,18 @@ def _register_flow46_tower(
     if breakeven_wr is not None:
         metrics["breakeven_win_rate"] = breakeven_wr
 
+    # FIX-20260804-005 (T30②): signal-semantic training params + explicit
+    # frozen_base_artifact_path so the runtime adapter (TransferResidualBrainAdapter)
+    # can compose y = y_A + r from the two self-contained artifact paths.
+    activation_threshold = float(transfer_cfg.get("activation_threshold", 0.15))
+    training_params = {
+        "objective": BRAIN_TYPE[tower],
+        "sl_atr_mult": contract.label.sl_atr_mult,
+        "tp_atr_mult": contract.label.tp_atr_mult,
+        "horizon": contract.label.horizon_bars,
+        "activation_threshold": activation_threshold,
+    }
+
     brain_config = build_brain_config(
         brain_id=brain_id,
         brain_type=BRAIN_TYPE[tower],
@@ -273,12 +285,17 @@ def _register_flow46_tower(
         dataset_hash=dataset_hash,
         label_contract_id=contract.label.contract_id,
         label_contract=label_contract_block(contract),
+        training_params=training_params,
         extra={
             "strategy": "btc_expected_r",
             "timeframe": "M5",
+            "activation_threshold": activation_threshold,
             "transfer": {
                 "kind": "freeze_and_residual",
                 "frozen_base_brain_id": base_id,
+                # FIX-20260804-005: explicit path (self-contained config — the
+                # runtime never queries a registry; fail-fast on missing file).
+                "frozen_base_artifact_path": str(base_file),
                 "frozen_base_artifact_hash": base_hash,
                 "frozen_base_schema": "btc_macro_enhanced_41_v2",
                 "residual_target": "y - y_A",
@@ -290,8 +307,9 @@ def _register_flow46_tower(
                 "deployment": {
                     "live_yaml_enabled": transfer_cfg.get("live_yaml_enabled", False),
                     "reason": (
-                        "runtime base+residual evaluator not yet wired; "
-                        "shadow brain carries lineage + governance candidate only"
+                        "runtime base+residual evaluator wired (FIX-20260804-005); "
+                        "shadow brain carries lineage + governance candidate only — "
+                        "explicitly disabled in live.yaml until activation decision"
                     ),
                 },
             },

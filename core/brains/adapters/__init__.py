@@ -17,6 +17,9 @@ from core.brains.adapters.lightgbm_brain_adapter import LightGBMBrainAdapter
 from core.brains.adapters.meta_filter_adapter import MetaFilterAdapter
 from core.brains.adapters.online_learner_adapter import OnlineLearnerAdapter
 from core.brains.adapters.params_brain_adapter import ParamsBrainAdapter
+from core.brains.adapters.transfer_residual_brain_adapter import (
+    TransferResidualBrainAdapter,
+)
 from core.brains.adapters.transformer_brain_adapter import TransformerBrainAdapter
 from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
 from core.brains.adapters.xgboost_brain_adapter import XGBoostBrainAdapter
@@ -59,6 +62,7 @@ __all__ = [
     "ParamsBrainAdapter",
     "OnlineLearnerAdapter",
     "TransformerBrainAdapter",
+    "TransferResidualBrainAdapter",
     "ADAPTER_REGISTRY",
     "BRAIN_TYPE_MAP",
 ]

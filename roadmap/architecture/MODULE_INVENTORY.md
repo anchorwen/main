@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-04T08:14:13Z
-> **扫描模块数**: 784
+> **自动生成**: 2026-08-04T12:25:13Z
+> **扫描模块数**: 782
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -76,6 +76,7 @@
 | `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
 | `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 597 | — | |
 | `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 271 | — | |
+| `transfer_residual_brain_adapter.py` | ✅ active | TransferResidualBrainAdapter | 4 | 188 | — | |
 | `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 288 | — | |
 | `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 316 | — | |
 | `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 295 | — | |
@@ -86,7 +87,7 @@
 |------|------|----|------|------|------|------|
 | `ab_test.py` | ✅ active | ExperimentConfig, TrafficSplitter, ExperimentResult, ExperimentTracker | 11 | 305 | — | |
 | `brain_attribution_service.py` | ✅ active | BrainAttribution, AttributionReport, BrainAttributionService | 11 | 327 | — | |
-| `brain_factory.py` | ✅ active | BrainFactory | 1 | 169 | — | |
+| `brain_factory.py` | ✅ active | BrainFactory | 1 | 185 | — | |
 | `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 10 | 370 | — | |
 | `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 522 | — | |
 | `brain_registry_loader.py` | ✅ active | BrainRegistryLoader | 1 | 7 | — | |
@@ -627,7 +628,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `brain_config.py` | ✅ active | — | 4 | 231 | — | |
+| `brain_config.py` | ✅ active | — | 4 | 242 | — | |
 | `breakeven.py` | ✅ active | BreakevenResult | 6 | 190 | — | |
 | `checkpoint.py` | ✅ active | CheckpointInfo, CheckpointManager | 13 | 199 | — | |
 | `cpcv.py` | ✅ active | CPCVFold, CPCVResult | 9 | 252 | — | |
@@ -652,14 +653,11 @@
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
-| `_audit_live_health_sweep_20260804.py` | ✅ active | — | 5 | 161 | — | |
-| `_audit_xau_last_open.py` | ✅ active | — | 2 | 101 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
-| `_v4_obs_final_audit.py` | ✅ active | — | 3 | 209 | — | |
 | `_verify_governance_evaluator.py` | ✅ active | — | 2 | 149 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
@@ -1009,7 +1007,7 @@
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
 | `train_btc_expected_r.py` | ✅ active | — | 8 | 634 | — | |
 | `train_btc_expected_r_institutional.py` | ✅ active | — | 6 | 503 | — | |
-| `train_btc_flow_46_transfer.py` | ✅ active | — | 6 | 509 | — | |
+| `train_btc_flow_46_transfer.py` | ✅ active | — | 6 | 527 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1898 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |

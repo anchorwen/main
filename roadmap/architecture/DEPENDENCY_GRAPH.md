@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-04T08:14:13Z
+> **自动生成**: 2026-08-04T12:25:13Z
 
 ## Package-Level Dependencies
 
@@ -62,6 +62,7 @@
 - `meta_filter_adapter.py` → (无内部依赖)
 - `online_learner_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.online_mlp_model`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
 - `params_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.schemas.trading_contracts`
+- `transfer_residual_brain_adapter.py` → `core.brains.adapters.lightgbm_brain_adapter`, `core.deployment.brain_alert`, `core.features.schemas.registry`
 - `transformer_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.services.inference_guard`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
 - `v9_onnx_brain_adapter.py` → `core.brains.services.inference_guard`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
 - `xgboost_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
@@ -70,7 +71,7 @@
 
 - `ab_test.py` → (无内部依赖)
 - `brain_attribution_service.py` → (无内部依赖)
-- `brain_factory.py` → `core.brains.adapters`, `core.deployment.brain_alert`, `core.deployment.brain_config_validator`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`
+- `brain_factory.py` → `core.brains.adapters`, `core.brains.adapters.transfer_residual_brain_adapter`, `core.deployment.brain_alert`, `core.deployment.brain_config_validator`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`
 - `brain_leaderboard.py` → `core.contracts.exceptions`, `core.feedback.brain_quality_engine`
 - `brain_promotion.py` → `core.governance.governance_service`
 - `brain_registry_loader.py` → (无内部依赖)
@@ -566,14 +567,11 @@
 - `_analyze_h1_swing_now.py` → (无内部依赖)
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
-- `_audit_live_health_sweep_20260804.py` → (无内部依赖)
-- `_audit_xau_last_open.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)
-- `_v4_obs_final_audit.py` → (无内部依赖)
 - `_verify_governance_evaluator.py` → `core.brains.services.brain_promotion`, `core.deployment.governance_evaluator`, `core.governance.governance_rule_engine`, `core.governance.governance_service`
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
