@@ -19,7 +19,6 @@ assembly points).  A regression here is a Sev-1 class defect.
 
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -31,9 +30,7 @@ from core.features.computers.btc_feature_augmenter import (
     assemble_41_series,
     assemble_41_vector,
 )
-from core.features.local_feature_store import LocalFeatureStore
 from core.features.schemas.registry import get_schema_feature_names
-from core.features.store_contracts import FeatureRecord
 from core.training.feature_replay import (
     compute_replay_components,
     replay_features,
@@ -44,29 +41,17 @@ from core.training.feature_replay import (
 
 
 def _mock_live_sources(
-    xau: list[float], audjpy: list[float], ratio: list[float], roc: list[float]
-) -> tuple[MagicMock, MagicMock, dict[str, int]]:
-    """Return (store, worker, counter) mocks that return the given per-bar
-    cross-asset values — exactly what ``assemble_41_series`` would consume."""
-    import time
+    audjpy: list[float], ratio: list[float], roc: list[float]
+) -> tuple[MagicMock, dict[str, int], list[float]]:
+    """Return (worker, counter, xau_implied) mocks.
 
+    DQAF-20260804-003: ALL cross-asset sources are served by the MT5 worker.
+    XAUUSDc closes are pinned by ``ratio``/``roc`` so the three cross-asset
+    features stay internally consistent (one price series).  ``xau_implied`` is
+    the XAUUSDc_return those closes produce — the pure path must consume the
+    SAME worker-derived values to remain bit-identical.
+    """
     state = {"i": 0}
-    # spec=LocalFeatureStore: real store contract only — DQAF-20260804-002.
-    store = MagicMock(spec=LocalFeatureStore)
-
-    def _latest(symbol, timeframe):
-        i = state["i"]
-        return FeatureRecord(
-            schema_name="test_schema",
-            schema_version="1",
-            symbol=symbol,
-            timeframe=timeframe,
-            event_time=datetime.fromtimestamp(time.time()),
-            values={"M5_Ret_1": xau[i]},
-        )
-
-    store.latest.side_effect = _latest
-
     worker = MagicMock()
 
     def _copy_rates(symbol, _tf, _pos, _count, timeout=3.0):
@@ -86,7 +71,15 @@ def _mock_live_sources(
         return None
 
     worker.copy_rates_from_pos.side_effect = _copy_rates
-    return store, worker, state
+    # XAUUSDc_return implied by the closes that pin ratio/roc:
+    #   ret = (xau_curr - xau_prev)/xau_prev = -roc/(1+roc)
+    xau_implied: list[float] = []
+    for i, r in enumerate(roc):
+        if ratio[i] <= 0 or not np.isfinite(ratio[i]):
+            xau_implied.append(0.0)
+        else:
+            xau_implied.append(-r / (1.0 + r))
+    return worker, state, xau_implied
 
 
 def _synth_ohlc(n: int = 300, seed: int = 42) -> pd.DataFrame:
@@ -234,21 +227,21 @@ class TestLivePathEqualsPure:
     def test_single_bar_live_equals_pure(self) -> None:
         daily = np.arange(24, dtype=np.float64) + 1.0
         micro = np.arange(9, dtype=np.float64) + 1.0
-        xau, audjpy, ratio, roc = 0.005, -0.003, 24.0, 0.01
-        store, worker, state = _mock_live_sources([xau], [audjpy], [ratio], [roc])
-        aug = BTCFeatureAugmenter(feature_store=store, mt5_worker=worker)
+        audjpy, ratio, roc = -0.003, 24.0, 0.01
+        worker, state, xau_implied = _mock_live_sources([audjpy], [ratio], [roc])
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
         fv_live = aug.augment(daily, micro, btc_price=60000.0, tf_ou=0.3, tf_hurst=0.4)
         fv_pure = assemble_41_vector(
             daily,
             micro,
-            xau_return=xau,
+            xau_return=xau_implied[0],
             audjpy_return=audjpy,
             btc_xau_ratio=ratio,
             btc_xau_ratio_roc=roc,
             tf_ou=0.3,
             tf_hurst=0.4,
         )
-        # allclose (rtol=1e-12): the LIVE source fetch recomputes audjpy/ratio via
+        # allclose (rtol=1e-12): the LIVE source fetch recomputes audjpy/xau/ratio via
         # division, introducing IEEE 1e-16 rounding vs the exact pure inputs.  The
         # ASSEMBLY is identical; the source-value float artifact is not a divergence.
         np.testing.assert_allclose(fv_live, fv_pure, rtol=1e-12, atol=1e-12)
@@ -260,15 +253,14 @@ class TestLivePathEqualsPure:
         n = 8
         daily = rng.randn(n, 24)
         micro = rng.randn(n, 9)
-        xau = rng.randn(n) * 1e-3
         audjpy = rng.randn(n) * 1e-3
         ratio = 20 + rng.rand(n) * 5
         roc = rng.randn(n) * 0.1
         ou = rng.rand(n)
         hurst = 0.2 + rng.rand(n) * 0.6
 
-        store, worker, state = _mock_live_sources(list(xau), list(audjpy), list(ratio), list(roc))
-        aug = BTCFeatureAugmenter(feature_store=store, mt5_worker=worker)
+        worker, state, xau_implied = _mock_live_sources(list(audjpy), list(ratio), list(roc))
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
         live = np.zeros((n, 41))
         for i in range(n):
             state["i"] = i
@@ -283,7 +275,7 @@ class TestLivePathEqualsPure:
         seq = assemble_41_series(
             daily,
             micro,
-            xau_return_series=xau,
+            xau_return_series=xau_implied,
             audjpy_return_series=audjpy,
             btc_xau_ratio_series=ratio,
             btc_xau_ratio_roc_series=roc,

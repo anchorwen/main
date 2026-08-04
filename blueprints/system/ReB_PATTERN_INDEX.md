@@ -1423,3 +1423,17 @@
 **Prevention**: (1) Mock with `spec=<RealType>` so only genuine attributes are allowed (`MagicMock(spec=LocalFeatureStore)`) — the mock fails fast when the test calls a nonexistent API. (2) Test helpers must return the REAL data shapes (FeatureRecord dataclass, numpy structured arrays), not dict look-alikes. (3) When a method "can't be found" on the real type, fix the code or the mock — never both silently diverge.
 
 **Detection**: A production `AttributeError`/`TypeError` for an API that unit tests call freely without error — the test suite's pass/fail never exercised the real interface.
+
+### ReB-20260804-SPORADIC_FEED_VS_MT5_SSOT
+- **Pattern Signature**: `SPORADIC_FEED_VS_MT5_SSOT`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-003
+- **Related**: FIX-20260804-003
+
+**Definition**: A feature that semantically needs the CURRENT price of a cross-symbol asset reads a feature store that is only fed sporadically (hours apart), while its sibling cross-asset features read the live MT5 terminal directly. The staleness guard (correctly) zero-fills the feature ~100% of the time — the slot is structurally dead not because the fix is wrong, but because the DATA SOURCE was chosen wrong: a sparse feed and a freshness guard are mutually exclusive by design. MT5 is the single source of truth for live prices; a periodic cross-symbol feed is distributed-systems over-engineering for a one-feature need.
+
+**Root mechanism**: Cross-asset features inside one compute unit drifted onto two different data paths (feature store vs MT5 direct) with no architectural consistency gate. The store path looks "safer" (cached, local) but has a cadence the guard can't tolerate.
+
+**Prevention**: (1) All cross-asset live prices in a compute unit must read the SAME source — MT5 direct (`copy_rates_from_pos` + a shared row-read helper). (2) Before adding a "staleness guard" to a store read, verify the store's feed cadence is ≤ the guard tolerance; if not, the source is wrong, not the guard. (3) A guard firing 100% of the time is a bug report about the FEED, never "working as intended".
+
+**Detection**: A feature slot恒零 while sibling slots from the same logical group are live and continuous; a debounced staleness/zero-fill warning that never stops firing; persisted feature-store records where one cross-asset column is all-zeros across the whole file.

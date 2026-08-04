@@ -2555,7 +2555,7 @@ def execute_live_cycle(
                     BTCFeatureAugmenter,
                 )
 
-                _aug = BTCFeatureAugmenter(feature_service, mt5_worker=mt5_worker)
+                _aug = BTCFeatureAugmenter(mt5_worker=mt5_worker)
                 state._btc_augmenter = _aug
 
         # ── FIX-20260716-005 §1: Pre-management MT5 sync ──
@@ -4039,7 +4039,7 @@ def execute_live_cycle(
                     BTCFeatureAugmenter,
                 )
 
-                _aug = BTCFeatureAugmenter(feature_store, mt5_worker=mt5_worker)
+                _aug = BTCFeatureAugmenter(mt5_worker=mt5_worker)
                 state._btc_augmenter = _aug
             tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
             # FIX-20260627-058 / DQAF-20260627-058:
@@ -4899,8 +4899,7 @@ def execute_live_cycle(
                                         BTCFeatureAugmenter,
                                     )
 
-                                    _fs = getattr(feature_service, "_store", None)
-                                    _aug = BTCFeatureAugmenter(_fs, mt5_worker=mt5_worker)
+                                    _aug = BTCFeatureAugmenter(mt5_worker=mt5_worker)
                                     state._btc_augmenter = _aug
                                 _btc_aug = _aug.augment(
                                     daily_feature_vector,

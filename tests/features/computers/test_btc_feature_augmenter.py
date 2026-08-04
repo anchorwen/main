@@ -17,34 +17,6 @@ from core.features.computers.btc_feature_augmenter import (
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
-def _make_store(xau_return: float = 0.001, event_time: float | None = None) -> MagicMock:
-    """Create a mock feature store for XAUUSDc — REAL contract (DQAF-20260804-002).
-
-    LocalFeatureStore.latest() returns a FeatureRecord dataclass, not a dict;
-    the augmenter reads it via to_dict().
-    """
-    import time
-    from datetime import datetime
-
-    from core.features.local_feature_store import LocalFeatureStore
-    from core.features.store_contracts import FeatureRecord
-
-    # spec=LocalFeatureStore: only real store attributes exist — DQAF-20260804-002
-    # `_coerce_feature_store` must see a bare store (no auto-created `_store`).
-    store = MagicMock(spec=LocalFeatureStore)
-    ts = event_time if event_time is not None else time.time()
-    record = FeatureRecord(
-        schema_name="test_schema",
-        schema_version="1",
-        symbol="XAUUSDc",
-        timeframe="M5",
-        event_time=datetime.fromtimestamp(ts),
-        values={"M5_Ret_1": xau_return},
-    )
-    store.latest.return_value = record
-    return store
-
-
 def _make_worker(audjpy_rates=None, xau_rates=None) -> MagicMock:
     """Create a mock MT5Worker with copy_rates_from_pos."""
     worker = MagicMock()
@@ -66,16 +38,13 @@ def _make_worker(audjpy_rates=None, xau_rates=None) -> MagicMock:
 class TestBTCFeatureAugmenterInit:
     def test_default_construction(self) -> None:
         aug = BTCFeatureAugmenter()
-        assert aug._store is None
         assert aug._worker is None
         assert aug._prev_ou is None
         assert aug._prev_hurst is None
 
-    def test_with_store_and_worker(self) -> None:
-        store = MagicMock()
+    def test_with_worker(self) -> None:
         worker = MagicMock()
-        aug = BTCFeatureAugmenter(feature_store=store, mt5_worker=worker)
-        assert aug._store is store
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
         assert aug._worker is worker
 
 
@@ -204,40 +173,60 @@ class TestAugmentRegimeDerivatives:
 
 
 class TestComputeXAUUSDCReturn:
-    def test_returns_value_from_store(self) -> None:
-        store = _make_store(xau_return=0.0025)
-        aug = BTCFeatureAugmenter(feature_store=store)
+    def test_returns_computed_return(self) -> None:
+        worker = _make_worker(
+            xau_rates=[
+                {"close": 100.0},
+                {"close": 101.0},
+            ]
+        )
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
         result = aug._compute_xauusdc_return()
-        assert result == pytest.approx(0.0025)
+        assert result == pytest.approx(0.01)
 
-    def test_no_store_returns_zero(self) -> None:
+    def test_no_worker_returns_zero(self) -> None:
         aug = BTCFeatureAugmenter()
         result = aug._compute_xauusdc_return()
         assert result == 0.0
 
-    def test_none_record_returns_zero(self) -> None:
-        store = MagicMock()
-        store.get_latest.return_value = None
-        aug = BTCFeatureAugmenter(feature_store=store)
+    def test_none_rates_returns_zero(self) -> None:
+        worker = _make_worker(xau_rates=None)
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
         result = aug._compute_xauusdc_return()
         assert result == 0.0
 
-    def test_stale_record_returns_zero(self) -> None:
-        store = _make_store(xau_return=0.005, event_time=0.0)  # epoch 0 = very stale
-        aug = BTCFeatureAugmenter(feature_store=store)
+    def test_insufficient_rates_returns_zero(self) -> None:
+        worker = _make_worker(xau_rates=[{"close": 100.0}])  # only 1 bar
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
+        result = aug._compute_xauusdc_return()
+        assert result == 0.0
+
+    def test_prev_close_zero_returns_zero(self) -> None:
+        worker = _make_worker(
+            xau_rates=[
+                {"close": 0.0},
+                {"close": 101.0},
+            ]
+        )
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
+        result = aug._compute_xauusdc_return()
+        assert result == 0.0
+
+    def test_non_finite_close_sanitized(self) -> None:
+        worker = _make_worker(
+            xau_rates=[
+                {"close": float("nan")},
+                {"close": 101.0},
+            ]
+        )
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
         result = aug._compute_xauusdc_return()
         assert result == 0.0
 
     def test_exception_returns_zero(self) -> None:
-        store = MagicMock()
-        store.get_latest.side_effect = RuntimeError("boom")
-        aug = BTCFeatureAugmenter(feature_store=store)
-        result = aug._compute_xauusdc_return()
-        assert result == 0.0
-
-    def test_non_finite_return_sanitized(self) -> None:
-        store = _make_store(xau_return=float("nan"))
-        aug = BTCFeatureAugmenter(feature_store=store)
+        worker = MagicMock()
+        worker.copy_rates_from_pos.side_effect = RuntimeError("MT5 error")
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
         result = aug._compute_xauusdc_return()
         assert result == 0.0
 
@@ -379,30 +368,20 @@ class TestGracefulDegradation:
 
 class TestCrossAssetRootCauseFixes:
     """Lock the exact defect classes that zero-filled slots [12]/[30]/[39-40]
-    for 1600+ cycles: (a) FeatureService-instead-of-store construction,
-    (b) FeatureRecord dataclass (not dict), (c) numpy.void structured rows."""
+    for 1600+ cycles: numpy.void structured rows on ALL THREE MT5 paths.
+    DQAF-20260804-003 unified slot [12] onto the MT5 worker like [30]/[39-40]
+    (feature-store read path removed)."""
 
-    def test_xau_read_via_feature_service_unwrap(self) -> None:
-        """FeatureService (wraps LocalFeatureStore in ``._store``) is accepted."""
-        import time
-        from datetime import datetime
-
-        from core.features.feature_service import FeatureService
-        from core.features.local_feature_store import LocalFeatureStore
-        from core.features.store_contracts import FeatureRecord
-
-        inner = MagicMock(spec=LocalFeatureStore)
-        inner.latest.return_value = FeatureRecord(
-            schema_name="test_schema",
-            schema_version="1",
-            symbol="XAUUSDc",
-            timeframe="M5",
-            event_time=datetime.fromtimestamp(time.time()),
-            values={"M5_Ret_1": 0.0031},
-        )
-        svc = FeatureService(feature_store=inner)
-        aug = BTCFeatureAugmenter(feature_store=svc)
-        assert aug._compute_xauusdc_return() == pytest.approx(0.0031)
+    def test_numpy_structured_rows_xau(self) -> None:
+        """MT5 ``copy_rates_from_pos`` returns numpy structured array rows
+        (``numpy.void``) — ``row.get()`` raises AttributeError.  The fix must
+        read ``row["close"]`` via ``_bar_close`` on the XAUUSDc path (slot 12)."""
+        dtype = np.dtype([("time", "i8"), ("close", "f8")])
+        rates = np.array([(1, 100.0), (2, 101.0)], dtype=dtype)
+        worker = MagicMock()
+        worker.copy_rates_from_pos.return_value = rates
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
+        assert aug._compute_xauusdc_return() == pytest.approx(0.01)
 
     def test_numpy_structured_rows_audjpy(self) -> None:
         """MT5 ``copy_rates_from_pos`` returns numpy structured array rows

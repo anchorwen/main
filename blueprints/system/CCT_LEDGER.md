@@ -1558,3 +1558,19 @@
   - Source 4: [测试] tests/features/computers/test_btc_feature_augmenter.py::TestCrossAssetRootCauseFixes (3 根因回归锁) + 46 tests PASS
 - **是否被推翻**: 否 (AR 处理: 设计如此=推翻 (53 条记录存在), MagicMock 证明设计=推翻 (测试盲区))
 - **关联 ReB Pattern**: STRUCTURED_ARRAY_ROW_AS_DICT, API_CONTRACT_MAGICMOCK_BLINDSPOT
+
+### CCT-20260804-003
+- **Docket ID**: DQAF-20260804-003
+- **日期**: 2026-08-04
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAUUSDc_return slot [12] 恒零 (193/193 条 _v2 特征仓记录), 而同批 AUDJPYc_return [30] + BTC/XAU ratio [39-40] 已恢复真实数据 — 三跨资产特征行为不一致。
+  - [Layer 2 — 中间异常]: `_compute_xauusdc_return` 读特征仓跨符号记录, `_MAX_STALENESS_SECONDS=300` staleness guard 正确触发 — XAUUSDc 跨仓最新记录 (08-04T03:35Z) 距计算时刻 >2h, 每次调用都被 guard 归零。
+  - [Layer 3 — 根因]: L3 架构不一致 (RC-03) — XAUUSDc_return 依赖稀疏跨仓 feed (4-6h/条人工 feature-update, 53 条), 而 AUDJPY/Ratio 走 MT5 直读 (连续/实时)。特征读路径本身修复正确, 但**数据源选择**使 slot [12] 结构性死亡。修复 FIX-20260804-003: `_compute_xauusdc_return` 统一 MT5 直读 (`copy_rates_from_pos("XAUUSDc",5,0,2)` + `_bar_close`), 删除特征仓读路径全部死代码 (`_latest_cross_record`/`_coerce_feature_store`/`_MAX_STALENESS_SECONDS`/`_xau_stale_count`/`feature_store` 构造参数/`_store` 状态), live_cycle 3 构造点清参。
+- **证据引用**:
+  - Source 1: [代码] core/features/computers/btc_feature_augmenter.py (`_compute_xauusdc_return` 特征仓读 + staleness guard, 与 `_compute_audjpyc_return`/`_compute_btc_xau_ratio` MT5 直读路径对比)
+  - Source 2: [数据] data_btc/feature_store/records/symbol=BTCUSDc/timeframe=M5/features.jsonl (193 条 _v2 记录: XAU=0 / AUDJPY+Ratio 真实)
+  - Source 3: [数据] data_btc/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl (53 条, 4-6h 节奏, 最后 08-04T03:35Z)
+  - Source 4: [配置] configs/live_btc.yaml + 实盘日志 (无连续 XAU 跨仓 feed 任务; staleness guard 设计行为)
+- **是否被推翻**: 否 (AR: "XAU 数据不可用"假设被 53 条真实 M5_Ret_1 记录推翻 — 数据可用, 是读路径数据源选择错误)
+- **关联 ReB Pattern**: SPORADIC_FEED_VS_MT5_SSOT

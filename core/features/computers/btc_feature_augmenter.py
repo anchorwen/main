@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import logging
 import math
-import time as _time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -45,65 +44,21 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 # ── Safeguard constants ──
-_MAX_STALENESS_SECONDS = 300  # 5 min — data older than this is untrustworthy
 _WARNING_DEBOUNCE_CYCLES = 100  # log at most once per 100 calls per error type
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Cross-asset access helpers (DQAF-20260804-002, single convergent points).
+# Cross-asset access helper (DQAF-20260804-002/003, single convergent point).
 #
-# Root cause: three co-located defects zero-filled XAUUSDc_return slot [12],
-# AUDJPYc_return slot [30] and BTC/XAU ratio slots [39-40] since process start
-# (1600+ failures), polluting persisted v2 feature-store records:
-#   1. ``_store.get_latest("XAUUSDc")`` — API does not exist on FeatureService
-#      (nor LocalFeatureStore, which exposes ``latest(symbol, timeframe)``).
-#   2. FeatureRecord is a dataclass, not a dict — ``record.get(...)`` failed.
-#   3. MT5 ``copy_rates_from_pos`` returns a numpy structured array; ``rates[i]``
-#      is ``numpy.void`` which has no ``.get()``.
+# DQAF-20260804-003 (IC 终局裁决): MT5 is the SINGLE SOURCE OF TRUTH for all
+# cross-asset prices.  AUDJPYc_return [30], XAUUSDc_return [12] and the
+# BTC/XAU ratio [39-40] ALL read MT5 directly through ``_bar_close``.  The
+# earlier feature-store read path (``_latest_cross_record`` / ``_coerce_feature_store``)
+# was REMOVED: its sporadic 4-6h cross-symbol feed left slot [12] zero-filled
+# ~always behind the 5-min staleness guard, while the sibling slots (MT5
+# direct) were live and continuous.  numpy.void rows have no ``.get()``
+# (DQAF-20260804-002), so all row access converges on ``_bar_close``.
 # ═══════════════════════════════════════════════════════════════════════════
-
-
-def _coerce_feature_store(feature_store: Any) -> Any:
-    """Unwrap a FeatureService into its inner LocalFeatureStore.
-
-    live_cycle.py constructs BTCFeatureAugmenter with a FeatureService (which
-    wraps the store in ``._store``, feature_service.py:78) at one site and a
-    bare LocalFeatureStore at the others.  Accept both — return the inner store
-    when present, else the store itself.
-    """
-    if feature_store is None:
-        return None
-    inner = getattr(feature_store, "_store", None)
-    return inner if inner is not None else feature_store
-
-
-def _latest_cross_record(feature_store: Any, symbol: str, timeframe: str) -> dict[str, Any] | None:
-    """Fetch the latest cross-symbol FeatureRecord as a plain dict.
-
-    Works with either a LocalFeatureStore (``latest(symbol, timeframe)``) or a
-    FeatureService (unwrapped above).  FeatureRecord (dataclass) is normalized
-    via ``to_dict()`` so callers keep the dict contract.  Any store failure
-    returns None — graceful degradation, never crashes the trading cycle.
-    """
-    store = _coerce_feature_store(feature_store)
-    if store is None:
-        return None
-    latest = getattr(store, "latest", None)
-    if not callable(latest):
-        return None
-    try:
-        record = latest(symbol, timeframe)
-    except Exception as exc:  # BLE001:FOG — store read failures degrade, never crash
-        _log.debug("BTCFeatureAugmenter: latest(%s, %s) failed: %s", symbol, timeframe, exc)
-        return None
-    if record is None:
-        return None
-    to_dict = getattr(record, "to_dict", None)
-    if callable(to_dict):
-        return to_dict()
-    if isinstance(record, dict):
-        return record
-    return None
 
 
 def _bar_close(rates: Any, idx: int) -> float:
@@ -401,7 +356,7 @@ class BTCFeatureAugmenter:
 
     Usage::
 
-        augmenter = BTCFeatureAugmenter(feature_store, mt5_worker=worker)
+        augmenter = BTCFeatureAugmenter(mt5_worker=worker)
         fv_41 = augmenter.augment(
             daily_arr_24, micro_arr_9, btc_price,
             tf_ou=theta, tf_hurst=hurst,
@@ -418,25 +373,19 @@ class BTCFeatureAugmenter:
 
     def __init__(
         self,
-        feature_store=None,
         mt5_worker: MT5Worker | None = None,
     ):
         """Initialise the augmenter.
 
         Args:
-            feature_store: LocalFeatureStore instance OR a FeatureService (its
-                           inner ``_store`` is used, DQAF-20260804-002) for
-                           reading XAUUSDc records.  Can be None (all
-                           cross-features zero-filled).
-            mt5_worker: MT5Worker for AUDJPYc tick data.  Can be None
-                        (AUDJPYc_return zero-filled).
+            mt5_worker: MT5Worker serving AUDJPYc / XAUUSDc tick data
+                        (DQAF-20260804-003 SSOT).  Can be None (all
+                        cross-features zero-filled).
         """
-        self._store = feature_store
         self._worker = mt5_worker
 
         # ── Debounced warning counters ──
         self._xau_fail_count = 0
-        self._xau_stale_count = 0
         self._audjpy_fail_count = 0
         self._xau_price_fail_count = 0  # FIX-138: XAU price fetch for BTC/XAU ratio
         self._nan_fail_count = 0  # FIX-20260628-059: NaN/Inf sanitization counter
@@ -472,8 +421,8 @@ class BTCFeatureAugmenter:
             np.ndarray of shape (41,) with corrected BTC feature slots.
 
         Phase 1 / M1: delegates to the shared pure assembly.  Cross-asset
-        values are fetched live (feature store / MT5); prev-OU/Hurst comes
-        from instance state (consecutive live calls).
+        values are fetched live from MT5 (DQAF-20260804-003 SSOT); prev-OU/Hurst
+        comes from instance state (consecutive live calls).
         """
         # ── Cross-asset features (live sources) ──
         xau_return = self._compute_xauusdc_return()
@@ -572,66 +521,49 @@ class BTCFeatureAugmenter:
     # ── Private helpers ─────────────────────────────────────────────────
 
     def _compute_xauusdc_return(self) -> float:
-        """Compute XAUUSDc return from feature store cross-symbol records.
+        """Compute XAUUSDc return from MT5 tick data (DQAF-20260804-003).
 
-        Safeguard 1 (time-alignment): if the XAU record is more than
-        _MAX_STALENESS_SECONDS old, zero-fill to prevent fake volatility.
+        Single Source of Truth: MT5 is the only authoritative live price source.
+        Previously this read the feature store cross-symbol records; that feed
+        was sporadic (4-6h), so the 5-min staleness guard zero-filled slot [12]
+        almost always.  Now mirrors ``_compute_audjpyc_return`` (slot [30]):
+        ``copy_rates_from_pos`` + ``_bar_close`` — consistent, continuous, live.
         """
-        if self._store is None:
+        if self._worker is None:
             return 0.0
 
         try:
-            # DQAF-20260804-002: single convergent cross-store read (dict out).
-            record = _latest_cross_record(self._store, "XAUUSDc", "M5")
-            if record is None:
+            rates = self._worker.copy_rates_from_pos(
+                "XAUUSDc",
+                5,
+                0,
+                2,
+                timeout=3.0,  # M5, 2 bars
+            )
+            if rates is None or len(rates) < 2:
                 self._xau_fail_count += 1
                 if self._xau_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
                     _log.warning(
-                        "BTCFeatureAugmenter: XAUUSDc record not found in feature store "
-                        "(failed %d times). Zero-filling XAUUSDc_return.",
+                        "BTCFeatureAugmenter: XAUUSDc rates unavailable "
+                        "(symbol may not be in Market Watch). "
+                        "Zero-filling XAUUSDc_return. (failed %d times)",
                         self._xau_fail_count,
                     )
                 return 0.0
 
-            # ── Safeguard 1: time-alignment check ──
-            record_time = record.get("event_time", record.get("timestamp", 0))
-            if isinstance(record_time, str):
-                from datetime import datetime
-
-                try:
-                    record_time = datetime.fromisoformat(record_time.replace("Z", "+00:00"))
-                    record_ts = record_time.timestamp()
-                except (ValueError, TypeError):
-                    record_ts = 0
-            else:
-                record_ts = float(record_time) if record_time else 0
-
-            now = _time.time()
-            staleness = now - record_ts if record_ts > 0 else float("inf")
-
-            if staleness > _MAX_STALENESS_SECONDS:
-                self._xau_stale_count += 1
-                if self._xau_stale_count % _WARNING_DEBOUNCE_CYCLES == 0:
-                    _log.warning(
-                        "BTCFeatureAugmenter: XAUUSDc data stale (%.0fs > %ds). "
-                        "Zero-filling XAUUSDc_return and BTC/XAU ratio features. "
-                        "(stale %d times)",
-                        staleness,
-                        _MAX_STALENESS_SECONDS,
-                        self._xau_stale_count,
-                    )
+            # DQAF-20260804-003: convergent numpy.void-safe row read.
+            prev_close = _bar_close(rates, -2)
+            curr_close = _bar_close(rates, -1)
+            if prev_close <= 0:
                 return 0.0
-
-            # Extract return from V9 features (M5_Ret_1 is the M5 bar return)
-            values = record.get("values", record.get("features", {}))
-            ret = float(values.get("M5_Ret_1", 0.0))
+            ret = (curr_close - prev_close) / prev_close
             return ret if math.isfinite(ret) else 0.0
 
         except Exception as exc:  # BLE001:FOG
             self._xau_fail_count += 1
             if self._xau_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
                 _log.error(
-                    "BTCFeatureAugmenter: failed to compute XAUUSDc_return: %s. "
+                    "BTCFeatureAugmenter: failed to fetch XAUUSDc: %s. "
                     "Zero-filling. (failed %d times)",
                     exc,
                     self._xau_fail_count,
