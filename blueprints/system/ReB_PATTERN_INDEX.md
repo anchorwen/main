@@ -1437,3 +1437,17 @@
 **Prevention**: (1) All cross-asset live prices in a compute unit must read the SAME source — MT5 direct (`copy_rates_from_pos` + a shared row-read helper). (2) Before adding a "staleness guard" to a store read, verify the store's feed cadence is ≤ the guard tolerance; if not, the source is wrong, not the guard. (3) A guard firing 100% of the time is a bug report about the FEED, never "working as intended".
 
 **Detection**: A feature slot恒零 while sibling slots from the same logical group are live and continuous; a debounced staleness/zero-fill warning that never stops firing; persisted feature-store records where one cross-asset column is all-zeros across the whole file.
+
+### ReB-20260804-CONTRACT_WITHOUT_RUNTIME_EVALUATOR
+- **Pattern Signature**: `CONTRACT_WITHOUT_RUNTIME_EVALUATOR`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-005
+- **Related**: FIX-20260804-005, FIX-20260803-007
+
+**Definition**: A training pipeline emits a complete brain config for a novel model architecture (here: freeze-and-residual, base+residual composition) but the runtime adapter layer has no evaluator for that physical structure. The brain registers as shadow with full lineage (Phase 5), yet the generic adapter route (BRAIN_TYPE_MAP → LightGBMBrainAdapter) loads only one of the two model files → dimension guard fallback (silent neutral, raw_score=0.0), OR the config fails the validator (ghost-brain ERROR from missing training_params.objective). The system produces a model it cannot execute; the "dead object" survives indefinitely because nothing crashes loudly — it just never votes. DQAF-20260804-005 evidence: Flow46 brain registered 2026-08-03 with OOS ρ=0.0721, never emitted a single signal; validator `_infer_objective_from_artifact` returns None for brain_type=expected_r_short (not startswith "lightgbm") → BrainConfigError at load.
+
+**Root mechanism**: brain_type encodes SIGNAL semantics (expected_r_short → Path 5 voting) and routes to a generic adapter that can load a single artifact. The config's PHYSICAL structure (transfer.kind=freeze_and_residual, two boosters) needs a bespoke composition adapter. Without a dispatch seam keyed on physical structure (not signal type), the model is inert.
+
+**Prevention**: (1) Any config carrying a `transfer` block describing multi-artifact composition MUST have a matching adapter dispatch — BrainFactory reads `transfer.kind` and instantiates the composition adapter (Method A, IC 2026-08-04 ruling: brain_type = signal semantics, transfer = physical structure). (2) The registration gate should verify adapter resolvability at registration time, not defer to load time. (3) A shadow brain that produces zero signals across its whole observation window is a bug report about missing runtime wiring, never "model is quiet".
+
+**Detection**: A brain registered with full lineage but `describe()` showing `backend` never reaching a transfer-aware string; `_num_features` = the single-artifact dimension while the schema is larger; validator ghost-brain ERROR (missing training_params.objective) on a config that should be valid.

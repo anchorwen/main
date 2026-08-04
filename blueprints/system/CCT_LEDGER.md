@@ -1574,3 +1574,19 @@
   - Source 4: [配置] configs/live_btc.yaml + 实盘日志 (无连续 XAU 跨仓 feed 任务; staleness guard 设计行为)
 - **是否被推翻**: 否 (AR: "XAU 数据不可用"假设被 53 条真实 M5_Ret_1 记录推翻 — 数据可用, 是读路径数据源选择错误)
 - **关联 ReB Pattern**: SPORADIC_FEED_VS_MT5_SSOT
+
+### CCT-20260804-005
+- **Docket ID**: DQAF-20260804-005
+- **日期**: 2026-08-04
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: BTC_Flow46_V1_SHORT 脑 (46-dim OFI 迁移, OOS ρ=0.0721) 实盘永不投票 — shadow 注册 (FIX-20260803-007) 后无任何信号输出, 运行时求值器未接线。
+  - [Layer 2 — 中间异常]: 双断链 — (a) BrainFactory 按 brain_type→BRAIN_TYPE_MAP→LightGBMBrainAdapter→load() 只加载 `artifact_path` 的 5-feature 残差 → `_num_features=5`; `SwingStrategy._run_inference` 组装 46-dim fv → `infer()` 维度守卫 46≠5 → fallback raw_score=0.0 (静默中性); (b) config 缺 `training_params.objective` → `_check_training_objective` 动态推断因 brain_type=expected_r_short 不 startswith "lightgbm"/"xgboost" 返回 None → ghost-brain ERROR → BrainConfigError 加载即拒。
+  - [Layer 3 — 根因]: L3 架构不完整 (RC-06, CONTRACT_WITHOUT_RUNTIME_EVALUATOR) — freeze-and-residual 训练管线产出完整 brain config (transfer.kind=freeze_and_residual) 但运行时 adapter 层无 base+residual 组合求值器; 训练侧 `ResidualTransferLearner.predict()` 的 y=y_A+r 组合逻辑从未接入 brain adapter 链。修复 FIX-20260804-005: `TransferResidualBrainAdapter` (双 booster load + infer 切割重组, 与训练侧 bit-identical) + BrainFactory 元数据分派 (方案 A, brain_type 保留信号语义) + brain_config.py 发射 training_params/transfer + Flow46 config +3 字段。
+- **证据引用**:
+  - Source 1: [代码] core/brains/adapters/lightgbm_brain_adapter.py:152-165 (infer 维度守卫) + core/brains/adapters/__init__.py:43 (expected_r_short→lightgbm_txt)
+  - Source 2: [配置] configs/brains_btc/BTC_Flow46_V1_SHORT_20260803_120909.json (缺 training_params.objective; artifact_path=5-feature 残差)
+  - Source 3: [代码] core/training/transfer_adapter.py:214-224 (ResidualTransferLearner.predict 组合逻辑 — 零运行时调用者) + core/brains/services/brain_factory.py (分派前无 transfer 元数据分支)
+  - Source 4: [代码] core/deployment/brain_config_validator.py:230-262 (_check_training_objective ghost-brain 路径)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: CONTRACT_WITHOUT_RUNTIME_EVALUATOR
