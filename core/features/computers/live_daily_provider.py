@@ -153,7 +153,13 @@ class LiveDailyFeatureProvider:
                     reader = csv.DictReader(fh)
                     if reader.fieldnames:
                         for row in reader:
-                            t = (row.get("time") or row.get("datetime") or "").strip()
+                            # FIX-20260804-009: legacy BTC D1 files use a
+                            # "timestamp" header (training-side format) — read
+                            # it too, or the date-keyed dedup misses those rows
+                            # and re-appends duplicates every sync.
+                            t = (
+                                row.get("time") or row.get("datetime") or row.get("timestamp") or ""
+                            ).strip()
                             if t:
                                 existing_ts.add(t[:10])  # date-only keys
 

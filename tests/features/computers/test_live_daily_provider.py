@@ -5,6 +5,7 @@ FIX-20260625-XXX: Tier 2 zero-coverage breakout #9.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -196,6 +197,41 @@ class TestSyncCSV:
         provider._mt5.copy_rates_from_pos.side_effect = Exception("catastrophic")
         # Should not raise
         provider._sync_csv()
+
+    def test_dedup_sees_legacy_timestamp_header(self, tmp_path: Path) -> None:
+        """FIX-20260804-009: dedup must recognize legacy 'timestamp'-header rows.
+
+        The BTC D1 CSV is a training-side file using a ``timestamp`` header (not
+        the provider's ``time``).  Before the fix the date-keyed dedup missed
+        those rows and re-appended duplicate bars on every sync.
+        """
+        csv_path = tmp_path / "btcusdc_d1_merged.csv"
+        csv_path.write_text(
+            "timestamp,open,high,low,close,volume\n"
+            "2026-08-03 00:00:00,63000,63100,62900,63050,100\n"
+            "2026-08-04 00:00:00,63050,63200,63000,63100,100\n",
+            encoding="utf-8",
+        )
+        mt5 = MagicMock()
+        mt5.copy_rates_from_pos.return_value = [
+            {
+                "time": int(datetime(2026, 8, 4).timestamp()),
+                "open": 63100.0,
+                "high": 63200.0,
+                "low": 63000.0,
+                "close": 63100.0,
+                "tick_volume": 0,
+                "spread": 0,
+                "real_volume": 0,
+            }
+        ]
+        provider = LiveDailyFeatureProvider(
+            mt5_module=mt5, symbol="BTCUSDc", d1_csv=str(csv_path), h4_csv=None
+        )
+        provider._sync_csv()
+        content = csv_path.read_text(encoding="utf-8")
+        # 08-04 must NOT be duplicated — the legacy timestamp row is seen by dedup
+        assert content.count("2026-08-04") == 1
 
 
 # ── _build_computer ────────────────────────────────────────────────────────

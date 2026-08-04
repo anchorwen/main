@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-04T14:56:20Z
+> **自动生成**: 2026-08-04T15:04:40Z
 > **扫描模块数**: 783
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -318,7 +318,7 @@
 |------|------|----|------|------|------|------|
 | `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 14 | 686 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
-| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 9 | 256 | — | |
+| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 9 | 262 | — | |
 | `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 687 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 339 | — | |
 | `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 110 | — | |
