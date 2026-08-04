@@ -33,7 +33,7 @@ brains:
   - path: configs/brains/XAU_Swing_M30_Sym_A.json
     enabled: true
   - path: configs/brains/XAU_Swing_M30_Exec_A.json
-    enabled: true
+    enabled: false
   - path: configs/brains/XAU_Swing_M15_Sym_A.json
     enabled: true
   - path: configs/brains/XAU_Swing_M15_Exec_A.json
@@ -41,7 +41,7 @@ brains:
   - path: configs/brains/XAU_Swing_H1_Sym_A.json
     enabled: true
   - path: configs/brains/XAU_Swing_H1_Exec_A.json
-    enabled: true
+    enabled: false
   - path: configs/brains/XAU_Swing_H4_Sym_A.json
     enabled: false
   - path: configs/brains/XAU_Swing_H4_Exec_A.json
@@ -81,7 +81,7 @@ brains:
   - path: configs/brains/Swing_V9_H4_V3.json
     enabled: false
   - path: configs/brains/XAU_Swing_M30_V5.json
-    enabled: true
+    enabled: false
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:

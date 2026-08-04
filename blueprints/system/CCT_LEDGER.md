@@ -1590,3 +1590,20 @@
   - Source 4: [代码] core/deployment/brain_config_validator.py:230-262 (_check_training_objective ghost-brain 路径)
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: CONTRACT_WITHOUT_RUNTIME_EVALUATOR
+
+---
+
+### CCT-20260804-006
+- **Docket ID**: DQAF-20260804-006
+- **日期**: 2026-08-04
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 今日 XAU 3 单全 SHORT 全在局部底部/回撤进场, 2 SL + 1 深套 (上涨日 4047→4082 逆势做空)。证据: `data/live_trade_journal.jsonl` ticket 4419403411 (m15 SHORT 4048.7 SL@4063.8) / 4419404324 (m30 SHORT 4049.1) / 4421972593 (h1 SHORT 4063.8 持仓深套)。
+  - [Layer 2 — 中间异常]: 全 swing 脑方向锁死 SHORT — H1_Exec_A 155/155 SHORT, M30_V5 154/155 SHORT (99.4%), 信号 886 SHORT:3 LONG; M15_V7_binary 恒定 conf 0.783 (退化签名)。证据: `data/brain_votes/2026-08-04.jsonl` + scripts/_audit_xau_votes_today.py。
+  - [Layer 3 — 根因]: L3 毒井 (RC-09) — `live_intent_loop.py:759` H1 硬编码 `d1_csv="data/raw/xauusdc_d1_merged.csv"` → BTC 进程 LiveDailyProvider `_sync_csv()` (core/features/computers/live_daily_provider.py:112-185) 按 `self._symbol=BTCUSDc` 拉 BTC D1 bar 追加进 XAU 文件 → `data/raw/xauusdc_d1_merged.csv` 行 2510-2532 (2026-07-04→08-04) 全 BTC 价 63,000-64,700 → 全 swing 脑 D1_* 特征投毒 → 模型 out-of-distribution → 输出退化 SHORT 锁死 (MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE, 同签名 FIX-20260629-184)。
+- **证据引用**:
+  - Source 1: `data/raw/xauusdc_d1_merged.csv` — 行 2510/2512/2514/2516/2528/2530/2532 = 2026-07-04→08-04 BTC 价 (63,093.3→63,466.89)
+  - Source 2: `data/brain_votes/2026-08-04.jsonl` — H1_Exec_A 155 SHORT / M30_V5 154 SHORT (独立于 journal 的投票流)
+  - Source 3 (根因): `core/features/computers/live_daily_provider.py:129-158` `_sync_csv()` 按 `self._symbol` 抓取 + 追加 `self._d1_csv` (跨资产路径无符号守卫) — 跨品种验证源
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: D1_WELL_CROSS_ASSET_POISONING / MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE / MONITOR_ASSET_HARDCODED_DATA_DIR

@@ -1451,3 +1451,26 @@
 **Prevention**: (1) Any config carrying a `transfer` block describing multi-artifact composition MUST have a matching adapter dispatch — BrainFactory reads `transfer.kind` and instantiates the composition adapter (Method A, IC 2026-08-04 ruling: brain_type = signal semantics, transfer = physical structure). (2) The registration gate should verify adapter resolvability at registration time, not defer to load time. (3) A shadow brain that produces zero signals across its whole observation window is a bug report about missing runtime wiring, never "model is quiet".
 
 **Detection**: A brain registered with full lineage but `describe()` showing `backend` never reaching a transfer-aware string; `_num_features` = the single-artifact dimension while the schema is larger; validator ghost-brain ERROR (missing training_params.objective) on a config that should be valid.
+
+---
+
+### ReB-20260804-MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE
+- **Pattern Signature**: `MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-006
+- **Related**: FIX-20260629-184 (DQAF-20260629-P03), FIX-20260804-006
+- **定义**: 回归/分类模型输出坍缩为近恒定方向与置信度 — 全部信号同向 (SHORT), 置信度唯一值极少 (uniq=1~7) 或 accuracy≈随机。XAU 案例: H1_Exec_A 155/155 SHORT, M15_V7_binary 恒定 0.783 (uniq=1), M30_V5 test-acc 0.3396≈随机却 live。第三次历史实例 (前: BTC Swing_V10_H1_Directional 100% SHORT → 冻结)。
+- **上游触发**: 输入特征 out-of-distribution (本例: D1 特征毒井喂 BTC 价) 或标签偏置 (asymmetric SL/TP 合约 61.5% SHORT label)。
+- **预防**: (1) 方向浓度监控器 per-asset 正常报警 (≥90% 同向 → DingTalk); (2) 模型注册/晋升门禁加输出多样性检查 (方向熵 + conf 唯一值下限); (3) accuracy≈随机 (<0.4) 禁止 live。
+- **检测**: `scripts/_audit_xau_votes_today.py` 置信度唯一值 ≤3 或单方向 ≥95% → 告警; audit_xau_directional_bias.py 长期方向比。
+
+---
+
+### ReB-20260804-D1_WELL_CROSS_ASSET_POISONING
+- **Pattern Signature**: `D1_WELL_CROSS_ASSET_POISONING`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-006
+- **Related**: FIX-20260804-006, CROSS_ASSET_CONTAMINATION_AUDIT.md (DQAF-20260615-006 H1)
+- **定义**: 双进程共享代码, 一方硬编码另一方的 CSV 路径 (`live_intent_loop.py:759` d1_csv 恒指 XAU) → BTC 进程的 `LiveDailyProvider._sync_csv()` 按 BTC symbol 抓取 bar 追加进 XAU 文件 → date-keyed dedup 使 XAU 正确 bar 无法回填 → XAU 日线尾部被 BTC 价格毒化 → 所有消费 D1 特征的模型 out-of-distribution。污染行数 = 07-04 起全月。
+- **预防**: (1) 数据文件路径必须由 base_dir/symbol 派生, 禁止跨资产硬编码 (CROSS_ASSET_CONTAMINATION_AUDIT H1 修复); (2) LiveDailyProvider `_sync_csv` 写前校验 `self._symbol` 与 CSV 文件名符号一致, 不符 → 拒绝写入 + SEVERE 告警; (3) 数据质量守卫: 日线 close 超出该资产合理量级 (XAU 4-5k vs BTC 60k+) → fail-fast。
+- **检测**: 全仓数据审计脚本 — 对每资产 D1 CSV 校验价格量级域 (XAU 1k-10k, BTC 10k-200k); reconcile 脚本比对 CSV 尾部日期与对应 symbol 的 MT5 直读 bar。

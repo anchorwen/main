@@ -231,3 +231,17 @@
 - **Fix**: FIX-20260804-002 (L3, commit ca2c4db9) — 单收敛点: `_coerce_feature_store()` (unwrap FeatureService._store) + `_latest_cross_record()` (latest()+to_dict() 归一 dict) + `_bar_close()` (dict/numpy.void 统一读 close, 负索引归一). 测试契约纠正 (spec=LocalFeatureStore 防 MagicMock 误判) + 3 根因回归锁. 验证: 46 tests PASS + mypy/ruff clean + 296 features/training 全绿 + pre-commit 全链 PASS.
 - **ReB**: STRUCTURED_ARRAY_ROW_AS_DICT / API_CONTRACT_MAGICMOCK_BLINDSPOT
 - **Status**: **CLOSED** — FIX-20260804-002 (commit ca2c4db9, 零填充停止, 新 v2 特征记录纯净)
+
+---
+
+- **Docket ID**: DQAF-20260804-006
+- **Date**: 2026-08-04
+- **Severity**: Sev 2
+- **Title**: XAU 进场位置系统性最差 — 100% SHORT 偏置 + 模型输出退化 + D1 特征毒井
+- **Evidence**: `data/live_trade_journal.jsonl` 今日 3 单全 SHORT 全在局部底部 (m15 4048.7@10:15 / m30 4049.1@10:15 / h1 4063.8@12:10), 2 SL + 1 深套 (上涨日 4047→4082); `data/brain_votes/2026-08-04.jsonl` H1_Exec_A 155/155 SHORT + M30_V5 154/155 SHORT (script 输出: scripts/_audit_xau_votes_today.py); 信号方向 886 SHORT:3 LONG; 退化签名 M15_V7_binary conf_uniq=1 恒定 0.783; **D1 毒井**: `data/raw/xauusdc_d1_merged.csv` 行 2510-2532 (2026-07-04→08-04) 价格 63,000-64,700 = BTC 量级。
+- **DA**: 全 swing 脑 D1_* 特征 (D1_Ret_1/ATR/RSI/MACD/Vol_ZScore/Bollinger/ADX) 吃进 BTC 价 → out-of-distribution → 输出退化 SHORT 锁死。执行无滑点 (信号 10:15:02→执行 10:15:22, 价差<0.3) — 非执行问题, 纯信号方向问题。
+- **AR**: 推翻"滑点/延迟" (20s 延迟价差<0.3); 推翻"方向映射反转" (brain_votes raw_score 符号验证正确); 推翻"今日 FIX/重启回归" (3 单在 12:58Z 重启前, FIX 全 BTC 侧); 部分成立"顺势追突破"但方向反 (886:3 结构性反向)。
+- **Root Cause**: L2 — 模型输出退化 (MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE, 同签名 FIX-20260629-184) + **上游 L3 毒井** (RC-09 config-drift: `live_intent_loop.py:759` H1 硬编码 XAU D1 CSV → BTC 进程 LiveDailyProvider 跨写 → 07-04 起 D1 特征全毒)。
+- **Fix**: FIX-20260804-006 — 6 脑物理冻结 (retired + vote_weight 0: M30_V5/H1_Exec_A/M30_Exec_A/M15_V7_binary/H1_V2_binary/M30_V7_binary) + live.yaml 3 条接线 enabled:false. **待办 (需 IC 批准)**: (1) live_intent_loop.py:759 H1 参数化 D1 CSV 路径; (2) 修复毒井 CSV (07-04 起截断重采); (3) direction_concentration_monitor 三重修复 (data_btc 硬编码→per-asset / golden_master 字段路径 / 大小写)。需重启生效。
+- **ReB**: MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE / D1_WELL_CROSS_ASSET_POISONING / MONITOR_ASSET_HARDCODED_DATA_DIR
+- **Status**: **FIXED_1_OF_3** — FIX-20260804-006 (冻结已完成待重启; D1 毒井修复 + monitor 修复待 IC 批准后实施)
