@@ -86,3 +86,7 @@ data/conformal_calibrator_state.json
 
 data_btc/live_trade_journal.jsonl
 data/live_trade_journal.jsonl
+
+# 2026-08-04 IC 第一决议: golden_master.jsonl 是无限增长的运行时账本,
+# 移出 VCS 跟踪 (DQAF-042 "MAY be tracked" 为许可, 本裁决行使裁量权降级)
+data_btc/golden_master.jsonl
