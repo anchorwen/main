@@ -205,11 +205,6 @@ def evaluate_governance_state(
         len(perf),
     )
 
-    # ── Persist governance state to disk ──
-    _gov_save_path = base_dir / "governance_state.json"
-    governance_service.save(str(_gov_save_path), lock_timeout=1.0)
-    logger.info("[GOV_LIVE] Governance state saved to %s", _gov_save_path)
-
     # ── Auditor→Executor: evaluate decisions, apply via rule engine ──
     brain_states = governance_service.get_all_states()
     evaluator = BrainPromotionEvaluator()
@@ -261,6 +256,21 @@ def evaluate_governance_state(
         changes: list[str] = []
     else:
         changes = rule_engine.execute_transitions(decisions)
+
+    # ── Persist governance state to disk AFTER transitions ──
+    # DQAF-20260804-001 (L3): save must happen AFTER execute_transitions so
+    # throttle/promote decisions actually persist.  The previous pre-transition
+    # save persisted only the perf injection; every in-memory transition (e.g.
+    # BTC_Swing_V4 live→probation throttle) was discarded on the next 60s
+    # reload → governance_state.json never converged.  Single save covers both
+    # deployment paths (container scheduler_service + bare-metal launcher).
+    _gov_save_path = base_dir / "governance_state.json"
+    governance_service.save(str(_gov_save_path), lock_timeout=1.0)
+    logger.info(
+        "[GOV_LIVE] Governance state saved to %s (transitions=%s)",
+        _gov_save_path,
+        ",".join(changes) if changes else "none",
+    )
 
     return {
         "base_dir": str(base_dir),

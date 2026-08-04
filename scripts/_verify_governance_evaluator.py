@@ -14,12 +14,14 @@ with synthetic, deterministic data:
   3. NO-HOLD control: the same throttle WITHOUT a hold is applied.
   4. EXPIRED-hold control: an expired hold no longer blocks demotion.
   5. PROMOTION passthrough: a held brain's promotion is never blocked.
-  6. Live sanity: evaluate_governance_state on a snapshot keeps V4 live.
+  6. PERSISTENCE (DQAF-20260804-001): a throttle decision written by
+     evaluate_governance_state survives a disk reload — the L3 fix that moved
+     save() AFTER execute_transitions.  Deterministic synthetic data.
 """
 
 from __future__ import annotations
 
-import shutil
+import json
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -102,33 +104,42 @@ def main() -> int:
     assert gov4.get_brain_state("TestHeld")["status"] == "live"
     print(f"ASSERT PASS 5: held probation→live promotion passes through → {changes4[0]}")
 
-    # ── Assert 6: live sanity — evaluate_governance_state keeps V4 live ──
-    # Live-data dependent, so only assert the INVARIANT: V4 is never demoted
-    # while the hold is active (regardless of whether the evaluator throttles
-    # or holds this snapshot).
-    src_dir = Path("data_btc")
-    with tempfile.TemporaryDirectory(prefix="gov_eval_verify_") as tmp:
+    # ── Assert 6: PERSISTENCE — transitions survive reload (DQAF-20260804-001) ──
+    # Deterministic, no live data.  The old "V4 stays live during active hold"
+    # invariant is stale — the hold expired 2026-08-03T23:59:59Z and the L3 fix
+    # (save AFTER execute_transitions) now persists in-memory transitions.  This
+    # asserts the FIX: a throttle decision written by evaluate_governance_state
+    # must land on disk and survive a fresh GovernanceService.load().
+    with tempfile.TemporaryDirectory(prefix="gov_persist_verify_") as tmp:
         tmp_dir = Path(tmp)
-        for fname in ("governance_state.json", "brain_performance.json"):
-            src = src_dir / fname
-            if not src.exists():
-                print(f"MISSING: {src}")
-                return 2
-            shutil.copy2(src, tmp_dir / fname)
-        gov_snap = GovernanceService.load(str(tmp_dir / "governance_state.json"))
-        result = evaluate_governance_state(gov_snap, tmp_dir, brains_dir="configs/brains_btc")
-        v4 = [d for d in result["decisions"] if d["brain_id"] == "BTC_Swing_V4"]
-        if v4:
-            print(
-                f"  V4 snapshot decision: action={v4[0]['action']} "
-                f"approved={v4[0]['approved']} reasons={v4[0]['reasons']}"
-            )
-        for c in result["changes"]:
-            print(f"  change: {c}")
+        gov = GovernanceService()
+        gov.register_brain("TestPersist", "live")
+        gov.save(str(tmp_dir / "governance_state.json"))
+        # 18 wins / 42 losses → WR=0.30 (<0.38), PF=0.43 (<0.80), count=60.
+        # count∈[50,100): min_live_samples reached, _new_brain=True → the
+        # protected path returns a live→probation throttle (not frozen/retire).
+        _recs = [{"execution_outcome": "win"} for _ in range(18)] + [
+            {"execution_outcome": "loss"} for _ in range(42)
+        ]
+        (tmp_dir / "brain_performance.json").write_text(
+            json.dumps({"records": {"TestPersist": _recs}}), encoding="utf-8"
+        )
+        empty_brains = tmp_dir / "brains"  # no observation holds → not blocked
+        empty_brains.mkdir()
+        result = evaluate_governance_state(
+            gov, tmp_dir, brains_dir=str(empty_brains), manual_mode=False
+        )
+        persisted = [c for c in result["changes"] if "TestPersist" in c]
+        print(f"  TestPersist transition in cycle: {persisted}")
         gov_after = GovernanceService.load(str(tmp_dir / "governance_state.json"))
-        st = gov_after.get_brain_state("BTC_Swing_V4")
-        assert st["status"] == "live", f"V4 was demoted despite hold! status={st['status']}"
-        print("ASSERT PASS 6: V4 stays live after evaluate_governance_state (hold invariant)")
+        st = gov_after.get_brain_state("TestPersist")
+        assert (
+            st["status"] == "probation"
+        ), f"transition did NOT persist to disk! status={st['status']}"
+        print(
+            "ASSERT PASS 6: throttle transition PERSISTED to governance_state.json "
+            "(DQAF-20260804-001 save-after-transition)"
+        )
 
     print("VERIFY OK")
     return 0

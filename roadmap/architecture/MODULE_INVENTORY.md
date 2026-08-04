@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-03T12:12:30Z
+> **自动生成**: 2026-08-04T05:05:49Z
 > **扫描模块数**: 782
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -190,7 +190,7 @@
 | `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 288 | — | |
 | `feature_update_producer.py` | ✅ active | — | 2 | 80 | — | |
 | `final_audit.py` | ✅ active | FinalAuditService | 5 | 211 | — | |
-| `governance_evaluator.py` | ✅ active | — | 3 | 282 | — | |
+| `governance_evaluator.py` | ✅ active | — | 3 | 292 | — | |
 | `governance_summary.py` | ✅ active | — | 4 | 56 | — | |
 | `health_check.py` | ✅ active | HealthCheckService | 9 | 117 | — | |
 | `lifecycle_manager.py` | ✅ active | LifecycleManager | 7 | 166 | — | |
@@ -658,7 +658,7 @@
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
 | `_v4_obs_final_audit.py` | ✅ active | — | 3 | 209 | — | |
-| `_verify_governance_evaluator.py` | ✅ active | — | 2 | 138 | — | |
+| `_verify_governance_evaluator.py` | ✅ active | — | 2 | 149 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
