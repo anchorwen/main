@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-04T15:04:40Z
-> **扫描模块数**: 783
+> **自动生成**: 2026-08-04T17:07:51Z
+> **扫描模块数**: 784
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -653,6 +653,7 @@
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
+| `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
@@ -1028,7 +1029,7 @@
 | `train_xau_directional_v1.py` | ✅ active | — | 6 | 293 | — | |
 | `train_xau_directional_v2.py` | ✅ active | — | 18 | 923 | — | |
 | `validate_label_vs_live.py` | ✅ active | LabelLiveMismatchError | 2 | 130 | — | |
-| `verify_lineage.py` | ✅ active | — | 10 | 383 | — | |
+| `verify_lineage.py` | ✅ active | — | 10 | 422 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |
 | `your_trainer.py` | ✅ active | — | 7 | 223 | — | |
 

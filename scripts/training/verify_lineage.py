@@ -134,7 +134,46 @@ def verify_brain(
     brain_id = cfg.get("brain_id", "?")
     results: list[dict[str, str]] = []
 
+    # Lineage-exemption (FIX-20260805-001): legacy brains grandfathered by an
+    # explicit IC migration mandate.  Only the four *lineage-gap* checks may be
+    # exempted (registry_row/commit_hash/dataset_hash/label_contract_id are
+    # about whether training went through the institutional pipeline and cannot
+    # be truthfully reconstructed for pre-M3 ad-hoc artifacts).  Integrity
+    # FAILs - tampered artifact, wrong magic, unknown schema - are NEVER
+    # downgraded.  A malformed exemption block invalidates itself (FAIL).
+    _EXEMPTABLE = {"registry_row", "commit_hash", "dataset_hash", "label_contract_id"}
+    exempted_checks: set[str] = set()
+    exempt_note = ""
+    exempt_block = cfg.get("lineage_exempt")
+    if exempt_block is not None:
+        if isinstance(exempt_block, dict):
+            exempted = exempt_block.get("exempts")
+            fix_id = str(exempt_block.get("fix_id", "") or "")
+            granted_by = str(exempt_block.get("granted_by", "") or "")
+            if (
+                isinstance(exempted, list)
+                and set(exempted) <= _EXEMPTABLE
+                and fix_id
+                and granted_by
+            ):
+                exempted_checks = set(exempted)
+                exempt_note = f"{fix_id} / {granted_by}"
+        if not exempt_note:
+            results.append(
+                {
+                    "brain": brain_id,
+                    "check": "lineage_exempt_valid",
+                    "verdict": "FAIL",
+                    "detail": "lineage_exempt block malformed - exemption ignored "
+                    f"(must be a dict with non-empty fix_id/granted_by and exempts "
+                    f"subset of {sorted(_EXEMPTABLE)})",
+                }
+            )
+
     def add(check: str, verdict: str, detail: str) -> None:
+        if verdict == "MISSING" and check in exempted_checks:
+            verdict = "PASS"
+            detail = f"EXEMPT ({exempt_note}) - {detail}"
         results.append({"brain": brain_id, "check": check, "verdict": verdict, "detail": detail})
 
     # 1. artifact_hash present

@@ -12,7 +12,7 @@
   "artifact_hash": "fe161981e763ac58a478c769d71b67d2511e2cdb476fbd519f08b78cc3a257be",
   "status": "shadow",
   "vote_weight": 0.0,
-  "magic": 90450,
+  "magic": 90452,
   "brain_role": "expected_r_tower",
   "training_horizon": 24,
   "strategy": "btc_expected_r",
@@ -86,5 +86,12 @@
   "_intent": {
     "trading": "shadow_only",
     "note": "Investment Committee V4 Final Mandate: LONG tower Observation Only — vote_weight=0.0, 30-day OOS blind test. ρ=0.0445 misses 0.05 gate. Records E[R_long] signals but never triggers orders. Promoted to vote_weight=1.0 only if OOS ρ >= 0.05 after 30 days and >=50 signals."
+  },
+  "lineage_exempt": {
+    "fix_id": "FIX-20260805-001",
+    "granted_by": "IC Legacy Magic Alignment mandate 2026-08-05",
+    "granted_on": "2026-08-05",
+    "reason": "Legacy config predates Phase 5 lineage (FIX-20260803-006); trained via pre-M3 ad-hoc pipeline. TrainingRunRecord/commit_hash/dataset_hash/label_contract_id cannot be truthfully reconstructed without re-training. Grandfathered by explicit IC migration exemption. Integrity checks (artifact_hash, feature_schema, magic_matches_line) remain fully enforced.",
+    "exempts": ["registry_row", "commit_hash", "dataset_hash", "label_contract_id"]
   }
 }

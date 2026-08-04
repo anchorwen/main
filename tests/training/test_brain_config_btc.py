@@ -244,6 +244,59 @@ class TestVerifyLineage:
         assert verdicts["artifact_hash_present"] == "FAIL"
         assert verdicts["registry_row"] == "MISSING"
 
+    def _legacy_cfg_with_exemption(self, tmp_path: Path, **exempt_overrides: Any) -> dict[str, Any]:
+        """Complete cfg stripped of Phase 5 lineage fields + a valid exemption."""
+        cfg, artifact_hash, _ = _make_complete_cfg(tmp_path)
+        for k in ("trained_by_commit_hash", "dataset_hash", "label_contract_id"):
+            cfg.pop(k)
+        block: dict[str, Any] = {
+            "fix_id": "FIX-20260805-001",
+            "granted_by": "IC Legacy Magic Alignment mandate 2026-08-05",
+            "exempts": ["registry_row", "commit_hash", "dataset_hash", "label_contract_id"],
+        }
+        block.update(exempt_overrides)
+        cfg["lineage_exempt"] = block
+        return cfg
+
+    def test_lineage_exempt_converts_missing_to_pass(self, tmp_path: Path) -> None:
+        # FIX-20260805-001: legacy brains grandfathered by IC mandate -> the four
+        # lineage-gap checks PASS (EXEMPT), while integrity checks stay PASS.
+        cfg = self._legacy_cfg_with_exemption(tmp_path)
+        results = verify_brain(cfg, tmp_path, {}, {"btc_expected_r_m15": 90452})
+        verdicts = {r["check"]: r["verdict"] for r in results}
+        assert verdicts["registry_row"] == "PASS"
+        assert verdicts["commit_hash"] == "PASS"
+        assert verdicts["dataset_hash"] == "PASS"
+        assert verdicts["label_contract_id"] == "PASS"
+        assert verdicts["artifact_hash_matches"] == "PASS"
+        assert verdicts["magic_matches_line"] == "PASS"
+        # the exemption is documented, not silent
+        row = next(r for r in results if r["check"] == "registry_row")
+        assert "EXEMPT" in row["detail"]
+        assert "FIX-20260805-001" in row["detail"]
+
+    def test_lineage_exempt_never_downgrades_fail(self, tmp_path: Path) -> None:
+        # Even a VALID exemption clears only lineage gaps; an integrity FAIL
+        # (tampered artifact) is never downgraded.
+        cfg = self._legacy_cfg_with_exemption(tmp_path)
+        (tmp_path / "model.txt").write_text("tampered", encoding="utf-8")
+        results = verify_brain(cfg, tmp_path, {}, {"btc_expected_r_m15": 90452})
+        verdicts = {r["check"]: r["verdict"] for r in results}
+        assert verdicts["artifact_hash_matches"] == "FAIL"  # integrity NEVER exempted
+        assert verdicts["registry_row"] == "PASS"  # lineage gap cleared by exemption
+        row = next(r for r in results if r["check"] == "registry_row")
+        assert "EXEMPT" in row["detail"]
+
+    def test_malformed_lineage_exempt_rejected(self, tmp_path: Path) -> None:
+        # Exemption must be a dict with non-empty fix_id/granted_by + valid exempts.
+        cfg = self._legacy_cfg_with_exemption(
+            tmp_path, exempts=["dataset_hash", "magic_matches_line"]
+        )
+        results = verify_brain(cfg, tmp_path, {}, {"btc_expected_r_m15": 90452})
+        verdicts = {r["check"]: r["verdict"] for r in results}
+        assert verdicts["lineage_exempt_valid"] == "FAIL"
+        assert verdicts["dataset_hash"] == "MISSING"
+
     def test_strategy_line_magics_parse(self) -> None:
         live = {
             "strategy_lines": {

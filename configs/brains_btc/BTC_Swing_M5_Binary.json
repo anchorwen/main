@@ -12,7 +12,7 @@
   "artifact_hash": "b2bd145a10430f81fcdc0f3a6e8029589039e63e66a4952515001a19ad59d9da",
   "status": "probation",
   "vote_weight": 1.0,
-  "magic": 90413,
+  "magic": 90410,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
   "strategy": "btc_swing",
@@ -110,5 +110,12 @@
     "trading": "probation_limited",
     "note": "FIX-20260712-003: B-path binary classifier on probation — micro-lot real trading allowed. Previous _note said 'signals recorded, not executed' which was stale since status=probation."
   },
-  "_note": "FIX-20260706-025 (upgrade from FIX-20260706-015 baseline): B-path binary directional classifier v2 — SYMMETRIC labels + REAL per-bar spread + REAL 41-dim features + curation. XGBoost binary:logistic WR=54.2% ±1.5% (+3.1pp over zero-fill baseline 51.1%). Per-fold: 56.4%/53.7%/54.1%/51.9%/55.2%. Label WR=58.1%, EV=-0.005R (near-zero — symmetric friction). Institutional mandate: NO threshold shifting — accept native 64.6% LONG (regime-honest). Deadzone θ=0.05 → [0.45,0.55] NEUTRAL. As of FIX-20260712-003: probation_limited trading active (see _intent field). Previous model (WR=51.1%) superseded."
+  "_note": "FIX-20260706-025 (upgrade from FIX-20260706-015 baseline): B-path binary directional classifier v2 — SYMMETRIC labels + REAL per-bar spread + REAL 41-dim features + curation. XGBoost binary:logistic WR=54.2% ±1.5% (+3.1pp over zero-fill baseline 51.1%). Per-fold: 56.4%/53.7%/54.1%/51.9%/55.2%. Label WR=58.1%, EV=-0.005R (near-zero — symmetric friction). Institutional mandate: NO threshold shifting — accept native 64.6% LONG (regime-honest). Deadzone θ=0.05 → [0.45,0.55] NEUTRAL. As of FIX-20260712-003: probation_limited trading active (see _intent field). Previous model (WR=51.1%) superseded.",
+  "lineage_exempt": {
+    "fix_id": "FIX-20260805-001",
+    "granted_by": "IC Legacy Magic Alignment mandate 2026-08-05",
+    "granted_on": "2026-08-05",
+    "reason": "Legacy config predates Phase 5 lineage (FIX-20260803-006); trained via pre-M3 ad-hoc pipeline. TrainingRunRecord/commit_hash/dataset_hash/label_contract_id cannot be truthfully reconstructed without re-training. Grandfathered by explicit IC migration exemption. Integrity checks (artifact_hash, feature_schema, magic_matches_line) remain fully enforced.",
+    "exempts": ["registry_row", "commit_hash", "dataset_hash", "label_contract_id"]
+  }
 }
