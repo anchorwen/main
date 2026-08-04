@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.execution.strategy_line import StrategyLineConfig
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 # ── resolved_min_economic_volume derivation ────────────────────────────────
 
@@ -25,7 +26,7 @@ def test_btc_derives_own_floor_001() -> None:
         name="btc_swing_h1_v2",
         magic=90412,
         brain_types={"lightgbm_v1"},
-        base_dir="data_btc",
+        base_dir=TEST_BASE_DIR,
         symbol="BTCUSDc",
         base_volume=0.01,
         lot_step=0.01,
@@ -41,7 +42,7 @@ def test_xau_keeps_two_lot_step() -> None:
         name="m30_swing",
         magic=90003,
         brain_types={"xgboost_v9"},
-        base_dir="data",
+        base_dir=TEST_BASE_DIR,
         symbol="XAUUSDc",
         base_volume=0.05,
         lot_step=0.01,
@@ -55,7 +56,7 @@ def test_explicit_config_wins_over_derivation() -> None:
         name="btc_swing_h1_v2",
         magic=90412,
         brain_types={"lightgbm_v1"},
-        base_dir="data_btc",
+        base_dir=TEST_BASE_DIR,
         symbol="BTCUSDc",
         base_volume=0.01,
         lot_step=0.01,
@@ -72,7 +73,7 @@ def test_btc_floor_independent_of_base_volume_scale() -> None:
         name="btc_swing_h4",
         magic=90415,
         brain_types={"xgboost_v9"},
-        base_dir="data_btc",
+        base_dir=TEST_BASE_DIR,
         symbol="BTCUSDc",
         base_volume=0.05,
         lot_step=0.01,
@@ -96,7 +97,7 @@ def test_builder_static_validation_warns_not_raises() -> None:
         name="structural_below_floor",
         magic=99999,
         brain_types={"lightgbm_v1"},
-        base_dir="data_btc",
+        base_dir=TEST_BASE_DIR,
         symbol="BTCUSDc",
         base_volume=0.005,  # deliberately below BTC floor 0.01
         lot_step=0.01,
@@ -106,7 +107,7 @@ def test_builder_static_validation_warns_not_raises() -> None:
         name="ok_strategy",
         magic=99998,
         brain_types={"lightgbm_v1"},
-        base_dir="data_btc",
+        base_dir=TEST_BASE_DIR,
         symbol="BTCUSDc",
         base_volume=0.01,
         lot_step=0.01,

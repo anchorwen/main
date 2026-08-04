@@ -10,6 +10,7 @@ import pytest
 from core.execution.statarb_strategy import StatArbStrategy
 from core.execution.strategy_line import StrategyLineConfig
 from tests.execution.conftest import make_proposal
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 
 @pytest.fixture
@@ -30,7 +31,10 @@ class TestStatArbStrategyInference:
     def test_passes_mid_price_to_adapter(self, statarb_brain):
         strat = StatArbStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="statarb_dynamic", magic=90003, brain_types={"ou_params_v6"}
+                base_dir=TEST_BASE_DIR,
+                name="statarb_dynamic",
+                magic=90003,
+                brain_types={"ou_params_v6"},
             ),
             brains=[statarb_brain],
         )
@@ -48,7 +52,10 @@ class TestStatArbStrategyInference:
     def test_brain_id_stamped(self, statarb_brain):
         strat = StatArbStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="statarb_dynamic", magic=90003, brain_types={"ou_params_v6"}
+                base_dir=TEST_BASE_DIR,
+                name="statarb_dynamic",
+                magic=90003,
+                brain_types={"ou_params_v6"},
             ),
             brains=[statarb_brain],
         )
@@ -64,7 +71,10 @@ class TestStatArbStrategyInference:
         ]
         strat = StatArbStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="statarb_dynamic", magic=90003, brain_types={"ou_params_v6"}
+                base_dir=TEST_BASE_DIR,
+                name="statarb_dynamic",
+                magic=90003,
+                brain_types={"ou_params_v6"},
             ),
             brains=brains,
         )
@@ -75,7 +85,10 @@ class TestStatArbStrategyInference:
         """When mid_price is None, 0.0 is used as fallback."""
         strat = StatArbStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="statarb_dynamic", magic=90003, brain_types={"ou_params_v6"}
+                base_dir=TEST_BASE_DIR,
+                name="statarb_dynamic",
+                magic=90003,
+                brain_types={"ou_params_v6"},
             ),
             brains=[statarb_brain],
         )
@@ -86,7 +99,10 @@ class TestStatArbStrategyInference:
     def test_empty_brains_returns_empty(self):
         strat = StatArbStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="statarb_dynamic", magic=90003, brain_types={"ou_params_v6"}
+                base_dir=TEST_BASE_DIR,
+                name="statarb_dynamic",
+                magic=90003,
+                brain_types={"ou_params_v6"},
             ),
             brains=[],
         )

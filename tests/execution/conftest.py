@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from core.execution.strategy_line import StrategyLineConfig
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +100,7 @@ def make_proposal(
 def barrier_config() -> StrategyLineConfig:
     """Default BarrierStrategy config matching live.yaml barrier_12bar section."""
     return StrategyLineConfig(
-        base_dir="data",
+        base_dir=TEST_BASE_DIR,
         name="barrier_12bar",
         magic=90001,
         brain_types={"xgboost_v9", "lightgbm_v1"},
@@ -120,7 +121,7 @@ def barrier_config() -> StrategyLineConfig:
 def micro_config() -> StrategyLineConfig:
     """Default MicroStrategy config matching live.yaml micro_3bar section."""
     return StrategyLineConfig(
-        base_dir="data",
+        base_dir=TEST_BASE_DIR,
         name="micro_3bar",
         magic=90002,
         brain_types={"xgboost_v4.5", "transformer_v4.3", "transformer_v5"},
@@ -138,7 +139,7 @@ def micro_config() -> StrategyLineConfig:
 def statarb_config() -> StrategyLineConfig:
     """Default StatArbStrategy config matching live.yaml statarb_dynamic section."""
     return StrategyLineConfig(
-        base_dir="data",
+        base_dir=TEST_BASE_DIR,
         name="statarb_dynamic",
         magic=90003,
         brain_types={"ou_params_v6"},

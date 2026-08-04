@@ -11,6 +11,7 @@ from core.execution.barrier_strategy import BarrierStrategy
 from core.execution.strategy_line import StrategyLineConfig
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 from tests.execution.conftest import make_proposal
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 
 @pytest.fixture
@@ -31,7 +32,10 @@ class TestBarrierStrategyInference:
     def test_passes_feature_vector_to_adapter(self, barrier_brain):
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir=TEST_BASE_DIR,
+                name="barrier_12bar",
+                magic=90001,
+                brain_types={"xgboost_v9"},
             ),
             brains=[barrier_brain],
         )
@@ -49,7 +53,10 @@ class TestBarrierStrategyInference:
     def test_brain_id_stamped_on_proposal(self, barrier_brain):
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir=TEST_BASE_DIR,
+                name="barrier_12bar",
+                magic=90001,
+                brain_types={"xgboost_v9"},
             ),
             brains=[barrier_brain],
         )
@@ -65,7 +72,10 @@ class TestBarrierStrategyInference:
         ]
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir=TEST_BASE_DIR,
+                name="barrier_12bar",
+                magic=90001,
+                brain_types={"xgboost_v9"},
             ),
             brains=brains,
         )
@@ -77,7 +87,10 @@ class TestBarrierStrategyInference:
     def test_empty_brains_returns_empty(self):
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir=TEST_BASE_DIR,
+                name="barrier_12bar",
+                magic=90001,
+                brain_types={"xgboost_v9"},
             ),
             brains=[],
         )

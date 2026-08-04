@@ -9,6 +9,7 @@ import pytest
 from core.execution.micro_strategy import MicroStrategy
 from core.execution.strategy_line import StrategyLineConfig
 from tests.execution.conftest import make_proposal
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 
 @pytest.fixture
@@ -29,7 +30,7 @@ class TestMicroStrategyInference:
     def test_passes_micro_feature_vector_to_adapter(self, micro_brain):
         strat = MicroStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+                base_dir=TEST_BASE_DIR, name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
             ),
             brains=[micro_brain],
         )
@@ -46,7 +47,7 @@ class TestMicroStrategyInference:
     def test_brain_id_stamped(self, micro_brain):
         strat = MicroStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+                base_dir=TEST_BASE_DIR, name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
             ),
             brains=[micro_brain],
         )
@@ -62,7 +63,7 @@ class TestMicroStrategyInference:
         ]
         strat = MicroStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+                base_dir=TEST_BASE_DIR, name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
             ),
             brains=brains,
         )
@@ -72,7 +73,7 @@ class TestMicroStrategyInference:
     def test_empty_brains_returns_empty(self):
         strat = MicroStrategy(
             config=StrategyLineConfig(
-                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+                base_dir=TEST_BASE_DIR, name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
             ),
             brains=[],
         )

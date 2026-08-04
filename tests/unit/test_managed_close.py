@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from core.contracts.domain.dispatch_context import DispatchContext, build_dispatch_context
 from core.execution.managed_close import _utc_iso, dispatch_managed_close
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 # dispatch_managed_close uses lazy imports inside the function body.
 # Patch the SOURCE module, not the local binding.
@@ -37,7 +38,7 @@ def _make_pos(
 def _make_config() -> MagicMock:
     cfg = MagicMock()
     cfg.mt5_terminal_path = "C:\\mock\\terminal64.exe"
-    cfg.base_dir = "data"
+    cfg.base_dir = TEST_BASE_DIR
     cfg.symbol = "XAUUSDc"
     cfg.adapter_name = "mt5"
     cfg.ignore_protection_flag = False
@@ -70,8 +71,12 @@ class TestPnlEstimation:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True, "intent_id": "test_001"}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="brain_flip",
-                mid=3020.0, strategy_name="test_strategy",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="brain_flip",
+                mid=3020.0,
+                strategy_name="test_strategy",
             )
         assert result is True
         _, kwargs = mock_dispatch.call_args
@@ -82,8 +87,12 @@ class TestPnlEstimation:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True, "intent_id": "test_002"}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="tp_hit",
-                mid=2980.0, strategy_name="test_strategy",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="tp_hit",
+                mid=2980.0,
+                strategy_name="test_strategy",
             )
         assert result is True
         _, kwargs = mock_dispatch.call_args
@@ -94,8 +103,12 @@ class TestPnlEstimation:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True, "intent_id": "test_003"}
             dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="time_exit",
-                mid=3020.0, strategy_name="test_strategy",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="time_exit",
+                mid=3020.0,
+                strategy_name="test_strategy",
             )
         _, kwargs = mock_dispatch.call_args
         assert "pnl" not in kwargs["execution_payload"]
@@ -107,7 +120,10 @@ class TestBareDispatch:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True, "intent_id": "test_bare"}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="bleed_stop",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="bleed_stop",
                 strategy_name="barrier_12bar",
             )
         assert result is True
@@ -119,7 +135,10 @@ class TestBareDispatch:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.side_effect = RuntimeError("MT5 connection lost")
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="hesitation_exit",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="hesitation_exit",
                 strategy_name="statarb_dynamic",
             )
         assert result is False
@@ -129,8 +148,12 @@ class TestBareDispatch:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True, "intent_id": "test_payload"}
             dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="ev_trajectory_gamma2",
-                strategy_name="statarb_m15", exit_confidence=0.45,
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="ev_trajectory_gamma2",
+                strategy_name="statarb_m15",
+                exit_confidence=0.45,
             )
         _, kwargs = mock_dispatch.call_args
         payload = kwargs["execution_payload"]
@@ -146,8 +169,12 @@ class TestReentryGuard:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="brain_flip",
-                state=None, strategy_name="test_strategy",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="brain_flip",
+                state=None,
+                strategy_name="test_strategy",
             )
         assert result is True
 
@@ -156,8 +183,12 @@ class TestReentryGuard:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="sl_hit",
-                state=MagicMock(), strategy_name="",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="sl_hit",
+                state=MagicMock(),
+                strategy_name="",
             )
         assert result is True
 
@@ -166,14 +197,20 @@ class TestReentryGuard:
         mock_state = MagicMock()
         mock_state._cooldown_registry = None
         from core.execution.reentry_guard import ReentryState
+
         reentry = ReentryState()
         mock_state._reentry_states = {"test_reentry": reentry}
 
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="brain_flip_long_conf_0.85",
-                mid=3000.0, state=mock_state, strategy_name="test_reentry",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="brain_flip_long_conf_0.85",
+                mid=3000.0,
+                state=mock_state,
+                strategy_name="test_reentry",
                 exit_confidence=0.85,
             )
         assert result is True
@@ -187,8 +224,13 @@ class TestErrorResilience:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="time_exit",
-                mid=3000.0, state=None, strategy_name="error_test",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="time_exit",
+                mid=3000.0,
+                state=None,
+                strategy_name="error_test",
             )
         assert result is True
         mock_dispatch.assert_called_once()
@@ -198,7 +240,11 @@ class TestErrorResilience:
         with patch(DISPATCH_PATH) as mock_dispatch:
             mock_dispatch.return_value = {"dispatched": True}
             result = dispatch_managed_close(
-                config=_make_config(), ctx=_make_ctx(), pos=pos, reason="unknown_close",
-                mid=None, strategy_name="btc_swing",
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="unknown_close",
+                mid=None,
+                strategy_name="btc_swing",
             )
         assert result is True

@@ -10,6 +10,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from tests.mock_kit.config_factory import TEST_BASE_DIR
+
 
 # ---------------------------------------------------------------------------
 # Mock config helper
@@ -18,7 +20,7 @@ def _make_config(**overrides: object) -> SimpleNamespace:
     """Create a minimal LiveCycleConfig-compatible namespace for testing."""
     defaults: dict[str, object] = {
         "symbol": "XAUUSDc",
-        "base_dir": "data",  # FIX-20260615-006/C1: required by StrategyLineConfig
+        "base_dir": TEST_BASE_DIR,  # FIX-20260615-006/C1: required by StrategyLineConfig
         "strategy_configs": {},
         "sl_atr_mult": 2.0,
         "tp_atr_mult": 3.5,

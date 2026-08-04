@@ -18,6 +18,7 @@ from tests.execution.conftest import (
     make_proposal,
 )
 from tests.execution.test_strategy_line import _ctx, _make_strategy
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 # ── Helper ────────────────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ class TestMultiStrategyPipeline:
         # Barrier: long signal
         barrier = _make_strategy(
             config=StrategyLineConfig(
-                base_dir="data",
+                base_dir=TEST_BASE_DIR,
                 name="barrier_12bar",
                 magic=90001,
                 brain_types={"test"},
@@ -182,7 +183,7 @@ class TestMultiStrategyPipeline:
         # Micro: short signal
         micro = _make_strategy(
             config=StrategyLineConfig(
-                base_dir="data",
+                base_dir=TEST_BASE_DIR,
                 name="micro_3bar",
                 magic=90002,
                 brain_types={"test"},
@@ -200,7 +201,7 @@ class TestMultiStrategyPipeline:
         # StatArb: long signal (oversold reversion)
         statarb = _make_strategy(
             config=StrategyLineConfig(
-                base_dir="data",
+                base_dir=TEST_BASE_DIR,
                 name="statarb_dynamic",
                 magic=90003,
                 brain_types={"test"},

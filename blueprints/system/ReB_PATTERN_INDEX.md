@@ -1483,3 +1483,12 @@
 - **定义**: 风控/监控器三重结构性失聪致长期静默: (1) 调度入口硬编码单一资产 data_dir (`_scheduled_monitor` data_btc) → 另一资产永不检查; (2) 读错数据字段路径 (读顶层 `direction`, 实际嵌套 `outputs.<strategy>.direction`) → 恒 0 信号; (3) 大小写/词形错配 (存小写 short/long vs 匹配大写 SHORT) → 恒 0 命中。叠加时间戳字段错配 (`timestamp_utc` vs `timestamp`/`recorded_at`) → 永远 INSUFFICIENT DATA 分支, 静默返回 exit 0。风控警报器失效比模型失效更不可饶恕 (IC 语)。
 - **预防**: (1) 监控器必须参数化全资产目录, 禁止硬编码单资产; (2) 读取字段前先实证数据结构 (golden_master 结构探查), 禁止凭假设读字段; (3) 方向/枚举值必须归一化 (uppercase + 别名映射 BUY/SELL) 后匹配; (4) 时间过滤字段与数据 schema 对齐; (5) 监控器须有"数据不足≠正常"区分 — INSUFFICIENT 分支也要告警而非静默 exit 0。
 - **检测**: `scripts/_monitor_direction_concentration.py --data-dirs data data_btc` (FIX-20260804-008 后实证 XAU CRITICAL 86% SHORT); 定期核对监控器读入信号数 vs 实际 golden_master 行数 (信号数=0 即盲区红旗)。
+
+### ReB-20260805-TEST_LIVE_LEDGER_POLLUTION
+- **Pattern Signature**: `TEST_LIVE_LEDGER_POLLUTION`
+- **Date Cataloged**: 2026-08-05
+- **Source Docket**: FIX-20260804-010 (FIX-20260804-007 部署验证发现)
+- **Related**: FIX-20260804-010, DQAF-20260804-007
+- **定义**: 测试代码把运行时 base_dir 指向实盘目录 (`StrategyLineConfig(base_dir="data"/"data_btc")`), 而 `record_brain_votes()` 每 evaluate() cycle 无条件追加 `{base_dir}/brain_votes/{date}.jsonl` → 全量 pytest 每次运行把 test_brain_01/b1/b2 测试投票 (brain_status=unknown, strategy=test_line/barrier_12bar/micro_3bar 等) 写入实盘投票台账。测试与实盘共享写入路径, 无隔离边界 → 台账被测试数据毒化, 审计脚本读到幻影脑。污染时间戳与 pytest 运行窗口精确重合 (22:51Z 启动即 14:51Z 首行)。
+- **预防**: (1) 测试构造的任何运行时 config 的 base_dir 必须指向隔离目录 (pytest tmp 或 OS temp), 严禁字面 `"data"`/`"data_btc"` (FIX-20260804-010 `config_factory.TEST_BASE_DIR` 单收敛点); (2) 新增 `record_brain_votes` 调用链的测试必须显式注入 base_dir; (3) 台账污染检测: 对 `data/brain_votes/*.jsonl` 定期审计 brain_id 是否在已知生产脑清单内, 出现 test_* 即红旗; (4) 全量 pytest 结束后核对台账行数变化, 新增行数应≈0 (测试必须零写入实盘)。
+- **检测**: `python scripts/audits/_audit_xau_votes_today.py --date YYYY-MM-DD --data-dir data` 输出中出现 test_brain_01/b1/b2 即污染; `data/brain_votes/{date}.jsonl` 中出现 strategy=test_line 行即污染。

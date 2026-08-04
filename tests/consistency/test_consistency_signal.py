@@ -5,13 +5,14 @@ from __future__ import annotations
 from core.execution.strategy_line import StrategyLineConfig
 from tests.execution.conftest import make_proposal
 from tests.execution.test_strategy_line import _ctx, _make_strategy
+from tests.mock_kit.config_factory import TEST_BASE_DIR
 
 
 class TestSignalDeterminism:
     def test_same_input_same_decision(self):
         """Identical proposals should produce identical decisions."""
         config = StrategyLineConfig(
-            base_dir="data", name="barrier_12bar", magic=90001, brain_types={"test"}
+            base_dir=TEST_BASE_DIR, name="barrier_12bar", magic=90001, brain_types={"test"}
         )
         proposals = [
             make_proposal(
@@ -36,7 +37,7 @@ class TestSignalDeterminism:
     def test_same_input_same_sl_tp(self):
         """With same ATR and mid_price, SL/TP should be identical."""
         config = StrategyLineConfig(
-            base_dir="data", name="barrier_12bar", magic=90001, brain_types={"test"}
+            base_dir=TEST_BASE_DIR, name="barrier_12bar", magic=90001, brain_types={"test"}
         )
         proposals = [
             make_proposal(
@@ -58,7 +59,7 @@ class TestSignalDeterminism:
     def test_consensus_deterministic(self):
         """Consensus algorithm should be deterministic for same inputs."""
         config = StrategyLineConfig(
-            base_dir="data", name="barrier_12bar", magic=90001, brain_types={"test"}
+            base_dir=TEST_BASE_DIR, name="barrier_12bar", magic=90001, brain_types={"test"}
         )
         proposals = [
             make_proposal(up_probability=0.75, down_probability=0.25, direction_bias="long"),

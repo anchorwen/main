@@ -8,9 +8,28 @@ Extracted from tests/execution/conftest.py StrategyLineConfig fixtures.
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from core.execution.strategy_line import StrategyLineConfig
+
+
+def create_test_base_dir() -> str:
+    """Isolated runtime dir for strategy-line tests.
+
+    Strategy-line tests must never point base_dir at the live ``data/`` /
+    ``data_btc/`` directories: record_brain_votes() appends one JSONL line
+    per brain to ``{base_dir}/brain_votes/{date}.jsonl`` on every
+    evaluate() cycle, so a live base_dir lets a full pytest run pollute the
+    real voting ledger (ReB-20260805-010).  All runtime artifacts a test
+    writes land under the OS temp dir instead.
+    """
+    return str(Path(tempfile.gettempdir()) / "xau_strategy_test_runtime")
+
+
+# Single shared throwaway base_dir for all strategy tests.
+TEST_BASE_DIR = create_test_base_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -21,6 +40,7 @@ def create_strategy_line_config(
     name: str = "barrier_12bar",
     magic: int = 90001,
     brain_types: set[str] | None = None,
+    base_dir: str | None = None,
     base_volume: float = 0.01,
     max_volume: float = 0.05,
     base_sl_atr_mult: float = 2.0,
@@ -40,7 +60,7 @@ def create_strategy_line_config(
         brain_types = {"xgboost_v9", "lightgbm_v1"}
 
     return StrategyLineConfig(
-        base_dir="data",
+        base_dir=base_dir or TEST_BASE_DIR,
         name=name,
         magic=magic,
         brain_types=brain_types,
