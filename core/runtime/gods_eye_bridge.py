@@ -132,6 +132,7 @@ def feed_gods_eye(
                     "confidence_modifier": round(verdict.confidence_modifier, 4),
                     "recommended_mode": verdict.recommended_mode,
                     "multi_tf_alignment": round(verdict.multi_tf_alignment, 4),
+                    "tf_alignment_detail": verdict.tf_alignment_detail,
                     "cross_instrument_consensus": round(verdict.cross_instrument_consensus, 4),
                     "chop_detected": verdict.chop_detected,
                     "chop_score": round(verdict.chop_score, 4),

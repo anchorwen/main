@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-04T06:12:44Z
-> **扫描模块数**: 782
+> **自动生成**: 2026-08-04T08:14:13Z
+> **扫描模块数**: 784
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -525,7 +525,7 @@
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 466 | — | |
 | `feature_freshness.py` | ✅ active | — | 2 | 81 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
-| `gods_eye_bridge.py` | ✅ active | — | 2 | 150 | — | |
+| `gods_eye_bridge.py` | ✅ active | — | 2 | 151 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 309 | — | |
 | `h1_features.py` | ✅ active | — | 1 | 112 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
@@ -652,6 +652,8 @@
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
+| `_audit_live_health_sweep_20260804.py` | ✅ active | — | 5 | 161 | — | |
+| `_audit_xau_last_open.py` | ✅ active | — | 2 | 101 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
