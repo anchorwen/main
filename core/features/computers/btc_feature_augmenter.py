@@ -50,6 +50,88 @@ _WARNING_DEBOUNCE_CYCLES = 100  # log at most once per 100 calls per error type
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Cross-asset access helpers (DQAF-20260804-002, single convergent points).
+#
+# Root cause: three co-located defects zero-filled XAUUSDc_return slot [12],
+# AUDJPYc_return slot [30] and BTC/XAU ratio slots [39-40] since process start
+# (1600+ failures), polluting persisted v2 feature-store records:
+#   1. ``_store.get_latest("XAUUSDc")`` — API does not exist on FeatureService
+#      (nor LocalFeatureStore, which exposes ``latest(symbol, timeframe)``).
+#   2. FeatureRecord is a dataclass, not a dict — ``record.get(...)`` failed.
+#   3. MT5 ``copy_rates_from_pos`` returns a numpy structured array; ``rates[i]``
+#      is ``numpy.void`` which has no ``.get()``.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _coerce_feature_store(feature_store: Any) -> Any:
+    """Unwrap a FeatureService into its inner LocalFeatureStore.
+
+    live_cycle.py constructs BTCFeatureAugmenter with a FeatureService (which
+    wraps the store in ``._store``, feature_service.py:78) at one site and a
+    bare LocalFeatureStore at the others.  Accept both — return the inner store
+    when present, else the store itself.
+    """
+    if feature_store is None:
+        return None
+    inner = getattr(feature_store, "_store", None)
+    return inner if inner is not None else feature_store
+
+
+def _latest_cross_record(feature_store: Any, symbol: str, timeframe: str) -> dict[str, Any] | None:
+    """Fetch the latest cross-symbol FeatureRecord as a plain dict.
+
+    Works with either a LocalFeatureStore (``latest(symbol, timeframe)``) or a
+    FeatureService (unwrapped above).  FeatureRecord (dataclass) is normalized
+    via ``to_dict()`` so callers keep the dict contract.  Any store failure
+    returns None — graceful degradation, never crashes the trading cycle.
+    """
+    store = _coerce_feature_store(feature_store)
+    if store is None:
+        return None
+    latest = getattr(store, "latest", None)
+    if not callable(latest):
+        return None
+    try:
+        record = latest(symbol, timeframe)
+    except Exception as exc:  # BLE001:FOG — store read failures degrade, never crash
+        _log.debug("BTCFeatureAugmenter: latest(%s, %s) failed: %s", symbol, timeframe, exc)
+        return None
+    if record is None:
+        return None
+    to_dict = getattr(record, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+    if isinstance(record, dict):
+        return record
+    return None
+
+
+def _bar_close(rates: Any, idx: int) -> float:
+    """Read the ``close`` price of a rate bar — dict row OR numpy.void row.
+
+    MT5 ``copy_rates_from_pos`` returns a numpy structured array whose rows are
+    ``numpy.void`` — ``row.get()`` raises AttributeError.  Single convergent
+    point for cross-asset rate reads; missing/invalid rows return 0.0.
+    """
+    if rates is None or len(rates) == 0:
+        return 0.0
+    if idx < 0:
+        idx = len(rates) + idx
+    if idx < 0 or idx >= len(rates):
+        return 0.0
+    row = rates[idx]
+    try:
+        raw = row.get("close", 0.0) if isinstance(row, dict) else row["close"]
+    except (KeyError, IndexError, TypeError):
+        return 0.0
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if math.isfinite(value) else 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Phase 1 / M1 (FIX-20260803-XXX): Pure-function assembly — THE shared code path.
 #
 # Live inference (BTCFeatureAugmenter.augment) and historical replay
@@ -342,8 +424,10 @@ class BTCFeatureAugmenter:
         """Initialise the augmenter.
 
         Args:
-            feature_store: LocalFeatureStore instance for reading XAUUSDc
-                           records.  Can be None (all cross-features zero-filled).
+            feature_store: LocalFeatureStore instance OR a FeatureService (its
+                           inner ``_store`` is used, DQAF-20260804-002) for
+                           reading XAUUSDc records.  Can be None (all
+                           cross-features zero-filled).
             mt5_worker: MT5Worker for AUDJPYc tick data.  Can be None
                         (AUDJPYc_return zero-filled).
         """
@@ -497,7 +581,8 @@ class BTCFeatureAugmenter:
             return 0.0
 
         try:
-            record = self._store.get_latest("XAUUSDc")
+            # DQAF-20260804-002: single convergent cross-store read (dict out).
+            record = _latest_cross_record(self._store, "XAUUSDc", "M5")
             if record is None:
                 self._xau_fail_count += 1
                 if self._xau_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
@@ -582,8 +667,9 @@ class BTCFeatureAugmenter:
                     )
                 return 0.0
 
-            prev_close = float(rates[-2].get("close", rates[-2]["close"]))
-            curr_close = float(rates[-1].get("close", rates[-1]["close"]))
+            # DQAF-20260804-002: numpy.void rows have no .get() — use helper.
+            prev_close = _bar_close(rates, -2)
+            curr_close = _bar_close(rates, -1)
             if prev_close <= 0:
                 return 0.0
             ret = (curr_close - prev_close) / prev_close
@@ -636,8 +722,9 @@ class BTCFeatureAugmenter:
                     )
                 return (0.0, 0.0)
 
-            xau_close = float(rates[-1].get("close", 0))
-            xau_prev_close = float(rates[-2].get("close", 0))
+            # DQAF-20260804-002: numpy.void rows have no .get() — use helper.
+            xau_close = _bar_close(rates, -1)
+            xau_prev_close = _bar_close(rates, -2)
 
             if xau_close <= 0 or xau_prev_close <= 0:
                 return (0.0, 0.0)

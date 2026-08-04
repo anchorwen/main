@@ -19,6 +19,7 @@ assembly points).  A regression here is a Sev-1 class defect.
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -30,7 +31,9 @@ from core.features.computers.btc_feature_augmenter import (
     assemble_41_series,
     assemble_41_vector,
 )
+from core.features.local_feature_store import LocalFeatureStore
 from core.features.schemas.registry import get_schema_feature_names
+from core.features.store_contracts import FeatureRecord
 from core.training.feature_replay import (
     compute_replay_components,
     replay_features,
@@ -48,13 +51,21 @@ def _mock_live_sources(
     import time
 
     state = {"i": 0}
-    store = MagicMock()
+    # spec=LocalFeatureStore: real store contract only — DQAF-20260804-002.
+    store = MagicMock(spec=LocalFeatureStore)
 
-    def _get_latest(_symbol):
+    def _latest(symbol, timeframe):
         i = state["i"]
-        return {"values": {"M5_Ret_1": xau[i]}, "event_time": time.time()}
+        return FeatureRecord(
+            schema_name="test_schema",
+            schema_version="1",
+            symbol=symbol,
+            timeframe=timeframe,
+            event_time=datetime.fromtimestamp(time.time()),
+            values={"M5_Ret_1": xau[i]},
+        )
 
-    store.get_latest.side_effect = _get_latest
+    store.latest.side_effect = _latest
 
     worker = MagicMock()
 

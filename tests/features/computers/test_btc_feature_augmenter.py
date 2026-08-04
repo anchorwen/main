@@ -18,15 +18,30 @@ from core.features.computers.btc_feature_augmenter import (
 
 
 def _make_store(xau_return: float = 0.001, event_time: float | None = None) -> MagicMock:
-    """Create a mock feature store for XAUUSDc."""
-    import time
+    """Create a mock feature store for XAUUSDc — REAL contract (DQAF-20260804-002).
 
-    store = MagicMock()
-    record = {
-        "values": {"M5_Ret_1": xau_return},
-        "event_time": event_time if event_time is not None else time.time(),
-    }
-    store.get_latest.return_value = record
+    LocalFeatureStore.latest() returns a FeatureRecord dataclass, not a dict;
+    the augmenter reads it via to_dict().
+    """
+    import time
+    from datetime import datetime
+
+    from core.features.local_feature_store import LocalFeatureStore
+    from core.features.store_contracts import FeatureRecord
+
+    # spec=LocalFeatureStore: only real store attributes exist — DQAF-20260804-002
+    # `_coerce_feature_store` must see a bare store (no auto-created `_store`).
+    store = MagicMock(spec=LocalFeatureStore)
+    ts = event_time if event_time is not None else time.time()
+    record = FeatureRecord(
+        schema_name="test_schema",
+        schema_version="1",
+        symbol="XAUUSDc",
+        timeframe="M5",
+        event_time=datetime.fromtimestamp(ts),
+        values={"M5_Ret_1": xau_return},
+    )
+    store.latest.return_value = record
     return store
 
 
@@ -128,7 +143,7 @@ class TestAugmentHappyPath:
         # None tf_ou causes TypeError at ou_div_adx = None / max(ADX, 1)
         # This is a known limitation — callers must pass numeric values
         try:
-            aug.augment(daily, micro, btc_price=60000.0, tf_ou=None, tf_hurst=0.5)
+            aug.augment(daily, micro, btc_price=60000.0, tf_ou=None, tf_hurst=0.5)  # type: ignore[arg-type]  # noqa: E501 — deliberate None-safety probe
         except (TypeError, AssertionError):
             pass  # Expected: None can't be used in division
 
@@ -357,3 +372,56 @@ class TestGracefulDegradation:
         assert aug._first_augment_logged is False
         aug.augment(np.zeros(24), np.zeros(9), btc_price=60000.0)
         assert aug._first_augment_logged is True
+
+
+# ── DQAF-20260804-002 root-cause regression locks ──────────────────────────
+
+
+class TestCrossAssetRootCauseFixes:
+    """Lock the exact defect classes that zero-filled slots [12]/[30]/[39-40]
+    for 1600+ cycles: (a) FeatureService-instead-of-store construction,
+    (b) FeatureRecord dataclass (not dict), (c) numpy.void structured rows."""
+
+    def test_xau_read_via_feature_service_unwrap(self) -> None:
+        """FeatureService (wraps LocalFeatureStore in ``._store``) is accepted."""
+        import time
+        from datetime import datetime
+
+        from core.features.feature_service import FeatureService
+        from core.features.local_feature_store import LocalFeatureStore
+        from core.features.store_contracts import FeatureRecord
+
+        inner = MagicMock(spec=LocalFeatureStore)
+        inner.latest.return_value = FeatureRecord(
+            schema_name="test_schema",
+            schema_version="1",
+            symbol="XAUUSDc",
+            timeframe="M5",
+            event_time=datetime.fromtimestamp(time.time()),
+            values={"M5_Ret_1": 0.0031},
+        )
+        svc = FeatureService(feature_store=inner)
+        aug = BTCFeatureAugmenter(feature_store=svc)
+        assert aug._compute_xauusdc_return() == pytest.approx(0.0031)
+
+    def test_numpy_structured_rows_audjpy(self) -> None:
+        """MT5 ``copy_rates_from_pos`` returns numpy structured array rows
+        (``numpy.void``) — ``row.get()`` raises AttributeError.  The fix must
+        read ``row["close"]`` via ``_bar_close``."""
+        dtype = np.dtype([("time", "i8"), ("close", "f8")])
+        rates = np.array([(1, 100.0), (2, 101.0)], dtype=dtype)
+        worker = MagicMock()
+        worker.copy_rates_from_pos.return_value = rates
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
+        assert aug._compute_audjpyc_return() == pytest.approx(0.01)
+
+    def test_numpy_structured_rows_btc_xau_ratio(self) -> None:
+        """Same structured-array defect on the BTC/XAU ratio path (slots 39-40)."""
+        dtype = np.dtype([("time", "i8"), ("close", "f8")])
+        rates = np.array([(1, 2500.0), (2, 2600.0)], dtype=dtype)
+        worker = MagicMock()
+        worker.copy_rates_from_pos.return_value = rates
+        aug = BTCFeatureAugmenter(mt5_worker=worker)
+        ratio, roc = aug._compute_btc_xau_ratio(btc_price=60000.0)
+        assert ratio == pytest.approx(60000.0 / 2600.0)
+        assert roc == pytest.approx((60000 / 2600 - 60000 / 2500) / (60000 / 2500))
