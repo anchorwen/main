@@ -238,10 +238,38 @@
 - **Date**: 2026-08-04
 - **Severity**: Sev 2
 - **Title**: XAU 进场位置系统性最差 — 100% SHORT 偏置 + 模型输出退化 + D1 特征毒井
-- **Evidence**: `data/live_trade_journal.jsonl` 今日 3 单全 SHORT 全在局部底部 (m15 4048.7@10:15 / m30 4049.1@10:15 / h1 4063.8@12:10), 2 SL + 1 深套 (上涨日 4047→4082); `data/brain_votes/2026-08-04.jsonl` H1_Exec_A 155/155 SHORT + M30_V5 154/155 SHORT (script 输出: scripts/_audit_xau_votes_today.py); 信号方向 886 SHORT:3 LONG; 退化签名 M15_V7_binary conf_uniq=1 恒定 0.783; **D1 毒井**: `data/raw/xauusdc_d1_merged.csv` 行 2510-2532 (2026-07-04→08-04) 价格 63,000-64,700 = BTC 量级。
+- **Evidence**: `data/live_trade_journal.jsonl` 今日 3 单全 SHORT 全在局部底部 (m15 4048.7@10:15 / m30 4049.1@10:15 / h1 4063.8@12:10), 2 SL + 1 深套 (上涨日 4047→4082); `data/brain_votes/2026-08-04.jsonl` H1_Exec_A 155/155 SHORT + M30_V5 154/155 SHORT (script 输出: scripts/audits/_audit_xau_votes_today.py); 信号方向 886 SHORT:3 LONG; 退化签名 M15_V7_binary conf_uniq=1 恒定 0.783; **D1 毒井**: `data/raw/xauusdc_d1_merged.csv` 行 2510-2532 (2026-07-04→08-04) 价格 63,000-64,700 = BTC 量级。
 - **DA**: 全 swing 脑 D1_* 特征 (D1_Ret_1/ATR/RSI/MACD/Vol_ZScore/Bollinger/ADX) 吃进 BTC 价 → out-of-distribution → 输出退化 SHORT 锁死。执行无滑点 (信号 10:15:02→执行 10:15:22, 价差<0.3) — 非执行问题, 纯信号方向问题。
 - **AR**: 推翻"滑点/延迟" (20s 延迟价差<0.3); 推翻"方向映射反转" (brain_votes raw_score 符号验证正确); 推翻"今日 FIX/重启回归" (3 单在 12:58Z 重启前, FIX 全 BTC 侧); 部分成立"顺势追突破"但方向反 (886:3 结构性反向)。
 - **Root Cause**: L2 — 模型输出退化 (MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE, 同签名 FIX-20260629-184) + **上游 L3 毒井** (RC-09 config-drift: `live_intent_loop.py:759` H1 硬编码 XAU D1 CSV → BTC 进程 LiveDailyProvider 跨写 → 07-04 起 D1 特征全毒)。
-- **Fix**: FIX-20260804-006 — 6 脑物理冻结 (retired + vote_weight 0: M30_V5/H1_Exec_A/M30_Exec_A/M15_V7_binary/H1_V2_binary/M30_V7_binary) + live.yaml 3 条接线 enabled:false. **待办 (需 IC 批准)**: (1) live_intent_loop.py:759 H1 参数化 D1 CSV 路径; (2) 修复毒井 CSV (07-04 起截断重采); (3) direction_concentration_monitor 三重修复 (data_btc 硬编码→per-asset / golden_master 字段路径 / 大小写)。需重启生效。
+- **Fix**: FIX-20260804-006 — 6 脑物理冻结 (retired + vote_weight 0: M30_V5/H1_Exec_A/M30_Exec_A/M15_V7_binary/H1_V2_binary/M30_V7_binary) + live.yaml 3 条接线 enabled:false. 三段全部落地: (1) FIX-20260804-007 live_bootstrap D1/H4 per-symbol 参数化 + Symbol Guard; (2) FIX-20260804-007 毒井 CSV 截断 (2522→2510, 备份保留) + 重启回填; (3) FIX-20260804-008 monitor 三重修复 (全资产/嵌套字段/大小写)。重启 143126Z/143213Z 生效 (冻结 6 脑 fully muted)。
 - **ReB**: MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE / D1_WELL_CROSS_ASSET_POISONING / MONITOR_ASSET_HARDCODED_DATA_DIR
-- **Status**: **FIXED_1_OF_3** — FIX-20260804-006 (冻结已完成待重启; D1 毒井修复 + monitor 修复待 IC 批准后实施)
+- **Status**: **CLOSED** — FIX-20260804-006/007/008 全链落地 (freeze + well-cleansing + monitor wake; 用户重启 143213Z 生效; monitor 实证 XAU CRITICAL 86% SHORT / 100% trades)
+
+---
+
+- **Docket ID**: DQAF-20260804-007
+- **Date**: 2026-08-04
+- **Severity**: Sev 2
+- **Title**: D1 特征毒井 — BTC 数据污染 XAU D1 管线 (跨资产写)
+- **Evidence**: `data/raw/xauusdc_d1_merged.csv` 行 2510-2521 尾部 12 行 (2026-07-04→08-04) 价格 63,093-64,794 = BTC 量级; 行 2508-2509 (07-26/27 XAU 4093-4094) 与毒行交错证明 date-keyed dedup 阻断 XAU 正确回填; `live_intent_loop.py` init_feature_services 硬编码 `d1_csv="data/raw/xauusdc_d1_merged.csv"` (BTC 进程同路径构造 LiveDailyProvider, `_sync_csv` 按 symbol=BTCUSDc 拉 BTC bar 追加进 XAU 文件)。
+- **DA**: BTC 进程 `LiveDailyProvider._sync_csv()` 无条件追加 → 无符号守卫 → 每新 D1 bar 跨写; 毒化自 07-04 起与 SHORT 偏置升级期完全重合。
+- **AR**: 推翻"XAU 自身写错" (XAU 进程写 XAU bar 正确, 污染源是 BTC 进程); 推翻"只毒一次" (每次新 bar 重复追加)。
+- **Root Cause**: L3 — RC-03 边界错误/硬编码: 跨资产共享 XAU CSV 路径, `LiveDailyProvider` 无 symbol↔filename 契约守卫。
+- **Fix**: FIX-20260804-007 — (1) `live_bootstrap.init_feature_services` D1/H4 CSV 按 `_asset_base_dir/raw/{symbol}.lower()_d1_merged.csv` 派生 (XAU→data/, BTC→data_btc/); (2) `LiveDailyProvider._assert_d1_symbol_contract()` 构造时 + `_sync_csv` 写前熔断 (DataIntegrityError 不被 FOG 吞, bootstrap re-raise); (3) 毒尾截断 2522→2510 + 全量备份 `_quarantine_xauusdc_d1_merged_poisoned_20260804.csv`; 重启后 XAU init 自动回填正确 bar. +5 单测。
+- **ReB**: D1_WELL_CROSS_ASSET_POISONING
+- **Status**: **CLOSED** — FIX-20260804-007 (code + 截断 + 备份完成, 待重启部署生效)
+
+---
+
+- **Docket ID**: DQAF-20260804-008
+- **Date**: 2026-08-04
+- **Severity**: Sev 2
+- **Title**: direction_concentration_monitor 三重结构性失聪 — 99.7% SHORT 退化零告警
+- **Evidence**: 今日 XAU 3 单全 SHORT 无任何告警; `scripts/_monitor_direction_concentration.py` `_scheduled_monitor` 硬编码 `data_dir="data_btc"` (XAU 永不检查); 实测 golden_master 时间过滤 0 行 (字段 `timestamp_utc` vs 读 `timestamp`/`recorded_at`) → 永远 INSUFFICIENT DATA; 方向读顶层 `direction` (恒 None) vs 实际 `outputs.<strategy>.direction`; 大小写错配 (gm 小写 short/long vs 匹配大写 SHORT)。
+- **DA**: 监控器对 XAU 完全静默 → 退化脑 SHORT 锁死一个月无风控警报; 风控警报器失效比模型失效更不可饶恕 (IC 语)。
+- **AR**: 推翻"数据不足" (修复后实测 24h 577 信号); 推翻"XAU 无退化" (修复后实测 86% SHORT / 100% trades)。
+- **Root Cause**: L2 — 监控器读错字段/目录/大小写三重盲区 (MONITOR_FIELD_PATH_MISMATCH), 恒 INSUFFICIENT DATA 静默。
+- **Fix**: FIX-20260804-008 — `DEFAULT_ASSET_DIRS=("data","data_btc")` 全资产扫描 + worst-wins 聚合 + alert 带 asset_dir; `_extract_gm_direction` 嵌套 outputs 提取; `normalize_direction` 大小写+BUY/SELL 归一; gm 时间过滤 `timestamp_utc`; GBK 控制台 emoji 崩溃修复. 实证: XAU CRITICAL (86% SHORT 信号 496/577, 100% trades 50/50), BTC 平衡. +9 单测。
+- **ReB**: MONITOR_FIELD_PATH_MISMATCH / D1_WELL_CROSS_ASSET_POISONING
+- **Status**: **CLOSED** — FIX-20260804-008 (实证检测 CRITICAL, 修复完成)

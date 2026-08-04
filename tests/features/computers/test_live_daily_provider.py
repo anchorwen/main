@@ -225,3 +225,63 @@ class TestBuildComputer:
         # Provider construction may or may not succeed depending on CSV content
         # The key invariant: no unhandled crash that corrupts state
         assert True  # reached this point without fatal error, or was caught
+
+
+# ── Symbol Guard (FIX-20260804-007) ─────────────────────────────────────────
+
+
+class TestSymbolGuard:
+    """Fuse: in-memory symbol must match the merged-CSV filename symbol.
+
+    Root cause D1_WELL_CROSS_ASSET_POISONING — the BTC process wrote BTCUSDc
+    bars into the XAU CSV because the path was hardcoded.
+    """
+
+    def test_cross_asset_fuse_raises(self) -> None:
+        """BTC provider pointed at the XAU CSV must raise DataIntegrityError."""
+        from core.contracts.exceptions import DataIntegrityError
+
+        with pytest.raises(DataIntegrityError):
+            LiveDailyFeatureProvider(
+                mt5_module=MagicMock(),
+                symbol="BTCUSDc",
+                d1_csv="/data/raw/xauusdc_d1_merged.csv",
+            )
+
+    def test_symbol_convention_mismatch_raises(self) -> None:
+        """XAU provider pointed at the BTC CSV must raise DataIntegrityError."""
+        from core.contracts.exceptions import DataIntegrityError
+
+        with pytest.raises(DataIntegrityError):
+            LiveDailyFeatureProvider(
+                mt5_module=MagicMock(),
+                symbol="XAUUSDc",
+                d1_csv="/data_btc/raw/btcusdc_d1_merged.csv",
+            )
+
+    def test_h4_mismatch_raises(self) -> None:
+        """H4 CSV mismatch trips the guard too."""
+        from core.contracts.exceptions import DataIntegrityError
+
+        with pytest.raises(DataIntegrityError):
+            LiveDailyFeatureProvider(
+                mt5_module=MagicMock(),
+                symbol="XAUUSDc",
+                d1_csv="/data/raw/xauusdc_d1_merged.csv",
+                h4_csv="/data/raw/btcusdc_h4_merged.csv",
+            )
+
+    def test_matching_symbol_convention_passes(self) -> None:
+        """Correct per-symbol wiring constructs fine (regression lock on the fix)."""
+        provider = LiveDailyFeatureProvider(
+            mt5_module=MagicMock(),
+            symbol="XAUUSDc",
+            d1_csv="/data/raw/xauusdc_d1_merged.csv",
+            h4_csv="/data/raw/xauusdc_h4_merged.csv",
+        )
+        assert provider._symbol == "XAUUSDc"
+
+    def test_non_convention_filename_allowed(self) -> None:
+        """Arbitrary (non-convention) filenames carry no symbol contract — not enforced."""
+        provider = _create_provider(d1_csv="/tmp/custom_test.csv")
+        assert provider is not None

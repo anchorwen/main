@@ -1599,11 +1599,41 @@
 - **置信度**: confirmed
 - **因果链**:
   - [Layer 1 — 症状]: 今日 XAU 3 单全 SHORT 全在局部底部/回撤进场, 2 SL + 1 深套 (上涨日 4047→4082 逆势做空)。证据: `data/live_trade_journal.jsonl` ticket 4419403411 (m15 SHORT 4048.7 SL@4063.8) / 4419404324 (m30 SHORT 4049.1) / 4421972593 (h1 SHORT 4063.8 持仓深套)。
-  - [Layer 2 — 中间异常]: 全 swing 脑方向锁死 SHORT — H1_Exec_A 155/155 SHORT, M30_V5 154/155 SHORT (99.4%), 信号 886 SHORT:3 LONG; M15_V7_binary 恒定 conf 0.783 (退化签名)。证据: `data/brain_votes/2026-08-04.jsonl` + scripts/_audit_xau_votes_today.py。
+  - [Layer 2 — 中间异常]: 全 swing 脑方向锁死 SHORT — H1_Exec_A 155/155 SHORT, M30_V5 154/155 SHORT (99.4%), 信号 886 SHORT:3 LONG; M15_V7_binary 恒定 conf 0.783 (退化签名)。证据: `data/brain_votes/2026-08-04.jsonl` + scripts/audits/_audit_xau_votes_today.py。
   - [Layer 3 — 根因]: L3 毒井 (RC-09) — `live_intent_loop.py:759` H1 硬编码 `d1_csv="data/raw/xauusdc_d1_merged.csv"` → BTC 进程 LiveDailyProvider `_sync_csv()` (core/features/computers/live_daily_provider.py:112-185) 按 `self._symbol=BTCUSDc` 拉 BTC D1 bar 追加进 XAU 文件 → `data/raw/xauusdc_d1_merged.csv` 行 2510-2532 (2026-07-04→08-04) 全 BTC 价 63,000-64,700 → 全 swing 脑 D1_* 特征投毒 → 模型 out-of-distribution → 输出退化 SHORT 锁死 (MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE, 同签名 FIX-20260629-184)。
 - **证据引用**:
   - Source 1: `data/raw/xauusdc_d1_merged.csv` — 行 2510/2512/2514/2516/2528/2530/2532 = 2026-07-04→08-04 BTC 价 (63,093.3→63,466.89)
   - Source 2: `data/brain_votes/2026-08-04.jsonl` — H1_Exec_A 155 SHORT / M30_V5 154 SHORT (独立于 journal 的投票流)
   - Source 3 (根因): `core/features/computers/live_daily_provider.py:129-158` `_sync_csv()` 按 `self._symbol` 抓取 + 追加 `self._d1_csv` (跨资产路径无符号守卫) — 跨品种验证源
 - **是否被推翻**: 否
-- **关联 ReB Pattern**: D1_WELL_CROSS_ASSET_POISONING / MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE / MONITOR_ASSET_HARDCODED_DATA_DIR
+- **关联 ReB Pattern**: D1_WELL_CROSS_ASSET_POISONING / MODEL_OUTPUT_DEGENERACY_SHORT_COLLAPSE / MONITOR_TRIPLE_BLIND_SPOT
+
+### CCT-20260804-007
+- **Docket ID**: DQAF-20260804-007
+- **日期**: 2026-08-04
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `data/raw/xauusdc_d1_merged.csv` 尾部 12 行 (2026-07-04→08-04) 全 BTC 价 63,093-64,794; 与 XAU 干净行 (行 2508-2509 = 07-26/27, close 4093-4094) 交错 → date-keyed dedup 使 XAU 正确 bar 无法回填。
+  - [Layer 2 — 中间异常]: BTC 进程 `LiveDailyProvider(symbol=BTCUSDc, d1_csv="data/raw/xauusdc_d1_merged.csv")` — 同构实例, 硬编码 XAU 路径; `_sync_csv()` 按 `self._symbol` 拉 BTC D1 bar 无条件追加进 XAU 文件 (写前无符号守卫)。
+  - [Layer 3 — 根因]: L3 (RC-03) — `core/runtime/live_bootstrap.py:129-135` init_feature_services 硬编码 `d1_csv/h4_csv="data/raw/xauusdc_*"`, 跨资产共享单一路径, 无 symbol↔filename 契约守卫 → BTC 每新 D1 bar 跨写 XAU 文件。
+- **证据引用**:
+  - Source 1: `data/raw/xauusdc_d1_merged.csv` 行 2510-2521 (BTC 价) + 行 2508-2509 (XAU 价) 交错
+  - Source 2: `core/runtime/live_bootstrap.py:133-134` 硬编码 XAU 路径 (BTC 进程同路径)
+  - Source 3: `core/features/computers/live_daily_provider.py:112-185` `_sync_csv()` 无符号守卫跨写
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: D1_WELL_CROSS_ASSET_POISONING
+
+### CCT-20260804-008
+- **Docket ID**: DQAF-20260804-008
+- **日期**: 2026-08-04
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU 99.7% SHORT 退化 (886 SHORT:3 LONG) 整月无任何风控告警; 今日 3 单烂进场事后审计才发现。
+  - [Layer 2 — 中间异常]: `direction_concentration_monitor` 对 XAU 恒输出 INSUFFICIENT DATA (exit 0 静默) — 修复后实测 24h 577 信号 (486 SHORT: 91 LONG 方向分布, XAU) 证明数据存在但监控器读不到。
+  - [Layer 3 — 根因]: L2 (MONITOR_TRIPLE_BLIND_SPOT) — 三重失聪: (1) `_scheduled_monitor` 硬编码 `data_dir="data_btc"` → XAU 永不检查; (2) golden_master 方向字段路径错 (读顶层 `direction` 恒 None vs 实际 `outputs.<strategy>.direction`) → 恒 0 信号; (3) 大小写错配 (gm 存小写 short/long vs 匹配大写 SHORT)。叠加时间戳字段错配 (读 `timestamp`/`recorded_at` vs 实际 `timestamp_utc`) → 时间过滤 0 行。
+- **证据引用**:
+  - Source 1: `scripts/_monitor_direction_concentration.py:214` `data_dir="data_btc"` 硬编码
+  - Source 2: 修复前实测 `data/golden_master.jsonl` 时间过滤 0 行 (timestamp_utc 280 行), 方向提取 0 命中
+  - Source 3: 修复后 `python scripts/_monitor_direction_concentration.py --data-dirs data data_btc` → XAU CRITICAL (86% SHORT / 100% trades)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: MONITOR_TRIPLE_BLIND_SPOT / D1_WELL_CROSS_ASSET_POISONING

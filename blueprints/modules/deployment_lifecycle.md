@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260804-007 | 2026-08-04 | cursor-agent | — | **MODULE_SOURCE_MAP: add `scripts/audits/_audit_xau_votes_today.py` → monitor_dashboard** (DQAF-20260804-006 法证工具纳入版本库 — IC 批准; XAU 退化脑投票审计, 由 scripts/ 根迁移至 scripts/audits/ 并参数化 --date/--data-dir). | RC-12 — new module registration |
 | FIX-20260803-005 | 2026-08-03 | cursor-agent | — | **MODULE_SOURCE_MAP: add `scripts/features/reconcile_store_schemas.py` → features_service** (FIX-20260803-005 战役四 — feature-store schema reconciliation tool, blueprint-compliant registration). | RC-12 — new module registration |
 | FIX-20260802-006 | 2026-08-02 | cursor-agent | — | **MODULE_SOURCE_MAP: add `scripts/scan_ofi_wasserstein.py` → features_service** (FIX-20260802-005 T21 Gate-1 OFI Wasserstein scan — blueprint-compliant registration for the new analytical tool alongside `scripts/inspect_ofi_history.py`). | RC-12 — new module registration |
 | FIX-20260801-014 | 2026-08-02 | cursor-agent | dd07e462 | reconcile retired-as-ceiling (DQAF-20260801-011): cmd_reconcile Phase 1 now treats config=retired as an ABSOLUTE terminal state - governance is force-overridden to retired with vote_weight=0 regardless of any higher governance status (was: floor-only, kept live/probation for retired configs). Ran --auto-fix: 15 XAU ghost states cleaned (8 live + shadow/candidate/frozen/probation) + 1 archived orphan. BTC side confirmed 0 drift. | config-drift |

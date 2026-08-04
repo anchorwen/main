@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-04T13:48:52Z
+> **自动生成**: 2026-08-04T14:56:20Z
 > **扫描模块数**: 783
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -318,7 +318,7 @@
 |------|------|----|------|------|------|------|
 | `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 14 | 686 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
-| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 223 | — | |
+| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 9 | 256 | — | |
 | `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 687 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 339 | — | |
 | `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 110 | — | |
@@ -531,7 +531,7 @@
 | `h1_features.py` | ✅ active | — | 1 | 112 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
-| `live_bootstrap.py` | ✅ active | — | 1 | 160 | — | |
+| `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5121 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
@@ -653,9 +653,8 @@
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
-| `_audit_xau_votes_today.py` | ✅ active | — | 3 | 136 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
-| `_monitor_direction_concentration.py` | ✅ active | — | 4 | 254 | — | |
+| `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
@@ -722,7 +721,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 741 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 742 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -910,6 +909,12 @@
 |------|------|----|------|------|------|------|
 | `model_inventory.py` | ✅ active | — | 1 | 75 | — | |
 | `reference_integrity.py` | ✅ active | — | 2 | 168 | — | |
+
+## scripts/audits
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `_audit_xau_votes_today.py` | ✅ active | — | 3 | 148 | — | |
 
 ## scripts/backtest
 

@@ -350,6 +350,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/audit_btc_live_direction.py",  # DQAF-058: BTC direction bias audit
         "scripts/forensic_feature_analysis.py",  # DQAF-058: feature distribution forensics
         "scripts/analyze_gate_activity.py",  # FIX-20260712-003: Layer 4 dead gate detection
+        "scripts/audits/_audit_xau_votes_today.py",  # DQAF-20260804-006: XAU degenerate-brain vote audit
     ],
     "runtime_live": [
         "main.py",

@@ -97,6 +97,10 @@ def init_feature_services(
     _store_dir = Path(feature_store_dir)
     if not _store_dir.is_absolute():
         _store_dir = project_root / _store_dir
+    # FIX-20260804-007: per-asset data root (data/ for XAU, data_btc/ for BTC).
+    # D1/H4 CSV paths are derived from this so each symbol's provider only ever
+    # touches its own CSV (D1_WELL_CROSS_ASSET_POISONING, ReB-20260804-007).
+    _asset_base_dir = _store_dir.parent
     from core.features.local_feature_store import LocalFeatureStore
 
     result["feature_store"] = LocalFeatureStore(str(_store_dir))
@@ -123,15 +127,22 @@ def init_feature_services(
     )
 
     # ── Daily D1 Feature Provider ──
+    # FIX-20260804-007: D1/H4 CSV paths derived per-symbol from the asset base
+    # dir.  The old hardcoded "data/raw/xauusdc_*" paths let the BTC process's
+    # provider append BTCUSDc bars into the XAU D1 CSV — poisoned D1 features
+    # for swing brains since 2026-07-04 (D1_WELL_CROSS_ASSET_POISONING).
     try:
+        from core.contracts.exceptions import DataIntegrityError
         from core.features.computers.live_daily_provider import LiveDailyFeatureProvider
 
+        _d1_csv = _asset_base_dir / "raw" / f"{symbol.lower()}_d1_merged.csv"
+        _h4_csv = _asset_base_dir / "raw" / f"{symbol.lower()}_h4_merged.csv"
         result["daily_feature_provider"] = LiveDailyFeatureProvider(
             mt5_module=mt5,
             mt5_worker=mt5_worker,
             symbol=symbol,
-            d1_csv="data/raw/xauusdc_d1_merged.csv",
-            h4_csv="data/raw/xauusdc_h4_merged.csv",
+            d1_csv=_d1_csv,
+            h4_csv=_h4_csv,
         )
         print(
             json.dumps(
@@ -140,11 +151,17 @@ def init_feature_services(
                     "time": _utc_iso(),
                     "latest_timestamp": result["daily_feature_provider"].latest_timestamp,
                     "feature_dim": result["daily_feature_provider"].feature_dim,
+                    "d1_csv": str(_d1_csv),
                 },
                 ensure_ascii=False,
             ),
             flush=True,
         )
+    except DataIntegrityError:
+        # Symbol Guard fuse (FIX-20260804-007): cross-asset CSV wiring is a
+        # data-integrity violation.  Fail the pipeline — never trade on
+        # possibly-poisoned D1 features.
+        raise
     except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _dfp_exc:
         print(
             json.dumps(

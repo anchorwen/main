@@ -1462,7 +1462,7 @@
 - **定义**: 回归/分类模型输出坍缩为近恒定方向与置信度 — 全部信号同向 (SHORT), 置信度唯一值极少 (uniq=1~7) 或 accuracy≈随机。XAU 案例: H1_Exec_A 155/155 SHORT, M15_V7_binary 恒定 0.783 (uniq=1), M30_V5 test-acc 0.3396≈随机却 live。第三次历史实例 (前: BTC Swing_V10_H1_Directional 100% SHORT → 冻结)。
 - **上游触发**: 输入特征 out-of-distribution (本例: D1 特征毒井喂 BTC 价) 或标签偏置 (asymmetric SL/TP 合约 61.5% SHORT label)。
 - **预防**: (1) 方向浓度监控器 per-asset 正常报警 (≥90% 同向 → DingTalk); (2) 模型注册/晋升门禁加输出多样性检查 (方向熵 + conf 唯一值下限); (3) accuracy≈随机 (<0.4) 禁止 live。
-- **检测**: `scripts/_audit_xau_votes_today.py` 置信度唯一值 ≤3 或单方向 ≥95% → 告警; audit_xau_directional_bias.py 长期方向比。
+- **检测**: `scripts/audits/_audit_xau_votes_today.py` 置信度唯一值 ≤3 或单方向 ≥95% → 告警; audit_xau_directional_bias.py 长期方向比。
 
 ---
 
@@ -1472,5 +1472,14 @@
 - **Source Docket**: DQAF-20260804-006
 - **Related**: FIX-20260804-006, CROSS_ASSET_CONTAMINATION_AUDIT.md (DQAF-20260615-006 H1)
 - **定义**: 双进程共享代码, 一方硬编码另一方的 CSV 路径 (`live_intent_loop.py:759` d1_csv 恒指 XAU) → BTC 进程的 `LiveDailyProvider._sync_csv()` 按 BTC symbol 抓取 bar 追加进 XAU 文件 → date-keyed dedup 使 XAU 正确 bar 无法回填 → XAU 日线尾部被 BTC 价格毒化 → 所有消费 D1 特征的模型 out-of-distribution。污染行数 = 07-04 起全月。
-- **预防**: (1) 数据文件路径必须由 base_dir/symbol 派生, 禁止跨资产硬编码 (CROSS_ASSET_CONTAMINATION_AUDIT H1 修复); (2) LiveDailyProvider `_sync_csv` 写前校验 `self._symbol` 与 CSV 文件名符号一致, 不符 → 拒绝写入 + SEVERE 告警; (3) 数据质量守卫: 日线 close 超出该资产合理量级 (XAU 4-5k vs BTC 60k+) → fail-fast。
-- **检测**: 全仓数据审计脚本 — 对每资产 D1 CSV 校验价格量级域 (XAU 1k-10k, BTC 10k-200k); reconcile 脚本比对 CSV 尾部日期与对应 symbol 的 MT5 直读 bar。
+- **预防**: (1) 数据文件路径必须由 base_dir/symbol 派生, 禁止跨资产硬编码 (CROSS_ASSET_CONTAMINATION_AUDIT H1 修复); (2) LiveDailyProvider `_sync_csv` 写前校验 `self._symbol` 与 CSV 文件名符号一致, 不符 → 拒绝写入 + SEVERE 告警 (FIX-20260804-007 `_assert_d1_symbol_contract` 已实现 — DataIntegrityError 熔断); (3) 数据质量守卫: 日线 close 超出该资产合理量级 (XAU 4-5k vs BTC 60k+) → fail-fast。
+- **检测**: 全仓数据审计脚本 — 对每资产 D1 CSV 校验价格量级域 (XAU 1k-10k, BTC 10k-200k); reconcile 脚本比对 CSV 尾部日期与对应 symbol 的 MT5 直读 bar; direction_concentration_monitor (FIX-20260804-008 后全资产监控)。
+
+### ReB-20260804-MONITOR_TRIPLE_BLIND_SPOT
+- **Pattern Signature**: `MONITOR_TRIPLE_BLIND_SPOT`
+- **Date Cataloged**: 2026-08-04
+- **Source Docket**: DQAF-20260804-008
+- **Related**: FIX-20260804-008, DQAF-20260804-006, ReB-20260804-D1_WELL_CROSS_ASSET_POISONING
+- **定义**: 风控/监控器三重结构性失聪致长期静默: (1) 调度入口硬编码单一资产 data_dir (`_scheduled_monitor` data_btc) → 另一资产永不检查; (2) 读错数据字段路径 (读顶层 `direction`, 实际嵌套 `outputs.<strategy>.direction`) → 恒 0 信号; (3) 大小写/词形错配 (存小写 short/long vs 匹配大写 SHORT) → 恒 0 命中。叠加时间戳字段错配 (`timestamp_utc` vs `timestamp`/`recorded_at`) → 永远 INSUFFICIENT DATA 分支, 静默返回 exit 0。风控警报器失效比模型失效更不可饶恕 (IC 语)。
+- **预防**: (1) 监控器必须参数化全资产目录, 禁止硬编码单资产; (2) 读取字段前先实证数据结构 (golden_master 结构探查), 禁止凭假设读字段; (3) 方向/枚举值必须归一化 (uppercase + 别名映射 BUY/SELL) 后匹配; (4) 时间过滤字段与数据 schema 对齐; (5) 监控器须有"数据不足≠正常"区分 — INSUFFICIENT 分支也要告警而非静默 exit 0。
+- **检测**: `scripts/_monitor_direction_concentration.py --data-dirs data data_btc` (FIX-20260804-008 后实证 XAU CRITICAL 86% SHORT); 定期核对监控器读入信号数 vs 实际 golden_master 行数 (信号数=0 即盲区红旗)。

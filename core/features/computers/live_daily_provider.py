@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from core.contracts.exceptions import DataIntegrityError
 from core.features.computers.daily_computer import DailyFeatureComputer
 
 if TYPE_CHECKING:
@@ -59,6 +60,7 @@ class LiveDailyFeatureProvider:
         self._latest_vector: np.ndarray | None = None
         self._latest_timestamp: str = ""
 
+        self._assert_d1_symbol_contract()  # FIX-20260804-007: fuse before any read/write
         self._refresh()  # initial load
 
     @property
@@ -78,6 +80,34 @@ class LiveDailyFeatureProvider:
         return self._latest_vector.copy()
 
     # ── Internal ──
+
+    def _assert_d1_symbol_contract(self) -> None:
+        """Fuse (FIX-20260804-007): in-memory symbol must match the CSV filename.
+
+        Root cause D1_WELL_CROSS_ASSET_POISONING (ReB-20260804-007): the BTC
+        process's provider wrote BTCUSDc D1 bars into the XAU CSV because the
+        path was hardcoded to XAU.  A provider may only ever read/write its own
+        symbol's merged CSV.  Raises DataIntegrityError on mismatch — a fuse,
+        never a silent cross-asset read/write.
+
+        Only enforced when the filename follows the per-symbol merged convention
+        ('{symbol}_d1_merged.csv' / '{symbol}_h4_merged.csv'); arbitrary
+        (non-convention) filenames carry no symbol contract to validate.
+        """
+        for label, csv_path in (("D1", self._d1_csv), ("H4", self._h4_csv)):
+            if csv_path is None:
+                continue
+            stem = Path(csv_path).stem.lower()
+            for suffix in ("_d1_merged", "_h4_merged"):
+                if stem.endswith(suffix):
+                    embedded = stem[: -len(suffix)]
+                    if embedded != self._symbol.lower():
+                        raise DataIntegrityError(
+                            f"Symbol Guard FAILED ({label}): provider symbol={self._symbol!r} "
+                            f"but CSV {Path(csv_path).name!r} embeds symbol {embedded!r} — "
+                            f"cross-asset CSV contamination is forbidden."
+                        )
+                    break
 
     def _is_new_bar_available(self) -> bool:
         """Check if MT5 has a new D1 bar since last refresh."""
@@ -109,8 +139,10 @@ class LiveDailyFeatureProvider:
                     self._last_bar_time = int(dts[idx].timestamp())
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass
+
     def _sync_csv(self) -> None:
         """Fetch new D1 bars from MT5 and append to CSV."""
+        self._assert_d1_symbol_contract()  # fuse — fires before ANY read/write
         try:
             # Read existing CSV to find last timestamp
             existing_ts: set[str] = set()
@@ -208,6 +240,7 @@ class LiveDailyFeatureProvider:
                 ),
                 flush=True,
             )
+
     def _build_computer(self) -> None:
         """Build a fresh DailyFeatureComputer from the current CSV."""
         if not self._d1_csv.exists():
