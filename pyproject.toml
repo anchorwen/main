@@ -42,6 +42,11 @@ include = ["apps*", "core*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# scripts/archive/ = retired, not for VCS (gitignored).  It is not part of
+# the codebase and must not fail the ci-mirror full-scan gate.  (exclude is
+# used over respect-gitignore: ruff 0.5.7 does not honor gitignore when the
+# gate scans `core/ apps/ scripts/` explicitly.)
+extend-exclude = ["scripts/archive/"]
 
 [tool.ruff.lint]
 # SIM105 (contextlib.suppress vs try/except/pass): style preference,
@@ -62,6 +67,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Diagnostic/audit scripts — throwaway tools, style rules waived
 "scripts/audit_*.py" = ["E302", "E305", "E701", "E702", "E401", "F401", "B007", "UP017", "I001", "SIM105", "E722", "UP038"]
+# Forensic probe scripts (_audit_*_YYYYMMDD.py, IC-mandated uncommitted):
+# same waiver as audit_*.py plus UP009/UP015/UP031 (encoding decl / open mode
+# / percent-format) — IC 2026-08-05 ruling: keep in work tree, don't modify.
+"scripts/_audit_*.py" = ["E302", "E305", "E701", "E702", "E401", "F401", "B007", "UP017", "I001", "SIM105", "E722", "UP038", "UP009", "UP015", "UP031"]
 "scripts/analyze_*.py" = ["E722", "B007", "SIM105", "UP038", "F401", "F541", "UP015", "UP017", "I001"]
 "scripts/diagnose_*.py" = ["SIM105", "F401", "I001", "E701", "BLE001"]  # DQAF-059: diagnostic tool, audit scripts
 "scripts/classify_ble001.py" = ["E401", "E701", "F401", "I001"]

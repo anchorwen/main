@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-05T02:57:31Z
-> **扫描模块数**: 789
+> **自动生成**: 2026-08-05T06:06:26Z
+> **扫描模块数**: 791
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -654,12 +654,14 @@
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
+| `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
 | `_audit_xau_two_longs_20260805.py` | ✅ active | — | 1 | 38 | — | |
 | `_audit_xau_votes_pnl_20260805.py` | ✅ active | — | 4 | 173 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
+| `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
@@ -727,7 +729,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 742 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 744 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -767,6 +769,7 @@
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
 | `forensic_feature_analysis.py` | ✅ active | — | 2 | 294 | — | |
+| `gate2_sentinel.py` | ✅ active | — | 8 | 301 | — | |
 | `generate_btc_empirical_scaler.py` | ✅ active | — | 3 | 221 | — | |
 | `generate_micro_scaler.py` | ✅ active | — | 5 | 320 | — | |
 | `governance_promote_m15.py` | 📄 config | — | 0 | 51 | — | |
@@ -896,7 +899,6 @@
 | `_diagnose_pnl_provenance.py` | 📄 config | — | 0 | 203 | — | |
 | `_diagnose_pnl_status.py` | 📄 config | — | 0 | 138 | — | |
 | `_list_btc_brains.py` | 📄 config | — | 0 | 27 | — | |
-| `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_parse_mt5_text.py` | ✅ active | — | 2 | 87 | — | |
 | `_validate_btc_july.py` | 📄 config | — | 0 | 197 | — | |
 | `_validate_mt5_complete.py` | ✅ active | — | 7 | 536 | — | |

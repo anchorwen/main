@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-05T02:57:31Z
+> **自动生成**: 2026-08-05T06:06:26Z
 
 ## Package-Level Dependencies
 
@@ -568,12 +568,14 @@
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_audit_btc_legacy_lineage_pnl_20260805.py` → (无内部依赖)
+- `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
 - `_audit_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_band_extremes_20260805.py` → (无内部依赖)
 - `_audit_xau_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_votes_pnl_20260805.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
+- `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
@@ -681,6 +683,7 @@
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`
 - `feedback_loop.py` → `core.feedback.brain_performance_tracker`
 - `forensic_feature_analysis.py` → (无内部依赖)
+- `gate2_sentinel.py` → `scripts.alert_dispatcher`, `scripts.inspect_ofi_history`
 - `generate_btc_empirical_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `generate_micro_scaler.py` → `core.features.adapters.microstructure_feature_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.registry`
 - `governance_promote_m15.py` → (无内部依赖)
@@ -808,7 +811,6 @@
 - `_diagnose_pnl_provenance.py` → (无内部依赖)
 - `_diagnose_pnl_status.py` → (无内部依赖)
 - `_list_btc_brains.py` → (无内部依赖)
-- `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_parse_mt5_text.py` → (无内部依赖)
 - `_validate_btc_july.py` → (无内部依赖)
 - `_validate_mt5_complete.py` → (无内部依赖)

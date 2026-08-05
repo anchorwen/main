@@ -309,9 +309,11 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/inspect_ofi_history.py",  # DQAF-20260707-005: OFI history monitor
         "scripts/scan_ofi_wasserstein.py",  # FIX-20260802-005: T21 Gate-1 OFI Wasserstein scan
         "scripts/features/reconcile_store_schemas.py",  # FIX-20260803-005: schema registration reconciliation
+        "scripts/gate2_sentinel.py",  # FIX-20260805-003: Gate 2 daily accumulation sentinel (reuses inspect())
     ],
     "market_mtf": [
         "core/market/mtf_price_service.py",
+        "scripts/_merge_aligned_multitf_data.py",  # FIX-20260805-003: BTC+cross-asset MT5 merge (RBI-1 relocated)
     ],
     "monitor_dashboard": [
         "apps/monitor/live_trading_dashboard.py",
