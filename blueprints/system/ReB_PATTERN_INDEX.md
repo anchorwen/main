@@ -20,6 +20,20 @@
 
 ---
 
+### ReB-20260805-EXPIRED_TEMP_GATE_UNRETIRED
+- **Pattern Signature**: `EXPIRED_TEMP_GATE_UNRETIRED`
+- **Date Cataloged**: 2026-08-05
+- **Source Docket**: DQAF-20260805-002
+- **Related**: FIX-20260805-008 (RESOLVED), FIX-20260611-005 (temp patch origin), FIX-20260613-089 (threshold desensitization), DQAF-20260619-002 (detection-defect fixes)
+
+**Definition**: A temporary patch/gate declares a contract with a future state ("auto-expires YYYY-MM-DD; after Phase N lands these become structural guarantees, not runtime audits") but the retirement is encoded ONLY as a message string with zero retirement logic. When the future state lands, the check keeps running on its old premise — counting the new architecture's expected behavior as a violation → false CRITICAL on every re-fire trigger (here: every restart). The signature: an expiry date that exists only in a formatted string / docstring, with no code path that retires the check or upgrades its semantics when its declared precondition is met. The FIX-20260611-005 temp patch expired 2026-07-11 (25 days overdue at diagnosis) yet kept FAILing on 123 retry-residue dupes using the pre-Phase-2 (ticket, ack_status) key.
+
+**Prevention** (IMPLEMENTED): Temp-gate retirement must be LOGIC, not text. When the declared precondition is satisfied, upgrade the check to consume the new architecture's identity contract — here, the Phase 2 idempotent event key `(position_identifier, deal_id)`. Expected-by-design residue (retry re-writes of the same event) becomes a metric, never a FAIL; genuine divergence (≥2 distinct non-zero deal_ids for one position) becomes the FAIL signal. Hard-deadline tech debt (`TODO-YYYYMMDD-*`) must be settled or re-scoped AT the deadline, never silently left as a stale string. Retained structural gates (close_price fill rate, trail coverage) keep their FAIL thresholds.
+
+**Detection**: Grep for `[EXPIRES ` / `auto-expire` / `TODO-\d{8}-` inside check/alert code with no associated retirement branch. Regression lock: `tests/observability/test_journal_completeness_phase2.py` asserts the expired framing (`EXPIRES`/`expires`) is absent and the new idempotent-key semantics hold (residue→PASS, ambiguity→FAIL, deal-0 rejected-then-confirmed→not ambiguous, orphan exclusion, unidentifiable metric).
+
+---
+
 ### ReB-20260805-HASHLOCK_STAT_PHANTOM
 - **Pattern Signature**: `HASHLOCK_STAT_PHANTOM`
 - **Date Cataloged**: 2026-08-05

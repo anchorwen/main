@@ -27,6 +27,23 @@
 
 ---
 
+### CCT-20260805-002
+- **Docket ID**: DQAF-20260805-002
+- **日期**: 2026-08-05
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 每次 live 重启后 ~7s 新进程生成 JOURNAL_SLA_VIOLATION CRITICAL (data_health_state.json updated_at 2026-08-05T13:49:04.777483, 重启 13:48:57 UTC 后 7s); 消息 "DUPES=123. close_price=100.0% trail=114.5% dupes=123 (eligible=1232 total=1263)" — dupes=123>10 为唯一 FAIL flag (health_checks.py:2472)。
+  - [Layer 2 — 中间异常]: 123 dupes 全为 Phase 2 async retry-reentrant 架构对同一 PositionClosed 事件的重写残留 — 独立探针 (scripts/_audit_dupe_category_20260805.py): 123/123 组 = Cat A (同 position_identifier + 同 deal_id), Cat B (同仓不同 deal) = 0, Cat C (缺身份) = 0, 8/1 后零新增; 0 部分平仓证据。检查仍按原始投影行数键 (position_ticket, ack_status) 判 dup (health_checks.py:2421), 未消费 Phase 2 幂等身份 (position_events.py:53 deal_id / :88 position_identifier)。
+  - [Layer 3 — 根因]: RC-06 (contract-violation) — FIX-20260611-005 声明 "Temporary patch — auto-expires 2026-07-11. After Phase 2 (PositionClosed event sourcing), these checks become structural guarantees, not runtime audits" (health_checks.py:2366-2368), 但 Phase 2 落地后补丁从未退役: `_expiry='2026-07-11'` (L2379) 仅消息字符串零退役逻辑, 检查未升级。技术债 TODO-20260711-journal-idempotency (FIX_REGISTRY.md FIX-20260613-089) 超期 25 天。
+- **证据引用**:
+  - Source 1: data_btc/state/data_health_state.json — updated_at 2026-08-05T13:49:04.777483 (重启后 7s), journal_completeness FAIL / JOURNAL_SLA_VIOLATION
+  - Source 2: core/observability/health_checks.py:2379 (_expiry 纯字符串零退役逻辑), :2472 (dupes>10 FAIL), :2366-2368 (临时补丁自声明契约)
+  - Source 3 (跨品种): data/live_trade_journal.jsonl (XAU) 同机制同型假阳性 (dupes=4, 未达阈值)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260805-EXPIRED_TEMP_GATE_UNRETIRED
+
+---
+
 ### CCT-20260805-001
 - **Docket ID**: DQAF-20260805-001
 - **日期**: 2026-08-05

@@ -11,7 +11,7 @@ import glob
 import json
 import os
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import UTC
 from typing import Any
 
@@ -2353,30 +2353,32 @@ class HealthCheckMethods:
             checked_at=_utc_iso(),
         )
 
-    # ── FIX-20260611-005: Journal completeness SLA (30-day auto-expiry) ──
+    # ── FIX-20260611-005 / FIX-20260805-008: Journal completeness SLA ──
+    # FIX-20260805-008: temporary patch retired — dedup upgraded to Phase 2
+    # idempotent event identity (position_identifier, deal_id).
 
     @health_check(
         tier=Tier.CRITICAL,
         source="journal_completeness",
-        description="Journal close_price fill rate, dedup, trail coverage",
+        description="Journal close_price fill rate, event idempotency, trail coverage",
     )
     def check_journal_completeness(self) -> SourceCheckResult:
-        """SLA monitoring: close_price, duplicate detection, trail coverage.
+        """SLA monitoring: close_price, event idempotency, trail coverage.
 
-        FIX-20260611-005: Temporary patch — auto-expires 2026-07-11.
-        After Phase 2 (PositionClosed event sourcing), these checks
-        become structural guarantees, not runtime audits.
+        FIX-20260805-008 (Phase 2 Event Sourcing semantics): the temporary
+        FIX-20260611-005 patch is retired.  Dedup now keys on the Phase 2
+        idempotent event identity — (position_identifier, deal_id) with
+        position_ticket fallback — written by PositionClosed.to_journal_entry().
+        Identical rewrites of the same event are expected retry residue
+        (metric only, NO FAIL); a position with >=2 distinct non-zero
+        deal_ids is genuine event-stream ambiguity (FAIL).  close_price /
+        trail thresholds retained as structural data-quality gates.
 
-        DQAF-20260619-002: Fixed three detection defects:
-        1. close_price now checks detail.request.close_price as fallback
-           (MT5 dispatch format stores price in nested request field).
-        2. Duplicate detection uses (position_ticket, ack_status) key —
-           rejected+closed for same ticket is NOT a duplicate.
-           Orphan entries (auto_orphan_*) are excluded from dedup.
-        3. trail_rate now computed from modify_sltp / close ratio
-           (trail_contribution field was never populated on close entries).
+        DQAF-20260619-002 (retained):
+        1. close_price checks detail.request.close_price as fallback.
+        2. Orphan entries (auto_orphan_*) are excluded from dedup.
+        3. trail_rate computed from modify_sltp / close ratio.
         """
-        _expiry = "2026-07-11"
         jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
         if not os.path.exists(jl_path):
             return SourceCheckResult(
@@ -2390,8 +2392,12 @@ class HealthCheckMethods:
 
         closes: list[dict] = []
         modify_count = 0
-        tickets_seen: dict[tuple, str] = {}  # (ticket, ack_status) → message_id
-        dupes = 0
+        # ── FIX-20260805-008: Phase 2 idempotent event identity key ──
+        # (position_identifier, deal_id) with position_ticket fallback.
+        seen_keys: set[tuple[str, int]] = set()
+        per_position_deals: dict[str, set[int]] = defaultdict(set)
+        residue = 0
+        unidentifiable = 0
         with open(jl_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -2408,21 +2414,30 @@ class HealthCheckMethods:
                 if action != "close":
                     continue
                 closes.append(entry)
-                ticket = entry.get("position_ticket")
-                if not ticket:
-                    continue
-                ack = entry.get("ack_status", "")
                 detail = entry.get("detail", {}) if isinstance(entry.get("detail"), dict) else {}
                 reason = detail.get("reason", "")
                 # ── DQAF-20260619-002: refined dedup ──
                 # Orphan entries are synthetic — don't count as duplicates.
                 if isinstance(reason, str) and reason.startswith("auto_orphan_"):
                     continue
-                key = (ticket, ack)
-                if key in tickets_seen:
-                    dupes += 1
+                # Phase 2 idempotent identity: position_identifier (immutable
+                # MT5 anchor) with position_ticket fallback; deal_id from detail.
+                pid_raw = entry.get("position_identifier") or entry.get("position_ticket")
+                if pid_raw is None:
+                    unidentifiable += 1
+                    continue
+                pid = str(pid_raw)
+                deal_raw = detail.get("deal_id", 0)
+                try:
+                    deal = int(deal_raw) if deal_raw not in (None, "") else 0
+                except (TypeError, ValueError):
+                    deal = 0
+                key = (pid, deal)
+                if key in seen_keys:
+                    residue += 1
                 else:
-                    tickets_seen[key] = entry.get("message_id", "")
+                    seen_keys.add(key)
+                per_position_deals[pid].add(deal)
 
         total = len(closes)
         if total == 0:
@@ -2466,11 +2481,16 @@ class HealthCheckMethods:
         cp_rate = _cp_found / max(_cp_eligible, 1)
         trail_rate = modify_count / max(total, 1)
 
+        # ── FIX-20260805-008: ambiguity = same position, >=2 distinct deals ──
+        # deal_id=0 means "no MT5 deal" (rejected attempts / engine-side no-deal)
+        # — an absence, not a deal event, so excluded from the distinct set.
+        ambiguous_events = sum(1 for deals in per_position_deals.values() if len(deals - {0}) >= 2)
+
         flags = []
         if cp_rate < 0.50:
             flags.append(f"CLOSE_PRICE_RATE={cp_rate:.1%}")
-        if dupes > 10:
-            flags.append(f"DUPES={dupes}")
+        if ambiguous_events > 0:
+            flags.append(f"AMBIGUOUS_EVENTS={ambiguous_events}")
         if trail_rate < 0.10:
             flags.append(f"TRAIL_RATE={trail_rate:.1%}")
 
@@ -2481,19 +2501,20 @@ class HealthCheckMethods:
                 status=SourceStatus.FAIL,
                 primary_code="JOURNAL_SLA_VIOLATION",
                 message=(
-                    f"[EXPIRES {_expiry}] Journal SLA violation: {', '.join(flags)}. "
-                    f"close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={dupes} "
-                    f"(eligible={_cp_eligible} total={total})"
+                    f"Journal SLA violation: {', '.join(flags)}. "
+                    f"close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={residue} "
+                    f"ambiguous={ambiguous_events} (eligible={_cp_eligible} total={total})"
                 ),
                 metrics={
                     "close_price_rate": round(cp_rate, 4),
                     "trail_rate": round(trail_rate, 4),
-                    "duplicates": dupes,
+                    "duplicates": residue,
                     "total_closes": total,
                     "close_price_eligible": _cp_eligible,
                     "close_price_found": _cp_found,
                     "modify_sltp_total": modify_count,
-                    "expires": _expiry,
+                    "ambiguous_events": ambiguous_events,
+                    "unidentifiable_rows": unidentifiable,
                 },
                 checked_at=_utc_iso(),
             )
@@ -2502,16 +2523,20 @@ class HealthCheckMethods:
             tier=Tier.CRITICAL,
             status=SourceStatus.PASS,
             primary_code="JOURNAL_SLA_OK",
-            message=f"Journal SLA OK: close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={dupes}",
+            message=(
+                f"Journal SLA OK: close_price={cp_rate:.1%} trail={trail_rate:.1%} "
+                f"dupes={residue} ambiguous={ambiguous_events}"
+            ),
             metrics={
                 "close_price_rate": round(cp_rate, 4),
                 "trail_rate": round(trail_rate, 4),
-                "duplicates": dupes,
+                "duplicates": residue,
                 "total_closes": total,
                 "close_price_eligible": _cp_eligible,
                 "close_price_found": _cp_found,
                 "modify_sltp_total": modify_count,
-                "expires": _expiry,
+                "ambiguous_events": ambiguous_events,
+                "unidentifiable_rows": unidentifiable,
             },
             checked_at=_utc_iso(),
         )

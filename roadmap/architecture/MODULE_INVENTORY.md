@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-05T13:41:53Z
-> **扫描模块数**: 792
+> **自动生成**: 2026-08-05T14:39:43Z
+> **扫描模块数**: 794
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -440,7 +440,7 @@
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
 | `event_bus.py` | ✅ active | EventBus | 7 | 65 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | 🧪 stub | HealthCheckMethods | 46 | 3395 | — | |
+| `health_checks.py` | 🧪 stub | HealthCheckMethods | 46 | 3420 | — | |
 | `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
 | `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 927 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
@@ -654,6 +654,8 @@
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
+| `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
+| `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
@@ -831,7 +833,7 @@
 | `runtime_protection_guard.py` | ✅ active | — | 1 | 22 | — | |
 | `scan_barrier_params.py` | ✅ active | — | 5 | 286 | — | |
 | `scan_ofi_wasserstein.py` | ✅ active | — | 7 | 297 | — | |
-| `send_data_health_alert.py` | ✅ active | — | 6 | 231 | — | |
+| `send_data_health_alert.py` | ✅ active | — | 6 | 230 | — | |
 | `send_live_order.py` | ✅ active | — | 4 | 148 | — | |
 | `shadow_decision_recorder.py` | ✅ active | — | 7 | 200 | — | |
 | `shadow_live_compare_report.py` | ✅ active | — | 9 | 218 | — | |

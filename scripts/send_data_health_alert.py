@@ -138,7 +138,6 @@ def format_health_report(report: dict[str, Any], symbol: str, mode: str) -> dict
     lines.append("")
     lines.append("---")
     lines.append("QuantOs 实盘告警系统")
-    lines.append("QuantOs 实盘告警系统")
 
     title = f"QUANT OS 告警: DataHealth {symbol} — {level} ({pass_c}/{total} OK)"
     return {"title": title, "text": "\n".join(lines)}
