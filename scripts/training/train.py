@@ -1302,38 +1302,62 @@ def run_pipeline(
     result = PipelineResult(contract_id="", status="FAILED")
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # CRYPTOGRAPHIC HASH-LOCK: refuse to train on dirty working tree
+    # CRYPTOGRAPHIC HASH-LOCK: refuse to train on a semantically dirty tree
     # ═══════════════════════════════════════════════════════════════════════════
+    # Content-based gate (DQAF-20260805-001, IC absolute approval): compares
+    # WORKTREE to HEAD by CONTENT via `git diff HEAD --name-only` — immune to
+    # the git stat-cache phantom (`git status --porcelain` reports a persistent
+    # ` M` when a process rewrites a tracked file with byte-identical content,
+    # only bumping mtime) and to CRLF pseudo-diffs (FIX-20260805-005 LF
+    # contract).  Untracked source files are blocked too, EXCEPT the
+    # IC-mandated `_audit_*.py` forensic probes (uncommitted by design).
+    # Mirrors train_btc_expected_r_institutional._enforce_hash_lock — never drift.
     if not allow_dirty:
         import subprocess
 
         try:
             dirty = subprocess.run(
-                ["git", "status", "--porcelain"],
+                ["git", "diff", "HEAD", "--name-only"],
                 capture_output=True,
                 text=True,
                 timeout=10,
                 cwd=str(Path(__file__).resolve().parents[2]),
             )
             if dirty.returncode == 0:
-                dirty_files = [
-                    line[2:].strip()
-                    for line in dirty.stdout.strip().split("\n")
-                    if line.strip() and not line.startswith("??")  # untracked files allowed
-                ]
-                # Only block for source code changes (.py, .yaml, .json)
+                # Only block for source code changes (.py, .yaml, .yml, .json)
+                # outside data/ data_btc/ (gitignored projections).
                 source_dirty = [
                     f
-                    for f in dirty_files
-                    if f.endswith((".py", ".yaml", ".yml", ".json"))
-                    and not Path(f).parts[0].startswith("data")  # exclude data/ data_btc/ etc.
+                    for f in dirty.stdout.strip().split("\n")
+                    if f.strip()
+                    and f.endswith((".py", ".yaml", ".yml", ".json"))
+                    and not Path(f).parts[0].startswith("data")
                 ]
+                # Untracked source files are a lineage break too — except the
+                # _audit_*.py forensic probes (ruff convention, FIX-20260805-003).
+                untracked = subprocess.run(
+                    ["git", "ls-files", "--others", "--exclude-standard"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    cwd=str(Path(__file__).resolve().parents[2]),
+                )
+                if untracked.returncode == 0:
+                    source_dirty += [
+                        f
+                        for f in untracked.stdout.strip().split("\n")
+                        if f.strip()
+                        and f.endswith((".py", ".yaml", ".yml", ".json"))
+                        and not Path(f).parts[0].startswith("data")
+                        and not (Path(f).name.startswith("_audit_") and f.endswith(".py"))
+                    ]
+                source_dirty = sorted(set(source_dirty))
                 if source_dirty:
                     print("[train] [HASH-LOCK] DIRTY WORKING TREE", flush=True)
                     print(
                         "[train] The following source files have uncommitted changes:", flush=True
                     )
-                    for f in sorted(source_dirty):
+                    for f in source_dirty:
                         print(f"  - {f}", flush=True)
                     print(
                         "[train] Training on a dirty tree breaks model lineage — "

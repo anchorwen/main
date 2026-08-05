@@ -89,32 +89,74 @@ def label_contract_block(contract) -> dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _enforce_hash_lock(allow_dirty: bool) -> None:
+def _is_forensic_probe(path: str) -> bool:
+    """IC-mandated `_audit_*.py` forensic probes stay uncommitted by design
+    (ruff convention: ``scripts/_audit_*.py``, FIX-20260805-003).  They are
+    read-only investigation scripts — never part of the trained lineage — so
+    they must NEVER trip the hash-lock and block the 8/19 battle."""
+    return path.endswith(".py") and Path(path).name.startswith("_audit_")
+
+
+def _enforce_hash_lock(allow_dirty: bool, cwd: str | Path | None = None) -> None:
+    """Content-based hash-lock: refuse to train on a semantically dirty tree.
+
+    DQAF-20260805-001 (IC absolute approval 2026-08-05): the gate compares
+    WORKTREE to HEAD by CONTENT (``git diff HEAD --name-only``) instead of
+    ``git status --porcelain``.  Porcelain is stat-based — a process rewriting
+    a tracked file with byte-identical content (mtime bump only) yields a
+    phantom `` M`` that never self-heals and would false-positive the 8/19
+    battle.  Content comparison is immune to stat phantoms AND to CRLF
+    pseudo-diffs (FIX-20260805-005 LF contract = double insurance).
+
+    Untracked source files (``git ls-files --others``) are blocked TOO — a new
+    uncommitted module is as much a lineage break as a modified tracked one —
+    except the IC-mandated ``_audit_*.py`` forensic probes (see
+    ``_is_forensic_probe``).
+
+    ``cwd`` is test-only: the regression suite runs this against a throwaway
+    git repo; production always uses PROJECT_ROOT.
+    """
     if allow_dirty:
         return
+    root = str(cwd if cwd is not None else PROJECT_ROOT)
     try:
         dirty = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "diff", "HEAD", "--name-only"],
             capture_output=True,
             text=True,
             timeout=10,
-            cwd=str(PROJECT_ROOT),
+            cwd=root,
         )
         if dirty.returncode == 0:
-            dirty_files = [
-                line[2:].strip()
-                for line in dirty.stdout.strip().split("\n")
-                if line.strip() and not line.startswith("??")
-            ]
             source_dirty = [
                 f
-                for f in dirty_files
-                if f.endswith((".py", ".yaml", ".yml", ".json"))
+                for f in dirty.stdout.strip().split("\n")
+                if f.strip()
+                and f.endswith((".py", ".yaml", ".yml", ".json"))
                 and not Path(f).parts[0].startswith("data")
             ]
+            # Untracked source files — a lineage break just like a modified
+            # tracked file, but the _audit_*.py forensic probes are exempt.
+            untracked = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=root,
+            )
+            if untracked.returncode == 0:
+                source_dirty += [
+                    f
+                    for f in untracked.stdout.strip().split("\n")
+                    if f.strip()
+                    and f.endswith((".py", ".yaml", ".yml", ".json"))
+                    and not Path(f).parts[0].startswith("data")
+                    and not _is_forensic_probe(f)
+                ]
+            source_dirty = sorted(set(source_dirty))
             if source_dirty:
                 print("[expected-r] [HASH-LOCK] DIRTY WORKING TREE", flush=True)
-                for f in sorted(source_dirty):
+                for f in source_dirty:
                     print(f"  - {f}", flush=True)
                 raise SystemExit(
                     f"Hash-lock: {len(source_dirty)} source file(s) uncommitted. "

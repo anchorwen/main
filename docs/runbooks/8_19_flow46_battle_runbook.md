@@ -84,6 +84,8 @@ ROOT -> D:\future                                            ✅ (修复前 D:\f
 git status --porcelain
 # 期望: 仅剩法证探针 scripts/_audit_*_20260805.py (未跟踪, IC 裁决保留)
 # 若出现 M configs/*.yaml 等跟踪文件改动 → 先收口 (裁决 4 已还原 live.yaml)
+# 注 (FIX-20260805-007): 8/19 的 hash-lock 已是内容基 (git diff HEAD --name-only),
+# 上述 stat 基 porcelain 出现的 mtime-only 幽灵 M 不会拦截训练 — 真正阻断的只有语义变更。
 ```
 
 ### RBI-3 — 关键文件在位清单（12 项）
@@ -188,7 +190,7 @@ python scripts/inspect_ofi_history.py --data-dir data_btc
 ### 阶段 4 — 迁移重训（8/19, 架构师, 工作树必须干净）
 
 ```bash
-git status --porcelain   # 期望: 仅未跟踪 _audit_* 探针
+git status --porcelain   # 期望: 仅未跟踪 _audit_* 探针 (hash-lock 内容基 FIX-20260805-007, 幽灵 M 不阻断)
 python scripts/training/train_btc_flow_46_transfer.py \
   --contract configs/training/btc_flow_46_transfer.yaml \
   --dataset data_btc/training/btc_flow46_v1/btc_flow46_aligned.npz \

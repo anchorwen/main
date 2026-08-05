@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-05T10:32:08Z
+> **自动生成**: 2026-08-05T13:41:53Z
 > **扫描模块数**: 792
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -748,7 +748,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 323 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_flow46_precheck.py` | ✅ active | — | 16 | 490 | — | |
+| `daily_flow46_precheck.py` | ✅ active | — | 17 | 539 | — | |
 | `daily_ops.py` | ✅ active | — | 41 | 3549 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
@@ -1016,12 +1016,12 @@
 | `run_promotion.py` | ✅ active | — | 6 | 285 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 273 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
-| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 2215 | — | |
+| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 2239 | — | |
 | `train_btc_binary_directional.py` | ✅ active | — | 5 | 385 | — | |
 | `train_btc_directional_v1.py` | ✅ active | — | 7 | 450 | — | |
 | `train_btc_directional_v10.py` | ✅ active | — | 6 | 576 | — | |
 | `train_btc_expected_r.py` | ✅ active | — | 8 | 634 | — | |
-| `train_btc_expected_r_institutional.py` | ✅ active | — | 6 | 503 | — | |
+| `train_btc_expected_r_institutional.py` | ✅ active | — | 7 | 545 | — | |
 | `train_btc_flow_46_transfer.py` | ✅ active | — | 6 | 527 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1898 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |

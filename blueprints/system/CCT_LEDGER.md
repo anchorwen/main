@@ -27,6 +27,23 @@
 
 ---
 
+### CCT-20260805-001
+- **Docket ID**: DQAF-20260805-001
+- **日期**: 2026-08-05
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `git status --porcelain` 对 `configs/live_btc.yaml` 持续报 ` M` 但 `git diff` 为空 — 6 轮 1s 采样全 ` M`; `git update-index --refresh` 报 needs update 仍 ` M`; 仅 `git add`(no-op, blob 不变 `76f78fcd`) 清除。内容与 index 逐字节相同 (CR=0 LF, hash-object raw + `--path` 过滤均 == index blob)。
+  - [Layer 2 — 中间异常]: 启动 reconcile 经 `brain_lifecycle_manager.py:205-211` `_save_live_yaml` → `atomic_write_text` 无条件重写 live_btc.yaml — 内容与 index 等价但 mtime 刷新 (18:44:30) → git stat 缓存失步且不自愈 (幽灵 ` M`)。
+  - [Layer 3 — 根因]: RC-06 (contract-violation) — hash-lock 契约应是"锁哈希(内容)而非时间戳", 但两 gate (`train.py:1311` `_enforce_hash_lock` + `daily_flow46_precheck.py:152` hash_lock, L71 "never drift" 契约) 用 stat 基 `git status --porcelain` 判定脏 → 内容等价仅 mtime 变化的文件触发假阳性。
+- **证据引用**:
+  - Source 1: `configs/live_btc.yaml` — blob `76f78fcd...` (raw + --path 过滤) == `git rev-parse :configs/live_btc.yaml`, CR=0, 6×1s 采样 porcelain 全 ` M`
+  - Source 2: `core/deployment/brain_lifecycle_manager.py:205-211` — `_save_live_yaml` 无条件 atomic_write_text 重写触发 (mtime 18:44:30)
+  - Source 3 (跨品种): `scripts/daily_flow46_precheck.py:152` — 复制版 gate 同 stat 基 (XAU live.yaml 同理), `git update-index --refresh` 失效实证
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260805-HASHLOCK_STAT_PHANTOM
+
+---
+
 ### CCT-20260726-012
 - **Docket ID**: DQAF-20260726-012
 - **日期**: 2026-07-26

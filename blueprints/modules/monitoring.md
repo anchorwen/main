@@ -62,6 +62,7 @@ See [Architecture](#architecture) above — the scheduler-driven pipeline (Task 
 
 ## Fix History
 
+| FIX-20260805-007 | 2026-08-05 | cursor-agent | — | **hash-lock 门禁内容基升级 — The Content-Based Gate (DQAF-20260805-001, IC 绝对批准)**. 预检 hash_lock 从 `git status --porcelain`(stat 基, git Stat 幽灵 + CRLF 伪差异假阳性) 升级为内容基: `_run_git_content_snapshot()`(`git diff HEAD --name-only` + `git ls-files --others --exclude-standard`) + `_classify_tree(dirty, untracked)` — dirty tracked source **或** untracked 非探针 source → Sev1; `_audit_*.py` 法证探针豁免 (永不阻断决战日). 与 `_enforce_hash_lock` (canonical train_btc_expected_r_institutional) 保持 "never drift" 契约. 回归锁: tests/training/test_hash_lock_content_gate.py. ReB: HASHLOCK_STAT_PHANTOM. | contract-violation |
 | FIX-20260805-006 | 2026-08-05 | cursor-agent | 39dc683f | DingTalk 机器人安全关键词 QuantOs 送达修复: alert_dispatcher._build_markdown 追加页脚 '---/QuantOs 实盘告警系统' — scripts 路径 (gate2/audit/drift/precheck) 告警此前全缺关键词 → errcode=310000 拒收; live 通道与 data-health 页脚已含. 实测 errcode==0 DINGTALK_SENT. 附带发现: DingTalkAlertChannel.send 只查 HTTP 200 不查 errcode (Deferred). | config-drift |
 | Date | FIX ID | Description |
 |------|--------|-------------|

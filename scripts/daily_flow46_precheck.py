@@ -16,8 +16,9 @@ What this is NOT:
 
 Iron Law #11: every number printed/written here comes from
 scripts.inspect_ofi_history.inspect() (Gate 2 stats), the sentinel's own
-state file, mt5_bridge_health.json, or `git status --porcelain` — the
-script is the sole evidence source.  All timestamps are normalized to
+state file, mt5_bridge_health.json, or the git content snapshot
+(`git diff HEAD --name-only` + `git ls-files --others`, see _run_git_content_snapshot)
+— the script is the sole evidence source.  All timestamps are normalized to
 timezone-aware UTC before any subtraction (IC 2026-08-05 Timezone Hygiene:
 naive-local minus naive-UTC would inject a constant 8h bias).
 
@@ -27,8 +28,9 @@ Decision machine (aggregate of five independent checks):
                                         gap ~15.5h; a missed day = ~39.5h)
   2. ofi_freshness: inspect().last_ts older than 4h   -> Sev1 (generous,
      absorbs the ~1h daily broker maintenance break)
-  3. hash_lock: dirty tracked .py/.yaml/.yml/.json outside data/ -> Sev1
-     (replicates _enforce_hash_lock; this is the 8/19 killer)
+  3. hash_lock: dirty tracked source OR untracked non-probe source
+     (.py/.yaml/.yml/.json outside data/) -> Sev1 — content-based, replicates
+     _enforce_hash_lock (this is the 8/19 killer)
   4. bridge_health: mt5_bridge_health.json disconnected / heartbeat >10min
      -> Sev2
   5. gate2_progress: informational only (presented, never alerted here)
@@ -67,8 +69,11 @@ _OFI_STALE_HOURS = 4.0
 _BRIDGE_STALE_MINUTES = 10.0
 # Battle date (Runbook §0).
 _BATTLE_DATE = date(2026, 8, 19)
-# hash-lock filter — replicate train_btc_expected_r_institutional.py:92-124
-# _enforce_hash_lock() exactly (never drift from it).
+# hash-lock filter — replicate train_btc_expected_r_institutional.py
+# _enforce_hash_lock() exactly (never drift from it).  Content-based since
+# DQAF-20260805-001: `git diff HEAD --name-only` (immune to stat-cache
+# phantoms + CRLF pseudo-diffs) + `git ls-files --others --exclude-standard`
+# (untracked source, minus _audit_*.py forensic probes).
 _HASH_LOCK_EXTS = (".py", ".yaml", ".yml", ".json")
 
 
@@ -139,17 +144,24 @@ def _age_hours(value: Any, now_utc: datetime) -> float | None:
     return (now_utc - parsed).total_seconds() / 3600.0
 
 
-def _run_git_porcelain() -> tuple[list[str], bool]:
-    """Run `git status --porcelain` from repo root.
+def _run_git_content_snapshot() -> tuple[list[str], list[str], bool]:
+    """Content-based working-tree snapshot (immune to git stat-cache phantoms).
 
-    Returns (lines, ok).  Default --porcelain does NOT list ignored files
-    (data/ and data_btc/ are gitignored — the hash-lock filter additionally
-    excludes any data-prefixed path).  Fail-open: git unavailable -> ([],
-    False), mirroring _enforce_hash_lock's `except` branch.
+    DQAF-20260805-001 (IC absolute approval): `git status --porcelain` is
+    stat-based — a process rewriting a tracked file with byte-identical
+    content (mtime bump only) yields a phantom ` M` that never self-heals,
+    false-positiveing the 8/19 gate.  Comparing WORKTREE to HEAD by content
+    (`git diff HEAD --name-only`) is invisible to such phantoms and to CRLF
+    pseudo-diffs (FIX-20260805-005 LF contract).
+
+    Returns (dirty_tracked, untracked, ok).  gitignored paths (data/,
+    data_btc/) never appear (--exclude-standard / diff semantics); the hash-lock
+    filter additionally excludes any data-prefixed path.  Fail-open: git
+    unavailable -> ([], [], False), mirroring _enforce_hash_lock's `except`.
     """
     try:
         proc = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "diff", "HEAD", "--name-only"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -158,30 +170,57 @@ def _run_git_porcelain() -> tuple[list[str], bool]:
             cwd=str(BASE),
         )
     except (OSError, subprocess.TimeoutExpired):
-        return [], False
+        return [], [], False
     if proc.returncode != 0:
-        return [], False
-    return [ln for ln in proc.stdout.splitlines() if ln.strip()], True
-
-
-def _classify_tree(lines: list[str]) -> dict[str, Any]:
-    """Classify porcelain lines the SAME way _enforce_hash_lock does.
-
-    - `?? path`            -> untracked (informational; expected probes)
-    - ` M`/`M `/`A `/`D `  -> strip 2-char status, keep tracked source files
-                             (.py/.yaml/.yml/.json) whose first path component
-                             does NOT start with "data".
-    """
-    dirty_source: list[str] = []
+        return [], [], False
+    dirty = [ln for ln in proc.stdout.splitlines() if ln.strip()]
+    try:
+        untracked_proc = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            cwd=str(BASE),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        untracked_proc = None
     untracked: list[str] = []
-    for line in lines:
-        if line.startswith("??"):
-            untracked.append(line[3:].strip())
-            continue
-        fname = line[2:].strip()
-        if fname.endswith(_HASH_LOCK_EXTS) and not Path(fname).parts[0].startswith("data"):
-            dirty_source.append(fname)
-    return {"dirty_source": sorted(dirty_source), "untracked": sorted(untracked)}
+    if untracked_proc is not None and untracked_proc.returncode == 0:
+        untracked = [ln for ln in untracked_proc.stdout.splitlines() if ln.strip()]
+    return dirty, untracked, True
+
+
+def _is_forensic_probe(path: str) -> bool:
+    """IC-mandated `_audit_*.py` forensic probes stay uncommitted by design
+    (ruff convention scripts/_audit_*.py, FIX-20260805-003) — never block."""
+    return path.endswith(".py") and Path(path).name.startswith("_audit_")
+
+
+def _classify_tree(dirty: list[str], untracked: list[str]) -> dict[str, Any]:
+    """Classify a content snapshot the SAME way _enforce_hash_lock does.
+
+    - dirty (tracked, WORKTREE != HEAD): keep source files (.py/.yaml/.yml/.json)
+      whose first path component does NOT start with "data".
+    - untracked (`git ls-files --others`): source files are blocking EXCEPT the
+      `_audit_*.py` forensic probes; all untracked are reported (informational).
+    """
+    dirty_source = [
+        f for f in dirty if f.endswith(_HASH_LOCK_EXTS) and not Path(f).parts[0].startswith("data")
+    ]
+    dirty_untracked_source = [
+        f
+        for f in untracked
+        if f.endswith(_HASH_LOCK_EXTS)
+        and not Path(f).parts[0].startswith("data")
+        and not _is_forensic_probe(f)
+    ]
+    return {
+        "dirty_source": sorted(dirty_source),
+        "dirty_untracked_source": sorted(dirty_untracked_source),
+        "untracked": sorted(untracked),
+    }
 
 
 def _eta_days(stats: dict[str, Any], h1_windows: int) -> float | None:
@@ -353,8 +392,12 @@ def run(data_dir: Path, *, dry_run: bool = False) -> int:
     stats = inspect(data_dir)
     sentinel = _check_sentinel(data_dir, now_utc)
     ofi = _check_ofi(stats, now_utc)
-    git_lines, git_ok = _run_git_porcelain()
-    tree = _classify_tree(git_lines) if git_ok else {"dirty_source": [], "untracked": []}
+    git_dirty, git_untracked, git_ok = _run_git_content_snapshot()
+    tree = (
+        _classify_tree(git_dirty, git_untracked)
+        if git_ok
+        else {"dirty_source": [], "dirty_untracked_source": [], "untracked": []}
+    )
     bridge = _check_bridge(data_dir, now_utc)
     countdown = _countdown(now_local)
 
@@ -366,7 +409,11 @@ def run(data_dir: Path, *, dry_run: bool = False) -> int:
     checks: dict[str, str] = {
         "sentinel_liveness": sentinel["severity"],
         "ofi_freshness": ofi["severity"],
-        "hash_lock": "Sev1" if tree["dirty_source"] else ("Sev2" if not git_ok else "OK"),
+        "hash_lock": (
+            "Sev1"
+            if (tree["dirty_source"] or tree["dirty_untracked_source"])
+            else ("Sev2" if not git_ok else "OK")
+        ),
         "bridge_health": bridge["severity"],
         "gate2_progress": "OK",  # informational — sentinel owns gate2 alerts
     }
@@ -395,8 +442,8 @@ def run(data_dir: Path, *, dry_run: bool = False) -> int:
         "ofi_last_ts": ofi["last_ts"],
         "ofi_age_h": ofi["age_hours"],
         "ofi_status": ofi["status"],
-        "tree_dirty": bool(tree["dirty_source"]),
-        "tree_dirty_files": tree["dirty_source"],
+        "tree_dirty": bool(tree["dirty_source"] or tree["dirty_untracked_source"]),
+        "tree_dirty_files": tree["dirty_source"] + tree["dirty_untracked_source"],
         "tree_untracked": tree["untracked"],
         "git_ok": git_ok,
         "bridge_connected": bridge["mt5_connected"],
@@ -429,7 +476,7 @@ def run(data_dir: Path, *, dry_run: bool = False) -> int:
     print(
         f"Gate 2: {n_windows}/{_H1_THRESHOLD} ({remaining} to go) | ETA ~{eta_date} | "
         f"sentinel={sentinel['status']} ofi={ofi['status']} "
-        f"hash_lock={'CLEAN' if not tree['dirty_source'] else 'DIRTY'} "
+        f"hash_lock={'CLEAN' if not (tree['dirty_source'] or tree['dirty_untracked_source']) else 'DIRTY'} "
         f"bridge={bridge['status']}"
     )
 
@@ -440,8 +487,10 @@ def run(data_dir: Path, *, dry_run: bool = False) -> int:
             "remaining": remaining,
             "eta": eta_date,
         }
-        if tree["dirty_source"]:
-            details["dirty_sources"] = ", ".join(tree["dirty_source"])
+        if tree["dirty_source"] or tree["dirty_untracked_source"]:
+            details["dirty_sources"] = ", ".join(
+                tree["dirty_source"] + tree["dirty_untracked_source"]
+            )
         if not git_ok:
             details["git_status"] = "unavailable"
         if sentinel["status"] == "stale":

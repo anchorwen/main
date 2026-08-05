@@ -22,11 +22,14 @@
 | gate2_progress | `inspect_ofi_history.inspect()` | 信息性 (呈现窗口数/ETA) | — |
 | sentinel_liveness | `data_btc/state/gate2_sentinel.json` | last_run 距今 >36h 或缺失 | Sev1 |
 | ofi_freshness | `inspect()` last_ts | 距今 >4h (覆盖每日 ~1h 休市) | Sev1 |
-| hash_lock | `git status --porcelain` | 脏 tracked `.py/.yaml/.yml/.json` 非 data/ | Sev1 |
+| hash_lock | `git diff HEAD --name-only` + `git ls-files --others --exclude-standard` | 脏 tracked source 或 untracked 非探针 source (`.py/.yaml/.yml/.json` 非 data/) | Sev1 |
 | bridge_health | `data_btc/reports/mt5_bridge_health.json` | 断连 或 heartbeat >10min | Sev2 |
 
-- **hash_lock 过滤器精确复制** `train_btc_expected_r_institutional.py:92-124`
+- **hash_lock 过滤器精确复制** `train_btc_expected_r_institutional.py` 的
   `_enforce_hash_lock` — 预检与 8/19 训练用同一判定，杜绝"预检说干净、训练却拒绝"。
+  **内容基 (DQAF-20260805-001 / FIX-20260805-007)**: `git diff HEAD --name-only`
+  (对 git stat 幽灵 + CRLF 伪差异免疫) + `git ls-files --others --exclude-standard`
+  (untracked source 阻断, 但 `_audit_*.py` 法证探针豁免)。
 - **时区卫生 (IC Timezone Hygiene)**: 所有时间戳经 `_parse_ts` 归一为
   timezone-aware UTC 后再相减 — 杜绝本地 (UTC+8) 与 naive UTC 直减的 8h 恒定偏差。
 - 聚合: any Sev1 → Sev1; else any Sev2 → Sev2; else OK。

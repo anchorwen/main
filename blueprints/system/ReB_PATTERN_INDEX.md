@@ -20,6 +20,20 @@
 
 ---
 
+### ReB-20260805-HASHLOCK_STAT_PHANTOM
+- **Pattern Signature**: `HASHLOCK_STAT_PHANTOM`
+- **Date Cataloged**: 2026-08-05
+- **Source Docket**: DQAF-20260805-001
+- **Related**: FIX-20260805-007 (RESOLVED), FIX-20260805-005 (LF contract double-insurance)
+
+**Definition**: A process rewriting a tracked file with byte-identical content (mtime bump only) desynchronizes git's stat cache → `git status --porcelain` reports a persistent phantom ` M` that never self-heals (`git update-index --refresh` fails; only `git add` clears it), even though the content hash == index blob. Any stat-based gate (`git status --porcelain` + extension filter) then false-positives on content-equivalent files. The signature: a "dirty tree" check built on METADATA (stat) instead of CONTENT (blob diff).
+
+**Prevention** (IMPLEMENTED): Hash-lock gates must compare WORKTREE to HEAD by CONTENT — `git diff HEAD --name-only` (immune to stat phantoms AND CRLF pseudo-diffs, which git's clean filter normalizes away) + `git ls-files --others --exclude-standard` for untracked source (blocking, minus `_audit_*.py` forensic probes). Three sites synchronized under the "never drift" contract: `_enforce_hash_lock` (canonical train_btc_expected_r_institutional), train.py inline copy, daily_flow46_precheck hash_lock. The write-side LF contract (FIX-20260805-005, `atomic_write_text newline="\n"`) removes the CRLF pseudo-diff source entirely — belt and suspenders.
+
+**Detection**: Automated regression — `tests/training/test_hash_lock_content_gate.py` (throwaway git repo: content-identical rewrite + mtime bump must NOT block; real semantic change must block; `_audit_*.py` untracked probe must NOT block; non-probe untracked source must block; gitignored data/ must never block). Grep for `git status --porcelain` used as a dirty predicate in automation.
+
+---
+
 ### ReB-20260803-XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD
 - **Pattern Signature**: `XAU_CENTRIC_HARDCODED_GLOBAL_THRESHOLD`
 - **Date Cataloged**: 2026-08-03
