@@ -49,6 +49,7 @@ def reconcile_and_record_closes(
         known_tickets=known_tickets,
         mt5_worker=mt5_worker,
         symbol=symbol,
+        state=state,
     )
     for evt in events:
         adapter.record(evt, journal_path, state=state, gate=gate)
@@ -82,6 +83,7 @@ def record_mia_closes(
             remaining_volume=0.0,
             symbol=symbol,
             mt5_worker=mt5_worker,
+            state=state,
         )
         if evt is not None and adapter.record(evt, journal_path, state=state, gate=gate):
             recorded += 1
@@ -192,6 +194,7 @@ class PositionCloseAdapter:
         known_tickets: dict[int, dict],
         mt5_worker: Any,
         symbol: str,
+        state: Any = None,
     ) -> list[PositionClosed]:
         """Detect volume changes and build PositionClosed events.
 
@@ -199,6 +202,9 @@ class PositionCloseAdapter:
             known_tickets: {ticket: {entry_price, side, strategy, ...}}
             mt5_worker: MT5Worker instance
             symbol: e.g. "XAUUSDc"
+            state: runtime state — DQAF-20260806-001 (FIX-2026XXXX-XXX): threaded
+                into _build_event so the SL label can read position_manager
+                trail_advances (Option A, mirrors reconciliation.py:198-204).
 
         Returns:
             List of PositionClosed events for this cycle.
@@ -239,6 +245,7 @@ class PositionCloseAdapter:
                 remaining_volume=current_vol,
                 symbol=symbol,
                 mt5_worker=mt5_worker,
+                state=state,
             )
             if event is not None:
                 events.append(event)
@@ -337,11 +344,16 @@ class PositionCloseAdapter:
         remaining_volume: float,
         symbol: str,
         mt5_worker: Any,
+        state: Any = None,
     ) -> PositionClosed | None:
         """Query MT5 deal history.  Build COMPLETE PositionClosed event.
 
         Uses DEAL cursor to only process unprocessed deals.
         If no deal found after 3 retries → CRITICAL log → return None.
+
+        state (DQAF-20260806-001, FIX-2026XXXX-XXX): lets the SL label read
+        position_manager trail_advances (Option A, mirrors reconciliation.py:
+        198-204).  Backward compatible — None ⇒ sl_hit_first (unchanged).
         """
         _cursor = self._last_deal_id.get(ticket, 0)
 
@@ -427,6 +439,36 @@ class PositionCloseAdapter:
                     _deal_profit = 0.0
                     _pnl_status = "pending_mt5_confirmation"
 
+            # ── DQAF-20260806-001: trail-aware SL label (adapter path) ──
+            # Mirror of reconciliation.py:198-204 (FIX-20260612-003).  That fix
+            # landed on the restart-only reconciliation path (live_cycle.py:1503,
+            # loop_iteration==1); the adapter is the ACTIVE journal writer
+            # (live_cycle.py:1756), so its hardcoded sl_hit_first silently
+            # relabelled every trailed SL exit since Strangler Fig #11
+            # (FIX-20260611-005, 2026-06-11) — 0 sl_hit_trailed ever emitted.
+            #
+            # Primary source: position_manager trail_advances (position still
+            # present at _build_event time — the position is only cleared in
+            # _notify_position_manager AFTER record() writes the journal).
+            trail_active = False
+            if state is not None:
+                _pm = getattr(state, "position_manager", None)
+                if _pm is not None:
+                    _pos = _pm.get_position(ticket) if hasattr(_pm, "get_position") else None
+                    if _pos is not None and getattr(_pos, "trail_advances", 0) > 0:
+                        trail_active = True
+            # MIA fallback (Strangler Fig #12): mia_close.py:89-92 captured
+            # trail_advances at detection time into trail_contribution; the
+            # ghost position may already be gone from position_manager.
+            # Restores mia_close.py:180-185 semantics.  Inert on the normal
+            # path — known_open_tickets entries never carry trail_contribution.
+            if not trail_active:
+                _trail_ct = open_entry.get("trail_contribution")
+                if isinstance(_trail_ct, dict) and (
+                    float(_trail_ct.get("trail_advances", 0) or 0) > 0
+                ):
+                    trail_active = True
+
             # ── Label from deal reason ──
             # DQAF-064 §1: Preserve watchdog exit reason from deal comment
             if _deal_comment.startswith("exit_watchdog:"):
@@ -437,7 +479,7 @@ class PositionCloseAdapter:
                 _short = "_".join(_parts[:2]) if len(_parts) >= 2 else _watchdog_reason[:30]
                 _label = f"watchdog:{_short}"
             elif _deal_reason == DEAL_REASON_SL:
-                _label = "sl_hit_first"
+                _label = "sl_hit_trailed" if trail_active else "sl_hit_first"
             elif _deal_reason == DEAL_REASON_TP:
                 _label = "tp_hit_first"
             elif _deal_comment:

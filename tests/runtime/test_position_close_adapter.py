@@ -481,3 +481,170 @@ class TestBuildEventExitDealSSOT:
         assert je["_pnl_status"] == "verified_from_mt5_deal"
         assert je["detail"]["close_price"] == 110.0
         assert je["pnl"] == 10.0
+
+
+class TestTrailAwareSLLabel:
+    """DQAF-20260806-001 (FIX-2026XXXX-XXX): SL-hit label must distinguish a
+    TRAILED SL from a first-touch SL.  Mirrors reconciliation.py:198-204
+    (FIX-20260612-003): state.position_manager.get_position(ticket).trail_advances
+    > 0 ⇒ label sl_hit_trailed, else sl_hit_first.
+
+    IC regression-lock mandate (Iron Law #5): the adapter is the ACTIVE journal
+    writer (live_cycle.py:1756); reconciliation runs only at restart, so the
+    trail-aware contract must live HERE too.  Welded by these tests — before
+    the fix, a trailed SL-hit is mislabeled sl_hit_first.
+
+    Primary source: position_manager trail_advances (Option A, mirrors
+    reconciliation).  MIA fallback: mia_close.py:89-92 captured trail_advances
+    at detection time into trail_contribution; the position may already be gone
+    from position_manager (ghost/unmanaged) → restore mia_close.py:180-185
+    semantics that Strangler Fig #12 (FIX-20260611-005) silently dropped.
+    """
+
+    def _sl_worker(self, comment: str = "") -> MagicMock:
+        worker = MagicMock()
+        entry = _mt5_deal(entry=0, ticket=1, price=64000.0, profit=0.0, time=100)
+        exit_ = _mt5_deal(
+            entry=1,
+            ticket=2,
+            price=63000.0,
+            profit=-1000.0,
+            reason=4,
+            time=200,
+            comment=comment,
+        )
+        worker.history_deals_get.return_value = [entry, exit_]
+        return worker
+
+    def _state(self, trail_advances: int) -> SimpleNamespace:
+        pos = SimpleNamespace(trail_advances=trail_advances)
+        pm = MagicMock()
+        pm.get_position.return_value = pos
+        return SimpleNamespace(position_manager=pm)
+
+    def test_sl_hit_with_trail_activity_labels_sl_hit_trailed(self) -> None:
+        """Trail actively tightened SL ⇒ trail exit, NOT first-touch SL."""
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={
+                "entry_price": 64000.0,
+                "side": "long",
+                "strategy": "btc_swing",
+                "volume": 0.1,
+            },
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=self._sl_worker(),
+            state=self._state(trail_advances=3),
+        )
+        assert evt is not None
+        assert evt.label == "sl_hit_trailed"
+        assert evt.exit_reason == "sl_hit"
+
+    def test_sl_hit_without_trail_stays_sl_hit_first(self) -> None:
+        """trail_advances == 0 ⇒ first-touch SL (unchanged contract)."""
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={
+                "entry_price": 64000.0,
+                "side": "long",
+                "strategy": "btc_swing",
+                "volume": 0.1,
+            },
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=self._sl_worker(),
+            state=self._state(trail_advances=0),
+        )
+        assert evt is not None
+        assert evt.label == "sl_hit_first"
+
+    def test_sl_hit_without_state_backward_compat(self) -> None:
+        """state=None (callers with no position_manager) ⇒ sl_hit_first."""
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={
+                "entry_price": 64000.0,
+                "side": "long",
+                "strategy": "btc_swing",
+                "volume": 0.1,
+            },
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=self._sl_worker(),
+        )
+        assert evt is not None
+        assert evt.label == "sl_hit_first"
+
+    def test_watchdog_comment_priority_preserved(self) -> None:
+        """exit_watchdog: comment outranks trail label (DQAF-064 §1)."""
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={
+                "entry_price": 64000.0,
+                "side": "long",
+                "strategy": "btc_swing",
+                "volume": 0.1,
+            },
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=self._sl_worker(comment="exit_watchdog:hesitation"),
+            state=self._state(trail_advances=5),
+        )
+        assert evt is not None
+        assert evt.label == "watchdog:hesitation"
+
+    def test_mia_entry_trail_contribution_fallback(self) -> None:
+        """MIA path (Strangler Fig #12): position_manager may have already
+        cleared a ghost — trail_contribution captured at detection time
+        (mia_close.py:89-92) still proves the SL was trailed."""
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        evt = adapter._build_event(
+            ticket=1,
+            open_entry={
+                "entry_price": 64000.0,
+                "side": "long",
+                "strategy": "btc_swing",
+                "volume": 0.1,
+                "trail_contribution": {
+                    "initial_sl": 63200.0,
+                    "final_sl": 64500.0,
+                    "trail_advances": 2,
+                },
+            },
+            closed_volume=0.1,
+            remaining_volume=0.0,
+            symbol="BTCUSDc",
+            mt5_worker=self._sl_worker(),
+        )
+        assert evt is not None
+        assert evt.label == "sl_hit_trailed"
+
+    def test_detect_and_build_end_to_end_trail_label(self) -> None:
+        """Runtime path (live_cycle.py:1756 → reconcile_and_record_closes →
+        detect_and_build → _build_event): a trailed position closed by SL
+        produces sl_hit_trailed through the PUBLIC API."""
+        adapter = PositionCloseAdapter(tick_size=1.0)
+        worker = self._sl_worker()
+        pos = MagicMock()
+        pos.ticket = 1
+        pos.volume = 0.0  # closed → volume delta triggers detection
+        worker.positions_get.return_value = [pos]
+        events = adapter.detect_and_build(
+            known_tickets={
+                1: {"volume": 0.1, "entry_price": 64000.0, "side": "long", "strategy": "btc_swing"},
+            },
+            mt5_worker=worker,
+            symbol="BTCUSDc",
+            state=self._state(trail_advances=3),
+        )
+        assert len(events) == 1
+        assert events[0].label == "sl_hit_trailed"

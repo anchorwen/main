@@ -59,6 +59,23 @@
 
 ---
 
+### CCT-20260806-001
+- **Docket ID**: DQAF-20260806-001
+- **日期**: 2026-08-06
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: journal 自 2026-06-10 后 0 条 `sl_hit_trailed`; TRAIL_TELEMETRY_BLINDSPOT 探针契约对齐 (FIX-20260805-009) 后仍触发 (诚实信号); 近窗 (7/15+) 81 笔 sl_hit_first 高密度存在。
+  - [Layer 2 — 中间异常]: 81 笔 sl_hit_first 中 **41 笔 SL 物理移动过** (position_snapshots current_sl 系列变化, 40 笔 ≥1.0R, 23 笔 ≥3 级, 最高 85.6R); **MT5 成交价反证 40/41 成交价落在『最终移动后 SL』** (broker 强制执行 trail) — 物理层健康, Chandelier trail 真实 ratchet。逻辑层: trail 出场被系统性误标 sl_hit_first。
+  - [Layer 3 — 根因]: L3 (RC-06 contract-violation) — `position_close_adapter.py:439-440` 对 DEAL_REASON_SL 硬编码 `sl_hit_first`, `_build_event` 签名无 state → 结构上读不到 `position_manager.trail_advances`。时间线: 6/10 旧 MIA 路径产出 2 条 sl_hit_trailed (mia_close.py:182-185 trail-aware 参考实现) → 6/11 FIX-20260611-005 Strangler Fig #11 adapter 接管所有 close 记录 (label 硬编码) → 6/12 FIX-20260612-003 trail-aware 修复落在已被替代的 reconciliation.py (仅重启补账 live_cycle.py:1503 loop_iteration==1) → 修复与写入路径错位 (LABEL_PRODUCER_SWAP_SILENT_AMNESIA)。
+- **证据引用**:
+  - Source 1: `scripts/_audit_trail_mislabel_20260806.py` (Iron Law #11 脚本, 留工作树) — 81 票根: 41 SL 移动 / 40 ≥1.0R / 40/41 成交价落移动后 SL / 23 多步≥3级 / 方向 41/41 正确; 32 FLAT, 8 无快照
+  - Source 2: `core/runtime/position_close_adapter.py:439-440` (硬编码 sl_hit_first), `:332` `_build_event` 签名无 state; `core/runtime/reconciliation.py:198-204` (trail-aware 打标, FIX-20260612-003), `core/runtime/live_cycle.py:1503` (仅重启补账触发), `:1756` (adapter 主写路径)
+  - Source 3 (跨品种): `core/runtime/mia_close.py:89-92` + `:180-185` (trail-aware 参考实现, Strangler Fig #12 路由后被 adapter 覆盖为 sl_hit_first); XAU 同构风险 (adapter 共享代码)
+- **是否被推翻**: 否 (AR 否决 4 反假设: H1 提前 GC→adapter 无 state 读不到; H2 snapshot 乐观→40/41 成交价反证; H3 仅 breakeven→23 笔多步铁证 trail; H4 BTC 无 trail→41 笔 broker 侧 SL 真实移动)
+- **关联 ReB Pattern**: ReB-20260806-LABEL_PRODUCER_SWAP_SILENT_AMNESIA
+
+---
+
 ### CCT-20260805-001
 - **Docket ID**: DQAF-20260805-001
 - **日期**: 2026-08-05

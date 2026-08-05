@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-05T16:30:38Z
+> **自动生成**: 2026-08-05T19:05:13Z
 
 ## Package-Level Dependencies
 
@@ -572,6 +572,7 @@
 - `_audit_idempotent_key_20260805.py` → (无内部依赖)
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
+- `_audit_trail_mislabel_20260806.py` → (无内部依赖)
 - `_audit_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_band_extremes_20260805.py` → (无内部依赖)
 - `_audit_xau_two_longs_20260805.py` → (无内部依赖)

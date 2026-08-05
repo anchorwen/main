@@ -34,6 +34,20 @@
 
 ---
 
+### ReB-20260806-LABEL_PRODUCER_SWAP_SILENT_AMNESIA
+- **Pattern Signature**: `LABEL_PRODUCER_SWAP_SILENT_AMNESIA`
+- **Date Cataloged**: 2026-08-06
+- **Source Docket**: DQAF-20260806-001
+- **Related**: FIX-20260806-001 (RESOLVED, Option A), FIX-20260611-005 (Strangler Fig #11 producer swap), FIX-20260612-003 (trail-aware label on deprecated path), mia_close.py (trail-aware reference), DQAF-20260805-003 (probe follow-up chain)
+
+**Definition**: A Strangler Fig replacement takes over a write path (here: PositionCloseAdapter became the sole close-event producer on 6/11 via FIX-20260611-005) but the DOMAIN-AWARE label contract of the old producer (trail-aware `sl_hit_trailed`, which landed one day later in FIX-20260612-003) is applied to the DEPRECATED path (reconciliation.py, restart-only `loop_iteration==1`) while the NEW producer silently hardcodes a coarse label (`sl_hit_first` at position_close_adapter.py:439-440, signature without `state`). The fix and the writer diverge in the same release window → telemetry goes dark (0× `sl_hit_trailed` for 8 weeks) with zero error. Distinguishing signature vs SEMANTIC_DRIFT_MONITOR_PROBE: the probe fix was about the OBSERVER; this is the PRODUCER swallowing domain signal at the write boundary. ECoL proof of the physical layer: broker-side SL trail executed perfectly (41/81 SL moved, 40/41 fills landed on the trailed SL) — only the observation label collapsed.
+
+**Prevention** (IMPLEMENTED, Option A surgical): The active producer must read the same runtime state the domain contract keys on. `state.position_manager` → `get_position(ticket).trail_advances` threaded into `_build_event`/`detect_and_build` (mirror of reconciliation.py:198-204) + MIA `trail_contribution` fallback restoring mia_close.py:180-185 semantics lost in the swap. When a Strangler Fig replaces a writer, AUDIT the label-decision logic itself (not just the write API) and migrate the label contract in the SAME change — a swapped producer carrying a hardcoded label is a silent telemetry kill. **Deferred (Option C, 8/19 后)**: unify the three divergent label sources (adapter/reconciliation/mia_close) into one function — kills the 3-way semantic fork at the root.
+
+**Detection**: (1) Grep the ACTIVE close-writer for `sl_hit_first` literal; verify it reads trail_advances or has no state param. (2) Regression lock `tests/runtime/test_position_close_adapter.py::TestTrailAwareSLLabel` — 6 tests weld the contract: trailed SL → sl_hit_trailed; no-trail → sl_hit_first; state=None → sl_hit_first (back-compat); watchdog comment priority; MIA trail_contribution fallback; detect_and_build end-to-end. (3) Monitor: journal `sl_hit_trailed` count should now rise from 0 as trailed SL exits occur; `TRAIL_TELEMETRY_BLINDSPOT` probe (FIX-20260805-009, inclusive match) stays honest.
+
+---
+
 ### ReB-20260805-SEMANTIC_DRIFT_MONITOR_PROBE
 - **Pattern Signature**: `SEMANTIC_DRIFT_MONITOR_PROBE`
 - **Date Cataloged**: 2026-08-06

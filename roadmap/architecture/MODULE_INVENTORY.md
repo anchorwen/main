@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-05T16:30:38Z
-> **扫描模块数**: 794
+> **自动生成**: 2026-08-05T19:05:13Z
+> **扫描模块数**: 795
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -542,7 +542,7 @@
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 634 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 676 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 327 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
@@ -658,6 +658,7 @@
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
+| `_audit_trail_mislabel_20260806.py` | ✅ active | — | 3 | 281 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
 | `_audit_xau_two_longs_20260805.py` | ✅ active | — | 1 | 38 | — | |
