@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-04T17:07:51Z
-> **扫描模块数**: 784
+> **自动生成**: 2026-08-05T02:57:31Z
+> **扫描模块数**: 789
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -653,7 +653,12 @@
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
+| `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
+| `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
+| `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
+| `_audit_xau_two_longs_20260805.py` | ✅ active | — | 1 | 38 | — | |
+| `_audit_xau_votes_pnl_20260805.py` | ✅ active | — | 4 | 173 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |

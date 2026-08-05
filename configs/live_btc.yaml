@@ -140,7 +140,7 @@ alert_system:
     threshold: 0
 brains:
   registry_entries:
-  - enabled: true
+  - enabled: false
     path: configs/brains_btc/BTC_Swing_V4.json
   - enabled: false
     path: configs/brains_btc/BTC_Swing_V12_H1_Survival.json
@@ -156,11 +156,11 @@ brains:
     path: configs/brains_btc/BTC_Expected_R_V4_SHORT.json
   - enabled: false
     path: configs/brains_btc/BTC_Swing_M15.json
-  - enabled: true
+  - enabled: false
     path: configs/brains_btc/BTC_Swing_M30.json
-  - enabled: true
+  - enabled: false
     path: configs/brains_btc/BTC_Swing_H1_V2.json
-  - enabled: true
+  - enabled: false
     path: configs/brains_btc/BTC_Swing_H4.json
   - path: configs/brains_btc/BTC_Expected_R_V5_LONG_20260803_120849.json
     enabled: true
