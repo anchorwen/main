@@ -310,6 +310,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/scan_ofi_wasserstein.py",  # FIX-20260802-005: T21 Gate-1 OFI Wasserstein scan
         "scripts/features/reconcile_store_schemas.py",  # FIX-20260803-005: schema registration reconciliation
         "scripts/gate2_sentinel.py",  # FIX-20260805-003: Gate 2 daily accumulation sentinel (reuses inspect())
+        "scripts/daily_flow46_precheck.py",  # FIX-20260805-004: daily battle-readiness precheck (reuses inspect + sentinel + git status)
     ],
     "market_mtf": [
         "core/market/mtf_price_service.py",
