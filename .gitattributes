@@ -10,6 +10,9 @@
 *.sh text eol=lf
 
 # Keep source files LF to avoid cross-platform churn.
+# IC 2026-08-05 (The Git Hygiene Dictate): hash-lock 过滤集为 .py/.yaml/.yml/.json
+# (_enforce_hash_lock) — 四类扩展名全部锁死 eol=lf, 杜绝 CRLF 伪差异再触发误拦。
 *.py text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.json text eol=lf
