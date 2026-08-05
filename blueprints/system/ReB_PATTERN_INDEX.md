@@ -34,6 +34,20 @@
 
 ---
 
+### ReB-20260805-SEMANTIC_DRIFT_MONITOR_PROBE
+- **Pattern Signature**: `SEMANTIC_DRIFT_MONITOR_PROBE`
+- **Date Cataloged**: 2026-08-06
+- **Source Docket**: DQAF-20260805-003
+- **Related**: FIX-20260805-009 (RESOLVED), FIX-20260612-003 (label contract origin), DQAF-20260806-001 (follow-up: trail exit telemetry gap)
+
+**Definition**: A monitoring/alerting probe keys on an EXACT literal value (here: the bare label key `"trail"`) that the underlying data contract later replaced with a versioned synonym (`sl_hit_trailed`, written by FIX-20260612-003). The probe's dictionary never catches up → the warning fires on every cycle even though the telemetry it claims is missing is actually healthy. Signature: a monitor condition that must be kept in sync with a producer-side label/token vocabulary, checked as exact-equality instead of contract-inclusive membership. A deeper trap surfaced during this fix: the probe scans a WINDOW (tail-500) while the "evidence" of health (2× `sl_hit_trailed`) lived outside that window — so after the vocabulary fix the warning persisted as an HONEST signal pointing to a genuine recent-window absence, which must be evaluated on its own (DQAF-20260806-001), not silenced.
+
+**Prevention** (IMPLEMENTED): Monitor probes must match the producer's label CONTRACT inclusively (`any("trail" in k for k in labels)`), not an exact historical token. When a producer changes label vocabulary, grep the consumers/probes for the old exact token and update them in the same change. When verifying "telemetry is healthy", measure on the SAME window the probe scans (tail-500), never the full corpus — a full-corpus positive that is outside the probe window leaves the warning legitimately firing.
+
+**Detection**: Grep check/alert code for exact-string membership tests (`X not in dict`) against label/token vocabularies produced elsewhere; flag when the producer writes a compound/variant token. Regression lock: `tests/observability/test_trade_journal_trail_probe.py` asserts inclusive-match semantics (sl_hit_trailed present → no warning; genuinely absent → warning retained; below close-count threshold → no warning).
+
+---
+
 ### ReB-20260805-HASHLOCK_STAT_PHANTOM
 - **Pattern Signature**: `HASHLOCK_STAT_PHANTOM`
 - **Date Cataloged**: 2026-08-05

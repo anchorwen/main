@@ -97,8 +97,11 @@ class HealthCheckMethods:
             f"Retries: {retry_count}"
         )
 
-        # Annotate if 'trail' label is absent (ReB-20260610-001 blindspot)
-        if "trail" not in labels and close_count > 10:
+        # Annotate if NO trail-related exit label is present (ReB-20260610-001
+        # blindspot).  Since FIX-20260612-003 the reconciliation layer records
+        # trail-active SL hits as 'sl_hit_trailed' — match that vocabulary
+        # inclusively instead of a stale exact bare-'trail' key probe.
+        if not any("trail" in k for k in labels) and close_count > 10:
             message += " | WARNING: 'trail' exit label never recorded (TRAIL_TELEMETRY_BLINDSPOT)"
 
         return SourceCheckResult(

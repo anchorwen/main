@@ -44,6 +44,21 @@
 
 ---
 
+### CCT-20260805-003
+- **Docket ID**: DQAF-20260805-003
+- **日期**: 2026-08-06
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: trade_journal 健康检查每轮消息追加 "WARNING: 'trail' exit label never recorded (TRAIL_TELEMETRY_BLINDSPOT)" (health_checks.py:102), status 仍 PASS/JOURNAL_OK — 告警噪音级, 不触发升级。
+  - [Layer 2 — 根因]: 探针精确键 `"trail" not in labels` (health_checks.py:101) 未随 FIX-20260612-003 label 契约演进 — reconciliation.py:193-217 将 trail-active SL 出场写为 `sl_hit_trailed` (注释 :197 "closes the TRAIL_TELEMETRY_BLINDSPOT"), 精确裸键 "trail" 永不存在 → 每轮误报。
+- **证据引用**:
+  - Source 1: core/observability/health_checks.py:101-102 (精确键探测 + 警告注入), core/runtime/reconciliation.py:193-217 (sl_hit_trailed 契约)
+  - Source 2: data_btc/live_trade_journal.jsonl — 全量 label 分布 1263 close: sl_hit_trailed=2 (2026-06-10), sl_hit_first=274; tail-500 窗口 (7/21-7/24, 249 close): trail label = 0
+- **是否被推翻**: 否 (契约对齐为最终根因; 尾窗真实缺失为诚实信号, 转 DQAF-20260806-001)
+- **关联 ReB Pattern**: ReB-20260805-SEMANTIC_DRIFT_MONITOR_PROBE
+
+---
+
 ### CCT-20260805-001
 - **Docket ID**: DQAF-20260805-001
 - **日期**: 2026-08-05
