@@ -165,6 +165,11 @@ def _build_markdown(card: AlertCard, cooling_note: str = "") -> str:
 
     checksum = hashlib.sha256(card.timestamp.encode()).hexdigest()[:8]
     lines.append(f"`checksum: {checksum}`")
+    # FIX-20260805-006: DingTalk robot custom security keyword "QuantOs" — every
+    # script-path alert must contain it or the API rejects with errcode=310000.
+    # Footer mirrors alert_channels.py / send_data_health_alert.py convention.
+    lines.append("---")
+    lines.append("QuantOs 实盘告警系统")
 
     return _sanitize("\n".join(lines))
 

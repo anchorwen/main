@@ -695,7 +695,7 @@ def cmd_reconcile(
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass  # No existing transition log to preserve
         _svc.save(str(gov_path), lock_timeout=30.0)
-        live_path.write_text(live_yaml, encoding="utf-8")
+        live_path.write_text(live_yaml, encoding="utf-8", newline="\n")  # FIX-20260805-005: LF
         if cleanup_ledger:
             ledger_path.write_text(
                 json.dumps(ledger_data, indent=2, ensure_ascii=False), encoding="utf-8"

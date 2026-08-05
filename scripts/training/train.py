@@ -750,7 +750,7 @@ def _auto_register_in_live_yaml(
     live["brains"]["registry_entries"] = entries
 
     try:
-        with open(live_yaml_path, "w", encoding="utf-8") as f:
+        with open(live_yaml_path, "w", encoding="utf-8", newline="\n") as f:  # FIX-20260805-005: LF
             _yaml.safe_dump(live, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
         print(f"[train] Registered {brain_id} in live.yaml")
     except (OSError, ValueError) as e:
@@ -809,7 +809,7 @@ def _auto_register_in_governance(
     )
 
     try:
-        with open(gov_path, "w", encoding="utf-8") as f:
+        with open(gov_path, "w", encoding="utf-8", newline="\n") as f:  # FIX-20260805-005: LF
             json.dump(state, f, indent=2, ensure_ascii=False)
         print(f"[train] Registered {brain_id} in governance_state.json (candidate)")
     except (OSError, ValueError) as e:

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-05T09:48:27Z
+> **自动生成**: 2026-08-05T10:32:08Z
 > **扫描模块数**: 792
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -173,7 +173,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `atomic_file_writer.py` | ✅ active | AtomicFileError, AtomicFileWriter | 14 | 169 | — | |
+| `atomic_file_writer.py` | ✅ active | AtomicFileError, AtomicFileWriter | 14 | 172 | — | |
 | `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 521 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 17 | 350 | — | |
@@ -667,7 +667,7 @@
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
 | `_verify_governance_evaluator.py` | ✅ active | — | 2 | 149 | — | |
-| `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 216 | — | |
+| `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 221 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `analyze_dual_symbol_trades.py` | ✅ active | — | 4 | 275 | — | |
@@ -729,7 +729,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 745 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 746 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |

@@ -62,6 +62,7 @@ See [Architecture](#architecture) above — the scheduler-driven pipeline (Task 
 
 ## Fix History
 
+| FIX-20260805-006 | 2026-08-05 | cursor-agent | 39dc683f | DingTalk 机器人安全关键词 QuantOs 送达修复: alert_dispatcher._build_markdown 追加页脚 '---/QuantOs 实盘告警系统' — scripts 路径 (gate2/audit/drift/precheck) 告警此前全缺关键词 → errcode=310000 拒收; live 通道与 data-health 页脚已含. 实测 errcode==0 DINGTALK_SENT. 附带发现: DingTalkAlertChannel.send 只查 HTTP 200 不查 errcode (Deferred). | config-drift |
 | Date | FIX ID | Description |
 |------|--------|-------------|
 | 2026-08-05 | FIX-20260805-003 | **Gate 2 先锋哨兵部署 (IC 裁决 2, Red Gap 1)**. `scripts/gate2_sentinel.py` — daily OFI accumulation monitor reusing `inspect_ofi_history.inspect()` (statistics SSOT) + `alert_dispatcher.dispatch_alert()` (DingTalk, cooling built in). 6-state decision machine (data missing / record rollback / Gate2 READY once / 24h stall / near-deadline / normal). Stall detection accounts for broker weekend closure + ~1h daily maintenance halt (IC 2026-08-05 correction: weekend runs skipped, ETA from historical average h1_windows/span_days). Mounted as Windows schtasks `Future\Gate2Sentinel` daily 12:30 (Last Result 0 verified, progress trail `data_btc/state/gate2_sentinel.log`). Design: docs/runbooks/gate2_sentinel_deployment.md. Zero new alert/statistics logic (Decoupling/Iterability preserved). |

@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260805-005 | 2026-08-05 | cursor-agent | — | **CRLF 字节级根治 (IC 绝对批准 2026-08-05, L2)** — `scripts/brain.py:698` brain 管理旁路直写 live.yaml 加 `newline="\n"` 同化 LF, 与 atomic_write_text 单收敛点构成同类模式全覆盖. 详见 FIX_REGISTRY. | RC-06 — contract-violation |
 | FIX-20260805-003 | 2026-08-05 | cursor-agent | — | **8/19 Flow46 决战前置清偿 (The Final Lock)** — MODULE_SOURCE_MAP 登记 `scripts/gate2_sentinel.py`→features_service + `scripts/_merge_aligned_multitf_data.py`→market_mtf; 架构文档自动刷新 (DEPENDENCY_GRAPH/MODULE_INVENTORY/CHANGELOG); Runbook 双文档定稿 + schtasks 哨兵部署. 详见 FIX_REGISTRY. | RC-12 — new module registration |
 | FIX-20260805-004 | 2026-08-05 | cursor-agent | — | **Daily Flow46 battle-readiness precheck** — MODULE_SOURCE_MAP 登记 `scripts/daily_flow46_precheck.py`→features_service; 架构文档自动刷新; 部署 runbook `docs/runbooks/daily_flow46_precheck_deployment.md`. 详见 FIX_REGISTRY. | RC-12 — new module registration |
 | FIX-20260804-007 | 2026-08-04 | cursor-agent | — | **MODULE_SOURCE_MAP: add `scripts/audits/_audit_xau_votes_today.py` → monitor_dashboard** (DQAF-20260804-006 法证工具纳入版本库 — IC 批准; XAU 退化脑投票审计, 由 scripts/ 根迁移至 scripts/audits/ 并参数化 --date/--data-dir). | RC-12 — new module registration |

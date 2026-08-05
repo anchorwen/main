@@ -9,11 +9,10 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from core.deployment.atomic_file_writer import (
     AtomicFileError,
     AtomicFileWriter,
+    atomic_write_text,
 )
 
 
@@ -40,7 +39,7 @@ class TestAtomicFileWriterInit:
         assert len(w._targets) == 2
 
     def test_init_with_string_targets(self) -> None:
-        w = AtomicFileWriter(["/a/file.json"])
+        w = AtomicFileWriter([Path("/a/file.json")])
         assert isinstance(w._targets[0], Path)
 
     def test_add_target(self) -> None:
@@ -209,3 +208,31 @@ class TestCleanup:
     def test_unlink_nonexistent_no_error(self) -> None:
         AtomicFileWriter._unlink(Path("/nonexistent/file.xyz"))
         # Should not raise
+
+
+class TestLFByteOutput:
+    """FIX-20260805-005 regression lock: writers must emit LF bytes, never CRLF.
+
+    On Windows, text-mode write_text() without ``newline`` translates ``\\n`` →
+    ``\\r\\n``, producing a CRLF working copy → git pseudo-diff → 8/19 training
+    hash-lock rejection. These tests fail on Windows before the fix and pass
+    after; on Linux they pass trivially (``newline="\\n"`` is the default).
+    """
+
+    def test_atomic_write_text_emits_lf_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "cfg.yaml"
+            atomic_write_text(target, "a: 1\nb: 2\n")
+            data = target.read_bytes()
+            assert b"\r\n" not in data
+            assert data.endswith(b"\n")
+
+    def test_stage_content_emits_lf_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "out.json"
+            w = AtomicFileWriter([target])
+            staging = w.stage_content(target, '{"k": "v"}\n')
+            data = staging.read_bytes()
+            assert b"\r\n" not in data
+            assert data.endswith(b"\n")
+            w._cleanup()

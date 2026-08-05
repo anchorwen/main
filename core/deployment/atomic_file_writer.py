@@ -72,7 +72,7 @@ class AtomicFileWriter:
     def stage_content(self, target: Path, content: str) -> Path:
         """Write new content to staging file. Returns staging path."""
         staging = self.staging_path(target)
-        staging.write_text(content, encoding="utf-8")
+        staging.write_text(content, encoding="utf-8", newline="\n")  # FIX-20260805-005: LF contract
         self._staging[target] = staging
         return staging
 
@@ -149,7 +149,10 @@ def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> N
     On any error the original file is untouched.
     """
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding=encoding)
+    # FIX-20260805-005: force LF on Windows — text-mode write_text would emit \r\n
+    # → git pseudo-diff → 8/19 training hash-lock rejection. newline="\n" is the
+    # cross-platform no-op on Linux, hard LF contract on Windows.
+    tmp.write_text(content, encoding=encoding, newline="\n")
     try:
         tmp.replace(path)
     except OSError:
