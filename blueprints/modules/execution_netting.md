@@ -63,6 +63,12 @@ PortfolioNettingConfig(
 |--------|-----------------|-----|
 | runtime/live_cycle | PortfolioNettingGate, PortfolioNettingConfig | Pre-flush netting gate |
 
+## Known Issues
+
+- **Same-cycle pending orders only**: Netting swallows competing pending orders within one cycle. Protection against opening against EXISTING positions is delegated to `CrossStrategyCoordinator` (position-level, per-decision) — a layered contract, not a gap in this module.
+- **`reduce` mode residue**: When `|net|/gross` is above threshold but the minority side is non-trivial, `reduce` still dispatches the majority — the netted exposure can remain material. `swallow` (institutional default) is the fail-closed mode.
+- **Pre-dispatch decision**: The swallow decision is made before `exec_queue.flush()`. It does not re-validate against post-decision price movement — a gap between decision and fill is not covered by this gate.
+
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
 |----------|-----------|----------|

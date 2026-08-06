@@ -61,6 +61,12 @@ d² = Σ_i ((x_i - μ_i) / σ_i)²  (normalized Euclidean distance)
 |--------|-----------------|-----|
 | runtime/strategy_evaluator | OODGateway (via _get_ood_gateway) | Cut 2 pre-inference OOD check |
 
+## Known Issues
+
+- **Calibrated schemas only**: OOD coverage exists only for schemas with exported params (`v9_institutional_40`, `v4.3_microstructure_9`). Other feature schemas run without OOD protection until calibrated via `export_ood_params.py`.
+- **Diagonal covariance fallback**: When sample count is insufficient for a full covariance matrix, per-dimension normalized Euclidean distance is used — weaker at detecting correlated drift across features.
+- **Recalibration dependency**: Static full-history calibration blocks on secular regime shifts (FIX-20260720-001 introduced rolling-window recalibration). Params must be re-exported as windows roll, or the gate's thresholds become stale.
+
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
 |----------|-----------|----------|

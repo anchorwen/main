@@ -33,6 +33,49 @@ This blueprint tracks the institutional evolution from V4.1 → V4.2 → V4.3, s
 
 ---
 
+## Key Files
+
+| File | Role |
+|------|------|
+| `F:\ai\Dual_Assassin\Dual_Assassin_Live.py` | Live loop — MT5 data → XGBoost radars → PPO meta → VR regime → dispatch |
+| `F:\ai\Dual_Assassin\Dual_Assassin_Live_v7.py` | V7 variant (dual-run, FIX-20260728-004 PID-lock guard) |
+| `d:\future\micro_features_live.py` | Shared 34-dim micro-structure feature computer (imported by live loop) |
+| `F:\ai\Dual_Assassin\god_*_micro.json` / `rev_*_micro.json` | 4 XGBoost micro-enriched models (70d/68d) |
+| `F:\ai\Dual_Assassin\ppo_dual_assassin.zip` | PPO meta-controller (position sizing) |
+| `F:\ai\Dual_Assassin\open_tickets_state.json` | State persistence (recreated on crash) |
+
+## Data Flow
+
+```
+Dual_Assassin_Live.py (single process, no external I/O beyond MT5)
+├─ MT5 copy_rates_from_pos(600) → OHLC → V14(36d) + V15(34d)
+├─ MT5 copy_ticks_range(prev bar) → micro_features_live.py
+│   ├─ compute_micro_features_from_ticks() → 14 per-tick arrays
+│   ├─ aggregate_per_tick_to_bar() → 34 scalars
+│   └─ apply_price_offsets() → mid_open_offset, mid_close_offset
+└─ np.concatenate() → V14(70d)/V15(68d) → XGBoost (p_tb,p_ts,p_rb,p_rs)
+   → PPO (0/1.0x/3.0x sizing) → RegimeDetector VR routing → MT5 dispatch
+```
+
+## Inbound Dependencies
+
+| Source | What is consumed | Why |
+|--------|-----------------|-----|
+| MT5 (Exness, Magic=888888) | `copy_rates_from_pos` OHLC + `copy_ticks_range` ticks | Live market data + execution |
+| `d:\future\micro_features_live.py` | 34-dim micro feature computer (shared library) | Micro-structure features for enriched XGBoost models |
+| `F:\ai\Dual_Assassin\*_micro.json` models | Pre-trained XGBoost + PPO artifacts | Inference |
+
+## Outbound Dependents
+
+| Module | What it uses | Why |
+|--------|--------------|-----|
+| `scripts/_retrain_with_micro.py` (d:\future) | Micro feature training pipeline | Offline model retraining (`--deploy`) |
+| `scripts/_micro_enrichment_test.py` / `_validate_tick_load.py` / `_test_micro_live.py` | Validation/EDA helpers | Post-deployment checks (see Verification) |
+| FIX_REGISTRY (Dual_Assassin module) | Fix ledger | Tracks V4.x fixes (FIX-20260724-001…004, 20260725-003/004, 20260728-002/004) |
+| External watchdog | `watchdog_kill.log` + heartbeat | Stall detection (FIX-20260728-004) |
+
+---
+
 ## Version History
 
 ### V4.1 Baseline (2026-07-21) — Performance Baseline
@@ -403,6 +446,8 @@ If over-blocking observed (≥48h zero trades during active session):
 
 | Fix ID | Date | Summary | Root Cause |
 |:---|:---|:---|:---|
+| FIX-20260728-004 | 2026-07-28 | **L2: Process Self-Protection Triad — PID Lock + Heartbeat + Log Tee (DQAF-20260728-003).** PID lock prevents duplicate instances competing for same MT5 terminal (root: v7+V4.4 dual-run on Magic 888888). Heartbeat (`heartbeat.json`) written every bar cycle with signal state for external watchdog stall detection. Log tee (`live_console.log`) captures all console output for post-mortem. 1 file, +100 lines. ReB: `SILENT_OBSERVER`. | L2 — three concurrent design gaps: no instance protection, no liveness signal, no durable diagnostics. Process could hang silently on MT5 IPC deadlock with zero observable evidence (confirmed in `watchdog_kill.log`) |
+| FIX-20260728-002 | 2026-07-28 | **L3: Hysteresis Exit — per-trade dynamic exit threshold (DQAF-20260728-001).** Replaces static 1.5σ Alpha Decay exit with peak-anchored hysteresis: `exit_σ = peak_σ - 0.8σ` (MIN_EXIT floor=1.0σ). Strong entries (peak=3.0σ)→exit at ~2.2σ; weak entries (peak=2.0σ)→exit at ~1.2σ. `_open_tickets` extended with `peak_rel` (monotonic ratchet: BUY=max, SELL=min) and `rel_type`. Static 1.5σ retained as fallback backstop only. OAT: 方案 A deployed; 方案 B (ATR gate) / 方案 C (per-engine Δσ) deferred pending post-P0 observation. ReB: `STATIC_EXIT_THRESHOLD_OVERFITTING`. 1 file, ~70 lines. | L3 — architecture defect: entry/exit σ gap compressed 50% (1.0σ→0.5σ) when SIGMA_ENTRY lowered 2.5→2.0; static exit threshold cannot adapt to per-trade signal quality (Alpha Decay surge 17%→37%) |
 | FIX-20260725-004 | 2026-07-25 | **SIGMA_ENTRY 2.5→2.0**: Corrected micro model (post-FIX-20260724-001) produces narrower rel distribution (σ≈0.16 vs scrambled σ≈0.27). The 2.5σ threshold calibrated on the scrambled model is unreachable with corrected features — 0 signals in 60-bar simulation vs 6 signals at 1.5σ. 2.0σ selected as conservative midpoint: tighter than original 2.5σ (which was calibrated on noise), looser than 1.5σ (which produced 21% signal rate on scrambled model). Expected signal rate: ~3-5/day at 2.0σ (vs 0 at 2.5σ, 29 at 1.5σ). | L2: Threshold calibrated on buggy model — FIX-20260724-001 changed the feature distribution without recalibrating the downstream threshold |
 | FIX-20260725-003 | 2026-07-25 | **Warmup zero-micro elimination**: `warmup_radars()` now uses OHLC-only models instead of micro models with zero-filled micro features. Root cause: zero-micro warmup predictions had μ=+0.06 σ=0.20, while live real-micro predictions had μ=+0.04 σ=0.16. The 25% wider σ inflated rolling thresholds for 5 hours after restart. Fix: load both OHLC models (for warmup) and micro models (for live), warm up with OHLC only. The OHLC→micro transition is smooth (both have comparable σ) — no fake data injected. | L2: Zero-padding micro features during warmup created distribution mismatch; the model interprets zeros as meaningful features (e.g., zero spread_toxicity = "no adverse selection" signal), not as missing data |
 | FIX-20260724-002 | 2026-07-25 | **Warmup window reduction**: Rolling HISTORY window reduced from 120→60 bars (10h→5h). FIX-20260724-001's zero-to-real-micro transition contamination window halved. μ/σ statistical precision only marginally affected (σ estimate error 6.5%→9%). System adapts to regime changes 2× faster. | L2: 120 was chosen for feature computation lookback (ret_120), not for statistical stability of μ/σ estimation — warmup uses pre-computed features and doesn't need 120 bars |

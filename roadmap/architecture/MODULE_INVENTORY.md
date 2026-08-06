@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-05T19:05:13Z
+> **自动生成**: 2026-08-06T02:53:36Z
 > **扫描模块数**: 795
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -855,7 +855,7 @@
 | `train_xau_metafilter.py` | ✅ active | — | 10 | 531 | — | |
 | `training_strategy_report.py` | ⬜ empty | — | 0 | 172 | — | |
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
-| `validate_blueprints.py` | ✅ active | — | 8 | 358 | — | |
+| `validate_blueprints.py` | ✅ active | — | 8 | 361 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 409 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |

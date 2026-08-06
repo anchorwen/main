@@ -38,6 +38,8 @@
 | **runtime/live** | alpha, brains, contracts, deployment, execution, features, feedback, governance, infrastructure, ledger, market, observability, parliament, state, strategies |
 | **deployment/lifecycle** | brains, contracts, execution, features, feedback, governance, ledger, market, observability, parliament, protocol, risk, state |
 | **execution/orders** | brains, contracts, deployment, metrics, observability, parliament, protocol, runtime |
+| **execution/netting** | — (self-contained — operates on queued decision objects) |
+| **execution/ood** | — (self-contained — operates on numpy arrays) |
 | **execution/guards** | contracts |
 | **execution/reentry** | — (self-contained) |
 | **brains/adapters** | contracts, features (via factory) |
@@ -70,6 +72,7 @@
 | **deployment/config** | contracts |
 | **deployment/lifecycle** | contracts, state |
 | **market/mtf** | — (self-contained, stdlib datetime only) |
+| **dual_assassin/v4** | — (standalone external system; shares d:\future\micro_features_live.py lib) |
 
 ## Apps → Core Dependencies
 

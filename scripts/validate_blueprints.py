@@ -47,6 +47,8 @@ EXPECTED_MODULES = [
     "execution_exit_watchdog",
     "execution_guards",
     "execution_managed_close",
+    "execution_netting",
+    "execution_ood",
     "execution_orders",
     "execution_position_manager",
     "execution_reentry",
@@ -80,6 +82,7 @@ EXPECTED_MODULES = [
     "monitoring",
     "monitor_dashboard",
     "mt5_bridge_worker",
+    "dual_assassin_v4",
 ]
 
 FIX_ID_RE = re.compile(r"FIX-\d{8}-\d{3}")

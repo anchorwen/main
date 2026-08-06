@@ -49,6 +49,12 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260703-001 — TECH_DEBT-005 Phase 3: Dynamic SessionDetector cutover (2026-07-03)
+
+**Root Cause**: RC-09 — config-drift. Hardcoded `_SESSIONS` table + `detect_session()` static branch diverged from broker reality; static time-window logic (weekend blocks, session loops, CME-inherited rollover table) was the sole authority.
+
+**Change**: Deleted hardcoded `_SESSIONS` table + `detect_session()` static branch — full cutover to dynamic `SessionDetector` tick-frequency probe. Phase 2 audit (June 19 - July 3, 2026): 14/14 tests passed, 4176/4176 sample points 100% agreement, 0 real-strategy weekend trades for forex_24_5, crypto_24_7 confirmed always-normal. Removed 116 lines of static time-window logic. `detect_session()` now delegates entirely to `SessionDetector.probe()` — broker tick_time is SSOT.
+
 ### FIX-20260802-001 — Zero-Vote Brain Exclusion from p_win Pool (DQAF-20260802-002 / IC Ruling) (2026-08-02)
 
 **Root Cause**: RC-05 — boundary-error. A brain stripped of voting rights (governance `vote_weight<=0`, e.g. BTC_Swing_V4_LGB probation vote=0.0, WR=0.4141) still contributed its historical WR to the strategy-line p_win median pool — the "短板穿透" (weakest-link penetration) mechanism anchoring ensemble EV to the muted brain's floor.
