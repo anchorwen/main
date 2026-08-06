@@ -27,6 +27,32 @@ from core.contracts.phantom_contract import (
 )
 from core.data.write_ahead_log import WALConfig, WriteAheadLog
 
+
+@pytest.fixture(autouse=True)
+def _disarm_phantom_alert_channel(monkeypatch):
+    """Test-domain isolation — DQAF-20260806-002 (phantom DingTalk leak).
+
+    ``_alert_violation`` (core/contracts/phantom_contract.py) constructs a
+    real ``LiveAlertHub(base_dir="data")`` on every contract violation, which
+    auto-wires a DingTalk channel from ``QUANTOS_DINGTALK_WEBHOOK_URL`` and
+    pushes a CRITICAL alert.  These tests deliberately violate contracts to
+    exercise the mechanism — so every run leaked real ``phantom:*`` CRITICAL
+    alerts into the live DingTalk group.
+
+    Fix (Option C, IC ruling): physically disarm at the test boundary by
+    making ``LiveAlertHub.__init__`` raise ``ImportError``.  ``_alert_violation``
+    catches exactly that exception (phantom_contract.py:926) and falls back to
+    stderr — the existing, tested no-op path.  Zero production-code changes.
+    """
+
+    import core.observability.live_alert_hub as _lah
+
+    def _raise_import_error(*_args: object, **_kwargs: object) -> None:
+        raise ImportError("LiveAlertHub disabled for test-domain isolation")
+
+    monkeypatch.setattr(_lah.LiveAlertHub, "__init__", _raise_import_error)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PhantomStub
 # ═══════════════════════════════════════════════════════════════════════════

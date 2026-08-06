@@ -58,6 +58,20 @@
 
 **Prevention** (IMPLEMENTED): Monitor probes must match the producer's label CONTRACT inclusively (`any("trail" in k for k in labels)`), not an exact historical token. When a producer changes label vocabulary, grep the consumers/probes for the old exact token and update them in the same change. When verifying "telemetry is healthy", measure on the SAME window the probe scans (tail-500), never the full corpus — a full-corpus positive that is outside the probe window leaves the warning legitimately firing.
 
+---
+
+### ReB-20260806-TEST_TO_PROD_ALERT_LEAK
+- **Pattern Signature**: `TEST_TO_PROD_ALERT_LEAK`
+- **Date Cataloged**: 2026-08-06
+- **Source Docket**: DQAF-20260806-002
+- **Related**: FIX-20260806-005 (RESOLVED, Option C), FIX-20260805-006 (DingTalk keyword unblock — the trigger that surfaced this leak), DQAF-20260806-001 (same day, unrelated)
+
+**Definition**: A production alerting path (here: `_alert_violation()` → `LiveAlertHub(base_dir="data").send_critical()` in core/contracts/phantom_contract.py) is invoked by TEST code that deliberately triggers the guarded condition to exercise the mechanism. Because the alert path has zero awareness of its caller domain, the test violations traverse the FULL production channel (env-wired DingTalk webhook) and push real CRITICAL alerts into the live ops group on every test run. The leak is masked while delivery is broken (errcode=310000 keyword rejection) and becomes VISIBLE the moment delivery is fixed — fixing the "sewer" (keyword) reveals the test water already leaking into it. Signature: a hardcoded live `base_dir="data"` in a library-adjacent alert helper + auto-wired webhook from process env + tests that intentionally violate the contract. Auditable proof: `phantom:test_*` contract_ids in the alert stream match test-fixture ids verbatim, never production predicate ids.
+
+**Prevention** (IMPLEMENTED, Option C — test-domain isolation, zero production change): Disarm at the TEST boundary, never pollute production with test-awareness. (1) Module autouse fixture makes `LiveAlertHub.__init__` raise `ImportError` so `_alert_violation` falls into its existing stderr branch (counter semantics preserved, hub/thread/audit-log side effects eliminated). (2) `tests/conftest.py` global autouse `delenv` of `QUANTOS_DINGTALK_WEBHOOK_URL`/`QUANTOS_DINGTALK_SECRET`/`QUANTOS_SLACK_WEBHOOK_URL`/`SLACK_WEBHOOK_URL` physically blinds the whole test domain (belt-and-suspenders). Rejected Option A (production `if "pytest" in sys.modules`) as Test-Induced Design Damage — production code must never know it is being tested.
+
+**Detection**: (1) Grep alert-injection helpers for hardcoded `base_dir="data"` + env-wired channels — each is a leak candidate. (2) Check alert_audit.jsonl for `phantom:*` or `test_*` rule_names whose contract_ids don't exist in the production predicate registry. (3) After any alert-DELIVERY fix (keyword/webhook), audit the audit log for previously-silent test-origin alerts. (4) Regression lock: `tests/contracts/test_phantom_contract.py` autouse fixture + `tests/conftest.py` global delenv (audit-log line count must not grow when the phantom suite runs).
+
 **Detection**: Grep check/alert code for exact-string membership tests (`X not in dict`) against label/token vocabularies produced elsewhere; flag when the producer writes a compound/variant token. Regression lock: `tests/observability/test_trade_journal_trail_probe.py` asserts inclusive-match semantics (sl_hit_trailed present → no warning; genuinely absent → warning retained; below close-count threshold → no warning).
 
 ---

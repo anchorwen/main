@@ -76,6 +76,23 @@
 
 ---
 
+### CCT-20260806-002
+- **Docket ID**: DQAF-20260806-002
+- **日期**: 2026-08-06
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 2026-08-06T05:03:23 三条 `phantom:test_fail` / `phantom:test_neg` / `phantom:counter_test` CRITICAL 推送至实盘钉钉群 (触发时间 05:03:23.285516/.270512/.397541); 审计日志 `data/logs/alert_audit.jsonl` 同毫秒三连记录 (2026-08-06T05:03:23.482559/.470558/.545573), 每条前置同毫秒 `system_online` 心跳 (LiveAlertHub 构造副作用)。
+  - [Layer 2 — 中间异常]: `_alert_violation()` (core/contracts/phantom_contract.py:899-933) 对 `@phantom` 违例执行 `hub = LiveAlertHub(base_dir="data"); hub.send_critical(reason=f"phantom:{contract_id}")`; `LiveAlertHub.__init__` (live_alert_hub.py:390-397) 读机器级 env `QUANTOS_DINGTALK_WEBHOOK_URL` 接线 DingTalkAlertChannel → 真实推送。测试运行时 `@phantom` 装饰器在 `__debug__` 模式 (phantom_contract.py:763-766) 对故意失败的 predicate 调 `_alert_violation`。
+  - [Layer 3 — 根因]: L2 (RC-06 contract-violation / 测试域边界缺失) — 生产代码 `_alert_violation` 对"谁在调用"零感知: 测试故意触发违例以验证契约机制时, 走了与真实违例完全相同的 `LiveAlertHub(base_dir="data")` → DingTalk 通道。test_neg/test_fail/counter_test 为测试专用 contract_id (test_phantom_contract.py:177-207/850-857), 生产 predicate id (risk_budget_non_negative 等) 永不匹配 → 100% 测试来源。FIX-20260805-006 (关键词 QuantOs) 修复送达前, 同类推送被 errcode=310000 静默拒收; 修复后首次真实触达 (05:03 = A3 验证期 pytest; 03:53/03:55 为 A2 验证期同类)。
+- **证据引用**:
+  - Source 1: `data/logs/alert_audit.jsonl` — 2026-08-06T05:03:23 三条 `phantom:*` CRITICAL + 三条同毫秒 `system_online` (规则名+recorded_at 逐条对应钉钉推送)
+  - Source 2: `core/contracts/phantom_contract.py:899-933` (`_alert_violation` 构造 LiveAlertHub + send_critical), `:918-924` (env 接线 DingTalk), `core/observability/live_alert_hub.py:390-397` (QUANTOS_DINGTALK_WEBHOOK_URL 自动接线), shell `env` 实测 f33f64c0... 已设
+  - Source 3 (测试来源): `tests/contracts/test_phantom_contract.py:177-207` (test_neg/test_fail 故意违例), `:850-857` (counter_test 直调 `_alert_violation`) — 逐字匹配推送 contract_id/message
+- **是否被推翻**: 否 (AR 否决: "实盘 phantom 违例?" → 生产注册 id 列表 phantom_contract.py:551-669 无 test_* 前缀, 反假设不成立)
+- **关联 ReB Pattern**: ReB-20260806-TEST_TO_PROD_ALERT_LEAK
+
+---
+
 ### CCT-20260805-001
 - **Docket ID**: DQAF-20260805-001
 - **日期**: 2026-08-05
