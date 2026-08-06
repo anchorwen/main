@@ -167,6 +167,29 @@ from core.execution.regime_direction_gate import RegimeDirectionGate
 _direction_gate = RegimeDirectionGate(adx_threshold=25, stale_warn_cycles=48)
 
 
+# ── DQAF-20260806-003 Option B2: GodsEye health deadband ramp ───────────────
+# IC Approved 2026-08-06 (投委会终局裁决): 否决 B1 (mode 条件恒 1.0 — 执行端对
+# normal 态 health 0.9→0.75 的降级零感知, 违背 GodsEye 连续微调初衷); 否决 B3
+# (乘数层 floor 兜底 — 与 Ω 终门地板叠地板, 违背 FIX-20260730-010 单闸门哲学);
+# 批准 B2 = Deadband + Proportional Control.
+#
+#   health >= 0.70  → 1.0   (健康死区: 环境安全, 不干预资金管理层数学 — 彻底解决
+#                            0.02 阈值共振, 健康 GodsEye 不再把已收敛到 min_economic
+#                            的 volume 再 shave 到 floor 之下)
+#   0.25 <= health < 0.70 → 连续线性斜坡 0.25x..1.0x (比例控制带: volume 平滑降级,
+#                           直至跌破 min_economic 被 Ω 终门物理绞杀)
+#   health < 0.25   → 0.25  (钳位既有最坏乘数 floor — 红线: 所有 Floor/Multiplier 不变)
+def _gods_eye_health_vol_mult(health: float) -> float:
+    _HEALTH_DEADBAND = 0.70  # health >= deadband -> no volume intervention
+    _HEALTH_VOL_FLOOR = 0.25  # worst-case multiplier (pre-existing floor, preserved)
+    if health >= _HEALTH_DEADBAND:
+        return 1.0
+    if health <= _HEALTH_VOL_FLOOR:
+        return _HEALTH_VOL_FLOOR
+    _t = (health - _HEALTH_VOL_FLOOR) / (_HEALTH_DEADBAND - _HEALTH_VOL_FLOOR)
+    return _HEALTH_VOL_FLOOR + (1.0 - _HEALTH_VOL_FLOOR) * _t
+
+
 def evaluate_strategy_lines(
     *,
     strategy_lines: dict[str, Any],
@@ -1105,8 +1128,12 @@ def evaluate_strategy_lines(
             # ── Health-based volume modulation ──
             # FIX-20260730-010: Removed max(0.01, ...) floor — Ω Phase 2.
             # Volume floor is now enforced ONLY at the final settlement gate.
+            # DQAF-20260806-003 Option B2 (IC Approved): _health_vol via
+            # deadband ramp — healthy GodsEye (health >= 0.70) no longer
+            # shaves volume, so a healthy eye cannot push an economically
+            # viable volume below the min_economic floor (threshold resonance).
             if decision.should_trade:
-                _health_vol = max(0.25, _ge_health)  # floor health score at 25%, not volume
+                _health_vol = _gods_eye_health_vol_mult(_ge_health)
                 decision.volume = round(decision.volume * _health_vol, 4)
                 # Append God's Eye diagnostic to reason
                 _ge_tag = f"+gods_eye:{_ge_mode}" f"_h={_ge_health:.2f}" f"_cm={_ge_conf_mod:.2f}"

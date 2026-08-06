@@ -20,6 +20,20 @@
 
 ---
 
+### ReB-20260806-THRESHOLD_RESONANCE_VOLUME_SHAVE
+- **Pattern Signature**: `THRESHOLD_RESONANCE_VOLUME_SHAVE`
+- **Date Cataloged**: 2026-08-06
+- **Source Docket**: DQAF-20260806-003
+- **Related**: FIX-20260806-007 (RESOLVED — Option A regime_map + Option B2 deadband ramp), FIX-20260730-010 (Ω Final Settlement Gate origin), DQAF-20260804-004 (partial capture, "静候恢复" premise later falsified), TECH_DEBT-010 (Option C cold-explore chain, DEFERRED 8/19 后)
+
+**Definition**: A downstream multiplier sits on top of a volume that has already converged to a hard floor (min_economic 0.02), and its default/reduced branch multiplies that floor-bound value below the floor → the final Ω gate then KILLs the order even when every upstream signal is healthy. Signature: (1) an upstream chain structurally floors volume (regime reduced ×0.65 → lot_step floor-round → trend_maturity_discount floor 0.40 → 2nd floor-round = pinned at 0.02); (2) a contract-violating multiplier (`max(0.25, health)` at strategy_evaluator.py:1108-1110) applies AFTER the floor-convergence and BEFORE the Ω gate, shaving 0.02 → 0.0102-0.0175; (3) the gate default (`gates.get(strategy_name, "reduced")` at regime_gate.py:815) silently mis-tags unmapped strategies as reduced. The 8/04 "wait for health recovery" premise (health×cm>0.70 unlocks) was falsified by E2b: health=0.875 × cm=1.10 = 0.963 ≫ 0.70 yet still KILL — proof the volume was structurally pinned, not health-gated.
+
+**Prevention** (IMPLEMENTED, IC Approved 2026-08-06): (1) **Option A** — regime_map completeness: every strategy must have an explicit mapping in live.yaml for all regimes (mirror live_btc.yaml), eliminating the silent default-reduced fallback. (2) **Option B2** — Deadband + Proportional Control transfer function replaces `max(0.25, health)`: health ≥ 0.70 → 1.0 (zero intervention in the healthy band), 0.25-0.70 → continuous linear ramp, ≤ 0.25 → clamp 0.25 (worst-case floor preserved). B1 (mode-conditional flat 1.0) rejected — kills the continuous-micro-adjustment contract; B3 (multiplier-floor) rejected — floor-on-floor code smell violating FIX-20260730-010 single-gate philosophy. Rule: a floor-converged volume must not pass through a shaving multiplier before the terminal gate; if it must, the multiplier needs an explicit deadband.
+
+**Detection**: (1) Grep for `gates.get(` with a default in regime gate code — every strategy must be explicitly keyed. (2) For any volume multiplier applied before the Ω floor gate, verify a deadband ≥ the multiplier's no-intervention threshold exists. (3) Regression lock `tests/runtime/test_strategy_evaluator.py::TestGodsEyeHealthDeadbandRamp` — 4 pure-function tests (deadband/ramp/clamp) + 2 E2E (healthy 0.875 survives Ω gate at 0.02; degraded 0.30 still KILLs). (4) Monitor: `min_economic_volume_blocked` rate in intent log should drop to ~0 at healthy GodsEye states post-deploy.
+
+---
+
 ### ReB-20260805-EXPIRED_TEMP_GATE_UNRETIRED
 - **Pattern Signature**: `EXPIRED_TEMP_GATE_UNRETIRED`
 - **Date Cataloged**: 2026-08-05

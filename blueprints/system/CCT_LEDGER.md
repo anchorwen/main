@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260806-003
+- **Docket ID**: DQAF-20260806-003
+- **日期**: 2026-08-06
+- **置信度**: confirmed (全层)
+- **因果链**:
+  - [Layer 1 — 症状]: XAU 健康态零开单 — 每周期 `min_economic_volume_blocked: volume=0.0102-0.0175 < 0.02`，conf 最高 0.877、GodsEye health 最高 0.875 依旧 KILL。证据: `data/logs/intent_20260806T072045Z.log` L109 (07:21 0.0111) / L486 (08:05 0.0175, decisive) / L571 (08:15 0.0167) / L615。
+  - [Layer 2 — 中间异常]: volume 结构性收敛到 min_economic floor (0.02): kelly raw_target 0.042-0.0536 → regime reduced ×0.65 → lot_step floor-round → trend_maturity_discount (floor 0.40) → 二次 floor-round 恒 0.02; 随后 GodsEye ×max(0.25, health) → 0.0102-0.0175。证据: intent log kelly_sizing final_stepped_volume=0.02 全周期; core/execution/strategy_line.py L1622-1635/L2027-2033; core/runtime/strategy_evaluator.py L1108-1110。
+  - [Layer 3 — 根因]: (a) **L3 config-drift** — configs/live.yaml regime_map swing 家族仅 low_vol 定义, regime_gate.py:815 `gates.get(strategy_name, "reduced")` 默认 reduced (×0.65) 压低 raw target (BTC 对照 live_btc.yaml:294-304 完整, 反证 XAU 特有); (b) **L2 contract-violation** — GodsEye health 乘数 max(0.25, health) 违反自身 "normal: no modification" 契约 (strategy_evaluator.py:1103 注释), 且作用点在 Ω 终门 (L1145 `_floor=0.02`) 之前、volume 已收敛到 floor 之后 → 健康态也系统性 shave 跌破 floor (阈值共振)。
+- **证据引用**:
+  - Source 1: [Intent Log] `data/logs/intent_20260806T072045Z.log` — gods_eye_cycle / kelly_sizing / min_economic_volume_blocked 同毫秒链 (L104-109, L485-486, L571, L615)
+  - Source 2: [代码] `core/runtime/strategy_evaluator.py:1108-1110` (health 乘数) + `:1145-1157` (Ω 终门 _floor=0.02) + `core/execution/regime_gate.py:815` (默认 reduced)
+  - Source 3: [跨品种对照] `configs/live_btc.yaml:294-304` BTC regime_map 完整 (normal/trending/mild_trend=full) vs `configs/live.yaml:857-911` XAU swing 仅 low_vol — 缺口 XAU 特有
+- **是否被推翻**: 否 (8/04 DQAF-20260804-004 "静候恢复" 闭案被本 docket Layer 2/3 实证推翻 — health 0.875×cm 1.10=0.963 ≫ 0.70 解锁线仍全 KILL, 证明 volume 被结构性钉死, 健康恢复无法解锁)
+- **关联 ReB Pattern**: ReB-20260806-THRESHOLD_RESONANCE_VOLUME_SHAVE
+
 ### CCT-20260805-002
 - **Docket ID**: DQAF-20260805-002
 - **日期**: 2026-08-05

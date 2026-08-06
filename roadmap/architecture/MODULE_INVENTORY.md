@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-06T04:04:42Z
-> **扫描模块数**: 796
+> **自动生成**: 2026-08-06T10:32:08Z
+> **扫描模块数**: 798
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -561,7 +561,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 6 | 1313 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 48 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 5 | 1379 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 6 | 1406 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -658,6 +658,7 @@
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
+| `_audit_storm_sender_20260806.py` | ✅ active | — | 1 | 130 | — | |
 | `_audit_trail_mislabel_20260806.py` | ✅ active | — | 3 | 281 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
@@ -667,6 +668,7 @@
 | `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_mypy_scope.py` | ✅ active | — | 2 | 55 | — | |
+| `_probe_ai_tick_20260806.py` | ✅ active | — | 2 | 87 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |

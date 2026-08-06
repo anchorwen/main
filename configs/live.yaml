@@ -863,6 +863,12 @@ regime_gate:
       micro_h1: full
       statarb_dynamic: reduced
       statarb_m15: reduced
+      m15_swing: full
+      m30_swing: full
+      h1_swing: full
+      h1_directional: full
+      h4_swing: full
+      daily_swing: full
     mild_trend:
       barrier_12bar: full
       barrier_12bar_meta: reduced
@@ -871,6 +877,12 @@ regime_gate:
       micro_h1: full
       statarb_dynamic: reduced
       statarb_m15: reduced
+      m15_swing: full
+      m30_swing: full
+      h1_swing: full
+      h1_directional: full
+      h4_swing: full
+      daily_swing: full
     ranging:
       barrier_12bar: reduced
       barrier_12bar_meta: full
@@ -879,6 +891,12 @@ regime_gate:
       micro_h1: reduced
       statarb_dynamic: full
       statarb_m15: full
+      m15_swing: reduced
+      m30_swing: reduced
+      h1_swing: reduced
+      h1_directional: reduced
+      h4_swing: reduced
+      daily_swing: reduced
     high_vol:
       barrier_12bar: false
       barrier_12bar_meta: reduced
@@ -887,6 +905,12 @@ regime_gate:
       micro_h1: reduced
       statarb_dynamic: reduced
       statarb_m15: reduced
+      m15_swing: reduced
+      m30_swing: reduced
+      h1_swing: reduced
+      h1_directional: reduced
+      h4_swing: reduced
+      daily_swing: reduced
     low_vol:
       barrier_12bar: reduced
       barrier_12bar_meta: reduced
@@ -909,6 +933,12 @@ regime_gate:
       micro_h1: full
       statarb_dynamic: full
       statarb_m15: full
+      m15_swing: full
+      m30_swing: full
+      h1_swing: full
+      h1_directional: full
+      h4_swing: full
+      daily_swing: full
 shadow:
   shadow_config: configs/live_shadow_config.json
   compare_report_dir: reports/shadow_compare
