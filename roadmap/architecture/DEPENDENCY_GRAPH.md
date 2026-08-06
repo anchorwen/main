@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-06T02:53:36Z
+> **自动生成**: 2026-08-06T04:04:42Z
 
 ## Package-Level Dependencies
 
@@ -580,6 +580,7 @@
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
+- `_mypy_scope.py` → (无内部依赖)
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)

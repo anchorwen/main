@@ -209,13 +209,13 @@ print("TOP CANDIDATES (sorted by forward accuracy, then flip count)")
 print(f"{'='*72}")
 
 # Score: penalise flips, reward accuracy
-for r in sorted(results, key=lambda x: (-x["fwd_acc"], x["flips"]))[:10]:
-    is_base = " *** BASELINE" if (r["q"], r["r"]) == baseline else ""
+for res in sorted(results, key=lambda x: (-x["fwd_acc"], x["flips"]))[:10]:
+    is_base = " *** BASELINE" if (res["q"], res["r"]) == baseline else ""
     print(
-        f"  Q={r['q']:>7.1f}  R={r['r']:>8.0f}  "
-        f"FwdAcc={r['fwd_acc']:.3f}  Flips={r['flips']:>4d}  "
-        f"MaxFalse={r['max_false']:>3d}  "
-        f"L={r['long_pct']:.0f}% S={r['short_pct']:.0f}% N={r['neut_pct']:.0f}%{is_base}"
+        f"  Q={res['q']:>7.1f}  R={res['r']:>8.0f}  "
+        f"FwdAcc={res['fwd_acc']:.3f}  Flips={res['flips']:>4d}  "
+        f"MaxFalse={res['max_false']:>3d}  "
+        f"L={res['long_pct']:.0f}% S={res['short_pct']:.0f}% N={res['neut_pct']:.0f}%{is_base}"
     )
 
 # ── Recommendation ──
@@ -230,12 +230,12 @@ print(f"{'='*72}")
 # 4. Lowest flip count among qualifying candidates
 
 qualifying = [
-    r
-    for r in results
-    if r["fwd_acc"] >= 0.52
-    and r["max_false"] <= 24
-    and r["long_pct"] >= 10
-    and r["short_pct"] >= 10
+    res
+    for res in results
+    if res["fwd_acc"] >= 0.52
+    and res["max_false"] <= 24
+    and res["long_pct"] >= 10
+    and res["short_pct"] >= 10
 ]
 
 if qualifying:

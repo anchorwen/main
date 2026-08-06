@@ -176,9 +176,11 @@ class SystemSelfTest:
         try:
             fn()
             return {"name": name, "status": "pass"}
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("system_facade:_check"):
-                return {"name": name, "status": "fail", "error": str(exc)}
+                error = str(exc)
+            return {"name": name, "status": "fail", "error": error}
+
     def _test_health(self):
         r = self._c.health_check.liveness()
         assert r["status"] == "alive", f"liveness: {r}"

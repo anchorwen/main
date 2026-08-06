@@ -10,6 +10,7 @@ import sys
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_BTC = PROJECT_ROOT / "data_btc"
@@ -47,7 +48,7 @@ def parse_ts(val):
 
 def audit_symbol(label, data_dir, hours):
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
-    result = {}
+    result: dict[str, Any] = {}
 
     # -- 1. Golden Master (latest cycle) --
     gm = load_jsonl(data_dir / "golden_master.jsonl")
@@ -72,7 +73,7 @@ def audit_symbol(label, data_dir, hours):
     journal = load_jsonl(data_dir / "live_trade_journal.jsonl")
     recent_journal = []
     open_positions = {}
-    strategy_pnl = defaultdict(float)
+    strategy_pnl: defaultdict[str, float] = defaultdict(float)
 
     for entry in journal:
         ts = parse_ts(entry.get("recorded_at"))
@@ -126,8 +127,8 @@ def audit_symbol(label, data_dir, hours):
         if ts and ts >= cutoff:
             recent_labels.append(lb)
 
-    label_counts = defaultdict(int)
-    label_pnl = defaultdict(float)
+    label_counts: defaultdict[str, int] = defaultdict(int)
+    label_pnl: defaultdict[str, float] = defaultdict(float)
     for lb in labels:
         lb_type = lb.get("label", "?")
         label_counts[lb_type] += 1
@@ -147,7 +148,7 @@ def audit_symbol(label, data_dir, hours):
         with open(gov, encoding="utf-8") as f:
             gs = json.load(f)
         states = gs.get("brain_states", {})
-        status_counts = defaultdict(int)
+        status_counts: defaultdict[str, int] = defaultdict(int)
         live_brains = []
         for bid, bd in states.items():
             st = bd.get("status", "?")

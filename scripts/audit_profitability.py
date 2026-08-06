@@ -227,7 +227,9 @@ def print_report(trades: list, label: str, window_start: datetime, window_end: d
         )
 
     # Exit reason breakdown
-    label_counts = defaultdict(lambda: {"count": 0, "pnl": 0.0})
+    label_counts: defaultdict[str, dict[str, int | float]] = defaultdict(
+        lambda: {"count": 0, "pnl": 0.0}
+    )
     for t in trades:
         if t["pnl"] is not None:
             lb = t["label"]

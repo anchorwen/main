@@ -43,14 +43,22 @@ import numpy as np
 FROZEN_NOW = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
 
 
-def _green(s: str) -> str: return f"\033[92m{s}\033[0m"
-def _red(s: str) -> str: return f"\033[91m{s}\033[0m"
-def _yellow(s: str) -> str: return f"\033[93m{s}\033[0m"
+def _green(s: str) -> str:
+    return f"\033[92m{s}\033[0m"
+
+
+def _red(s: str) -> str:
+    return f"\033[91m{s}\033[0m"
+
+
+def _yellow(s: str) -> str:
+    return f"\033[93m{s}\033[0m"
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # Check 1: JSON Serialization Round-Trip Fidelity
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def check_json_roundtrip(data_dir: str) -> dict[str, Any]:
     """Verify that float64 → JSON string → float64 preserves values."""
@@ -68,7 +76,11 @@ def check_json_roundtrip(data_dir: str) -> dict[str, Any]:
                     break
 
     if m5_path is None or not m5_path.exists():
-        return {"check": "json_roundtrip", "verdict": "SKIP", "detail": "No feature store records found"}
+        return {
+            "check": "json_roundtrip",
+            "verdict": "SKIP",
+            "detail": "No feature store records found",
+        }
 
     # Read the latest 100 records and test round-trip
     records = []
@@ -165,6 +177,7 @@ def check_json_roundtrip(data_dir: str) -> dict[str, Any]:
 # Check 2: Schema Merge Fidelity
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def check_merge_fidelity(data_dir: str) -> dict[str, Any]:
     """Verify that load_feature_store() merge preserves raw store values."""
     print()
@@ -180,7 +193,11 @@ def check_merge_fidelity(data_dir: str) -> dict[str, Any]:
     # Load merged features via the training path
     merged_features = load_feature_store(data_dir)
     if not merged_features:
-        return {"check": "merge_fidelity", "verdict": "SKIP", "detail": "No merged features (micro store empty)"}
+        return {
+            "check": "merge_fidelity",
+            "verdict": "SKIP",
+            "detail": "No merged features (micro store empty)",
+        }
 
     # Load contract feature names
     contract_names = load_contract_feature_names(data_dir)
@@ -218,7 +235,9 @@ def check_merge_fidelity(data_dir: str) -> dict[str, Any]:
             if schema == "v9_institutional_40":
                 raw_v9[et] = {k: float(v) for k, v in vals.items() if isinstance(v, (int, float))}
             elif schema == "v4.3_microstructure_9":
-                raw_micro[et] = {k: float(v) for k, v in vals.items() if isinstance(v, (int, float))}
+                raw_micro[et] = {
+                    k: float(v) for k, v in vals.items() if isinstance(v, (int, float))
+                }
 
     mismatches = 0
     matched_pairs = 0
@@ -287,6 +306,7 @@ def check_merge_fidelity(data_dir: str) -> dict[str, Any]:
 # Check 3: ASOF Join Correctness (Knowledge-Time Filtering)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def check_asof_correctness(data_dir: str) -> dict[str, Any]:
     """Verify ASOF join never uses future or not-yet-known features."""
     print()
@@ -329,7 +349,11 @@ def check_asof_correctness(data_dir: str) -> dict[str, Any]:
         trades.append({"ticket": tkt, "open_time": open_dt, "open_ts_str": open_ts})
 
     if len(trades) < 5:
-        return {"check": "asof_correctness", "verdict": "SKIP", "detail": f"Only {len(trades)} trades"}
+        return {
+            "check": "asof_correctness",
+            "verdict": "SKIP",
+            "detail": f"Only {len(trades)} trades",
+        }
 
     # Load features with timestamps
     fs_path = Path(data_dir) / "feature_store" / "records"
@@ -370,11 +394,13 @@ def check_asof_correctness(data_dir: str) -> dict[str, Any]:
                         ingested_dt = ingested_dt.replace(tzinfo=UTC)
                 except (ValueError, TypeError):
                     pass
-            features.append({
-                "event_time": event_dt,
-                "ingested_at": ingested_dt,
-                "values": rec.get("values", {}),
-            })
+            features.append(
+                {
+                    "event_time": event_dt,
+                    "ingested_at": ingested_dt,
+                    "values": rec.get("values", {}),
+                }
+            )
 
     # Sort by event_time
     features.sort(key=lambda f: f["event_time"])
@@ -392,8 +418,8 @@ def check_asof_correctness(data_dir: str) -> dict[str, Any]:
         open_dt = trade["open_time"]
         # Find last feature with event_time <= open_dt (vanilla ASOF)
         best_idx = -1
-        for i, f in enumerate(features):
-            if f["event_time"] <= open_dt:
+        for i, feat in enumerate(features):
+            if feat["event_time"] <= open_dt:
                 best_idx = i
             else:
                 break
@@ -424,13 +450,17 @@ def check_asof_correctness(data_dir: str) -> dict[str, Any]:
 
     if future_leaks == 0 and knowledge_leaks == 0:
         verdict = "PASS"
-        print(f"  {_green('[PASS]')} ASOF join is backward-looking only — no future or knowledge leaks")
+        print(
+            f"  {_green('[PASS]')} ASOF join is backward-looking only — no future or knowledge leaks"
+        )
     elif future_leaks > 0:
         verdict = "FAIL"
         print(f"  {_red('[FAIL]')} {future_leaks} future data leaks detected!")
     else:
         verdict = "WARN"
-        print(f"  {_yellow('[WARN]')} Knowledge-time leaks in pre-Column-3 data (no ingested_at yet)")
+        print(
+            f"  {_yellow('[WARN]')} Knowledge-time leaks in pre-Column-3 data (no ingested_at yet)"
+        )
 
     return {
         "check": "asof_correctness",
@@ -445,10 +475,9 @@ def check_asof_correctness(data_dir: str) -> dict[str, Any]:
 # Main
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Training-Serving Parity Verification (Column 2)"
-    )
+    parser = argparse.ArgumentParser(description="Training-Serving Parity Verification (Column 2)")
     parser.add_argument("--data-dir", default="data_btc", help="Data directory")
     args = parser.parse_args()
 
@@ -471,9 +500,13 @@ def main() -> int:
 
     exit_code = 0
     for r in results:
-        icon = _green("[PASS]") if r["verdict"] == "PASS" else (
-            _yellow("[WARN]") if r["verdict"] == "WARN" else (
-                _red("[FAIL]") if r["verdict"] == "FAIL" else "[SKIP]"
+        icon = (
+            _green("[PASS]")
+            if r["verdict"] == "PASS"
+            else (
+                _yellow("[WARN]")
+                if r["verdict"] == "WARN"
+                else (_red("[FAIL]") if r["verdict"] == "FAIL" else "[SKIP]")
             )
         )
         print(f"  {icon} {r['check']}")

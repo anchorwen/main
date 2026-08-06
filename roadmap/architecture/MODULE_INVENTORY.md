@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-06T02:53:36Z
-> **扫描模块数**: 795
+> **自动生成**: 2026-08-06T04:04:42Z
+> **扫描模块数**: 796
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -18,7 +18,7 @@
 | `main_v9_shadow.py` | ✅ active | FeatureInputError, OutputPlan, StreamEnvelopePlan, SessionStreamPlan, BaselineSuiteSpec, FormalBaselineManifest, ShadowSessionManager | 91 | 2197 | — | |
 | `orchestrator.py` | ✅ active | CycleOutcome, DecisionCycleOrchestrator | 6 | 310 | — | |
 | `runtime_loop.py` | ✅ active | SimpleFeatureSnapshot, DecisionCycleResult, RuntimeLoop | 3 | 322 | — | |
-| `system_facade.py` | ✅ active | SystemFacade, SystemSelfTest | 27 | 237 | — | |
+| `system_facade.py` | ✅ active | SystemFacade, SystemSelfTest | 27 | 239 | — | |
 | `v9_shadow_sse.py` | ✅ active | SessionStreamQueryError, SessionStreamResponseStartError, SessionSSEClientBuffer, ShadowSessionSSEHandler | 22 | 315 | — | |
 | `v9_shadow_support.py` | ✅ active | StubFeatureService, V9ParliamentAdapter | 2 | 66 | — | |
 
@@ -26,7 +26,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `live_trading_dashboard.py` | ✅ active | LiveDashboardHandler | 34 | 2480 | — | |
+| `live_trading_dashboard.py` | ✅ active | LiveDashboardHandler | 34 | 2486 | — | |
 
 ## core
 
@@ -109,7 +109,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `adapters.py` | ✅ active | — | 11 | 208 | — | |
+| `adapters.py` | ✅ active | — | 11 | 210 | — | |
 | `calibrator_contract.py` | ✅ active | CalibratorHistoryEntry, CalibratorState | 3 | 116 | — | |
 | `cap_result.py` | ✅ active | CapProofExpired, CapProofReused, _SuccessProof, CapResult, Kernel | 19 | 289 | — | |
 | `domain_keys.py` | 📄 config | — | 0 | 979 | — | |
@@ -666,10 +666,11 @@
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
+| `_mypy_scope.py` | ✅ active | — | 2 | 55 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
-| `_verify_governance_evaluator.py` | ✅ active | — | 2 | 149 | — | |
+| `_verify_governance_evaluator.py` | ✅ active | — | 3 | 155 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 221 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
@@ -677,7 +678,7 @@
 | `analyze_exit_optimization_effect.py` | ✅ active | — | 6 | 661 | — | |
 | `analyze_feature_shift.py` | ✅ active | — | 5 | 323 | — | |
 | `analyze_gate_activity.py` | ✅ active | — | 3 | 194 | — | |
-| `analyze_live_brain_performance.py` | ✅ active | — | 6 | 672 | — | |
+| `analyze_live_brain_performance.py` | ✅ active | — | 6 | 754 | — | |
 | `analyze_live_journal.py` | ✅ active | — | 7 | 827 | — | |
 | `analyze_ou_pnl.py` | ✅ active | — | 10 | 401 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
@@ -686,8 +687,8 @@
 | `analyze_swing_pnl.py` | ✅ active | — | 16 | 527 | — | |
 | `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |
 | `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 460 | — | |
-| `assess_system_health.py` | 📄 config | — | 0 | 229 | — | |
-| `audit_2day.py` | ✅ active | — | 1 | 207 | — | |
+| `assess_system_health.py` | 📄 config | — | 0 | 277 | — | |
+| `audit_2day.py` | ✅ active | — | 1 | 236 | — | |
 | `audit_behavior_compliance.py` | ✅ active | — | 5 | 437 | — | |
 | `audit_brain_fleet.py` | ✅ active | — | 1 | 307 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
@@ -696,7 +697,7 @@
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
 | `audit_data_final.py` | ✅ active | — | 5 | 246 | — | |
-| `audit_data_health_journal.py` | ✅ active | — | 2 | 170 | — | |
+| `audit_data_health_journal.py` | ✅ active | — | 2 | 174 | — | |
 | `audit_data_integrity.py` | ✅ active | — | 12 | 1002 | — | |
 | `audit_data_module.py` | ✅ active | — | 3 | 358 | — | |
 | `audit_deferred_tasks.py` | ✅ active | TriggerCondition, TaskAssessment | 11 | 577 | — | |
@@ -709,7 +710,7 @@
 | `audit_memory.py` | ✅ active | — | 8 | 399 | — | |
 | `audit_physics_thresholds.py` | ✅ active | — | 2 | 157 | — | |
 | `audit_pnl_ledger_integrity.py` | ✅ active | — | 3 | 364 | — | |
-| `audit_profitability.py` | ✅ active | — | 7 | 371 | — | |
+| `audit_profitability.py` | ✅ active | — | 7 | 373 | — | |
 | `audit_state_of_system.py` | ✅ active | — | 5 | 347 | — | |
 | `audit_trade_quality.py` | ✅ active | — | 5 | 275 | — | |
 | `audit_xau_directional_bias.py` | 📄 config | — | 0 | 128 | — | |
@@ -732,7 +733,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 746 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 757 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -743,7 +744,7 @@
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
-| `clean_ledger_bloat.py` | ✅ active | — | 2 | 195 | — | |
+| `clean_ledger_bloat.py` | ✅ active | — | 2 | 192 | — | |
 | `cleanup_claude_transcripts.py` | ✅ active | — | 2 | 100 | — | |
 | `commander_g2_metafilter_path.py` | ✅ active | — | 3 | 258 | — | |
 | `commander_g3_alpha_vacuum.py` | ✅ active | — | 4 | 159 | — | |
@@ -787,7 +788,7 @@
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
 | `inspect_ofi_history.py` | ✅ active | — | 5 | 224 | ✅ | |
 | `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
-| `live_audit_realtime.py` | ✅ active | — | 4 | 384 | — | |
+| `live_audit_realtime.py` | ✅ active | — | 4 | 385 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
 | `live_daily_recap.py` | ✅ active | — | 25 | 941 | — | |
 | `live_dashboard.py` | ✅ active | — | 16 | 538 | — | |
@@ -823,7 +824,7 @@
 | `position_query.py` | ✅ active | — | 8 | 437 | — | |
 | `position_snapshot.py` | ✅ active | — | 3 | 176 | — | |
 | `pre_commit_blueprint.py` | ✅ active | — | 5 | 204 | — | |
-| `pre_commit_mypy.py` | ✅ active | — | 5 | 162 | — | |
+| `pre_commit_mypy.py` | ✅ active | — | 5 | 168 | — | |
 | `probe_xau_signal_generation.py` | ✅ active | — | 7 | 362 | — | |
 | `purge_backtest_from_governance.py` | ✅ active | — | 5 | 249 | — | |
 | `reconcile_fix_registry.py` | ✅ active | — | 6 | 381 | — | |
@@ -860,7 +861,7 @@
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 409 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |
 | `validate_magic_sync.py` | ✅ active | — | 4 | 178 | — | |
-| `verify.py` | ✅ active | — | 15 | 1011 | — | |
+| `verify.py` | ✅ active | — | 18 | 1082 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 90 | — | |
 | `verify_capresult_ast.py` | ✅ active | Violation, ScanReport, DynamicCallDetector, CapResultOkPlacementDetector, RawAccessDetector, FailOpenGuardDetector, ProofLeakDetector | 31 | 650 | ✅ | |
 | `verify_dqaf044_fix_effect.py` | ✅ active | — | 9 | 322 | — | |
@@ -868,8 +869,8 @@
 | `verify_event_stream.py` | ✅ active | — | 3 | 200 | — | |
 | `verify_health_check_coverage.py` | ✅ active | — | 2 | 143 | — | |
 | `verify_phantom_contracts.py` | ✅ active | Violation, VerificationReport | 7 | 437 | — | |
-| `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 292 | — | |
-| `verify_training_serving_parity.py` | ✅ active | — | 7 | 492 | — | |
+| `verify_pnl_data_integrity.py` | ✅ active | — | 5 | 302 | — | |
+| `verify_training_serving_parity.py` | ✅ active | — | 7 | 525 | — | |
 | `watchdog_daily_ops.py` | ✅ active | — | 3 | 171 | — | |
 
 ## scripts/archive

@@ -96,10 +96,69 @@ def _current_commit_hash() -> str:
         return ""
 
 
+def _expand_mypy_targets(targets: list[str]) -> list[str]:
+    """Expand scripts/ dir targets to explicit files, dropping forensic artifacts.
+
+    Forensic artifacts (scripts/archive/ frozen forensics + scripts/_audit_* probes)
+    are out of the maintained type-check scope — a mypy dir-scan of scripts/ would
+    otherwise pull ~118 pre-existing historical errors into --full (see _mypy_scope).
+    core/ and apps/ pass through as dirs (no exclusion needed).
+    """
+    from _mypy_scope import is_forensic
+
+    expanded: list[str] = []
+    for t in targets:
+        posix = t.replace("\\", "/")
+        abs_t = ROOT / t
+        if posix.startswith("scripts/") and abs_t.is_dir():
+            for f in sorted(abs_t.rglob("*.py")):
+                rel = f.relative_to(ROOT).as_posix()
+                if not is_forensic(rel):
+                    expanded.append(rel)
+        elif posix.endswith(".py") and is_forensic(posix):
+            continue  # explicit forensic file target → drop
+        else:
+            expanded.append(t)
+    return expanded
+
+
+def _per_file_error_counts(output: str) -> dict[str, int]:
+    """Count mypy error lines per file (normalised to POSIX rel paths)."""
+    counts: dict[str, int] = {}
+    for line in output.splitlines():
+        if ": error:" in line:
+            path = line.split(":", 1)[0].replace("\\", "/")
+            counts[path] = counts.get(path, 0) + 1
+    return counts
+
+
+def _load_mypy_baseline() -> dict[str, int]:
+    """Load mypy_baseline.json (debt register) for baseline-aware gating."""
+    bp = ROOT / "mypy_baseline.json"
+    if not bp.exists():
+        return {}
+    try:
+        raw: object = json.loads(bp.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            return {str(k): int(v) for k, v in raw.items()}
+    except (OSError, ValueError, TypeError):
+        pass
+    return {}
+
+
 def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
-    """Run mypy on specified targets. Returns (passed, output)."""
+    """Run mypy on specified targets. Returns (passed, output).
+
+    Gate is baseline-aware (consistent with pre_commit_mypy.py): a file passes if its
+    error count is <= max(mypy_baseline.json entry, RED_LINE_FROZEN_ALLOWANCE).  New
+    type errors beyond the frozen/registered debt still fail.  Forensic artifacts are
+    excluded upstream by _expand_mypy_targets.
+    """
+    from _mypy_scope import allowed_errors
+
     if targets is None:
         targets = ["core/", "apps/", "scripts/"]
+    targets = _expand_mypy_targets(targets)
     existing = [t for t in targets if (ROOT / t).exists()]
     if not existing:
         return True, "No targets to check."
@@ -112,9 +171,21 @@ def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
             cwd=str(ROOT),
             timeout=120,
         )
-        passed = result.returncode == 0
         output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
-        return passed, output
+        if result.returncode == 0:
+            return True, output
+        counts = _per_file_error_counts(output)
+        if not counts:
+            return False, output  # mypy crashed without parseable errors
+        baseline = _load_mypy_baseline()
+        offenders = {f: c for f, c in counts.items() if c > allowed_errors(f, baseline)}
+        if not offenders:
+            return True, output  # all within frozen/registered debt
+        detail = "\n".join(
+            f"  {f}: {c} errors (allowed {allowed_errors(f, baseline)})"
+            for f, c in sorted(offenders.items())
+        )
+        return False, f"[FAIL] {len(offenders)} file(s) exceed mypy allowance:\n{detail}\n{output}"
     except subprocess.TimeoutExpired:
         return False, "mypy timed out"
     except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG

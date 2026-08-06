@@ -1,26 +1,30 @@
 from __future__ import annotations
-# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 """Two-day trade audit: June 10-11, 2026 — XAU + BTC."""
 import json, glob
 from collections import Counter, defaultdict
 
-TARGET = ['2026-06-10', '2026-06-11']
+TARGET = ["2026-06-10", "2026-06-11"]
+
 
 def load_jsonl(path):
-    with open(path, encoding='utf-8') as f:
+    with open(path, encoding="utf-8") as f:
         return [json.loads(l) for l in f if l.strip()]
 
+
 # ── Journal Analysis ──
-for name, jpath in [('XAU', 'data/live_trade_journal.jsonl'), ('BTC', 'data_btc/live_trade_journal.jsonl')]:
+for name, jpath in [
+    ("XAU", "data/live_trade_journal.jsonl"),
+    ("BTC", "data_btc/live_trade_journal.jsonl"),
+]:
     entries = load_jsonl(jpath)
-    filtered = [d for d in entries if d.get('recorded_at', '')[:10] in TARGET]
+    filtered = [d for d in entries if d.get("recorded_at", "")[:10] in TARGET]
 
     print(f"\n{'='*70}")
     print(f"  {name} Trade Journal — June 10-11")
     print(f"{'='*70}")
 
-    by_date: dict[str, list] = defaultdict(int)
+    by_date: dict[str, int] = defaultdict(int)
     actions: Counter[str] = Counter()
     retcodes: Counter[str] = Counter()
     sides: Counter[str] = Counter()
@@ -29,25 +33,25 @@ for name, jpath in [('XAU', 'data/live_trade_journal.jsonl'), ('BTC', 'data_btc/
     volumes = []
 
     for d in filtered:
-        recorded = d.get('recorded_at', '')[:10]
+        recorded = d.get("recorded_at", "")[:10]
         by_date[recorded] += 1
-        actions[d.get('action', '?')] += 1
-        sides[d.get('side', '')] += 1
+        actions[d.get("action", "?")] += 1
+        sides[d.get("side", "")] += 1
 
-        detail = d.get('detail', {})
+        detail = d.get("detail", {})
         if isinstance(detail, dict):
-            rc = detail.get('retcode')
+            rc = detail.get("retcode")
             if rc:
                 retcodes[str(rc)] += 1
-            req = detail.get('request', {})
+            req = detail.get("request", {})
             if isinstance(req, dict):
-                vol = req.get('volume')
+                vol = req.get("volume")
                 if vol:
                     volumes.append(vol)
                 if rc == 10009:
-                    if req.get('action') == 1 and req.get('type') == 1:
+                    if req.get("action") == 1 and req.get("type") == 1:
                         real_opens.append(d)
-                    elif req.get('action') == 1 and req.get('type') == 0:
+                    elif req.get("action") == 1 and req.get("type") == 0:
                         real_closes.append(d)
 
     print(f"  Total: {len(filtered)} entries")
@@ -56,26 +60,35 @@ for name, jpath in [('XAU', 'data/live_trade_journal.jsonl'), ('BTC', 'data_btc/
     print(f"  Retcodes: {dict(retcodes)}")
     print(f"  Sides: {dict(sides)}")
     if volumes:
-        print(f"  Volume: min={min(volumes)} max={max(volumes)} avg={sum(volumes)/len(volumes):.3f}")
+        print(
+            f"  Volume: min={min(volumes)} max={max(volumes)} avg={sum(volumes)/len(volumes):.3f}"
+        )
 
     print(f"  Real market opens: {len(real_opens)}")
     for d in real_opens:
-        detail = d.get('detail', {})
-        req = detail.get('request', {})
-        print(f"    [{d.get('recorded_at','')[:19]}] side={d.get('side','')} vol={req.get('volume','?')} price={req.get('price','?')} order={detail.get('order','?')} msg={d.get('message_id','')[:50]}")
+        detail = d.get("detail", {})
+        req = detail.get("request", {})
+        print(
+            f"    [{d.get('recorded_at','')[:19]}] side={d.get('side','')} vol={req.get('volume','?')} price={req.get('price','?')} order={detail.get('order','?')} msg={d.get('message_id','')[:50]}"
+        )
 
     print(f"  Real market closes: {len(real_closes)}")
     for d in real_closes:
-        detail = d.get('detail', {})
-        req = detail.get('request', {})
-        print(f"    [{d.get('recorded_at','')[:19]}] side={d.get('side','')} vol={req.get('volume','?')} price={req.get('price','?')} order={detail.get('order','?')}")
+        detail = d.get("detail", {})
+        req = detail.get("request", {})
+        print(
+            f"    [{d.get('recorded_at','')[:19]}] side={d.get('side','')} vol={req.get('volume','?')} price={req.get('price','?')} order={detail.get('order','?')}"
+        )
 
 # ── Alerts Analysis ──
-for name, apath in [('XAU', 'data/logs/alert_audit.jsonl'), ('BTC', 'data_btc/logs/alert_audit.jsonl')]:
+for name, apath in [
+    ("XAU", "data/logs/alert_audit.jsonl"),
+    ("BTC", "data_btc/logs/alert_audit.jsonl"),
+]:
     alerts = load_jsonl(apath)
     filtered = []
     for a in alerts:
-        rec = a.get('recorded_at', '')
+        rec = a.get("recorded_at", "")
         if any(d in rec for d in TARGET):
             filtered.append(a)
 
@@ -84,28 +97,28 @@ for name, apath in [('XAU', 'data/logs/alert_audit.jsonl'), ('BTC', 'data_btc/lo
     warnings = []
     system_on = []
     for a in filtered:
-        detail = a.get('detail', {})
+        detail = a.get("detail", {})
         if isinstance(detail, dict):
-            rn = detail.get('rule_name', '')
-            if 'trade' in rn:
+            rn = detail.get("rule_name", "")
+            if "trade" in rn:
                 trades.append(a)
-            elif 'system_online' in rn:
+            elif "system_online" in rn:
                 system_on.append(a)
             else:
                 warnings.append(a)
 
     print(f"    Trade notifications: {len(trades)}")
     for t in trades:
-        detail = t.get('detail', {})
-        title = detail.get('title','')[:120]
+        detail = t.get("detail", {})
+        title = detail.get("title", "")[:120]
         # Strip emoji for Windows console
-        title_clean = title.encode('ascii', errors='replace').decode('ascii')
+        title_clean = title.encode("ascii", errors="replace").decode("ascii")
         print(f"      [{t.get('recorded_at','')[:19]}] {title_clean}")
     print(f"    Warnings: {len(warnings)}")
     for w in warnings:
-        detail = w.get('detail', {})
-        wt = detail.get('title','')[:120]
-        wt_clean = wt.encode('ascii', errors='replace').decode('ascii')
+        detail = w.get("detail", {})
+        wt = detail.get("title", "")[:120]
+        wt_clean = wt.encode("ascii", errors="replace").decode("ascii")
         print(f"      [{w.get('recorded_at','')[:19]}] {detail.get('rule_name','')}: {wt_clean}")
     print(f"    System online: {len(system_on)}")
     if system_on:
@@ -119,20 +132,32 @@ print(f"\n{'='*70}")
 print("  Labels — June 10-11")
 print(f"{'='*70}")
 
-for name, lpath, sym in [('XAU', 'data/reports/live_labels.jsonl', 'XAUUSDc'), ('BTC', 'data_btc/reports/live_labels.jsonl', 'BTCUSDc')]:
+for name, lpath, sym in [
+    ("XAU", "data/reports/live_labels.jsonl", "XAUUSDc"),
+    ("BTC", "data_btc/reports/live_labels.jsonl", "BTCUSDc"),
+]:
     labels = load_jsonl(lpath)
-    own = [lb for lb in labels if lb.get('symbol') == sym and any(d in (lb.get('open_recorded_at','') or lb.get('close_recorded_at','')) for d in TARGET)]
+    own = [
+        lb
+        for lb in labels
+        if lb.get("symbol") == sym
+        and any(
+            d in (lb.get("open_recorded_at", "") or lb.get("close_recorded_at", "")) for d in TARGET
+        )
+    ]
 
     print(f"\n  {name} Labels: {len(own)}")
     if own:
-        wins = sum(1 for lb in own if lb.get('pnl') is not None and lb['pnl'] > 0)
-        losses = sum(1 for lb in own if lb.get('pnl') is not None and lb['pnl'] < 0)
-        unlabeled = sum(1 for lb in own if lb.get('pnl') is None)
-        total_pnl = sum(lb.get('pnl', 0) for lb in own if lb.get('pnl') is not None)
+        wins = sum(1 for lb in own if lb.get("pnl") is not None and lb["pnl"] > 0)
+        losses = sum(1 for lb in own if lb.get("pnl") is not None and lb["pnl"] < 0)
+        unlabeled = sum(1 for lb in own if lb.get("pnl") is None)
+        total_pnl = sum(lb.get("pnl", 0) for lb in own if lb.get("pnl") is not None)
         print(f"    W:{wins} L:{losses} Unlabeled:{unlabeled}  PnL: {total_pnl:+.4f}")
         for lb in own:
-            pid = lb.get('open_message_id', '')[:40] if lb.get('open_message_id') else ''
-            print(f"    ticket={lb.get('position_ticket')} side={lb.get('side')} label={lb.get('label')} pnl={lb.get('pnl')} entry={lb.get('entry_price')} exit={lb.get('exit_price')} msg={pid}")
+            pid = lb.get("open_message_id", "")[:40] if lb.get("open_message_id") else ""
+            print(
+                f"    ticket={lb.get('position_ticket')} side={lb.get('side')} label={lb.get('label')} pnl={lb.get('pnl')} entry={lb.get('entry_price')} exit={lb.get('exit_price')} msg={pid}"
+            )
     else:
         print("    NONE")
 
@@ -141,21 +166,21 @@ print(f"\n{'='*70}")
 print("  Intent Log Key Events — June 10-11")
 print(f"{'='*70}")
 
-for name, pattern in [('XAU', 'data/logs/intent_*.log'), ('BTC', 'data_btc/logs/intent_*.log')]:
+for name, pattern in [("XAU", "data/logs/intent_*.log"), ("BTC", "data_btc/logs/intent_*.log")]:
     files = sorted(glob.glob(pattern))
     print(f"\n  {name} Intent Logs:")
     for fpath in files:
-        fname = fpath.replace('\\', '/').split('/')[-1]
-        if '20260610' not in fname and '20260611' not in fname:
+        fname = fpath.replace("\\", "/").split("/")[-1]
+        if "20260610" not in fname and "20260611" not in fname:
             continue
-        with open(fpath, encoding='utf-8') as f:
+        with open(fpath, encoding="utf-8") as f:
             lines = f.readlines()
 
         cycles = 0
         shutdowns = []
         errors = []
         dispatches = []
-        no_trade_reasons: dict[str, int] = Counter()
+        no_trade_reasons: Counter[str] = Counter()
         last_cycle = None
 
         for line in lines:
@@ -165,28 +190,32 @@ for name, pattern in [('XAU', 'data/logs/intent_*.log'), ('BTC', 'data_btc/logs/
                 d = json.loads(line)
             except:
                 continue
-            ev = d.get('event', '')
-            t = d.get('time', '')
-            if ev == 'cycle_end':
+            ev = d.get("event", "")
+            t = d.get("time", "")
+            if ev == "cycle_end":
                 cycles += 1
                 last_cycle = t
-            elif 'shutdown' in ev:
+            elif "shutdown" in ev:
                 shutdowns.append((t, d))
-            elif 'error' in ev.lower():
+            elif "error" in ev.lower():
                 errors.append((t, d))
-            elif ev in ('intent_dispatched', 'strategy_dispatched'):
+            elif ev in ("intent_dispatched", "strategy_dispatched"):
                 dispatches.append((t, d))
-            elif ev == 'multi_strategy_eval':
-                strats = d.get('strategies', [])
+            elif ev == "multi_strategy_eval":
+                strats = d.get("strategies", [])
                 for s in strats:
-                    if not s.get('should_trade'):
-                        reason = s.get('reason', 'unknown')
+                    if not s.get("should_trade"):
+                        reason = s.get("reason", "unknown")
                         no_trade_reasons[reason] += 1
 
-        print(f"    {fname}: {len(lines)} lines, {cycles} cycles, {len(dispatches)} dispatches, {len(errors)} errors")
+        print(
+            f"    {fname}: {len(lines)} lines, {cycles} cycles, {len(dispatches)} dispatches, {len(errors)} errors"
+        )
         if shutdowns:
             for t, d in shutdowns:
-                print(f"      SHUTDOWN [{t}]: signal={d.get('signal','?')} action={d.get('action','?')}")
+                print(
+                    f"      SHUTDOWN [{t}]: signal={d.get('signal','?')} action={d.get('action','?')}"
+                )
         if errors:
             for t, d in errors[:5]:
                 print(f"      ERROR [{t}]: {d.get('error', str(d))[:150]}")

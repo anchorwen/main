@@ -84,7 +84,9 @@ def bridge_legacy(
 
 def bridge_result_or_raise(
     result: CapResult[T],
-) -> T:  # type: ignore[type-var]
+    _witness: type[T]
+    | None = None,  # type-witness: keeps T visible to mypy's type-var rule under follow_imports=skip
+) -> T:
     """Unwrap CapResult or raise RuntimeError with the error message.
 
     For call sites that cannot yet be migrated to CapResult-aware code.

@@ -1,5 +1,4 @@
 from __future__ import annotations
-# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 #!/usr/bin/env python3
 """
@@ -46,16 +45,23 @@ def load_brain_performance(data_dir: str) -> dict[str, dict]:
     records_dict = bp.get("records", {})
     if not isinstance(records_dict, dict):
         # Fallback: top-level iteration (legacy format)
-        records_dict = {k: v for k, v in bp.items()  # type: ignore[attr-defined]
-                       if k not in ("schema_version", "window_size", "brain_ids", "records")
-                       and isinstance(v, list)}
+        records_dict = {
+            k: v
+            for k, v in bp.items()
+            if k not in ("schema_version", "window_size", "brain_ids", "records")
+            and isinstance(v, list)
+        }
 
     result = {}
-    for bid, records in records_dict.items():  # type: ignore[attr-defined]
+    for bid, records in records_dict.items():
         if not isinstance(records, list):
             continue
-        wins = sum(1 for r in records if isinstance(r, dict) and r.get("execution_outcome") == "win")
-        losses = sum(1 for r in records if isinstance(r, dict) and r.get("execution_outcome") == "loss")
+        wins = sum(
+            1 for r in records if isinstance(r, dict) and r.get("execution_outcome") == "win"
+        )
+        losses = sum(
+            1 for r in records if isinstance(r, dict) and r.get("execution_outcome") == "loss"
+        )
         total = wins + losses
         wr = wins / total if total > 0 else 0.0
         result[bid] = {
@@ -81,7 +87,7 @@ def load_governance_metrics(data_dir: str) -> dict[str, dict]:
             gs = json.load(f)
 
     result = {}
-    for bid, state in gs.get("brain_states", {}).items():  # type: ignore[attr-defined]
+    for bid, state in gs.get("brain_states", {}).items():
         pm = state.get("performance_metrics", {}) or {}
         trades = pm.get("total_trades", 0)
         if trades > 0:
@@ -103,7 +109,7 @@ def load_signalsettled_stats(data_dir: str) -> dict[str, dict]:
     if not events_path.exists():
         return {}
 
-    brains: list[dict] = defaultdict(lambda: {"pnl_list": [], "long": 0, "short": 0})
+    brains: dict[str, dict] = defaultdict(lambda: {"pnl_list": [], "long": 0, "short": 0})
     with open(events_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -125,7 +131,7 @@ def load_signalsettled_stats(data_dir: str) -> dict[str, dict]:
                 brains[bid]["short"] += 1
 
     result = {}
-    for bid, b in brains.items():  # type: ignore[attr-defined]
+    for bid, b in brains.items():
         pnls = b["pnl_list"]
         n = len(pnls)
         wins = sum(1 for p in pnls if p > 0.001)
@@ -179,7 +185,9 @@ def main():
         # Collect all brain IDs across all sources
         all_bids = set(bp.keys()) | set(gov.keys()) | set(ss.keys())
 
-        print(f"\n  Sources found: brain_perf={len(bp)}, governance={len(gov)}, SignalSettled={len(ss)}")
+        print(
+            f"\n  Sources found: brain_perf={len(bp)}, governance={len(gov)}, SignalSettled={len(ss)}"
+        )
         print(f"  Total unique brains: {len(all_bids)}")
 
         # Table header
@@ -261,7 +269,7 @@ def main():
         # Check for FIX-20260615-012 contamination (orphan entries with pnl=0)
         if ss:
             orphan_suspects = []
-            for bid, s in ss.items():  # type: ignore[attr-defined]
+            for bid, s in ss.items():
                 if s["total"] >= 50 and s["be"] > s["total"] * 0.5:
                     orphan_suspects.append((bid, s["total"], s["be"]))
             if orphan_suspects:
@@ -271,15 +279,17 @@ def main():
 
         # Check for FIX-20260527-002 contamination (identical records across brains)
         if bp:
-            bp_trade_counts = {bid: d["total"] for bid, d in bp.items() if d["total"] > 0}  # type: ignore[attr-defined]
+            bp_trade_counts = {bid: d["total"] for bid, d in bp.items() if d["total"] > 0}
             # Brains with identical trade counts may be contaminated
             count_groups = defaultdict(list)
-            for bid, count in bp_trade_counts.items():  # type: ignore[attr-defined]
+            for bid, count in bp_trade_counts.items():
                 count_groups[count].append(bid)
-            contaminated_groups = {c: bids for c, bids in count_groups.items() if len(bids) >= 3}  # type: ignore[attr-defined]
+            contaminated_groups = {c: bids for c, bids in count_groups.items() if len(bids) >= 3}
             if contaminated_groups:
-                print("\n  !! POTENTIAL CONTAMINATION (FIX-20260527-002: identical per-trade records):")
-                for count, bids in sorted(contaminated_groups.items()):  # type: ignore[attr-defined]
+                print(
+                    "\n  !! POTENTIAL CONTAMINATION (FIX-20260527-002: identical per-trade records):"
+                )
+                for count, bids in sorted(contaminated_groups.items()):
                     print(f"    {count} trades shared by: {', '.join(bids[:5])}")
 
     print()

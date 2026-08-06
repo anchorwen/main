@@ -88,11 +88,11 @@ def deduplicate(
                 brain_id = entry.get("brain_id", "")
                 ts = str(entry.get("timestamp", ""))[:16]  # minute precision
                 ep = float(entry.get("entry_price", 0) or 0)
-                key = (str(brain_id), ts, round(ep, 2))
-                if key in seen_recorded:
+                key3 = (str(brain_id), ts, round(ep, 2))
+                if key3 in seen_recorded:
                     stats["deduped"] += 1
                     continue
-                seen_recorded.add(key)
+                seen_recorded.add(key3)
 
             # Write retained entry
             out.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
@@ -108,7 +108,9 @@ def main(argv: list[str] | None = None) -> int:
         description="Deduplicate ledger_events.jsonl SignalSettled bloat (DQAF-20260621-030)"
     )
     parser.add_argument("--base-dir", default="data_btc", help="Base data directory")
-    parser.add_argument("--backup", action="store_true", help="Create .bak backup before overwriting")
+    parser.add_argument(
+        "--backup", action="store_true", help="Create .bak backup before overwriting"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Report stats without writing")
     args = parser.parse_args(argv)
 
@@ -168,13 +170,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Reduction:         {(1-size_after/max(size_before,1))*100:.1f}%")
     print()
     print("Per event type:")
-    all_types = sorted(set(
-        list({k: 0 for k in list(dict.fromkeys(
-            list({k:0 for k in []}.keys())
-        ))}.keys())
-    ))
     # Recalculate: read output for per-type stats
-    per_type = {}
+    per_type: dict[str, int] = {}
     for line in ledger_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:

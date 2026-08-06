@@ -959,23 +959,25 @@ def _collect_system_resources() -> dict[str, Any]:
             "disk_pct": round(data_disk.percent, 1),
             "disk_path": str(data_disk.path),
         }
-    except Exception:  # BLE001:FOG
+    except Exception:  # BLE001:FOG  # noqa: BLE001
         with fail_open_guard("live_trading_dashboard:_collect_system_resources"):
             import shutil
 
             try:
                 usage = shutil.disk_usage(str(Path("data").resolve()))
                 disk_pct = round((usage.used / usage.total) * 100, 1) if usage.total > 0 else 0
-                return {
+                fallback: dict[str, Any] = {
                     "available": True,
                     "cpu_pct": None,
                     "memory_pct": None,
                     "disk_pct": disk_pct,
                     "disk_path": str(Path("data").resolve()),
                 }
-            except Exception:  # BLE001:FOG
-                with fail_open_guard("live_trading_dashboard:_collect_system_resources"):
-                    return {"available": False}
+            except Exception:  # BLE001:FOG  # noqa: BLE001
+                fallback = {"available": False}
+        return fallback
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Live MT5 positions fetch (thread-timeout guarded)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -998,9 +1000,10 @@ def _fetch_live_mt5_positions(
 
             snap = build_snapshot(mt5_terminal_path=mt5_terminal_path, symbol=symbol)
             result[0] = snap
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_target"):
                 exc_info[0] = exc
+
     t = threading.Thread(target=_target, daemon=True)
     t.start()
     t.join(timeout=timeout)
@@ -1088,10 +1091,11 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 self._serve_api_modules()
             else:
                 self._serve_json({"error": "not_found"}, 404)
-        except Exception:  # BLE001:FOG (Sev 4, Phase 3b)
+        except Exception:  # BLE001:FOG  # noqa: BLE001 (Sev 4, Phase 3b)
             with fail_open_guard("live_trading_dashboard:do_GET"):
                 logger.exception("Dashboard request failed: %s", self.path)
                 self._serve_json({"error": "internal_error"}, 500)
+
     def _serve_html(self) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1120,7 +1124,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             report.pop("text", None)
             report["generated_at"] = _utc_now_iso()
             self._serve_json(report)
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_dashboard"):
                 logger.warning("Dashboard collect failed: %s", exc)
                 self._serve_json(
@@ -1135,6 +1139,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "errors": [str(exc)[:500]],
                     }
                 )
+
     def _serve_api_positions(self) -> None:
         if self.MT5_TERMINAL_PATH:
             data = _fetch_live_mt5_positions(
@@ -1214,7 +1219,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "status": "unknown",
                         "last_direction": "UNKNOWN",
                     }
-            except Exception:  # BLE001:FOG
+            except Exception:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_brains"):
                     logger.warning("Failed to load brain performance tracker", exc_info=True)
         # 2. Governance status
@@ -1239,7 +1244,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                             "freeze_count": state.get("freeze_count", 0),
                             "last_direction": "UNKNOWN",
                         }
-            except Exception:  # BLE001:FOG
+            except Exception:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_brains"):
                     logger.warning("Failed to load governance state", exc_info=True)
         # 2.5 PnL data
@@ -1256,7 +1261,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         brains[bid]["pnl_win_rate"] = m.get("win_rate", 0)
                         brains[bid]["sharpe_ratio"] = m.get("sharpe_ratio", 0)
                         brains[bid]["pnl_samples"] = m.get("sample_count", 0)
-            except Exception:  # BLE001:FOG
+            except Exception:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_brains"):
                     logger.warning("Failed to load brain PnL ledger", exc_info=True)
         # 3. Last direction from today's shadow decisions
@@ -1385,7 +1390,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             slo = SloService()
             report = slo.evaluate()
             self._serve_json(report)
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_slo"):
                 logger.warning("SLO service failed: %s", exc)
                 self._serve_json(
@@ -1396,6 +1401,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "generated_at": _utc_now_iso(),
                     }
                 )
+
     def _serve_api_alerts(self) -> None:
         alerts: list[dict[str, Any]] = []
 
@@ -1407,7 +1413,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
 
             fired = AlertService.with_default_rules().get_fired_history(limit=50)
             alerts.extend(fired)
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_alerts"):
                 logger.warning("AlertService failed", exc_info=True)
         try:
@@ -1428,7 +1434,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                             "source": "audit_log",
                         }
                     )
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_alerts"):
                 logger.warning("AuditLog failed", exc_info=True)
         alerts.sort(key=lambda a: str(a.get("fired_at", "")), reverse=True)
@@ -1441,7 +1447,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         try:
             if path.exists():
                 return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_read_json_safe"):
                 pass
         return {}
@@ -1461,7 +1467,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                                 break
                         except json.JSONDecodeError:
                             continue
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_read_jsonl_head"):
                 pass
         return records
@@ -1508,7 +1514,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     report["bridge"]["heartbeat_age_s"] = round(now_ts - hb_ts, 1)
                 report["bridge"]["outbox_pending"] = bridge.get("outbox_pending", 0)
                 report["bridge"]["last_error"] = bridge.get("last_error")
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── 2. Intent loop / bar sync ──
@@ -1523,7 +1529,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 report["intent_loop"]["last_cycle_s"] = round(
                     now_ts - bar.get("last_cycle_ts", now_ts), 1
                 )
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── 3. Feature store ──
@@ -1535,7 +1541,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 "schemas_count": len(feature_schemas),
                 "schema_version_ok": True,
             }
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── 4. Daily ops ──
@@ -1547,7 +1553,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     "last_run_utc": last_ts,
                     "hours_ago": round((now_ts - float(last_ts)) / 3600.0, 2) if last_ts else None,
                 }
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── 5. Brain tracker + governance ──
@@ -1565,7 +1571,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         report["brains"]["active"] += 1
                     elif hs == "degraded":
                         report["brains"]["probation"] += 1
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         try:
@@ -1581,7 +1587,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 report["brains"]["probation"] += sum(
                     1 for s in states.values() if s.get("status") == "probation"
                 )
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── 6. Open positions ──
@@ -1594,7 +1600,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 report["positions"]["total_exposure"] = round(
                     sum(float(p.get("volume", 0)) for p in positions), 2
                 )
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── 7. Alerts ──
@@ -1616,7 +1622,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         )
                     except (ValueError, TypeError):
                         pass
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── 8. SLO ──
@@ -1628,7 +1634,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     "compliance_pct": slo_data.get("compliance_pct", 100.0),
                     "budget_remaining_pct": slo_data.get("budget_remaining_pct", 100.0),
                 }
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_build_unified_health"):
                 pass
         # ── Compute overall status ──
@@ -1703,7 +1709,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 "detail": hc.get("flags", {}).get("flag", {}),
             }
             report["primary_codes"] = hc.get("primary_codes", [])
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_health"):
                 logger.warning("Health check failed: %s", exc)
                 report["subsystems"]["healthcheck"] = {"status": "ERROR", "detail": str(exc)[:200]}
@@ -1736,7 +1742,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "insufficient_data": insufficient,
                     },
                 }
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_health"):
                 logger.warning("Brain health summary failed", exc_info=True)
         try:
@@ -1758,7 +1764,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "frozen": frozen,
                     },
                 }
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_health"):
                 logger.warning("Governance health summary failed", exc_info=True)
         self._serve_json(report)
@@ -1808,7 +1814,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "source": src_key,
                     }
                 )
-        except Exception:  # BLE001:FOG
+        except Exception:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_risk"):
                 logger.warning("Risk gate policy evaluation failed", exc_info=True)
                 flag_path = self.BASE_DIR / "live_dispatch_block.flag"
@@ -1868,7 +1874,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
 
                 store = BrainPnLStore.load(pnl_path)
                 pnl_table = store.get_summary_table()
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_performance"):
                     errors.append(f"pnl_ledger: {exc}")
                     logger.warning("PnL ledger load failed: %s", exc)
@@ -1883,7 +1889,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 t = BrainPerformanceTracker.load(tracker_path)
                 for s in t.get_all_summaries():
                     tracker[s["brain_id"]] = s
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_performance"):
                     errors.append(f"tracker: {exc}")
                     logger.warning("Tracker load failed: %s", exc)
@@ -1895,7 +1901,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
 
                 g = GovernanceService.load(gov_path)
                 gov_states = g.get_all_states()
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_performance"):
                     errors.append(f"governance: {exc}")
                     logger.warning("Governance load failed: %s", exc)
@@ -2000,7 +2006,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "sample_count": 0,
                         "recent_pnl_series": [],
                     }
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_brain_detail"):
                     logger.warning("Brain PnL detail failed for %s: %s", brain_id, exc)
                     result["pnl_error"] = str(exc)[:200]
@@ -2020,7 +2026,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     "sample_count": summary.get("sample_count", 0),
                     "outcome_distribution": summary.get("outcome_distribution", {}),
                 }
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_brain_detail"):
                     logger.warning("Brain performance detail failed for %s: %s", brain_id, exc)
         # Governance
@@ -2035,7 +2041,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     "freeze_count": state.get("freeze_count", 0),
                     "last_transition": state.get("last_transition_at", ""),
                 }
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_brain_detail"):
                     logger.warning("Brain governance detail failed for %s: %s", brain_id, exc)
         # Training metrics from brain config (if available)
@@ -2088,7 +2094,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 tlog = g.get_transition_log()
                 recent_transitions = list(tlog[-20:])
                 recent_transitions.reverse()
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_governance"):
                     errors.append(f"governance: {exc}")
                     logger.warning("Governance load failed: %s", exc)
@@ -2114,7 +2120,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         promotion_queue.append(entry)
                     elif rec in ("demote_to_probation", "freeze", "limit_exposure"):
                         demotion_warnings.append(entry)
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_governance"):
                     errors.append(f"tracker: {exc}")
                     logger.warning("Tracker load failed for governance: %s", exc)
@@ -2166,7 +2172,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 from core.governance.governance_service import GovernanceService
 
                 gov_states = GovernanceService.load(gov_path).get_all_states()
-            except Exception:  # BLE001:FOG
+            except Exception:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_analytics"):
                     logger.warning("Governance load failed for analytics", exc_info=True)
         if tracker_path.exists():
@@ -2199,7 +2205,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                             retirement_candidates.append(entry)
                         else:
                             degraded_brains.append(entry)
-            except Exception as exc:  # BLE001:FOG
+            except Exception as exc:  # BLE001:FOG  # noqa: BLE001
                 with fail_open_guard("live_trading_dashboard:_serve_api_analytics"):
                     errors.append(f"tracker: {exc}")
                     logger.warning("Tracker load failed for analytics: %s", exc)
@@ -2239,7 +2245,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     "connected": False,
                     "detail": "no health file",
                 }
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_modules"):
                 modules["mt5_bridge"] = {"status": "ERROR", "detail": str(exc)[:100]}
         # 2. Outbox
@@ -2261,7 +2267,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 "pending": pending,
                 "stale": stale,
             }
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_modules"):
                 modules["outbox"] = {"status": "ERROR", "detail": str(exc)[:100]}
         # 3. Feature Store
@@ -2293,7 +2299,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     "available": False,
                     "freshness": "not found",
                 }
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_modules"):
                 modules["feature_store"] = {"status": "ERROR", "detail": str(exc)[:100]}
         # 4. Brain Adapters
@@ -2317,7 +2323,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 "with_data": with_data,
                 "active": with_data,
             }
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_modules"):
                 modules["brain_adapters"] = {"status": "ERROR", "detail": str(exc)[:100]}
         # 5. Governance
@@ -2338,7 +2344,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 }
             else:
                 modules["governance"] = {"status": "WARNING", "detail": "not initialized"}
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_modules"):
                 modules["governance"] = {"status": "ERROR", "detail": str(exc)[:100]}
         # 6. Dispatch
@@ -2361,7 +2367,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 }
             else:
                 modules["daily_ops"] = {"status": "WARNING", "last_recap": "never"}
-        except Exception as exc:  # BLE001:FOG
+        except Exception as exc:  # BLE001:FOG  # noqa: BLE001
             with fail_open_guard("live_trading_dashboard:_serve_api_modules"):
                 modules["daily_ops"] = {"status": "ERROR", "detail": str(exc)[:100]}
         # 8. Resources

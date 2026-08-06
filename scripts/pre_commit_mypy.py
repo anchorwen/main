@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _mypy_scope import is_forensic
+
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = ROOT / "mypy_baseline.json"
 
@@ -98,6 +100,8 @@ def main() -> int:
             f = f.strip()
             if not f:
                 continue
+            if is_forensic(f):
+                continue  # forensic artifacts (archive/ + _audit_*) are out of type-gate scope
             count, _ = run_mypy(f)
             if count > 0:
                 new_baseline[f] = count
@@ -115,6 +119,8 @@ def main() -> int:
     total_checked = 0
 
     for rel_path in staged:
+        if is_forensic(rel_path):
+            continue  # forensic artifacts (archive/ + _audit_*) are out of type-gate scope
         abs_path = ROOT / rel_path
         if not abs_path.exists():
             continue

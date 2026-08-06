@@ -129,7 +129,9 @@ def audit_trade_journal(data_dir: str = "data_btc") -> dict:
     if timestamps:
         results["time_min"] = min(timestamps).isoformat()
         results["time_max"] = max(timestamps).isoformat()
-        results["time_span_days"] = round((max(timestamps) - min(timestamps)).total_seconds() / 86400, 2)
+        results["time_span_days"] = round(
+            (max(timestamps) - min(timestamps)).total_seconds() / 86400, 2
+        )
 
     # ── Missing close_price samples (detail view) ──
     results["missing_close_price_samples"] = [
@@ -137,20 +139,22 @@ def audit_trade_journal(data_dir: str = "data_btc") -> dict:
             "message_id": e.get("message_id", "?")[-20:],
             "recorded_at": e.get("recorded_at", "?"),
             "strategy": e.get("strategy", "?"),
-            "detail_keys": list(e.get("detail", {}).keys()) if isinstance(e.get("detail"), dict) else str(type(e.get("detail"))),
+            "detail_keys": list(e.get("detail", {}).keys())
+            if isinstance(e.get("detail"), dict)
+            else str(type(e.get("detail"))),
             "pnl": e.get("pnl"),
         }
         for e in without_price[:10]
     ]
 
     # ── close_price missing by strategy ──
-    missing_by_strategy: dict[str, int] = Counter()
+    missing_by_strategy: Counter[str] = Counter()
     for e in without_price:
         missing_by_strategy[e.get("strategy", "unknown")] += 1
     results["close_price_missing_by_strategy"] = dict(missing_by_strategy.most_common(10))
 
     # ── PnL null by strategy ──
-    pnl_null_by_strategy: dict[str, int] = Counter()
+    pnl_null_by_strategy: Counter[str] = Counter()
     for e in pnl_null:
         pnl_null_by_strategy[e.get("strategy", "unknown")] += 1
     results["pnl_null_by_strategy"] = dict(pnl_null_by_strategy.most_common(10))

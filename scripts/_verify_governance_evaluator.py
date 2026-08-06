@@ -49,6 +49,13 @@ def _make_decision(brain_id: str, current: str, target: str) -> BrainPromotionDe
     )
 
 
+def _status_of(gov: GovernanceService, brain_id: str) -> str:
+    """Return a brain's resolved status, asserting the state record exists."""
+    st = gov.get_brain_state(brain_id)
+    assert st is not None, f"missing brain state for {brain_id}"
+    return st["status"]
+
+
 def main() -> int:
     # ── Assert 1: config SSOT hold loads ──
     holds = load_observation_holds("configs/brains_btc")
@@ -67,7 +74,7 @@ def main() -> int:
     engine.set_observation_holds({"TestHeld": NOW_UTC + timedelta(days=1)})
     changes = engine.execute_transitions([_make_decision("TestHeld", "live", "probation")])
     assert changes and "BLOCKED" in changes[0], f"throttle was NOT blocked: {changes}"
-    assert gov.get_brain_state("TestHeld")["status"] == "live", "held brain was demoted!"
+    assert _status_of(gov, "TestHeld") == "live", "held brain was demoted!"
     print(f"ASSERT PASS 2: held live→probation BLOCKED → {changes[0]} (status stays live)")
 
     # ── Assert 3: NO-HOLD control — same throttle applies without a hold ──
@@ -76,9 +83,7 @@ def main() -> int:
     engine2 = GovernanceRuleEngine(gov2)
     changes2 = engine2.execute_transitions([_make_decision("TestHeld", "live", "probation")])
     assert changes2 and "BLOCKED" not in changes2[0], f"no-hold throttle was blocked: {changes2}"
-    assert (
-        gov2.get_brain_state("TestHeld")["status"] == "probation"
-    ), "no-hold throttle did not apply"
+    assert _status_of(gov2, "TestHeld") == "probation", "no-hold throttle did not apply"
     print(f"ASSERT PASS 3: no-hold live→probation applied → {changes2[0]}")
 
     # ── Assert 4: EXPIRED-hold control — expired hold no longer blocks ──
@@ -91,7 +96,7 @@ def main() -> int:
     ), "expired hold must NOT block demotion"
     changes3 = engine3.execute_transitions([_make_decision("TestHeld", "live", "probation")])
     assert changes3 and "BLOCKED" not in changes3[0], f"expired-hold throttle blocked: {changes3}"
-    assert gov3.get_brain_state("TestHeld")["status"] == "probation"
+    assert _status_of(gov3, "TestHeld") == "probation"
     print(f"ASSERT PASS 4: expired hold → demotion resumes → {changes3[0]}")
 
     # ── Assert 5: PROMOTION passthrough — held brain promotion is never blocked ──
@@ -101,7 +106,7 @@ def main() -> int:
     engine4.set_observation_holds({"TestHeld": NOW_UTC + timedelta(days=1)})
     changes4 = engine4.execute_transitions([_make_decision("TestHeld", "probation", "live")])
     assert changes4 and "BLOCKED" not in changes4[0], f"held promotion was blocked: {changes4}"
-    assert gov4.get_brain_state("TestHeld")["status"] == "live"
+    assert _status_of(gov4, "TestHeld") == "live"
     print(f"ASSERT PASS 5: held probation→live promotion passes through → {changes4[0]}")
 
     # ── Assert 6: PERSISTENCE — transitions survive reload (DQAF-20260804-001) ──
@@ -133,6 +138,7 @@ def main() -> int:
         print(f"  TestPersist transition in cycle: {persisted}")
         gov_after = GovernanceService.load(str(tmp_dir / "governance_state.json"))
         st = gov_after.get_brain_state("TestPersist")
+        assert st is not None, "TestPersist state missing after reload"
         assert (
             st["status"] == "probation"
         ), f"transition did NOT persist to disk! status={st['status']}"

@@ -39,7 +39,7 @@ from typing import Any
 
 def load_jsonl(path: Path) -> list[dict]:
     """Load JSONL file, skipping empty/malformed lines."""
-    records = []
+    records: list[dict] = []
     if not path.exists():
         print(f"[WARN] File not found: {path}")
         return records
@@ -75,7 +75,13 @@ def classify_exit(label: str | None, detail: dict | None) -> str:
         return "sl_hit"
     if reason in ("mia_close", "mt5_deal_reason_3"):
         return "mia_close"
-    if reason in ("unknown_close", "client_close", "position_not_found", "auto_orphan_rejected", "auto_orphan_stale"):
+    if reason in (
+        "unknown_close",
+        "client_close",
+        "position_not_found",
+        "auto_orphan_rejected",
+        "auto_orphan_stale",
+    ):
         return "unknown_close"
     # fallback: check label
     if label in ("win",):
@@ -107,6 +113,7 @@ def compute_sharpe(pnl_series: list[float]) -> float:
     if len(pnl_series) < 2:
         return 0.0
     import math
+
     mean_pnl = sum(pnl_series) / len(pnl_series)
     variance = sum((x - mean_pnl) ** 2 for x in pnl_series) / (len(pnl_series) - 1)
     if variance <= 0:
@@ -160,12 +167,14 @@ def analyze_trade_journal(data_dir: Path):
         if close_rec is None and tdata["closes"]:
             close_rec = tdata["closes"][-1]
 
-        resolved.append({
-            "ticket": ticket,
-            "open": open_rec,
-            "close": close_rec,
-            "modify_count": len(tdata["modifies"]),
-        })
+        resolved.append(
+            {
+                "ticket": ticket,
+                "open": open_rec,
+                "close": close_rec,
+                "modify_count": len(tdata["modifies"]),
+            }
+        )
 
     # --- Phase 3: Compute statistics ---
     total_trades = len(resolved)
@@ -173,20 +182,35 @@ def analyze_trade_journal(data_dir: Path):
     open_positions = [t for t in resolved if t["close"] is None]
 
     # Track per-brain stats
-    brain_stats: dict[str, dict] = defaultdict(lambda: {
-        "trades": [], "pnls": [], "wins": 0, "losses": 0, "breakeven": 0,
-        "long_trades": 0, "short_trades": 0, "long_wins": 0, "short_wins": 0,
-        "exit_reasons": defaultdict(int),
-        "strategies": defaultdict(int),
-        "total_pnl_r": 0.0,
-        "total_modifies": 0,
-    })
+    brain_stats: dict[str, dict] = defaultdict(
+        lambda: {
+            "trades": [],
+            "pnls": [],
+            "wins": 0,
+            "losses": 0,
+            "breakeven": 0,
+            "long_trades": 0,
+            "short_trades": 0,
+            "long_wins": 0,
+            "short_wins": 0,
+            "exit_reasons": defaultdict(int),
+            "strategies": defaultdict(int),
+            "total_pnl_r": 0.0,
+            "total_modifies": 0,
+        }
+    )
 
     # Track per-strategy stats
-    strategy_stats: dict[str, dict] = defaultdict(lambda: {
-        "trades": [], "pnls": [], "wins": 0, "losses": 0, "breakeven": 0,
-        "total_pnl_r": 0.0,
-    })
+    strategy_stats: dict[str, dict] = defaultdict(
+        lambda: {
+            "trades": [],
+            "pnls": [],
+            "wins": 0,
+            "losses": 0,
+            "breakeven": 0,
+            "total_pnl_r": 0.0,
+        }
+    )
 
     # Track exit reason stats
     exit_stats: dict[str, dict] = defaultdict(lambda: {"count": 0, "pnl_r_total": 0.0, "pnls": []})
@@ -216,16 +240,18 @@ def analyze_trade_journal(data_dir: Path):
 
         # Track specific watchdog reasons
         if exit_cat == "watchdog":
-            watchdog_exits.append({
-                "ticket": t["ticket"],
-                "label": label,
-                "pnl_r": pnl_r,
-                "side": side,
-                "strategy": strategy,
-                "brain_ids": brain_ids,
-                "date": date_str,
-                "close_reason": close_reason,
-            })
+            watchdog_exits.append(
+                {
+                    "ticket": t["ticket"],
+                    "label": label,
+                    "pnl_r": pnl_r,
+                    "side": side,
+                    "strategy": strategy,
+                    "brain_ids": brain_ids,
+                    "date": date_str,
+                    "close_reason": close_reason,
+                }
+            )
 
         all_pnls.append(pnl_r)
         date_pnls[date_str].append(pnl_r)
@@ -316,7 +342,9 @@ def analyze_trade_journal(data_dir: Path):
     print(f"  Unique position tickets:        {len(trades):>6}")
     print(f"  Closed trades (with PnL):       {len(closed_trades):>6}")
     print(f"  Open positions (no close yet):  {len(open_positions):>6}")
-    print(f"  Date range: {date_pnls and min(date_pnls.keys())} → {date_pnls and max(date_pnls.keys())}")
+    print(
+        f"  Date range: {date_pnls and min(date_pnls.keys())} → {date_pnls and max(date_pnls.keys())}"
+    )
     if open_positions:
         print(f"  Open tickets: {[t['ticket'] for t in open_positions]}")
 
@@ -364,15 +392,29 @@ def analyze_trade_journal(data_dir: Path):
     print(f"  Sharpe (approx):      {sharpe:+.2f}")
     print(f"  Risk/Reward Ratio:    {abs(avg_win/max(avg_loss, -0.01)):.2f}")
 
-    print(f"\n  Long trades:  {len(long_pnls)}, PnL={sum(long_pnls):+.1f}R, WR={sum(1 for p in long_pnls if p>0)/max(len(long_pnls),1)*100:.1f}%")
-    print(f"  Short trades: {len(short_pnls)}, PnL={sum(short_pnls):+.1f}R, WR={sum(1 for p in short_pnls if p>0)/max(len(short_pnls),1)*100:.1f}%")
+    print(
+        f"\n  Long trades:  {len(long_pnls)}, PnL={sum(long_pnls):+.1f}R, WR={sum(1 for p in long_pnls if p>0)/max(len(long_pnls),1)*100:.1f}%"
+    )
+    print(
+        f"  Short trades: {len(short_pnls)}, PnL={sum(short_pnls):+.1f}R, WR={sum(1 for p in short_pnls if p>0)/max(len(short_pnls),1)*100:.1f}%"
+    )
 
     # C. Exit Reason Analysis
     print("\n" + "─" * 80)
     print("  C. EXIT REASON BREAKDOWN")
     print("─" * 80)
-    exit_order = ["tp_hit", "sl_hit", "watchdog", "mia_close", "unknown_close", "breakeven", "other"]
-    print(f"  {'Exit Reason':<20} {'Count':>6} {'Share':>7} {'PnL(R)':>10} {'Avg PnL':>9} {'Win%':>7}")
+    exit_order = [
+        "tp_hit",
+        "sl_hit",
+        "watchdog",
+        "mia_close",
+        "unknown_close",
+        "breakeven",
+        "other",
+    ]
+    print(
+        f"  {'Exit Reason':<20} {'Count':>6} {'Share':>7} {'PnL(R)':>10} {'Avg PnL':>9} {'Win%':>7}"
+    )
     print(f"  {'-'*20} {'-'*6} {'-'*7} {'-'*10} {'-'*9} {'-'*7}")
     for ecat in exit_order:
         es = exit_stats.get(ecat)
@@ -380,14 +422,18 @@ def analyze_trade_journal(data_dir: Path):
             pnls = es["pnls"]
             ec_wins = sum(1 for p in pnls if p > 0)
             ec_wr = ec_wins / max(len(pnls), 1)
-            print(f"  {ecat:<20} {es['count']:>6} {es['count']/max(n,1)*100:>6.1f}% {es['pnl_r_total']:>+10.1f} {es['pnl_r_total']/es['count']:>+9.1f} {ec_wr*100:>6.1f}%")
+            print(
+                f"  {ecat:<20} {es['count']:>6} {es['count']/max(n,1)*100:>6.1f}% {es['pnl_r_total']:>+10.1f} {es['pnl_r_total']/es['count']:>+9.1f} {ec_wr*100:>6.1f}%"
+            )
 
     # D. Watchdog detail
     if watchdog_exits:
         print("\n" + "─" * 80)
         print("  D. WATCHDOG EXIT DETAIL")
         print("─" * 80)
-        wd_by_label: dict[str, dict] = defaultdict(lambda: {"count": 0, "pnl_r_total": 0.0, "pnls": []})
+        wd_by_label: dict[str, dict] = defaultdict(
+            lambda: {"count": 0, "pnl_r_total": 0.0, "pnls": []}
+        )
         for w in watchdog_exits:
             lbl = w["label"]
             wd_by_label[lbl]["count"] += 1
@@ -397,7 +443,9 @@ def analyze_trade_journal(data_dir: Path):
         print(f"  {'-'*50} {'-'*5} {'-'*9} {'-'*8}")
         for lbl in sorted(wd_by_label.keys()):
             wd = wd_by_label[lbl]
-            print(f"  {lbl:<50} {wd['count']:>5} {wd['pnl_r_total']:>+9.1f} {wd['pnl_r_total']/wd['count']:>+8.1f}")
+            print(
+                f"  {lbl:<50} {wd['count']:>5} {wd['pnl_r_total']:>+9.1f} {wd['pnl_r_total']/wd['count']:>+8.1f}"
+            )
 
     # E. Per-Brain Performance
     print("\n" + "─" * 80)
@@ -427,34 +475,40 @@ def analyze_trade_journal(data_dir: Path):
             if lb["brain_id"] == bid:
                 status = lb.get("status", status)
                 break
-        brain_list.append({
-            "brain_id": bid,
-            "status": status,
-            "trades": n_b,
-            "wins": wins_b,
-            "losses": losses_b,
-            "be": be_b,
-            "wr": wr_b,
-            "total_pnl_r": total_b,
-            "avg_win": avg_w,
-            "avg_loss": avg_l,
-            "max_dd": dd_b,
-            "sharpe": sharpe_b,
-            "long_trades": bs["long_trades"],
-            "short_trades": bs["short_trades"],
-            "long_wins": bs["long_wins"],
-            "short_wins": bs["short_wins"],
-            "modifies": bs["total_modifies"],
-            "exit_reasons": dict(bs["exit_reasons"]),
-            "strategies": dict(bs["strategies"]),
-        })
+        brain_list.append(
+            {
+                "brain_id": bid,
+                "status": status,
+                "trades": n_b,
+                "wins": wins_b,
+                "losses": losses_b,
+                "be": be_b,
+                "wr": wr_b,
+                "total_pnl_r": total_b,
+                "avg_win": avg_w,
+                "avg_loss": avg_l,
+                "max_dd": dd_b,
+                "sharpe": sharpe_b,
+                "long_trades": bs["long_trades"],
+                "short_trades": bs["short_trades"],
+                "long_wins": bs["long_wins"],
+                "short_wins": bs["short_wins"],
+                "modifies": bs["total_modifies"],
+                "exit_reasons": dict(bs["exit_reasons"]),
+                "strategies": dict(bs["strategies"]),
+            }
+        )
 
     brain_list.sort(key=lambda x: x["total_pnl_r"], reverse=True)
 
-    print(f"  {'Brain ID':<35} {'Status':<10} {'Trades':>6} {'Win%':>6} {'PnL(R)':>9} {'AvgW':>7} {'AvgL':>7} {'MaxDD':>7} {'Sharpe':>7}")
+    print(
+        f"  {'Brain ID':<35} {'Status':<10} {'Trades':>6} {'Win%':>6} {'PnL(R)':>9} {'AvgW':>7} {'AvgL':>7} {'MaxDD':>7} {'Sharpe':>7}"
+    )
     print(f"  {'-'*35} {'-'*10} {'-'*6} {'-'*6} {'-'*9} {'-'*7} {'-'*7} {'-'*7} {'-'*7}")
     for b in brain_list:
-        print(f"  {b['brain_id']:<35} {b['status']:<10} {b['trades']:>6} {b['wr']*100:>5.1f}% {b['total_pnl_r']:>+9.1f} {b['avg_win']:>+7.1f} {b['avg_loss']:>+7.1f} {b['max_dd']:>7.1f} {b['sharpe']:>+7.2f}")
+        print(
+            f"  {b['brain_id']:<35} {b['status']:<10} {b['trades']:>6} {b['wr']*100:>5.1f}% {b['total_pnl_r']:>+9.1f} {b['avg_win']:>+7.1f} {b['avg_loss']:>+7.1f} {b['max_dd']:>7.1f} {b['sharpe']:>+7.2f}"
+        )
 
     # F. Per-Strategy Performance
     print("\n" + "─" * 80)
@@ -465,21 +519,25 @@ def analyze_trade_journal(data_dir: Path):
         pnls = ss["pnls"]
         n_s = len(pnls)
         wr_s = ss["wins"] / max(n_s - ss["breakeven"], 1)
-        strat_list.append({
-            "strategy": sid,
-            "trades": n_s,
-            "wins": ss["wins"],
-            "losses": ss["losses"],
-            "be": ss["breakeven"],
-            "wr": wr_s,
-            "total_pnl_r": ss["total_pnl_r"],
-        })
+        strat_list.append(
+            {
+                "strategy": sid,
+                "trades": n_s,
+                "wins": ss["wins"],
+                "losses": ss["losses"],
+                "be": ss["breakeven"],
+                "wr": wr_s,
+                "total_pnl_r": ss["total_pnl_r"],
+            }
+        )
     strat_list.sort(key=lambda x: x["total_pnl_r"], reverse=True)
     print(f"  {'Strategy':<20} {'Trades':>6} {'Win%':>6} {'PnL(R)':>9} {'Avg Trade':>9}")
     print(f"  {'-'*20} {'-'*6} {'-'*6} {'-'*9} {'-'*9}")
     for s in strat_list:
         avg_tr = s["total_pnl_r"] / max(s["trades"], 1)
-        print(f"  {s['strategy']:<20} {s['trades']:>6} {s['wr']*100:>5.1f}% {s['total_pnl_r']:>+9.1f} {avg_tr:>+9.1f}")
+        print(
+            f"  {s['strategy']:<20} {s['trades']:>6} {s['wr']*100:>5.1f}% {s['total_pnl_r']:>+9.1f} {avg_tr:>+9.1f}"
+        )
 
     # G. Daily PnL
     print("\n" + "─" * 80)
@@ -499,7 +557,9 @@ def analyze_trade_journal(data_dir: Path):
     print("\n" + "─" * 80)
     print("  H. BRAIN DIRECTION BIAS (Long vs Short)")
     print("─" * 80)
-    print(f"  {'Brain ID':<35} {'Long T':>7} {'Long WR':>7} {'Short T':>7} {'Short WR':>7} {'Bias':>8}")
+    print(
+        f"  {'Brain ID':<35} {'Long T':>7} {'Long WR':>7} {'Short T':>7} {'Short WR':>7} {'Bias':>8}"
+    )
     print(f"  {'-'*35} {'-'*7} {'-'*7} {'-'*7} {'-'*7} {'-'*8}")
     for b in brain_list:
         lt = b["long_trades"]
@@ -518,7 +578,7 @@ def analyze_trade_journal(data_dir: Path):
     print("\n" + "─" * 80)
     print("  I. TRAILING SL BEHAVIOR (from position_snapshots)")
     print("─" * 80)
-    trail_counts = defaultdict(int)
+    trail_counts: defaultdict[str, int] = defaultdict(int)
     trail_pnls: dict[str, list[float]] = defaultdict(list)
     for t in closed_trades:
         ticket = t["ticket"]
@@ -535,7 +595,17 @@ def analyze_trade_journal(data_dir: Path):
         else:
             trail_counts["11+"] += 1
         pnl = t["close"].get("pnl") or 0.0
-        bucket = "0-1" if trail_count <= 1 else "2-3" if trail_count <= 3 else "4-6" if trail_count <= 6 else "7-10" if trail_count <= 10 else "11+"
+        bucket = (
+            "0-1"
+            if trail_count <= 1
+            else "2-3"
+            if trail_count <= 3
+            else "4-6"
+            if trail_count <= 6
+            else "7-10"
+            if trail_count <= 10
+            else "11+"
+        )
         trail_pnls[bucket].append(pnl)
     print(f"  {'Snapshot Bucket':<20} {'Count':>6} {'Avg PnL(R)':>11} {'Win%':>7}")
     print(f"  {'-'*20} {'-'*6} {'-'*11} {'-'*7}")
@@ -586,24 +656,34 @@ def analyze_trade_journal(data_dir: Path):
 
     print(f"\n  Losing brains (≥10 trades, PnL<0): {len(losing_brains)}")
     for b in losing_brains:
-        print(f"    {b['brain_id']}: {b['total_pnl_r']:+.1f}R, WR={b['wr']*100:.1f}%, {b['trades']} trades, status={b['status']}")
+        print(
+            f"    {b['brain_id']}: {b['total_pnl_r']:+.1f}R, WR={b['wr']*100:.1f}%, {b['trades']} trades, status={b['status']}"
+        )
 
     print(f"\n  Profitable brains (≥5 trades, PnL>0): {len(profitable_brains)}")
     for b in profitable_brains:
-        print(f"    {b['brain_id']}: {b['total_pnl_r']:+.1f}R, WR={b['wr']*100:.1f}%, {b['trades']} trades, status={b['status']}")
+        print(
+            f"    {b['brain_id']}: {b['total_pnl_r']:+.1f}R, WR={b['wr']*100:.1f}%, {b['trades']} trades, status={b['status']}"
+        )
 
     # PnL concentration
-    top_loss_brains = sorted([b for b in brain_list if b["total_pnl_r"] < 0], key=lambda x: x["total_pnl_r"])[:5]
+    top_loss_brains = sorted(
+        [b for b in brain_list if b["total_pnl_r"] < 0], key=lambda x: x["total_pnl_r"]
+    )[:5]
     print(f"\n  Top 5 PnL destroyers:")
     for b in top_loss_brains:
-        print(f"    {b['brain_id']}: {b['total_pnl_r']:+.1f}R, {b['trades']} trades, WR={b['wr']*100:.1f}%")
+        print(
+            f"    {b['brain_id']}: {b['total_pnl_r']:+.1f}R, {b['trades']} trades, WR={b['wr']*100:.1f}%"
+        )
 
     # Best exit channel
     for ecat in exit_order:
         es = exit_stats.get(ecat)
         if es and es["count"] > 0:
             if es["pnl_r_total"] > 0:
-                print(f"\n  Best exit channel: {ecat} — {es['pnl_r_total']:+.1f}R across {es['count']} trades")
+                print(
+                    f"\n  Best exit channel: {ecat} — {es['pnl_r_total']:+.1f}R across {es['count']} trades"
+                )
                 break
 
     print("\n[DONE] All statistics above are the sole source of truth.")
@@ -663,7 +743,9 @@ def main():
 
             print(f"  ticket={ticket} | {entry_time} → {close_time} | {side} | {volume} lot")
             print(f"    brains={brains} | entry={entry_price} | sl={sl} | tp={tp}")
-            print(f"    pnl={pnl:+.1f}R | label={label} | reason={reason} | exit={classify_exit(label, detail)}")
+            print(
+                f"    pnl={pnl:+.1f}R | label={label} | reason={reason} | exit={classify_exit(label, detail)}"
+            )
             print(f"    modifies={t['modify_count']}")
             print()
 
