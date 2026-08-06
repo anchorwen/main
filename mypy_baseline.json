@@ -1,16 +1,1 @@
-{
-  "tests/contracts/test_cap_result.py": 11,
-  "tests/data/test_contracts.py": 2,
-  "tests/execution/test_conformal_ou_gate.py": 8,
-  "tests/execution/test_mt5_worker.py": 12,
-  "tests/execution/test_rule_engine_budget_safety.py": 1,
-  "tests/execution/test_strategy_budget.py": 9,
-  "tests/features/computers/test_btc_feature_augmenter.py": 1,
-  "tests/runtime/test_deal_selection.py": 1,
-  "tests/runtime/test_feature_freshness.py": 5,
-  "tests/runtime/test_golden_master.py": 2,
-  "tests/runtime/test_position_ownership.py": 1,
-  "tests/runtime/test_session_guards.py": 8,
-  "tests/runtime/test_timeframe_scaling.py": 1,
-  "tests/training/test_flow46_alignment.py": 2
-}
+{}

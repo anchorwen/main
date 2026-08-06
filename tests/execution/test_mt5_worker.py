@@ -10,6 +10,7 @@ Tests parts that don't require actual MT5 C++ terminal.
 from __future__ import annotations
 
 import time
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +20,17 @@ from core.execution.mt5_worker import (
     get_mt5_worker,
     set_mt5_worker,
 )
+
+
+def _inject_attr(obj: Any, name: str, value: Any) -> None:
+    """Replace an attribute (including a method) at runtime — test seam.
+
+    Direct ``obj.attr = value`` trips mypy method-assign for real methods in
+    unified mode; ``setattr`` trips ruff B010.  Bypassing through ``__dict__``
+    keeps the seam statically invisible in both modes with identical runtime
+    behaviour (instance attribute shadows the method).
+    """
+    obj.__dict__[name] = value
 
 
 class TestSingleton:
@@ -145,8 +157,8 @@ class TestSubmitErrors:
         w = MT5Worker()
         w._running = True
         # Force circuit breaker open
-        w.circuit_breaker.allow_request = MagicMock(return_value=False)
-        w.circuit_breaker.get_status = MagicMock(return_value={"total_trips": 3})
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=False))
+        _inject_attr(w.circuit_breaker, "get_status", MagicMock(return_value={"total_trips": 3}))
         with pytest.raises(TimeoutError, match="circuit OPEN"):
             w._submit("symbol_info_tick", "XAUUSDc")
 
@@ -156,20 +168,20 @@ class TestSubmitErrors:
         w._running = True
         w._thread = MagicMock()
         w._thread.is_alive.return_value = False
-        w.circuit_breaker.allow_request = MagicMock(return_value=False)
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=False))
         # _reconnect should NOT raise circuit-open TimeoutError
         try:
             w._submit("_reconnect", w._mt5_init_kwargs, timeout=0.1)
         except TimeoutError as e:
             assert "circuit OPEN" not in str(e)
-        except Exception:
+        except Exception:  # noqa: BLE001 — tolerate unexpected non-Timeout
             pass
 
     def test_submit_stuck_worker_raises(self) -> None:
         """_submit when worker is stuck → TimeoutError."""
         w = MT5Worker()
         w._running = True
-        w.circuit_breaker.allow_request = MagicMock(return_value=True)
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=True))
         # Make worker appear stuck
         w._command_in_flight = "copy_ticks_from"
         w._last_command_start = time.monotonic() - 999.0
@@ -180,7 +192,7 @@ class TestSubmitErrors:
         """_submit when queue is full → RuntimeError."""
         w = MT5Worker()
         w._running = True
-        w.circuit_breaker.allow_request = MagicMock(return_value=True)
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=True))
         # Fill queue to max
         w._queue.maxsize = 2
         w._queue.put_nowait(("dummy", "cmd", (), {}))
@@ -218,8 +230,9 @@ class TestPositionsGet:
         """positions_get returns [] when _submit returns None."""
         w = MT5Worker()
         w._running = True
-        w.circuit_breaker.allow_request = MagicMock(return_value=True)
-        w._submit = MagicMock(return_value=None)  # type: ignore[assignment]
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=True))
+        submit_mock: Any = MagicMock(return_value=None)
+        _inject_attr(w, "_submit", submit_mock)
         result = w.positions_get(symbol="XAUUSDc")
         assert result == []
 
@@ -227,9 +240,9 @@ class TestPositionsGet:
         """positions_get passes symbol/ticket as kwargs to _submit."""
         w = MT5Worker()
         w._running = True
-        w.circuit_breaker.allow_request = MagicMock(return_value=True)
-        mock_submit = MagicMock(return_value=[{"ticket": 123}])
-        w._submit = mock_submit  # type: ignore[assignment]
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=True))
+        mock_submit: Any = MagicMock(return_value=[{"ticket": 123}])
+        _inject_attr(w, "_submit", mock_submit)
         result = w.positions_get(symbol="XAUUSDc", ticket=456)
         assert result == [{"ticket": 123}]
         mock_submit.assert_called_once()
@@ -240,9 +253,9 @@ class TestPositionsGet:
         """positions_get with no filters passes empty kwargs."""
         w = MT5Worker()
         w._running = True
-        w.circuit_breaker.allow_request = MagicMock(return_value=True)
-        mock_submit = MagicMock(return_value=[])
-        w._submit = mock_submit  # type: ignore[assignment]
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=True))
+        mock_submit: Any = MagicMock(return_value=[])
+        _inject_attr(w, "_submit", mock_submit)
         w.positions_get()
         call_kwargs = mock_submit.call_args[1]
         assert call_kwargs["_kwargs"] == {}
@@ -253,8 +266,9 @@ class TestHistoryDealsGet:
         """history_deals_get returns [] when _submit returns None."""
         w = MT5Worker()
         w._running = True
-        w.circuit_breaker.allow_request = MagicMock(return_value=True)
-        w._submit = MagicMock(return_value=None)  # type: ignore[assignment]
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=True))
+        submit_mock: Any = MagicMock(return_value=None)
+        _inject_attr(w, "_submit", submit_mock)
         result = w.history_deals_get(position=123)
         assert result == []
 
@@ -262,9 +276,9 @@ class TestHistoryDealsGet:
         """history_deals_get passes position/ticket as kwargs to _submit."""
         w = MT5Worker()
         w._running = True
-        w.circuit_breaker.allow_request = MagicMock(return_value=True)
-        mock_submit = MagicMock(return_value=[{"deal": 1}])
-        w._submit = mock_submit  # type: ignore[assignment]
+        _inject_attr(w.circuit_breaker, "allow_request", MagicMock(return_value=True))
+        mock_submit: Any = MagicMock(return_value=[{"deal": 1}])
+        _inject_attr(w, "_submit", mock_submit)
         result = w.history_deals_get(position=100, ticket=200)
         assert result == [{"deal": 1}]
         call_kwargs = mock_submit.call_args[1]
@@ -364,7 +378,7 @@ class TestRunDispatch:
         w._last_command_start = time.monotonic()
         try:
             future.set_exception.assert_not_called()
-        except Exception:
+        except Exception:  # noqa: BLE001 — tolerate unexpected non-Timeout
             pass
 
     def test_mt5_none_sets_runtime_error(self) -> None:
@@ -387,55 +401,64 @@ class TestRunDispatch:
 class TestApiMethods:
     def test_symbol_info_tick_calls_submit(self) -> None:
         w = MT5Worker()
-        w._submit = MagicMock(return_value={"bid": 1.0})  # type: ignore[assignment]
+        submit_mock: Any = MagicMock(return_value={"bid": 1.0})
+        _inject_attr(w, "_submit", submit_mock)
         result = w.symbol_info_tick("XAUUSDc", timeout=3.0)
         assert result == {"bid": 1.0}
-        w._submit.assert_called_once_with("symbol_info_tick", "XAUUSDc", timeout=3.0)
+        submit_mock.assert_called_once_with("symbol_info_tick", "XAUUSDc", timeout=3.0)
 
     def test_symbol_info_calls_submit(self) -> None:
         w = MT5Worker()
-        w._submit = MagicMock(return_value={"name": "XAUUSDc"})  # type: ignore[assignment]
+        submit_mock: Any = MagicMock(return_value={"name": "XAUUSDc"})
+        _inject_attr(w, "_submit", submit_mock)
         result = w.symbol_info("XAUUSDc", timeout=2.0)
         assert result == {"name": "XAUUSDc"}
-        w._submit.assert_called_once_with("symbol_info", "XAUUSDc", timeout=2.0)
+        submit_mock.assert_called_once_with("symbol_info", "XAUUSDc", timeout=2.0)
 
     def test_symbol_select_calls_submit(self) -> None:
         w = MT5Worker()
-        w._submit = MagicMock(return_value=True)  # type: ignore[assignment]
+        submit_mock: Any = MagicMock(return_value=True)
+        _inject_attr(w, "_submit", submit_mock)
         result = w.symbol_select("XAUUSDc", True, timeout=4.0)
         assert result is True
-        w._submit.assert_called_once_with("symbol_select", "XAUUSDc", True, timeout=4.0)
+        submit_mock.assert_called_once_with("symbol_select", "XAUUSDc", True, timeout=4.0)
 
     def test_copy_rates_from_pos_calls_submit(self) -> None:
         w = MT5Worker()
-        w._submit = MagicMock(return_value=[(1, 2, 3, 4, 5, 6, 7, 8)])  # type: ignore[assignment]
+        submit_mock: Any = MagicMock(return_value=[(1, 2, 3, 4, 5, 6, 7, 8)])
+        _inject_attr(w, "_submit", submit_mock)
         result = w.copy_rates_from_pos("XAUUSDc", 5, 0, 100, timeout=10.0)
         assert result == [(1, 2, 3, 4, 5, 6, 7, 8)]
-        w._submit.assert_called_once_with("copy_rates_from_pos", "XAUUSDc", 5, 0, 100, timeout=10.0)
+        submit_mock.assert_called_once_with(
+            "copy_rates_from_pos", "XAUUSDc", 5, 0, 100, timeout=10.0
+        )
 
     def test_copy_ticks_from_calls_submit(self) -> None:
         w = MT5Worker()
-        w._submit = MagicMock(return_value=[(1, 2, 3)])  # type: ignore[assignment]
+        submit_mock: Any = MagicMock(return_value=[(1, 2, 3)])
+        _inject_attr(w, "_submit", submit_mock)
         result = w.copy_ticks_from("XAUUSDc", 123456.0, 1000, 0, timeout=15.0)
         assert result == [(1, 2, 3)]
-        w._submit.assert_called_once_with(
+        submit_mock.assert_called_once_with(
             "copy_ticks_from", "XAUUSDc", 123456.0, 1000, 0, timeout=15.0
         )
 
     def test_account_info_calls_submit(self) -> None:
         w = MT5Worker()
-        w._submit = MagicMock(return_value={"balance": 10000.0})  # type: ignore[assignment]
+        submit_mock: Any = MagicMock(return_value={"balance": 10000.0})
+        _inject_attr(w, "_submit", submit_mock)
         result = w.account_info(timeout=3.0)
         assert result == {"balance": 10000.0}
-        w._submit.assert_called_once_with("account_info", timeout=3.0)
+        submit_mock.assert_called_once_with("account_info", timeout=3.0)
 
     def test_order_send_calls_submit(self) -> None:
         w = MT5Worker()
-        w._submit = MagicMock(return_value={"retcode": 10009})  # type: ignore[assignment]
+        submit_mock: Any = MagicMock(return_value={"retcode": 10009})
+        _inject_attr(w, "_submit", submit_mock)
         request = {"action": "buy", "symbol": "XAUUSDc", "volume": 0.01}
         result = w.order_send(request, timeout=10.0)
         assert result == {"retcode": 10009}
-        w._submit.assert_called_once_with("order_send", request, timeout=10.0)
+        submit_mock.assert_called_once_with("order_send", request, timeout=10.0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

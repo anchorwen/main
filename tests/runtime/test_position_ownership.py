@@ -6,7 +6,7 @@ Zero I/O, deterministic — ideal for parameterized testing.
 
 from __future__ import annotations
 
-import pytest
+from typing import Any
 
 from core.runtime.position_ownership import resolve_position_owner
 
@@ -18,7 +18,9 @@ _H4_TYPES = {"Swing_V9_H4_V2"}
 _3BAR_TYPES = {"V9_ONNX_3BAR", "V10_XGB_3BAR"}
 _STATARB_TYPES = {"OU_StatArb_Dynamic", "StatArb_M15"}
 
-_KWARGS = dict(
+# dict[str, Any] — a single literal type would not match the heterogeneous
+# keyword-only params (set[str] | frozenset[str]) under `**` spread in unified mode.
+_KWARGS: dict[str, Any] = dict(
     micro_m15_types=_M15_TYPES,
     micro_h1_types=_H1_TYPES,
     micro_h4_types=_H4_TYPES,
@@ -35,7 +37,8 @@ def test_empty_brain_ids_returns_default():
 
 
 def test_none_brain_ids_returns_default():
-    assert resolve_position_owner(None, [], **_KWARGS) == "barrier_12bar"  # type: ignore[arg-type]
+    none_brain_ids: Any = None  # deliberate invalid-input probe — Any bypasses static arg-type
+    assert resolve_position_owner(none_brain_ids, [], **_KWARGS) == "barrier_12bar"
 
 
 def test_no_match_returns_default():
@@ -102,7 +105,10 @@ def test_brain_id_not_in_registry():
 
 
 def test_custom_default_owner():
-    assert resolve_position_owner([], [], default_owner="custom_strategy", **_KWARGS) == "custom_strategy"
+    assert (
+        resolve_position_owner([], [], default_owner="custom_strategy", **_KWARGS)
+        == "custom_strategy"
+    )
 
 
 # ── Determinism ───────────────────────────────────────────────────────────

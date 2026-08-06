@@ -57,7 +57,9 @@ class TestPnLEventContract:
                 symbol="XAU",
                 pnl_r=1.0,
                 generated_by="test",
-                EVIL_FIELD="should_fail",  # type: ignore[call-arg]
+                **{
+                    "EVIL_FIELD": "should_fail"
+                },  # dynamic kwarg — static-invisible, runtime-rejected
             )
 
     def test_rejects_nan_pnl(self):
@@ -175,7 +177,7 @@ class TestGovernanceTransitionContract:
                 to_status="live",
                 reason="test",
                 triggered_by="manual",
-                BAD="field",  # type: ignore[call-arg]
+                **{"BAD": "field"},  # dynamic kwarg — static-invisible, runtime-rejected
             )
 
 
@@ -201,7 +203,7 @@ class TestTradeJournalContract:
                         continue
                     try:
                         rec = _j.loads(line)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — skip malformed journal line
                         continue
                     if rec.get("action") != "open":
                         continue
@@ -230,7 +232,7 @@ class TestTradeJournalContract:
                         continue
                     try:
                         rec = _j.loads(line)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — skip malformed journal line
                         continue
                     if rec.get("action") != "close":
                         continue
@@ -239,9 +241,9 @@ class TestTradeJournalContract:
                         labeled += 1
             if total > 10:
                 rate = labeled / total
-                assert rate >= 0.80, (
-                    f"{data_dir}: only {labeled}/{total} ({rate:.1%}) closes have labels"
-                )
+                assert (
+                    rate >= 0.80
+                ), f"{data_dir}: only {labeled}/{total} ({rate:.1%}) closes have labels"
 
 
 class TestEventStreamInvariants:
@@ -273,7 +275,7 @@ class TestEventStreamInvariants:
                         continue
                     try:
                         PnLEvent.model_validate_json(line)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — report invalid line
                         pytest.fail(f"Line {line_num} is invalid: {e}")
 
     def test_event_ids_are_unique(self):

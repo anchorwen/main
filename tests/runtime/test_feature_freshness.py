@@ -2,6 +2,7 @@
 
 FIX-20260620-084: New module zero-coverage breakout.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,12 @@ class _FakeConfig:
 
 
 class _FakeState:
+    # Declared interface attributes — feature_freshness mutates these on state.
+    _consecutive_stale_features: int = 0
+    _circuit_breaker_tripped: bool = False
+    _circuit_breaker_tripped_at: float = 0.0
+    _circuit_breaker_trip_reason: str = ""
+
     def __init__(self, **attrs):
         self.__dict__.update(attrs)
 
@@ -25,13 +32,15 @@ class _FakeRecord:
 
 
 class TestCheckFeatureFreshness:
-
     def test_noop_when_no_mt5(self) -> None:
         config = _FakeConfig()
         config.no_mt5 = True
         state = _FakeState()
         check_freshness(config, state, feature_store=None)
-        assert not hasattr(state, "_consecutive_stale_features") or state._consecutive_stale_features == 0
+        assert (
+            not hasattr(state, "_consecutive_stale_features")
+            or state._consecutive_stale_features == 0
+        )
 
     def test_noop_when_feature_store_is_none(self) -> None:
         config = _FakeConfig()

@@ -5,6 +5,7 @@ FIX-20260625-XXX: Tier 2 zero-coverage breakout #8.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -112,7 +113,8 @@ class TestAugmentHappyPath:
         # None tf_ou causes TypeError at ou_div_adx = None / max(ADX, 1)
         # This is a known limitation — callers must pass numeric values
         try:
-            aug.augment(daily, micro, btc_price=60000.0, tf_ou=None, tf_hurst=0.5)  # type: ignore[arg-type]  # noqa: E501 — deliberate None-safety probe
+            none_tf_ou: Any = None  # deliberate None-safety probe — Any bypasses static arg-type
+            aug.augment(daily, micro, btc_price=60000.0, tf_ou=none_tf_ou, tf_hurst=0.5)
         except (TypeError, AssertionError):
             pass  # Expected: None can't be used in division
 

@@ -11,6 +11,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -60,10 +61,17 @@ class TestRecordCycleInputs:
     def test_returns_none_when_recording_disabled(self) -> None:
         with patch.dict(os.environ, {"GOLDEN_MASTER_RECORD": "0"}, clear=True):
             result = record_cycle_inputs(
-                cycle_count=1, mid_price=4700.0, bid=4699.5, ask=4700.5,
-                current_atr=6.0, regime_info={"regime": "trending"},
-                trend_direction="up", trend_strength=0.8, macro_regime="normal",
-                risk_budget_usd=1000.0, session_volume_mult=1.0,
+                cycle_count=1,
+                mid_price=4700.0,
+                bid=4699.5,
+                ask=4700.5,
+                current_atr=6.0,
+                regime_info={"regime": "trending"},
+                trend_direction="up",
+                trend_strength=0.8,
+                macro_regime="normal",
+                risk_budget_usd=1000.0,
+                session_volume_mult=1.0,
                 health_volume_mult=1.0,
             )
         assert result is None
@@ -71,10 +79,18 @@ class TestRecordCycleInputs:
     def test_captures_all_inputs(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             result = record_cycle_inputs(
-                cycle_count=5, mid_price=4700.0, bid=4699.5, ask=4700.5,
-                current_atr=6.0, regime_info={"regime": "trending", "detected_regime": "strong_trend"},
-                trend_direction="up", trend_strength=0.8, macro_regime="normal",
-                hurst=0.65, risk_budget_usd=1000.0, session_volume_mult=1.0,
+                cycle_count=5,
+                mid_price=4700.0,
+                bid=4699.5,
+                ask=4700.5,
+                current_atr=6.0,
+                regime_info={"regime": "trending", "detected_regime": "strong_trend"},
+                trend_direction="up",
+                trend_strength=0.8,
+                macro_regime="normal",
+                hurst=0.65,
+                risk_budget_usd=1000.0,
+                session_volume_mult=1.0,
                 health_volume_mult=1.0,
             )
         assert result is not None
@@ -88,10 +104,17 @@ class TestRecordCycleInputs:
     def test_none_fields_handled(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             result = record_cycle_inputs(
-                cycle_count=1, mid_price=None, bid=None, ask=None,
-                current_atr=0.0, regime_info=None,
-                trend_direction="neutral", trend_strength=0.0, macro_regime="normal",
-                risk_budget_usd=0.0, session_volume_mult=1.0,
+                cycle_count=1,
+                mid_price=None,
+                bid=None,
+                ask=None,
+                current_atr=0.0,
+                regime_info=None,
+                trend_direction="neutral",
+                trend_strength=0.0,
+                macro_regime="normal",
+                risk_budget_usd=0.0,
+                session_volume_mult=1.0,
                 health_volume_mult=1.0,
             )
         assert result is not None
@@ -103,26 +126,44 @@ class TestRecordCycleInputs:
         with patch.dict(os.environ, {}, clear=True):
             fv = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
             result = record_cycle_inputs(
-                cycle_count=1, mid_price=1.0, bid=1.0, ask=1.0,
-                current_atr=1.0, regime_info={}, trend_direction="up",
-                trend_strength=0.0, macro_regime="normal",
-                risk_budget_usd=0.0, session_volume_mult=1.0,
-                health_volume_mult=1.0, feature_vector_sample=fv,
+                cycle_count=1,
+                mid_price=1.0,
+                bid=1.0,
+                ask=1.0,
+                current_atr=1.0,
+                regime_info={},
+                trend_direction="up",
+                trend_strength=0.0,
+                macro_regime="normal",
+                risk_budget_usd=0.0,
+                session_volume_mult=1.0,
+                health_volume_mult=1.0,
+                feature_vector_sample=fv,
             )
+        assert result is not None
         assert len(result["inputs"]["feature_vector_head8"]) == 8
 
 
 class TestRecordCycleOutputs:
     def test_noop_when_capture_none(self) -> None:
-        record_cycle_outputs(None, strategy_results=[], decisions_map={}, trade_decisions=0, queued=0)
+        record_cycle_outputs(
+            None, strategy_results=[], decisions_map={}, trade_decisions=0, queued=0
+        )
 
     def test_writes_to_temp_file(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             capture = record_cycle_inputs(
-                cycle_count=1, mid_price=4700.0, bid=4699.5, ask=4700.5,
-                current_atr=6.0, regime_info={}, trend_direction="up",
-                trend_strength=0.5, macro_regime="normal",
-                risk_budget_usd=1000.0, session_volume_mult=1.0,
+                cycle_count=1,
+                mid_price=4700.0,
+                bid=4699.5,
+                ask=4700.5,
+                current_atr=6.0,
+                regime_info={},
+                trend_direction="up",
+                trend_strength=0.5,
+                macro_regime="normal",
+                risk_budget_usd=1000.0,
+                session_volume_mult=1.0,
                 health_volume_mult=1.0,
             )
 
@@ -130,9 +171,16 @@ class TestRecordCycleOutputs:
             record_cycle_outputs(
                 capture,
                 strategy_results=[
-                    {"strategy": "test_swing", "direction": "long", "confidence": 0.75,
-                     "should_trade": True, "reason": "signal", "volume": 0.1,
-                     "sl": 4650.0, "tp": 4800.0},
+                    {
+                        "strategy": "test_swing",
+                        "direction": "long",
+                        "confidence": 0.75,
+                        "should_trade": True,
+                        "reason": "signal",
+                        "volume": 0.1,
+                        "sl": 4650.0,
+                        "tp": 4800.0,
+                    },
                 ],
                 decisions_map={},
                 trade_decisions=1,
@@ -151,19 +199,34 @@ class TestRecordCycleOutputs:
     def test_handles_dict_strategy_results(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             capture = record_cycle_inputs(
-                cycle_count=2, mid_price=1.0, bid=1.0, ask=1.0,
-                current_atr=1.0, regime_info={}, trend_direction="up",
-                trend_strength=0.0, macro_regime="normal",
-                risk_budget_usd=0.0, session_volume_mult=1.0,
+                cycle_count=2,
+                mid_price=1.0,
+                bid=1.0,
+                ask=1.0,
+                current_atr=1.0,
+                regime_info={},
+                trend_direction="up",
+                trend_strength=0.0,
+                macro_regime="normal",
+                risk_budget_usd=0.0,
+                session_volume_mult=1.0,
                 health_volume_mult=1.0,
             )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             record_cycle_outputs(
                 capture,
-                strategy_results={"swing": {"direction": "long", "confidence": 0.5,
-                                              "should_trade": False, "reason": "", "volume": 0,
-                                              "sl": 0, "tp": 0}},
+                strategy_results={
+                    "swing": {
+                        "direction": "long",
+                        "confidence": 0.5,
+                        "should_trade": False,
+                        "reason": "",
+                        "volume": 0,
+                        "sl": 0,
+                        "tp": 0,
+                    }
+                },
                 decisions_map={},
                 trade_decisions=0,
                 queued=0,
@@ -183,8 +246,10 @@ class TestLoadRecords:
         with tempfile.TemporaryDirectory() as tmpdir:
             gm_path = Path(tmpdir) / "golden_master.jsonl"
             gm_path.write_text(
-                json.dumps({"cycle": 1, "inputs": {}, "outputs": {}}) + "\n"
-                + json.dumps({"cycle": 2, "inputs": {}, "outputs": {}}) + "\n",
+                json.dumps({"cycle": 1, "inputs": {}, "outputs": {}})
+                + "\n"
+                + json.dumps({"cycle": 2, "inputs": {}, "outputs": {}})
+                + "\n",
                 encoding="utf-8",
             )
             records = load_records(data_dir=tmpdir)
@@ -194,9 +259,7 @@ class TestLoadRecords:
     def test_skips_corrupt_lines(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             gm_path = Path(tmpdir) / "golden_master.jsonl"
-            gm_path.write_text(
-                '{"cycle": 1}\nCORRUPT LINE\n{"cycle": 2}\n', encoding="utf-8"
-            )
+            gm_path.write_text('{"cycle": 1}\nCORRUPT LINE\n{"cycle": 2}\n', encoding="utf-8")
             records = load_records(data_dir=tmpdir)
         assert len(records) == 2
 
@@ -228,29 +291,61 @@ class TestFuzzyEqual:
 
 class TestReplayCheckCycle:
     def test_all_match(self) -> None:
-        cycle = {"outputs": {"swing": {"direction": "long", "should_trade": True,
-                                        "reason": "signal", "confidence": 0.75, "volume": 0.1}}}
-        live = {"swing": {"direction": "long", "should_trade": True,
-                           "reason": "signal", "confidence": 0.75, "volume": 0.1}}
+        cycle = {
+            "outputs": {
+                "swing": {
+                    "direction": "long",
+                    "should_trade": True,
+                    "reason": "signal",
+                    "confidence": 0.75,
+                    "volume": 0.1,
+                }
+            }
+        }
+        live = {
+            "swing": {
+                "direction": "long",
+                "should_trade": True,
+                "reason": "signal",
+                "confidence": 0.75,
+                "volume": 0.1,
+            }
+        }
         mismatches = replay_check_cycle(cycle, live)
         assert mismatches == []
 
     def test_detects_direction_mismatch(self) -> None:
-        cycle = {"outputs": {"swing": {"direction": "long", "should_trade": True,
-                                        "reason": "signal", "confidence": 0.75, "volume": 0.1}}}
-        live = {"swing": {"direction": "short", "should_trade": True,
-                           "reason": "signal", "confidence": 0.75, "volume": 0.1}}
+        cycle = {
+            "outputs": {
+                "swing": {
+                    "direction": "long",
+                    "should_trade": True,
+                    "reason": "signal",
+                    "confidence": 0.75,
+                    "volume": 0.1,
+                }
+            }
+        }
+        live = {
+            "swing": {
+                "direction": "short",
+                "should_trade": True,
+                "reason": "signal",
+                "confidence": 0.75,
+                "volume": 0.1,
+            }
+        }
         mismatches = replay_check_cycle(cycle, live)
         assert len(mismatches) > 0
 
     def test_detects_missing_strategy(self) -> None:
         cycle = {"outputs": {"swing": {"direction": "long"}}}
-        live = {}
+        live: dict[str, Any] = {}
         mismatches = replay_check_cycle(cycle, live)
         assert any("missing" in m for m in mismatches)
 
     def test_detects_new_strategy(self) -> None:
-        cycle = {"outputs": {}}
+        cycle: dict[str, Any] = {"outputs": {}}
         live = {"new_strat": {"direction": "long"}}
         mismatches = replay_check_cycle(cycle, live)
         assert any("new strategy" in m for m in mismatches)

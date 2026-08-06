@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
 from core.execution.strategy_budget import StrategyBudget
+
+# Deliberate invalid-input probes — Any-typed so mypy permits the static violation
+# while runtime validation still receives the raw bad value (both-mode clean).
+_BAD_PNL: Any = "bad"
+_NONE_PNL: Any = None
+_BAD_TS: Any = "bad"
+_BAD_SAVED: Any = "not_a_dict"
+_NONE_SAVED: Any = None
 
 
 class TestStrategyBudgetCheckPause:
@@ -169,21 +178,21 @@ class TestStrategyBudgetRecordTradeChecked:
 
     def test_err_on_non_numeric_pnl(self):
         budget = StrategyBudget(strategy_name="barrier_12bar")
-        result = budget.record_trade_checked(pnl_pct="bad", is_win=True)  # type: ignore[arg-type]
+        result = budget.record_trade_checked(pnl_pct=_BAD_PNL, is_win=True)
         assert result.is_err()
         error = result.match(ok=lambda v: None, err=lambda e: e)
         assert "pnl_pct must be numeric" in (error or "")
 
     def test_err_on_none_pnl(self):
         budget = StrategyBudget(strategy_name="barrier_12bar")
-        result = budget.record_trade_checked(pnl_pct=None, is_win=True)  # type: ignore[arg-type]
+        result = budget.record_trade_checked(pnl_pct=_NONE_PNL, is_win=True)
         assert result.is_err()
 
     def test_loss_count_increments_on_err(self):
         """Error path does NOT mutate state — validation fails before mutation."""
         budget = StrategyBudget(strategy_name="barrier_12bar")
         initial = budget.consecutive_losses
-        budget.record_trade_checked(pnl_pct="bad", is_win=False)  # type: ignore[arg-type]
+        budget.record_trade_checked(pnl_pct=_BAD_PNL, is_win=False)
         assert budget.consecutive_losses == initial  # no mutation on error
 
     def test_ok_pauses_on_daily_loss_limit(self):
@@ -212,7 +221,7 @@ class TestStrategyBudgetRecordTradeChecked:
         assert seen_ok[0] == "trade_recorded"
         assert len(seen_err) == 0
 
-        budget.record_trade_checked("bad", True).match(  # type: ignore[arg-type]
+        budget.record_trade_checked(_BAD_PNL, True).match(
             ok=lambda v: seen_ok.append(v["event"]),
             err=lambda e: seen_err.append(e),
         )
@@ -240,7 +249,7 @@ class TestStrategyBudgetRecordSLChecked:
 
     def test_err_on_non_numeric_timestamp(self):
         budget = StrategyBudget(strategy_name="barrier_12bar")
-        result = budget.record_sl_checked(timestamp="bad")  # type: ignore[arg-type]
+        result = budget.record_sl_checked(timestamp=_BAD_TS)
         assert result.is_err()
         error = result.match(ok=lambda v: None, err=lambda e: e)
         assert "timestamp must be numeric" in (error or "")
@@ -265,7 +274,7 @@ class TestStrategyBudgetRecordSLChecked:
         """Error path does NOT register an SL."""
         budget = StrategyBudget(strategy_name="barrier_12bar")
         initial_count = len(budget._sl_timestamps)
-        budget.record_sl_checked(timestamp="bad")  # type: ignore[arg-type]
+        budget.record_sl_checked(timestamp=_BAD_TS)
         assert len(budget._sl_timestamps) == initial_count
 
 
@@ -293,14 +302,14 @@ class TestStrategyBudgetLoadStateChecked:
 
     def test_err_on_non_dict_input(self):
         budget = StrategyBudget(strategy_name="barrier_12bar")
-        result = budget.load_state_checked("not_a_dict")  # type: ignore[arg-type]
+        result = budget.load_state_checked(_BAD_SAVED)
         assert result.is_err()
         error = result.match(ok=lambda v: None, err=lambda e: e)
         assert "expected dict" in (error or "")
 
     def test_err_on_none_input(self):
         budget = StrategyBudget(strategy_name="barrier_12bar")
-        result = budget.load_state_checked(None)  # type: ignore[arg-type]
+        result = budget.load_state_checked(_NONE_SAVED)
         assert result.is_err()
 
     def test_state_not_mutated_on_error(self):
@@ -308,7 +317,7 @@ class TestStrategyBudgetLoadStateChecked:
         budget = StrategyBudget(strategy_name="barrier_12bar")
         budget.daily_pnl_pct = -0.01
         original = budget.daily_pnl_pct
-        budget.load_state_checked("bad")  # type: ignore[arg-type]
+        budget.load_state_checked(_BAD_SAVED)
         assert budget.daily_pnl_pct == original
 
     def test_partial_state_backward_compatible(self):

@@ -97,7 +97,7 @@ def test_strategy_dict_with_budget_check():
 
     # The fixed pattern from live_cycle.py
     if _strat is not None and getattr(_strat, "budget", None) is not None:
-        _strat.budget.record_trade(0.0, False)  # type: ignore[attr-defined]  # should NOT be reached
+        getattr(_strat, "budget").record_trade(0.0, False)  # noqa: B009 — guard-clause demo, should NOT be reached
 
     # Verify we passed the check without error
     assert _strat is not None

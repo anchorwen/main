@@ -2,8 +2,10 @@
 
 FIX-20260620-086: Last new module zero-coverage breakout.
 """
+
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from core.runtime.session_guards import run_session_guards
@@ -24,12 +26,19 @@ class _FakeConfig:
 
 
 class _FakeState:
+    # Declared interface attributes — run_session_guards reads/writes these.
+    loop_iteration: int = 0
+    _feature_buffers_warm: bool = False
+    intraday_dd_kill: Any = None
+    block_new_entries: bool = False
+    circuit_breaker: Any = None
+    position_manager: Any = None
+
     def __init__(self, **attrs):
         self.__dict__.update(attrs)
 
 
 class TestRunSessionGuards:
-
     def test_no_mt5_returns_false_empty_dict(self) -> None:
         config = _FakeConfig()
         config.no_mt5 = True
@@ -70,7 +79,9 @@ class TestRunSessionGuards:
 
     @patch("core.execution.pre_trade_guards.detect_session")
     @patch("core.execution.pre_trade_guards.IntradayDrawdownKill")
-    def test_drawdown_blocked_returns_true(self, mock_dd_cls: MagicMock, mock_detect: MagicMock) -> None:
+    def test_drawdown_blocked_returns_true(
+        self, mock_dd_cls: MagicMock, mock_detect: MagicMock
+    ) -> None:
         config = _FakeConfig()
         config.intraday_drawdown_kill_enabled = True
         state = _FakeState(

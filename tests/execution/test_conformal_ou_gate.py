@@ -14,6 +14,7 @@ Coverage targets:
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 from core.execution.conformal_ou_gate import apply_conformal_ou_gate
@@ -22,24 +23,29 @@ from core.execution.strategy_decision import StrategyDecision
 # ── Shared fixtures ──────────────────────────────────────────────────────────
 
 
-def _make_decision(**kwargs: object) -> StrategyDecision:
-    """Minimal make_decision() stub matching StrategyLine._make_decision() signature."""
+def _make_decision(**kwargs: Any) -> StrategyDecision:
+    """Minimal make_decision() stub matching StrategyLine._make_decision() signature.
+
+    kwargs is Any-typed because this is a test seam: callers pass arbitrary
+    argument mixes (including deliberately invalid types) and the stub must
+    accept them statically while runtime coercion still applies.
+    """
     return StrategyDecision(
         strategy_name="test_strategy",
         magic=9999,
         should_trade=bool(kwargs.get("should_trade", False)),
         direction=str(kwargs.get("direction", "neutral")),
-        confidence=float(kwargs.get("confidence", 0.0)),  # type: ignore[arg-type]
-        volume=float(kwargs.get("volume", 0.0)),  # type: ignore[arg-type]
-        sl=float(kwargs.get("sl", 0.0)),  # type: ignore[arg-type]
-        tp=float(kwargs.get("tp", 0.0)),  # type: ignore[arg-type]
-        hard_sl=float(kwargs.get("hard_sl", 0.0)),  # type: ignore[arg-type]
-        brain_ids=list(kwargs.get("brain_ids", [])),  # type: ignore[arg-type]
-        supporting_count=int(kwargs.get("supporting_count", 0)),  # type: ignore[arg-type]
-        total_count=int(kwargs.get("total_count", 0)),  # type: ignore[arg-type]
+        confidence=float(kwargs.get("confidence", 0.0)),
+        volume=float(kwargs.get("volume", 0.0)),
+        sl=float(kwargs.get("sl", 0.0)),
+        tp=float(kwargs.get("tp", 0.0)),
+        hard_sl=float(kwargs.get("hard_sl", 0.0)),
+        brain_ids=list(kwargs.get("brain_ids", [])),
+        supporting_count=int(kwargs.get("supporting_count", 0)),
+        total_count=int(kwargs.get("total_count", 0)),
         regime_mode=str(kwargs.get("regime_mode", "full")),
         reason=str(kwargs.get("reason", "")),
-        gate_diag=dict(kwargs.get("gate_diag", {})),  # type: ignore[arg-type]
+        gate_diag=dict(kwargs.get("gate_diag", {})),
     )
 
 

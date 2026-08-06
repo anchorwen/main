@@ -5,7 +5,7 @@ FIX-20260619-045: Pure function test for apply_timeframe_scaling.
 
 from __future__ import annotations
 
-import pytest
+from typing import Any
 
 from core.runtime.timeframe_scaling import TIMEFRAME_TO_M5, apply_timeframe_scaling
 
@@ -42,8 +42,8 @@ class TestApplyTimeframeScaling:
         assert result["test"]["_tf_mult"] == 12
 
     def test_skips_non_dict_configs(self) -> None:
-        configs = {"test": "not_a_dict", "valid": {"timeframe": "M5", "exit": {}}}
-        result = apply_timeframe_scaling(configs)  # type: ignore[arg-type]
+        configs: Any = {"test": "not_a_dict", "valid": {"timeframe": "M5", "exit": {}}}
+        result = apply_timeframe_scaling(configs)
         assert result["valid"]["_tf_mult"] == 1
 
     def test_no_exit_config_preserved(self) -> None:

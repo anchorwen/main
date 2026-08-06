@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -113,9 +114,9 @@ class TestEffectiveFlowDim:
             def predict(self, X):
                 return np.zeros(X.shape[0])
 
-        base = _Base()
+        base: Any = _Base()  # fake base — Any bypasses the FrozenBaseModel arg-type
         learner = ResidualTransferLearner(
-            base,  # type: ignore[arg-type]
+            base,
             self._FLOW_NAMES,
             min_flow_dim=2,
         )
@@ -149,12 +150,12 @@ class TestCombinedInference:
             num_boost_round=1,
         )
         # Override predict to return the intended y_A.
-        base = FrozenBaseModel(base_booster, "fake_base")
+        base: Any = FrozenBaseModel(base_booster, "fake_base")
 
         def _fake_predict(X):
             return np.sum(X[:, :3], axis=1)
 
-        base.predict = _fake_predict  # type: ignore[method-assign]
+        base.predict = _fake_predict
 
         learner = ResidualTransferLearner(base, [f"f{i}" for i in range(5)], min_flow_dim=2)
         # make 5 flow names live

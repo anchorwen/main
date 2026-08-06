@@ -186,7 +186,7 @@ class TestResolutionDataclass:
             n_exit_deals=1,
         )
         try:
-            res.close_price = 2.0  # type: ignore[misc]
+            setattr(res, "close_price", 2.0)  # noqa: B010 — frozen; setattr still raises FrozenInstanceError
             raise AssertionError("ExitResolution should be frozen")
         except Exception:  # noqa: BLE001 — FrozenInstanceError expected
             pass

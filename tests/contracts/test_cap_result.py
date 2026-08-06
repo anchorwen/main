@@ -91,13 +91,13 @@ class TestCapResultCreation:
 
     def test_err_works_without_proof(self) -> None:
         """CapResult.err() requires no proof."""
-        result = CapResult.err("something went wrong")  # type: ignore[var-annotated]
+        result: CapResult[str] = CapResult.err("something went wrong")
         assert result.is_err() is True
         assert result.is_ok() is False
 
     def test_err_preserves_message(self) -> None:
         """CapResult.err() stores the error string."""
-        result = CapResult.err("disk full")  # type: ignore[var-annotated]
+        result: CapResult[str] = CapResult.err("disk full")
         assert result.is_err()
 
 
@@ -113,7 +113,7 @@ class TestCapResultMatch:
 
     def test_match_err_calls_err_branch(self) -> None:
         """match() dispatches to err when is_ok=False."""
-        result = CapResult.err("timeout")  # type: ignore[var-annotated]
+        result: CapResult[str] = CapResult.err("timeout")
         output = result.match(ok=lambda v: f"OK:{v}", err=lambda e: f"ERR:{e}")
         assert output == "ERR:timeout"
 
@@ -126,7 +126,7 @@ class TestCapResultMatch:
 
     def test_match_err_with_empty_ok_raises_no_error(self) -> None:
         """match() never evaluates the ok branch for an err result."""
-        result = CapResult.err("fail")  # type: ignore[var-annotated]
+        result: CapResult[str] = CapResult.err("fail")
         called: list[str] = []
 
         def ok_fn(v: object) -> str:
@@ -158,7 +158,7 @@ class TestCapResultTransform:
 
     def test_map_preserves_err(self) -> None:
         """map() on an err result returns the same error."""
-        result = CapResult.err("oops")  # type: ignore[var-annotated]
+        result: CapResult[str] = CapResult.err("oops")
         with Kernel.success_scope() as proof:
             mapped = result.map(lambda x: x * 2, proof)
         assert mapped.is_err()
@@ -191,7 +191,7 @@ class TestCapResultTransform:
 
     def test_flat_map_preserves_err(self) -> None:
         """flat_map() on an err result returns the same error."""
-        result = CapResult.err("already failed")  # type: ignore[var-annotated]
+        result: CapResult[str] = CapResult.err("already failed")
         with Kernel.success_scope() as proof:
 
             def try_parse(s: str) -> CapResult[int]:
@@ -231,7 +231,9 @@ class TestCapResultDunder:
         """ok != err regardless of value."""
         with Kernel.success_scope() as proof:
             ok_result = CapResult.ok(42, proof)
-        err_result = CapResult.err("42")  # type: ignore[var-annotated]
+        err_result: CapResult[object] = CapResult.err(
+            "42"
+        )  # object → avoids strict_equality vs CapResult[int]
         assert ok_result != err_result
 
     def test_eq_non_capresult(self) -> None:
@@ -249,13 +251,13 @@ class TestCapResultDunder:
 
     def test_repr_err(self) -> None:
         """__repr__ for err results."""
-        result = CapResult.err("timeout")  # type: ignore[var-annotated]
+        result: CapResult[str] = CapResult.err("timeout")
         assert "CapResult.err('timeout')" in repr(result)
 
     def test_hash_consistent(self) -> None:
         """Equal results have equal hashes."""
-        r1 = CapResult.err("same")  # type: ignore[var-annotated]
-        r2 = CapResult.err("same")  # type: ignore[var-annotated]
+        r1: CapResult[str] = CapResult.err("same")
+        r2: CapResult[str] = CapResult.err("same")
         assert hash(r1) == hash(r2)
         assert len({r1, r2}) == 1  # set dedup
 
@@ -354,7 +356,7 @@ class TestGenericTyping:
         text: str = int_result.match(ok=lambda v: str(v), err=lambda e: e)
         assert text == "42"
 
-        float_result = CapResult.err("nope")  # type: ignore[var-annotated]
+        float_result: CapResult[str] = CapResult.err("nope")
         number: float = float_result.match(ok=lambda v: float(v), err=lambda e: 0.0)
         assert number == 0.0
 
