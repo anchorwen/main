@@ -89,7 +89,10 @@ class TestCatalog:
 
         artifact = lookup("LEADERBOARD")
         assert artifact.logical_id == "LEADERBOARD"
-        assert artifact.ttl_seconds == 14400  # DQAF-057: tightened from 86400 (24h → 4h)
+        # FIX-20260628-156: widened from 14400 (4h) to 28800 (8h = 6h max_age + 2h buffer).
+        # DQAF-057 originally tightened 86400 → 14400; FIX-20260628-156 (L3) deliberately
+        # re-widened after operational max_age analysis. Keep in sync with catalog.py LEADERBOARD.
+        assert artifact.ttl_seconds == 28800
 
     def test_lookup_unknown_id_raises(self):
         """Lookup of unknown artifact raises KeyError."""
