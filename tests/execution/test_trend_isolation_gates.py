@@ -6,12 +6,19 @@ Covers:
   - Gate 4b: Multi-TF hard filter (swing strategies, H1 vs H4 divergence)
   - Gate 4c: Counter-trend gate (ADX-based, strategy-specific thresholds)
   - Gate 4d: Z-score inflection gate (statarb/OU strategies)
+  - Gate 4e: Spatial z-score gate (swing family — Long hard-block / Short degrade)
   - Edge: None regime_info, missing keys, neutral directions
 """
 
 from __future__ import annotations
 
-from core.execution.trend_isolation_gates import apply_trend_isolation_gates
+import numpy as np
+
+from core.execution.trend_isolation_gates import (
+    apply_spatial_zscore_gate,
+    apply_trend_isolation_gates,
+    extract_h1_price_zscore,
+)
 
 # ── Mock config ───────────────────────────────────────────────────────────
 
@@ -450,3 +457,283 @@ class TestGate4dZScoreInflection:
             regime_gate_mode="active",
         )
         assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Gate 4e: Spatial z-score gate (FIX-20260807-002, non-asymmetric)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestGate4eSpatialZScore:
+    """Non-asymmetric price-position sanity for the swing family.
+
+    LONG  H1_z > +1.5 → hard block (never buy the range top)
+    SHORT H1_z < -1.5 → volume degrade only (sell-low stays viable)
+    Ranging regime tightens both thresholds to ±1.0.
+    """
+
+    def test_long_hard_blocks_above_threshold(self) -> None:
+        """m15_swing LONG at H1_z=+2.0 (range top) → hard block."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="long",
+            h1_price_zscore=2.0,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is True
+        assert result.volume_mult == 1.0
+        assert result.reason is not None
+        assert "spatial_zscore_long_blocked" in result.reason
+
+    def test_long_passes_below_threshold(self) -> None:
+        """m15_swing LONG at H1_z=+1.0 (below 1.5) → pass-through."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="long",
+            h1_price_zscore=1.0,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 1.0
+
+    def test_short_degrades_below_threshold(self) -> None:
+        """m15_swing SHORT at H1_z=-2.0 (range bottom) → volume degrade only."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="short",
+            h1_price_zscore=-2.0,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 0.5
+        assert result.reason is not None
+        assert "spatial_zscore_short_degraded" in result.reason
+
+    def test_short_passes_above_threshold(self) -> None:
+        """m15_swing SHORT at H1_z=-1.0 (above -1.5) → no degradation."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="short",
+            h1_price_zscore=-1.0,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 1.0
+
+    def test_ranging_tightens_long_block(self) -> None:
+        """Ranging regime tightens threshold to ±1.0 — LONG at +1.2 now blocks."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m30_swing",
+            direction="long",
+            h1_price_zscore=1.2,
+            regime_info={"regime": "ranging"},
+            config=config,
+        )
+        assert result.blocked is True
+        assert result.reason is not None
+        assert "_ranging" in result.reason
+
+    def test_ranging_tightens_short_degrade(self) -> None:
+        """Ranging regime tightens short threshold to -1.0 — SHORT at -1.2 degrades."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="h1_swing",
+            direction="short",
+            h1_price_zscore=-1.2,
+            regime_info={"regime": "ranging"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 0.5
+        assert result.reason is not None
+        assert "_ranging" in result.reason
+
+    def test_non_ranging_long_passes_at_1_2(self) -> None:
+        """Normal regime at +1.2 → below 1.5 threshold → pass (ranging-coupling proof)."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m30_swing",
+            direction="long",
+            h1_price_zscore=1.2,
+            regime_info={"regime": "trending"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 1.0
+
+    def test_non_eligible_strategy_passes(self) -> None:
+        """statarb_dynamic is NOT in the swing family → gate does not apply."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="statarb_dynamic",
+            direction="long",
+            h1_price_zscore=3.0,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 1.0
+
+    def test_btc_swing_not_eligible(self) -> None:
+        """btc_swing is excluded — audit evidence is XAU-only (8/19 红线)."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="btc_swing",
+            direction="long",
+            h1_price_zscore=2.5,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 1.0
+
+    def test_none_zscore_passes(self) -> None:
+        """Missing z-score → fail-open pass-through (data gap never mis-blocks)."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="long",
+            h1_price_zscore=None,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 1.0
+
+    def test_neutral_direction_passes(self) -> None:
+        """Neutral direction → gate never fires."""
+        config = MockConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="neutral",
+            h1_price_zscore=3.0,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+
+    def test_config_override_long_block_threshold(self) -> None:
+        """StrategyLineConfig can tighten long-block threshold below default 1.5."""
+
+        class TightConfig(MockConfig):
+            spatial_long_block_z: float = 0.8
+
+        config = TightConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="long",
+            h1_price_zscore=0.9,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is True
+
+    def test_config_override_short_degrade_mult(self) -> None:
+        """StrategyLineConfig can tune the short degrade volume multiplier."""
+
+        class ShyConfig(MockConfig):
+            spatial_short_degrade_mult: float = 0.35
+
+        config = ShyConfig()
+        result = apply_spatial_zscore_gate(
+            name="m15_swing",
+            direction="short",
+            h1_price_zscore=-2.0,
+            regime_info={"regime": "normal"},
+            config=config,
+        )
+        assert result.blocked is False
+        assert result.volume_mult == 0.35
+
+    def test_integration_with_full_gate_chain(self) -> None:
+        """Full apply_trend_isolation_gates + spatial gate: swing LONG at top blocked.
+
+        The 4e gate is a separate function (spatial result consumed by
+        strategy_line.py) — this test locks the cooperative contract: 4aa-4d
+        pass (no direction conflict), then 4e blocks on position.
+        """
+        config = MockConfig()
+        trend_result = apply_trend_isolation_gates(
+            name="h1_swing",
+            direction="long",
+            confidence=0.7,
+            entry_z_score=0.0,
+            regime_info={
+                "regime": "trending",
+                "regime_gate": {
+                    "h4_trend_direction": "long",
+                    "h1_trend_direction": "long",
+                    "h1_adx": 18.0,
+                    "primary_trend": "long",
+                },
+            },
+            config=config,
+            brain_ids=["b1"],
+            support_count=2,
+            total_count=3,
+            regime_gate_mode="active",
+        )
+        assert trend_result is None  # 4aa-4d all pass
+        spatial = apply_spatial_zscore_gate(
+            name="h1_swing",
+            direction="long",
+            h1_price_zscore=2.1,
+            regime_info={"regime": "trending", "regime_gate": {}},
+            config=config,
+        )
+        assert spatial.blocked is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# H1_Price_ZScore extraction from the runtime v9_40 feature vector
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _v9_vector(h1_z: float) -> np.ndarray:
+    """Build a 40-dim v9 institutional vector with H1_Price_ZScore set."""
+    from core.features.schemas.registry import get_schema_feature_names
+
+    _names = get_schema_feature_names("v9_institutional_40")
+    _idx = _names.index("H1_Price_ZScore")
+    vec = np.zeros(len(_names), dtype=np.float64)
+    vec[_idx] = h1_z
+    return vec
+
+
+class TestExtractH1PriceZScore:
+    """extract_h1_price_zscore() — fail-open extraction from feature vector."""
+
+    def test_extracts_from_v9_vector(self) -> None:
+        vec = _v9_vector(-0.42)
+        assert extract_h1_price_zscore(vec) == -0.42
+
+    def test_none_vector_returns_none(self) -> None:
+        assert extract_h1_price_zscore(None) is None
+
+    def test_short_vector_returns_none(self) -> None:
+        assert extract_h1_price_zscore(np.zeros(30, dtype=np.float64)) is None
+
+    def test_nan_returns_none(self) -> None:
+        from core.features.schemas.registry import get_schema_feature_names
+
+        _idx = get_schema_feature_names("v9_institutional_40").index("H1_Price_ZScore")
+        vec = np.zeros(40, dtype=np.float64)
+        vec[_idx] = float("nan")
+        assert extract_h1_price_zscore(vec) is None
+
+    def test_list_input_works(self) -> None:
+        from core.features.schemas.registry import get_schema_feature_names
+
+        _idx = get_schema_feature_names("v9_institutional_40").index("H1_Price_ZScore")
+        lst = [0.0] * 40
+        lst[_idx] = 1.25
+        assert extract_h1_price_zscore(lst) == 1.25

@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260807-002
+- **Docket ID**: DQAF-20260807-002
+- **日期**: 2026-08-07
+- **置信度**: confirmed (全层)
+- **因果链**:
+  - [Layer 1 — 症状]: 实盘系统性"震荡区最高点开多/最低点开空" (用户观察 + 审计脚本): 全历史 640 笔 long 平均 H1_z=+0.034; LONG H1_z>+1.5 桶 25.7% 胜 / −49.29 总 (最差桶); SHORT H1_z<−1.0 桶 44.3% 胜 / +99.36 (盈利).
+  - [Layer 2 — 中间异常]: ML 动量特征 (H1_Price_ZScore 等) 在区间极值处峰化 → 信号置信度在顶部/底部最高 → 高置信信号恰恰出现在最差进场位置; 且 swing 家族无任何价格位置守卫, 只有方向守卫.
+  - [Layer 3 — 根因]: L3 (RC-06 architecture-incomplete) — check_z_inflection (唯一价格位置闸) 被 `"statarb" in name or "ou" in name.lower()` 白名单排除 swing 家族 (trend_isolation_gates.py:205-207) → 趋势追家族空间维度结构上零保护 (方向闸再多也拦不住"顺向但位置极差"的开单).
+- **证据引用**:
+  - Source 1: scripts/_audit_entry_timing_20260807.py (Iron Law #11 脚本, 留工作树) — 640 笔分布: long avg H1_z=+0.034 / long z>1 bucket 25.7% −49.29 / short z<−1 bucket 44.3% +99.36
+  - Source 2: core/execution/trend_isolation_gates.py:205-207 — check_z_inflection 硬限制 statarb/ou (L3 根因代码锚点); :239-384 4e 门禁实现 (FIX 锚点)
+  - Source 3 (跨品种): 用户提高手数以来实盘观察 + core/execution/strategy_line.py counter-trend 动作块后 4e 接线 (spatial_zscore_gate block/degrade 事件)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260807-TREND_CHASE_NO_POSITION_GATE
+
 ### CCT-20260807-001
 - **Docket ID**: DQAF-20260807-001
 - **日期**: 2026-08-07

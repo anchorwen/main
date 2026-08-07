@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-07T01:51:09Z
+> **自动生成**: 2026-08-07T03:58:00Z
 
 ## Package-Level Dependencies
 
@@ -253,7 +253,7 @@
 - `swing_strategy.py` → `core.execution.strategy_line`, `core.features.feature_assembler`, `core.runtime.h1_features`
 - `trail_stop_engine.py` → `core.execution.position_manager`
 - `trend_detector.py` → (无内部依赖)
-- `trend_isolation_gates.py` → `core.execution.strategy_decision`, `core.execution.strategy_line`
+- `trend_isolation_gates.py` → `core.execution.strategy_decision`, `core.execution.strategy_line`, `core.features.schemas.registry`
 - `trend_volume_guard.py` → (无内部依赖)
 
 ### `core/features/`
@@ -569,6 +569,8 @@
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_audit_btc_legacy_lineage_pnl_20260805.py` → (无内部依赖)
 - `_audit_dupe_category_20260805.py` → (无内部依赖)
+- `_audit_entry_regime_20260807.py` → (无内部依赖)
+- `_audit_entry_timing_20260807.py` → (无内部依赖)
 - `_audit_idempotent_key_20260805.py` → (无内部依赖)
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)

@@ -34,7 +34,11 @@ from core.execution.pwin_chain import resolve_p_win
 from core.execution.strategy_context import StrategyEvaluationContext
 from core.execution.strategy_decision import StrategyDecision
 from core.execution.strategy_protocol import StrategyEvaluateProtocol
-from core.execution.trend_isolation_gates import apply_trend_isolation_gates
+from core.execution.trend_isolation_gates import (
+    apply_spatial_zscore_gate,
+    apply_trend_isolation_gates,
+    extract_h1_price_zscore,
+)
 from core.execution.trend_volume_guard import (
     _counter_trend_action,
     check_minimum_rr,
@@ -1331,6 +1335,62 @@ class StrategyLine(StrategyEvaluateProtocol):
                     name,
                     exc_info=True,
                 )
+
+        # ── 4e. Spatial Z-Score Gate (FIX-20260807-002) ──
+        # Non-asymmetric price-position sanity for the swing family
+        # (DQAF-20260807-002): LONG hard-blocks at range tops (H1_z above
+        # threshold); SHORT only volume-degrades at range bottoms (H1_z below
+        # threshold).  H1 z-score is read from the runtime v9_40 context
+        # feature vector.  Fail-open: missing/non-finite z-score → pass-through.
+        # Placed after the counter-trend volume penalty so the Short degrade
+        # stacks multiplicatively on the already-computed _ct_vol_mult.
+        _h1_price_zscore = extract_h1_price_zscore(feature_vector)
+        _spatial = apply_spatial_zscore_gate(
+            name=name,
+            direction=direction,
+            h1_price_zscore=_h1_price_zscore,
+            regime_info=regime_info,
+            config=self.config,
+        )
+        if _spatial.blocked or _spatial.volume_mult != 1.0:
+            import json as _json
+
+            print(
+                _json.dumps(
+                    {
+                        "event": "spatial_zscore_gate",
+                        "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                        "strategy": name,
+                        "direction": direction,
+                        "h1_price_zscore": _h1_price_zscore,
+                        "blocked": _spatial.blocked,
+                        "volume_mult": round(_spatial.volume_mult, 4),
+                        "reason": _spatial.reason,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        if _spatial.blocked:
+            return StrategyDecision(
+                strategy_name=name,
+                magic=self.config.magic,
+                should_trade=False,
+                direction=direction,
+                confidence=confidence,
+                volume=0.0,
+                sl=0.0,
+                tp=0.0,
+                hard_sl=0.0,
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                reason=_spatial.reason,
+            )
+        if _spatial.volume_mult != 1.0:
+            _ct_vol_mult = _ct_vol_mult * _spatial.volume_mult
+            logger.info("[FIX-20260807-002] %s spatial degrade: %s", name, _spatial.reason)
 
         # Dynamic ref ATR: use live EWMA atr_mean when available (Phase 4)
         _dynamic_ref_atr = self.config.ref_atr

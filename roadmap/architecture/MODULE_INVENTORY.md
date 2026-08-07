@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-07T01:51:09Z
-> **扫描模块数**: 800
+> **自动生成**: 2026-08-07T03:58:00Z
+> **扫描模块数**: 802
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -279,13 +279,13 @@
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_context.py` | ✅ active | StrategyEvaluationContext | 0 | 85 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 19 | 2096 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 19 | 2156 | — | |
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 137 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 461 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
-| `trend_isolation_gates.py` | ✅ active | — | 1 | 234 | — | |
+| `trend_isolation_gates.py` | ✅ active | SpatialGateResult | 4 | 382 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 345 | — | |
 
 ## core/features
@@ -655,6 +655,8 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
+| `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
+| `_audit_entry_timing_20260807.py` | ✅ active | — | 5 | 301 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |

@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260807-TREND_CHASE_NO_POSITION_GATE
+- **Pattern Signature**: `TREND_CHASE_NO_POSITION_GATE`
+- **Date Cataloged**: 2026-08-07
+- **Source Docket**: DQAF-20260807-002
+- **Related**: FIX-20260807-002 (RESOLVED — 4e Spatial Z-Score Gate, Option A+C), trend_isolation_gates.py (4aa/4b/4c/4d), FIX-20260701-206 (4c ADX config thresholds), DQAF-20260630-198 (4c thermal fuse origin)
+
+**定义**: 一个趋势追家族只有方向性闸门 (ADX 强度、多TF 一致、counter-trend、z 拐点), 却没有任何价格位置闸门 — 当 ML 动量特征在区间极值处峰化时, 结构上"在震荡区最高点开多、最低点开空". 关键签名: (1) 唯一的 z 价格位置校验 (check_z_inflection) 被策略白名单硬限制在 statarb/ou, 排除整个 swing 家族; (2) 全历史数据呈现非对称证据 — LONG H1_z>+1.5 桶 25.7% 胜 / −49.29 (最差), SHORT H1_z<−1.0 桶 44.3% 胜 / +99.36 (盈利) → 多头顶部接盘是主要出血点, 空头低位追空反而可行.
+- **预防** (IMPLEMENTED, IC 雷霆裁决 Option A+C, 2026-08-07): 空间位置门禁必须与方向门禁正交并存. (1) **非对称设计** — Long 高位 (H1_z>+1.5) → 硬否决 (绝不接盘), Short 低位 (H1_z<−1.5) → 仅 volume 降额 (×0.5, 数据证明 sell-low 仍盈利); (2) **ranging 耦合** — detected_regime∈(ranging/chop) 时阈值收紧 ±1.5→±1.0 (区间极值最危险处最严格); (3) **数据接入用 schema registry 动态索引** (v9_institutional_40 H1_Price_ZScore), 禁止硬编码索引位; (4) **fail-open 契约** — 缺失/非有限 z-score → 放行 (数据缺口不得制造新阻塞), 仅在有效数据时收紧. 红线: 8/19 前禁止 Option B 类大周期回撤进场 (改变模型行为, 污染积累测试数据).
+- **检测**: 每笔实盘开单校验其 H1_Price_ZScore 相对方向阈值契约 (LONG 必 z≤+1.5, SHORT 必 z≥−1.5, ranging 更严 ±1.0); 审计脚本 scripts/_audit_entry_timing_20260807.py 全历史桶分析 (long z>1 桶胜率/总盈亏); intent log `spatial_zscore_gate` 事件: `spatial_zscore_long_blocked` (硬断) / `spatial_zscore_short_degraded` (降额) 计数; 任何新策略加入趋势追家族必须同时评估空间位置闸 (Iron Law #5 同模式搜索).
+
 ### ReB-20260807-TREND_CHASE_FAILOPEN_LOW_EDGE
 - **Pattern Signature**: `TREND_CHASE_FAILOPEN_LOW_EDGE`
 - **Date Cataloged**: 2026-08-07

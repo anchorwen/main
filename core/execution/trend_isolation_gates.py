@@ -10,6 +10,8 @@ pattern: check a condition → return rejected StrategyDecision or None.
 
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
 from typing import Any
 
 from core.execution.strategy_decision import StrategyDecision
@@ -232,3 +234,149 @@ def apply_trend_isolation_gates(
                 )
 
     return None  # all gates passed
+
+
+# ── 4e. Spatial Z-Score Gate (FIX-20260807-002) ──────────────────────────────
+# DQAF-20260807-002: the trend-following swing family had ZERO price-position
+# gates — every guard (4aa-4d) is direction-only.  ML momentum features peak at
+# range extremes, so the chain structurally bought tops / sold bottoms
+# (all-history long avg H1_z=+0.034; long H1_z>+1.5 bucket = 25.7% win /
+# −49.29 total — the single worst bucket).
+#
+# Non-asymmetric design (IC 雷霆裁决, Option A + C):
+#   LONG  H1_z > +threshold → HARD BLOCK  (never buy the range top)
+#   SHORT H1_z < −threshold → VOLUME DEGRADE only (sell-low remains viable:
+#         44.3% win / +99.36 total) — scale base volume, do not block.
+# Ranging/chop coupling: thresholds tighten ±1.5 → ±1.0.
+#
+# Fail-open contract: missing/non-finite H1 z-score, ineligible strategy, or
+# unknown direction → pass-through (SpatialGateResult()).  A data gap must
+# never create a new block.
+
+_SPATIAL_ELIGIBLE: frozenset[str] = frozenset(
+    {"m5_swing", "m15_swing", "m30_swing", "h1_swing", "h4_swing", "daily_swing"}
+)
+_SPATIAL_DEFAULT_LONG_BLOCK_Z = 1.5
+_SPATIAL_DEFAULT_SHORT_DEGRADE_Z = -1.5
+_SPATIAL_RANGING_LONG_BLOCK_Z = 1.0
+_SPATIAL_RANGING_SHORT_DEGRADE_Z = -1.0
+_SPATIAL_SHORT_DEGRADE_MULT = 0.5
+
+
+@dataclass(frozen=True)
+class SpatialGateResult:
+    """Outcome of the 4e spatial z-score gate.
+
+    Attributes:
+        blocked: True → caller must hard-veto the signal (Long at range top).
+        reason: Human + machine readable gate reason (telemetry / audit trail).
+        volume_mult: <1.0 → caller must scale base volume (Short at range
+            bottom); 1.0 = no degradation.
+    """
+
+    blocked: bool = False
+    reason: str | None = None
+    volume_mult: float = 1.0
+
+
+def extract_h1_price_zscore(feature_vector: Any) -> float | None:
+    """Extract H1_Price_ZScore from a runtime feature vector.
+
+    The live entry path feeds the 40-dim v9 institutional vector
+    (H1_Price_ZScore at schema index 32) as ``context.feature_vector`` for ALL
+    strategies — swing inference uses its own 35-dim vector, but the context
+    vector stays v9_40.  Meta-stage2 vectors embed the v9_40 prefix, so index
+    32 remains valid there too.
+
+    Fail-open contract: any ambiguity (None / wrong length / non-finite / not
+    indexable) → ``None`` so the 4e gate degrades to pass-through rather than
+    mis-blocking on a garbage value.
+    """
+    if feature_vector is None:
+        return None
+    try:
+        from core.features.schemas.registry import get_schema_feature_names
+
+        _names = get_schema_feature_names("v9_institutional_40")
+        if not _names:
+            return None
+        _idx = _names.index("H1_Price_ZScore")
+    except (ImportError, ValueError, KeyError, TypeError):
+        return None
+    try:
+        _val = float(feature_vector[_idx])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if not math.isfinite(_val):
+        return None
+    return _val
+
+
+def _spatial_is_ranging(regime_info: dict[str, Any] | None) -> bool:
+    """Detect ranging/chop regime for threshold tightening."""
+    if not isinstance(regime_info, dict):
+        return False
+    _regime = str(regime_info.get("regime", "")).lower()
+    _m5_fused = str(regime_info.get("m5_fused_regime", "")).lower()
+    return _regime in ("ranging", "chop") or _m5_fused in ("mean_reverting", "chop")
+
+
+def apply_spatial_zscore_gate(
+    *,
+    name: str,
+    direction: str,
+    h1_price_zscore: float | None,
+    regime_info: dict[str, Any] | None,
+    config: Any,
+) -> SpatialGateResult:
+    """4e Spatial Z-Score Gate — non-asymmetric price-position sanity.
+
+    Guards the trend-following swing family against entering at range extremes
+    (DQAF-20260807-002).  Thresholds are tunable via ``StrategyLineConfig``:
+    ``spatial_long_block_z`` / ``spatial_short_degrade_z`` (default ±1.5) and
+    ``*_ranging`` variants (default ±1.0) — same config-override pattern as the
+    4c ADX thresholds.
+    """
+    if name not in _SPATIAL_ELIGIBLE:
+        return SpatialGateResult()
+    if direction not in ("long", "short"):
+        return SpatialGateResult()
+    if h1_price_zscore is None or not math.isfinite(h1_price_zscore):
+        return SpatialGateResult()
+
+    _is_ranging = _spatial_is_ranging(regime_info)
+    if _is_ranging:
+        _long_block = float(
+            getattr(config, "spatial_long_block_z_ranging", _SPATIAL_RANGING_LONG_BLOCK_Z)
+        )
+        _short_degrade = float(
+            getattr(config, "spatial_short_degrade_z_ranging", _SPATIAL_RANGING_SHORT_DEGRADE_Z)
+        )
+    else:
+        _long_block = float(getattr(config, "spatial_long_block_z", _SPATIAL_DEFAULT_LONG_BLOCK_Z))
+        _short_degrade = float(
+            getattr(config, "spatial_short_degrade_z", _SPATIAL_DEFAULT_SHORT_DEGRADE_Z)
+        )
+    _degrade_mult = float(
+        getattr(config, "spatial_short_degrade_mult", _SPATIAL_SHORT_DEGRADE_MULT)
+    )
+
+    if direction == "long" and h1_price_zscore > _long_block:
+        return SpatialGateResult(
+            blocked=True,
+            reason=(
+                f"spatial_zscore_long_blocked:h1_z={h1_price_zscore:+.2f}"
+                f"_gt_{_long_block:+.1f}{'_ranging' if _is_ranging else ''}"
+            ),
+        )
+    if direction == "short" and h1_price_zscore < _short_degrade:
+        return SpatialGateResult(
+            blocked=False,
+            volume_mult=_degrade_mult,
+            reason=(
+                f"spatial_zscore_short_degraded:h1_z={h1_price_zscore:+.2f}"
+                f"_lt_{_short_degrade:+.1f}_vol_x{_degrade_mult:.2f}"
+                f"{'_ranging' if _is_ranging else ''}"
+            ),
+        )
+    return SpatialGateResult()
