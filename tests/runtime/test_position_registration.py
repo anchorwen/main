@@ -296,6 +296,73 @@ class TestRegisterDispatchedPositions:
         assert 5002 in known_tickets
         assert known_tickets[5002]["strategy"] == "test_swing"
 
+    def test_uses_dispatch_volume_not_decision_volume(self) -> None:
+        """IC 2026-08-07 裁决 2a (Volume Single-Source): registration MUST consume
+        DispatchResult.volume — the physical dispatch truth — even when reentry
+        decay mutated decision.volume AFTER the risk snapshot.  This pins the
+        split-brain root cause: dispatch sent 0.02 (risk.adjusted_volume) while
+        registration recorded the decayed 0.01, leaving the book half-exposed.
+        """
+        config = SimpleNamespace(
+            exit_management_enabled=True,
+            no_mt5=False,
+            strategy_configs={
+                "test_swing": {
+                    "tp": {"partial_tp_enabled": False},
+                    "exit": {
+                        "trail_atr_mult": 2.0,
+                        "trail_atr_mult_low": 1.5,
+                        "trail_atr_mult_high": 3.0,
+                        "breakeven_threshold_atr": 1.0,
+                        "trail_activation_atr": 1.0,
+                    },
+                }
+            },
+            position_state_path="/tmp/state.json",
+            exit_trail_activation_atr=1.0,
+        )
+        pm = MagicMock()
+        decision = _make_decision(volume=0.01)  # post-reentry-decay decision volume
+        dr = _make_dispatch_result(journal_entry={"intent_id": "intent_split_brain"})
+        dr.volume = 0.02  # physical dispatch truth (risk.adjusted_volume snapshot)
+        known_tickets: dict = {}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jpath = Path(tmpdir) / "live_trade_journal.jsonl"
+            jpath.write_text(
+                json.dumps(
+                    {
+                        "message_id": "intent_split_brain",
+                        "position_ticket": 7777,
+                        "entry_price": 4730.0,
+                        "side": "long",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = register_dispatched_positions(
+                config=config,
+                position_manager=pm,
+                known_open_tickets=known_tickets,
+                loop_iteration=1,
+                dispatch_results=[dr],
+                eval_summary={"decisions_map": {"test_swing": decision}},
+                brains=[],
+                journal_path=jpath,
+                current_atr=6.0,
+                mid_price=4700.0,
+            )
+
+        assert result["registered_count"] == 1
+        # register_position must receive the PHYSICAL dispatched volume (0.02),
+        # not the decayed decision volume (0.01) that created the ghost position.
+        call_kwargs = pm.register_position.call_args.kwargs
+        assert call_kwargs["volume"] == 0.02
+        # known_open_tickets (the reconciliation book) must also carry 0.02.
+        assert known_tickets[7777]["volume"] == 0.02
+
     def test_handles_registration_failure_gracefully(self) -> None:
         config = SimpleNamespace(
             exit_management_enabled=True,

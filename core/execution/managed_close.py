@@ -291,14 +291,23 @@ def dispatch_managed_close(
                     ),
                     flush=True,
                 )
-            elif state is not None and pnl is not None:
+            elif state is not None:
+                # ── IC 2026-08-07 裁决 2a (The Dispatch Truth) ──
+                # "Dispatched" = the close instruction was delivered to the
+                # Bridge-layer network socket (wd_result.success).  PnL is an
+                # OBSERVATION — a post-hoc estimate that may legitimately be
+                # None when mid/entry is unavailable — and must NEVER gate the
+                # physical dispatch outcome.  The old `and pnl is not None`
+                # marked a genuinely-sent close as undispatched, leaving the
+                # ticket tracked and breaking the reconciliation chain.
                 _close_dispatched = True
-                try:
-                    _oe = state.known_open_tickets.get(pos.ticket, {})
-                    if _oe:
-                        _oe["_engine_close_pnl"] = pnl
-                except (RuntimeError, ValueError, KeyError, TypeError, OSError):
-                    pass
+                if pnl is not None:
+                    try:
+                        _oe = state.known_open_tickets.get(pos.ticket, {})
+                        if _oe:
+                            _oe["_engine_close_pnl"] = pnl
+                    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+                        pass
         except Exception as _wd_exc:  # BLE001:FOG (logged, Phase 3b)
             print(
                 json.dumps(

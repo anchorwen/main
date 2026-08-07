@@ -45,6 +45,41 @@ def test_reload_populates_known_tickets_from_opens(tmp_path: Path) -> None:
     assert gate.known_ticket_count == 2
 
 
+def test_stateless_gate_sees_open_written_by_other_process(tmp_path: Path) -> None:
+    """IC 2026-08-07 Boundary 1 (The Stateless Gate): the gate must NOT rely on
+    the in-memory ticket set built at construction.  A close arriving for a
+    ticket whose open was written to the journal by ANOTHER process AFTER this
+    gate was constructed must be admitted — otherwise multi-process drift
+    (live_intent_loop vs mt5_bridge_worker vs daily_ops, zero IPC between them)
+    quarantines legitimate closes as orphans, the exact anomaly this fix kills.
+    """
+    jp = _write_journal(tmp_path, [])  # gate constructed with EMPTY journal
+    gate = JournalGate(jp, policy="quarantine")
+    assert gate.known_ticket_count == 0
+    # Simulate another process appending an open AFTER this gate instance exists.
+    with open(jp, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(_open(100, 100)) + "\n")
+    # Same gate instance — a stale in-memory set would reject this close as an
+    # orphan.  The stateless gate re-reads the physical journal and admits it.
+    assert (
+        gate.validate_close({"action": "close", "position_ticket": 100, "position_identifier": 100})
+        is True
+    )
+    assert not (tmp_path / "journal_orphan_quarantine.jsonl").exists()
+
+
+def test_stateless_gate_still_quarantines_genuine_orphan(tmp_path: Path) -> None:
+    """The stateless reload must NOT widen admission: a close with no matching
+    open anywhere in the journal is still rejected + quarantined."""
+    jp = _write_journal(tmp_path, [_open(100, 100)])
+    gate = JournalGate(jp, policy="quarantine")
+    orphan = {"action": "close", "position_ticket": 999, "position_identifier": 999}
+    assert gate.validate_close(orphan) is False
+    qpath = tmp_path / "journal_orphan_quarantine.jsonl"
+    assert qpath.exists()
+    assert len([l for l in qpath.read_text(encoding="utf-8").splitlines() if l]) == 1
+
+
 def test_register_open_adds_ticket(tmp_path: Path) -> None:
     gate = JournalGate(_write_journal(tmp_path, []), policy="quarantine")
     assert gate.known_ticket_count == 0

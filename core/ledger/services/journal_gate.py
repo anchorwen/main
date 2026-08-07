@@ -38,9 +38,15 @@ _log = logging.getLogger(__name__)
 class JournalGate:
     """Single authority for journal write admission control.
 
-    Loads the set of tracked position tickets from the journal at
-    initialization.  Close entries for unknown tickets are either
-    rejected, quarantined, or logged (depending on policy).
+    The Stateless Gate (IC 2026-08-07 裁决 Boundary 1): the SSOT is the
+    physical journal on disk, never the in-memory ticket set.  Each
+    ``validate_close`` re-reads the journal so the gate is consistent across
+    ALL processes (live_intent_loop / mt5_bridge_worker / daily_ops) with NO
+    IPC between them.  ``_known_tickets`` is only a monotonic fast-path cache
+    (tickets are never un-opened), refreshed from disk on every validation.
+
+    Close entries for unknown tickets are either rejected, quarantined, or
+    logged (depending on policy).
 
     Policy values:
       - ``"reject"``: Silently drop (production default after bake-in).
@@ -83,6 +89,15 @@ class JournalGate:
         registered via an open entry (``register_open``) OR was loaded from
         the journal at initialization.
 
+        The Stateless Gate (IC 2026-08-07 裁决 Boundary 1): SSOT 在硬盘里,
+        不在内存里.  Each validation RE-READS the physical journal so a ticket
+        opened by ANY process (live_intent_loop / mt5_bridge_worker /
+        daily_ops) is admitted.  Previously ``_known_tickets`` was built once
+        at construction — a close arriving in a DIFFERENT process (or written
+        after this instance started) was falsely quarantined as an orphan even
+        though the open was physically on disk.  There is deliberately NO IPC
+        between bridge and intent_loop: the shared journal is the only channel.
+
         Backfill entries tagged ``_source: "mt5_backfill"`` bypass the gate
         because their opens are being created in the same batch.
         """
@@ -100,6 +115,12 @@ class JournalGate:
             _log.warning("JournalGate: close entry has no valid position identity")
             return False
 
+        # ── Stateless validation: re-scan the physical journal each call ──
+        # IC 2026-08-07 Boundary 1 (The Stateless Gate).  The in-memory
+        # _known_tickets is refreshed from the on-disk SSOT at validation time,
+        # so multi-process instances can never drift from each other.
+        self._reload()
+
         if ticket in self._known_tickets:
             return True
 
@@ -108,7 +129,13 @@ class JournalGate:
         return False
 
     def register_open(self, ticket: int) -> None:
-        """Register a ticket after its open entry is successfully written."""
+        """Fast-path cache of a ticket after its open entry is successfully written.
+
+        The authoritative admission source is the physical journal (re-read on
+        every ``validate_close``); this in-memory add is purely an optimization
+        so the SAME process that just wrote the open can admit its close without
+        a redundant re-scan.  Tickets are monotonic — never removed once opened.
+        """
         if isinstance(ticket, int) and ticket > 0:
             self._known_tickets.add(ticket)
 

@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260807-003
+- **Docket ID**: DQAF-20260807-003
+- **日期**: 2026-08-07
+- **置信度**: confirmed (全层)
+- **因果链**:
+  - [Layer 1 — 症状]: 核心记账与终结管线四重断裂 — (a) 4454299643 合法平仓 (XAUUSDc m30_swing short, 开 0.02 lot, sl_hit_first, PnL=−66.30 verified_from_mt5_deal) 被 JournalGate 判 close_without_open 隔离进 quarantine → 平仓 PnL 从 SSOT 主账本消失 → DQAF-20260807-002 审计误读"仍持仓"; (b) 已物理派发的 close 网络请求因 PnL 计算失败被标记 dispatch 失败 → _close_dispatched 恒 False → 管理循环不确认终结; (c) pending_close 盲等锁 50 分钟 — MT5 半仓成交残留 (partial fill) 不感知, 下一周期不重发 close; (d) 平仓 corpse 记 volume=0.0 (ghost — 开 0.02 平 0.0).
+  - [Layer 2 — 中间异常]: (a) 多进程 _known_tickets 内存态漂移 — live_intent_loop/bridge/daily_ops 各自实例的 JournalGate 内存集合不同步 (无 IPC/无刷新), 合法 open 在 gate 进程内存缺失 → 平仓误判孤儿; (b) managed_close._close_dispatched 与 PnL 观测耦合 — dispatch 后立即计算 PnL, 失败则回滚派发结果 → 物理动作被观测过程门控; (c) management_phase 以意图 (known_open_tickets/pending lock) 推断 MT5 物理残余 — 不查 broker, partial fill 不可见 → 盲等; (d) position_registration 消费 decision.volume (reentry decay 后置覆写 0.02→0.01) 而非物理派发 DispatchResult.volume → 记账与物理偏离.
+  - [Layer 3 — 根因]: (a) L3 (contract-violation RC-06) — gate 是有状态的 (init 时一次性建 _known_tickets 内存集合缓存), 而多进程共享物理 journal → 状态源与真值源分离 (SSOT 在硬盘, 状态在内存); (b) L2 (logic) — 物理动作 (派发) 与观测 (PnL) 耦合在单一布尔量; (c) L2 (logic) — 终结状态机以意图状态而非 broker 物理状态为准 (partial fill 盲区); (d) L3 (state-leak RC-03) — 记账消费可变决策字段而非不可变派发结果.
+- **证据引用**:
+  - Source 1: [Quarantine] `data/journal_orphan_quarantine.jsonl` L534 — settlement_verified_4454299643, pnl=−66.30, verified_from_mt5_deal, sl_hit_first, close_time 08:34:15Z, volume=0.0 (ghost fingerprint)
+  - Source 2: [Main Journal] `data/live_trade_journal.jsonl` L9063 (open vol=0.02) + L9069 (close vol=0.02 pnl=−66.3 _source=zombie_reconcile_backfill) — Step 3 回填后主账本, verified_close_legs=1
+  - Source 3 (跨品种/根因代码锚点): core/execution/reentry_guard.py decay ladder 后置覆写 decision.volume + core/runtime/position_registration.py (FIX 前消费 decision.volume) — 记账与物理派发偏离; core/ledger/services/journal_gate.py validate_close (FIX 前一次性 _reload, 有状态缓存) — 多进程漂移锚点
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: STATEFUL_GATE_MULTIPROCESS_DRIFT / REGISTRATION_VS_DISPATCH_VOLUME_DIVERGENCE / DISPATCH_OBSERVATION_COUPLING / PARTIAL_FILL_BLINDNESS
+
 ### CCT-20260807-002
 - **Docket ID**: DQAF-20260807-002
 - **日期**: 2026-08-07

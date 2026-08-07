@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-07T03:58:00Z
-> **扫描模块数**: 802
+> **自动生成**: 2026-08-07T14:27:01Z
+> **扫描模块数**: 805
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -245,7 +245,7 @@
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
 | `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 398 | — | |
-| `managed_close.py` | ✅ active | — | 2 | 399 | — | |
+| `managed_close.py` | ✅ active | — | 2 | 408 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 511 | — | |
@@ -264,7 +264,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 57 | 2381 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 58 | 2396 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 6 | 712 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -391,7 +391,7 @@
 | `execution_reconciliation_service.py` | ✅ active | ExecutionReconciliationService | 9 | 264 | — | |
 | `gate_decision_refs.py` | ✅ active | — | 4 | 30 | — | |
 | `journal_cleanup.py` | ✅ active | — | 13 | 943 | — | |
-| `journal_gate.py` | ✅ active | JournalGate | 13 | 248 | — | |
+| `journal_gate.py` | ✅ active | JournalGate | 13 | 275 | — | |
 | `pnl_guard.py` | ✅ active | PnlGuard | 2 | 138 | — | |
 | `replay_execution_reader.py` | ✅ active | ReplayExecutionReader | 5 | 35 | — | |
 | `replay_execution_writer.py` | ✅ active | ReplayExecutionWriter | 2 | 26 | — | |
@@ -534,7 +534,7 @@
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5148 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
+| `management_phase.py` | ✅ active | — | 18 | 2657 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
@@ -544,7 +544,7 @@
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
 | `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 676 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
-| `position_registration.py` | ✅ active | — | 1 | 327 | — | |
+| `position_registration.py` | ✅ active | — | 1 | 344 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
 | `pre_close_context.py` | ✅ active | PreCloseContext | 8 | 145 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 432 | — | |
@@ -653,6 +653,7 @@
 | `_analyze_h1_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
+| `_audit_20260806_07_losses.py` | ✅ active | — | 8 | 359 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
 | `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
@@ -673,6 +674,8 @@
 | `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_mypy_scope.py` | ✅ active | — | 2 | 55 | — | |
+| `_probe_zombie_4454299643_20260807.py` | ✅ active | — | 1 | 65 | — | |
+| `_reconcile_zombie_4454299643_20260807.py` | ✅ active | — | 3 | 200 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
@@ -739,7 +742,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 757 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 758 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |

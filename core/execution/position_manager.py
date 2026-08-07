@@ -498,6 +498,21 @@ class ActivePositionManager:
         self._pending_close.pop(ticket, None)
         self._close_attempt_count.pop(ticket, None)
 
+    def sync_position_volume(self, ticket: int, volume: float) -> None:
+        """IC 2026-08-07 裁决 2b (Partial Fill State Machine): sync a tracked
+        position's DISPATCH volume to the MT5 ground-truth residual after a
+        partial fill.
+
+        Only ``pos.volume`` is lowered — ``expected_remaining_volume`` stays at
+        the FULL-close target so the management loop's partial-fill detection
+        (residual < expected) can still see that a residual re-close is owed.
+        """
+        if volume <= 0:
+            return
+        p = self._positions.get(ticket)
+        if p is not None:
+            p.volume = float(volume)
+
     def register_position(
         self,
         *,

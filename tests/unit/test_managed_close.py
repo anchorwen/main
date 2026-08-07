@@ -248,3 +248,39 @@ class TestErrorResilience:
                 strategy_name="btc_swing",
             )
         assert result is True
+
+    def test_watchdog_close_dispatched_even_when_pnl_none(self) -> None:
+        """IC 2026-08-07 裁决 2a (The Dispatch Truth): a close delivered to the
+        Bridge-layer network socket IS dispatched regardless of PnL estimation.
+        pnl=None (mid/entry unavailable) must NOT leave the ticket tracked as a
+        zombie — the old ``elif state is not None and pnl is not None`` kept
+        _close_dispatched=False on a genuinely-sent close, so known_open_tickets
+        was never popped and the reconciliation chain broke (the 09:09:56
+        `dispatched:false` paradox from ticket 4454873260).
+        """
+        pos = _make_pos(ticket=424242, side="short", volume=0.05, entry_price=None)
+        wd_result = MagicMock()
+        wd_result.success = True
+        wd_result.final_status = "dispatched"
+        exit_watchdog = MagicMock()
+        exit_watchdog.execute_exit.return_value = wd_result
+        state = MagicMock()
+        state.known_open_tickets = {424242: {"position_ticket": 424242, "message_id": "m_wd"}}
+        state._reentry_states = {}
+        state._cooldown_registry = None
+        state.alert_hub = None
+
+        with patch(DISPATCH_PATH) as mock_dispatch:
+            result = dispatch_managed_close(
+                config=_make_config(),
+                ctx=_make_ctx(),
+                pos=pos,
+                reason="watchdog_confidence_decay",
+                mid=3000.0,
+                state=state,
+                strategy_name="watchdog_test",
+                exit_watchdog=exit_watchdog,
+            )
+        assert result is True
+        # The dispatched close removes tracking — no zombie left behind.
+        assert 424242 not in state.known_open_tickets

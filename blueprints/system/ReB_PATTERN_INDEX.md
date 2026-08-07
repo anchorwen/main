@@ -20,6 +20,46 @@
 
 ---
 
+### ReB-20260807-STATEFUL_GATE_MULTIPROCESS_DRIFT
+- **Pattern Signature**: `STATEFUL_GATE_MULTIPROCESS_DRIFT`
+- **Date Cataloged**: 2026-08-07
+- **Source Docket**: DQAF-20260807-003
+- **Related**: FIX-20260807-003 (RESOLVED — Boundary 1 Stateless Gate), DQAF-20260726-012 (GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION — 同族跨重启状态), DQAF-20260708-001 (MUTABLE_TICKET_JOIN_ON_IMMUTABLE_POSITION — 同族 identity 漂移)
+
+**定义**: 一个守卫 append-only 账本的验证闸门在 __init__ 时一次性把"已知合法记录"缓存进内存集合, 而真值源是多个 OS 进程 (live_intent_loop / mt5_bridge_worker / daily_ops) 共享写入的物理 journal — 各进程实例内存态各自漂移, 无 IPC/无刷新 → 合法记录在 gate 进程内存缺失 → 被误拒 (实证: 4454299643 合法平仓被判 close_without_open 隔离, PnL 从 SSOT 消失). 关键签名: (1) gate 持 `_known_tickets` 等内存缓存; (2) 多进程各自实例; (3) 物理 journal 是不可变共享真值, 但 gate 读的是过时内存.
+- **预防** (IMPLEMENTED, IC Boundary 1): 守卫共享账本的验证闸门必须**无状态** — 每次 validate 调用重新扫描物理 journal (或受限 tail), "SSOT 在硬盘里, 不在内存里". 任何其正确性依赖跨进程缓存一致性的 gate 都是架构设计错误 (RC-06). 性能顾虑用 bounded tail / mtime hint 解决, 绝不用无界内存集合.
+- **检测**: grep 多进程上下文中的 in-memory ticket/state 缓存 gate; 回归锁 test_stateless_gate_sees_open_written_by_other_process (模拟"他进程写 open, 本进程 validate close") + test_stateless_gate_still_quarantines_genuine_orphan.
+
+### ReB-20260807-REGISTRATION_VS_DISPATCH_VOLUME_DIVERGENCE
+- **Pattern Signature**: `REGISTRATION_VS_DISPATCH_VOLUME_DIVERGENCE`
+- **Date Cataloged**: 2026-08-07
+- **Source Docket**: DQAF-20260807-003
+- **Related**: FIX-20260807-003 (RESOLVED — 体积单源化 合并入执行令 2a), DQAF-20260708-003 (close_price 伪造 — 同族 "记账非物理真值")
+
+**定义**: 记账层从决策对象 (decision.volume) 读持仓体积, 而物理派发已发出不同体积 → 账本与券商偏离 (ghost volume). 关键签名: (1) 下游变更 (reentry decay) 在 portfolio_risk snapshot **之后**覆写 decision.volume (0.02→0.01); (2) 派发发 adjusted_volume (0.02); (3) 记账读 decision.volume (0.01) → 开仓腿体积错; (4) 平仓 corpse 更记 0.0 → PnL 无法按体积对账 (实证: 开 0.02 平 0.0, PnL −66.30 与物理体积自证 $2/pt×32.807pts≈66).
+- **预防** (IMPLEMENTED, IC 执行令 2a 合并): 记账必须消费**物理派发结果** (DispatchResult.volume) 为唯一真值 — 绝不可消费可能被其他阶段覆写的可变决策字段. 记账是对物理现实的观测, 不是从意图重新推导. 退化 DispatchResult 无 volume 才回退 decision.volume (镜像派发侧表达式).
+- **检测**: 每次开仓记录 volume 与对应派发回执/journal 条目 volume 交叉核对 (Iron Law #11 脚本); 回归锁 test_registration_consumes_dispatch_volume (decision.volume≠DispatchResult.volume 时记账取后者).
+
+### ReB-20260807-DISPATCH_OBSERVATION_COUPLING
+- **Pattern Signature**: `DISPATCH_OBSERVATION_COUPLING`
+- **Date Cataloged**: 2026-08-07
+- **Source Docket**: DQAF-20260807-003
+- **Related**: FIX-20260807-003 (RESOLVED — 执行令 2a The Dispatch Truth), DQAF-20260708-003 (close_price 伪造 — 同族观测污染物理判定)
+
+**定义**: 一个物理动作的结果布尔量 (order dispatched) 与一个观测量 (PnL 计算) 耦合在单一变量 — dispatch 成功后立即计算 PnL, PnL 失败则把"已发出的网络请求"标记为未派发 → 管理循环不确认终结, 下游重发/失管. 关键签名: (1) `_close_dispatched` 赋值依赖 PnL 观测路径无异常; (2) 派发 (物理) 与观测 (PnL) 不同生命周期 (派发立即成功, PnL 需 MT5 deal 异步到达); (3) 观测失败反噬物理结果.
+- **预防** (IMPLEMENTED): 物理动作结果与观测结果必须解耦 — "Dispatched" 的定义只能是"订单已成功投递到 Bridge 网络 socket" (物理定义); PnL 是独立观测, 不得门控派发结果. 状态机语义分层: dispatch (物理动作) → settlement (观测), 中间态不得混用单一布尔量.
+- **检测**: 搜索赋值 _dispatched/dispatched 的地方, 确认其不在同一 try 块内依赖后续观测计算; 回归锁 test_close_dispatched_on_dispatch_success_while_pnl_fails (PnL 抛错仍 _close_dispatched=True).
+
+### ReB-20260807-PARTIAL_FILL_BLINDNESS
+- **Pattern Signature**: `PARTIAL_FILL_BLINDNESS`
+- **Date Cataloged**: 2026-08-07
+- **Source Docket**: DQAF-20260807-003
+- **Related**: FIX-20260807-003 (RESOLVED — 执行令 2b Partial Fill State Machine), DQAF-20260709-002 (BROKER_STATE_NOT_CONSULTED_BEFORE_UNTRACK — 同族 broker 状态不查)
+
+**定义**: 终结状态机以**意图** (pending_close 锁 / known_open_tickets) 而非 **broker 物理状态** (MT5 残余成交量) 推断仓位是否已平 — 平仓指令部分成交 (residual>0) 后, 盲等锁不感知, 下一周期不重发 close → 半仓裸露 50 分钟 (实证: 旧 pending_close 盲等逻辑). 关键签名: (1) 终结判定读意图状态而非 broker; (2) MT5 residual 与 intent 期望成交量有差异时无追平路径; (3) 锁 (pending lock) 无 partial-fill 感知.
+- **预防** (IMPLEMENTED): (1) 终结状态机必须感知 partial fill — `_probe_mt5_residual` + `_is_partial_fill` (residual < expected_remaining_volume) → 下一周期立即重发 close; (2) sync_position_volume 只降 pos.volume, 保持 expected_remaining_volume 为 full-close 目标 (target 不动, 只修正已成交部分); (3) pending lock 在残余>0 时保持激活, 绝不在残余未清时放行下一状态.
+- **检测**: 平仓 dispatch 后下周期核对 MT5 residual 与 intent 目标; 回归锁 tests/runtime/test_partial_fill_state_machine.py (13 测试: residual 探测/partial-fill 判定/重发 close/残余保留).
+
 ### ReB-20260807-TREND_CHASE_NO_POSITION_GATE
 - **Pattern Signature**: `TREND_CHASE_NO_POSITION_GATE`
 - **Date Cataloged**: 2026-08-07

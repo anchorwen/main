@@ -152,6 +152,74 @@ def _dispatch_managed_close(
     )
 
 
+# ── IC 2026-08-07 裁决 2b: Partial Fill State Machine ───────────────────────
+# A full-close intent that only partially fills leaves a NAKED residual.  The
+# management loop must detect it, sync the tracked volume to the residual, and
+# RE-SEND the close on the next cycle — never blind-wait it out for
+# PENDING_CLOSE_MAX_CYCLES (the "50-minute" trap).  Three converged helpers.
+
+
+def _probe_mt5_residual(mt5_worker: Any, ticket: int) -> float:
+    """Probe MT5 for a ticket's live volume (the residual after a close).
+
+    Returns 0.0 when the position is gone or MT5 is unreachable — callers
+    treat 0.0 as "fully closed / unknown → keep current clear semantics".
+    """
+    if mt5_worker is None:
+        return 0.0
+    try:
+        _mt5_positions = mt5_worker.positions_get(ticket=ticket)
+        if _mt5_positions and len(_mt5_positions) > 0:
+            return float(_mt5_positions[0].volume)
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass
+    return 0.0
+
+
+def _is_partial_fill(residual: float, pos: Any) -> bool:
+    """True when *residual* is a live partial-fill residual.
+
+    The close intent target is ``pos.expected_remaining_volume`` (kept at the
+    FULL original volume by sync_position_volume).  A residual strictly below
+    that target means MT5 actually closed some volume — a partial fill — and
+    the remainder must be re-closed.  A residual EQUAL to the target means the
+    close never took (dispatch failure / MT5 reject) — that stays under the
+    flood guard's blind-wait, not this path.
+    """
+    _target = getattr(pos, "expected_remaining_volume", 0.0) or 0.0
+    if _target <= 0:
+        _target = getattr(pos, "volume", 0.0) or 0.0
+    return residual > 0 and _target > 0 and residual < _target - 1e-9
+
+
+def _finalize_close_dispatch(
+    *,
+    pm: Any,
+    state: Any,
+    pos: Any,
+    mt5_worker: Any,
+) -> None:
+    """IC 2026-08-07 裁决 2b — converged finalize after a successful close dispatch.
+
+    Probes MT5 for the residual:
+      - PARTIAL FILL (residual < full-close target): the naked residual must
+        stay tracked at the residual volume with the pending lock LEFT ACTIVE —
+        the next cycle's pending-close check re-dispatches it immediately.
+      - FULL CLOSE / not-taken: clear the position exactly as before.
+    """
+    _resid = _probe_mt5_residual(mt5_worker, pos.ticket)
+    if _is_partial_fill(_resid, pos):
+        pm.sync_position_volume(pos.ticket, _resid)
+        _emit(
+            "partial_fill_residual_kept",
+            ticket=pos.ticket,
+            residual=_resid,
+            target=float(getattr(pos, "expected_remaining_volume", 0.0) or 0.0),
+        )
+        return
+    pm.clear_position(ticket=pos.ticket)
+
+
 def _build_and_dispatch_alert_context(
     config: Any,
     state: Any,
@@ -796,7 +864,9 @@ def _evaluate_brain_ensemble(
                         )
 
                         if _dispatched:
-                            pm.clear_position(ticket=pos.ticket)
+                            _finalize_close_dispatch(
+                                pm=pm, state=state, pos=pos, mt5_worker=mt5_worker
+                            )
                         return True
 
                 # ── OU mean-reversion exit (ARB brain) ──
@@ -843,7 +913,9 @@ def _evaluate_brain_ensemble(
                                     )
 
                                     if _dispatched:
-                                        pm.clear_position(ticket=pos.ticket)
+                                        _finalize_close_dispatch(
+                                            pm=pm, state=state, pos=pos, mt5_worker=mt5_worker
+                                        )
                                     return True
                             except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                                 pass
@@ -919,7 +991,7 @@ def _evaluate_brain_ensemble(
                     )
 
                     if _dispatched:
-                        pm.clear_position(ticket=pos.ticket)
+                        _finalize_close_dispatch(pm=pm, state=state, pos=pos, mt5_worker=mt5_worker)
                     return True
             except (
                 ValueError,
@@ -1904,7 +1976,7 @@ def execute_management_phase(
             )
 
             if _dispatched:
-                pm.clear_position(ticket=pos.ticket)
+                _finalize_close_dispatch(pm=pm, state=state, pos=pos, mt5_worker=mt5_worker)
             return True
 
         _emit(
@@ -1918,12 +1990,38 @@ def execute_management_phase(
 
         return False
 
-    # ── 6.7 Pending Close Lock (FIX-20260613-052: resolved placeholder) ──
-    # Prevents cross-cycle retry avalanche: when ExitWatchdog is already
-    # trying to close this position, subsequent management cycles must NOT
-    # spawn fresh watchdog batches.  The lock auto-expires after
-    # ActivePositionManager.PENDING_CLOSE_MAX_CYCLES to allow retry.
+    # ── 6.7 Pending Close Lock + Partial Fill State Machine (IC 2026-08-07 2b) ──
+    # The lock prevents cross-cycle retry avalanche: when ExitWatchdog is
+    # already trying to close this position, subsequent management cycles must
+    # NOT spawn fresh watchdog batches.  BUT a partial fill (MT5 residual > 0
+    # below the full-close target) is a NAKED RISK, not an avalanche — the lock
+    # MUST NOT blind-wait it out for PENDING_CLOSE_MAX_CYCLES.  Probe MT5:
+    # residual detected → sync the tracked volume and re-send the close NOW.
     if pm.is_pending_close(pos.ticket, state.loop_iteration):
+        _resid = _probe_mt5_residual(mt5_worker, pos.ticket)
+        if _is_partial_fill(_resid, pos):
+            pm.sync_position_volume(pos.ticket, _resid)
+            _resid_re_disp = _dispatch_managed_close(
+                config,
+                dispatch_ctx,
+                pos,
+                reason="partial_fill_redispatch",
+                mid=mid,
+                state=state,
+                strategy_name=_sname,
+                exit_confidence=_exit_confidence,
+                exit_watchdog=getattr(state, "exit_watchdog", None),
+                mt5_worker=mt5_worker,
+            )
+            _emit(
+                "partial_fill_residual_redispatch",
+                ticket=pos.ticket,
+                residual=_resid,
+                redispatched=_resid_re_disp,
+            )
+            if _resid_re_disp:
+                _finalize_close_dispatch(pm=pm, state=state, pos=pos, mt5_worker=mt5_worker)
+            return True
         _emit("pending_close_skipped", ticket=pos.ticket, loop_iteration=state.loop_iteration)
 
         return False
@@ -2071,7 +2169,7 @@ def execute_management_phase(
             )
 
             if _dispatched:
-                pm.clear_position(ticket=pos.ticket)
+                _finalize_close_dispatch(pm=pm, state=state, pos=pos, mt5_worker=mt5_worker)
             return True
 
     # ── 8. Layer 3: Time-based exit ──
@@ -2109,7 +2207,7 @@ def execute_management_phase(
             )
 
             if _dispatched:
-                pm.clear_position(ticket=pos.ticket)
+                _finalize_close_dispatch(pm=pm, state=state, pos=pos, mt5_worker=mt5_worker)
             return True
 
     return False

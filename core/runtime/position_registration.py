@@ -71,6 +71,23 @@ def register_dispatched_positions(
         if decision is None:
             continue
 
+        # ── IC 2026-08-07 裁决 2a (Volume Single-Source / Split-Brain fix) ──
+        # Registration MUST consume the PHYSICAL dispatch volume, never
+        # decision.volume.  Reentry-decay (live_cycle) mutates decision.volume
+        # AFTER portfolio_risk snapshots risk.adjusted_volume, so the two
+        # diverge: dispatch sent adjusted_volume (0.02) while registration
+        # recorded the decayed decision.volume (0.01) — the ghost-position root
+        # cause.  DispatchResult.volume IS exactly what execution_queue flushed
+        # to the bridge (risk.adjusted_volume if > 0 else decision.volume), so
+        # the book now mirrors physical reality.  Fall back to decision.volume
+        # only for a degenerate dispatched result carrying no volume (mirrors
+        # the dispatch-side expression exactly).
+        _drv = getattr(dr, "volume", None)
+        # isinstance guard: DispatchResult.volume is always a real float in
+        # production; a non-numeric volume means "no dispatch truth available"
+        # (degenerate result / mock) → fall back to decision.volume.
+        _dispatch_volume = _drv if isinstance(_drv, int | float) and _drv > 0 else decision.volume
+
         intent_id = (dr.journal_entry or {}).get("intent_id", "")
         ticket: int | None = None
         entry_from_journal: float | None = None
@@ -204,7 +221,7 @@ def register_dispatched_positions(
                 ticket=ticket,
                 side=decision.direction,
                 entry_price=entry_price,
-                volume=decision.volume,
+                volume=_dispatch_volume,
                 initial_sl=decision.sl,
                 initial_tp=decision.tp,
                 entry_atr=current_atr,
@@ -247,7 +264,7 @@ def register_dispatched_positions(
                 "position_ticket": ticket,
                 "action": "open",
                 "side": decision.direction,
-                "volume": decision.volume,
+                "volume": _dispatch_volume,
                 "entry_price": entry_price,
                 "strategy": _strategy_name,
                 "magic": decision.magic,
@@ -297,7 +314,7 @@ def register_dispatched_positions(
                         ticket=ticket,
                         strategy=dr.strategy_name,
                         side=decision.direction,
-                        volume=decision.volume,
+                        volume=_dispatch_volume,
                         entry_price=entry_price,
                         spread_points=_lom_spread_pts,
                         atr=current_atr,

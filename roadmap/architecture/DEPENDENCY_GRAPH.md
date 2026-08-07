@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-07T03:58:00Z
+> **自动生成**: 2026-08-07T14:27:01Z
 
 ## Package-Level Dependencies
 
@@ -567,6 +567,7 @@
 - `_analyze_h1_swing_now.py` → (无内部依赖)
 - `_analyze_h4_swing_now.py` → (无内部依赖)
 - `_analyze_m15_swing_now.py` → (无内部依赖)
+- `_audit_20260806_07_losses.py` → (无内部依赖)
 - `_audit_btc_legacy_lineage_pnl_20260805.py` → (无内部依赖)
 - `_audit_dupe_category_20260805.py` → (无内部依赖)
 - `_audit_entry_regime_20260807.py` → (无内部依赖)
@@ -587,6 +588,8 @@
 - `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_mypy_scope.py` → (无内部依赖)
+- `_probe_zombie_4454299643_20260807.py` → (无内部依赖)
+- `_reconcile_zombie_4454299643_20260807.py` → `core.ledger.services.journal_cleanup`, `core.ledger.services.journal_gate`
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)

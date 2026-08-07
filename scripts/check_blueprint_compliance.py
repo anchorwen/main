@@ -185,6 +185,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/ledger/services/",
         "core/infrastructure/",
         "scripts/validators/journal_validator.py",
+        "scripts/_reconcile_zombie_4454299643_20260807.py",  # DQAF-20260807-003: IC Step 3 zombie PnL legal reconciliation
     ],
     "contracts_domain": [
         "core/contracts/domain/",
