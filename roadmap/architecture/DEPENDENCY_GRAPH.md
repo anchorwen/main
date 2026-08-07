@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-07T14:27:01Z
+> **自动生成**: 2026-08-07T15:30:57Z
 
 ## Package-Level Dependencies
 
@@ -618,6 +618,7 @@
 - `audit_btc_live_direction.py` → (无内部依赖)
 - `audit_btc_v11_ledger.py` → (无内部依赖)
 - `audit_cross_symbol_consistency.py` → `scripts.alert_dispatcher`
+- `audit_data_chain_integrity.py` → (无内部依赖)
 - `audit_data_exhaustive.py` → `core.data.ticket_resolver`
 - `audit_data_final.py` → (无内部依赖)
 - `audit_data_health_journal.py` → (无内部依赖)

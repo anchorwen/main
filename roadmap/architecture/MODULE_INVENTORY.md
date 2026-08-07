@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-07T14:27:01Z
-> **扫描模块数**: 805
+> **自动生成**: 2026-08-07T15:30:57Z
+> **扫描模块数**: 806
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -704,6 +704,7 @@
 | `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
+| `audit_data_chain_integrity.py` | ✅ active | — | 16 | 996 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
 | `audit_data_final.py` | ✅ active | — | 5 | 246 | — | |
 | `audit_data_health_journal.py` | ✅ active | — | 2 | 174 | — | |
@@ -742,7 +743,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 758 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 759 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |

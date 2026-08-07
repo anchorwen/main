@@ -219,6 +219,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "data_infrastructure": [
         "core/data/",
         "scripts/migration/migrate_to_event_stream.py",
+        "scripts/audit_data_chain_integrity.py",  # FIX-20260807-004: 全数据链完整性审计 (Phase 0)
     ],
     "deployment_config": [
         "core/config/",
