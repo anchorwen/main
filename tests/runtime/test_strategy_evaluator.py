@@ -332,8 +332,10 @@ class TestGodsEyeHealthDeadbandRamp:
 
     def test_degraded_eye_still_killed_by_omega_gate(self):
         """Red-line check: a truly degraded GodsEye (health=0.30) STILL gets
-        killed at the Ω gate.  B2 only removes the shave in the healthy band;
-        it does NOT relax the min_economic floor (0.02) in the degraded band.
+        killed.  DQAF-20260807-001 Option A (hard veto) now kills it EARLIER
+        with an explicit BLOCKED_BY_GODSEYE reason instead of falling through
+        to the Ω min_economic gate — same kill, earlier, more diagnosable.
+        The B2 healthy-band (>= 0.70) no-shave guarantee is unchanged.
         """
         import core.runtime.strategy_evaluator as se
         from core.execution.strategy_decision import StrategyDecision
@@ -392,6 +394,130 @@ class TestGodsEyeHealthDeadbandRamp:
             se._get_ood_gateway = _original_ood
 
         sr = result["strategy_results"][0]
-        # 0.02 × ramp(0.30) = 0.02 × 0.3333 = 0.0067 < 0.02 → KILL.
+        # health=0.30 < 0.55 → Option A hard veto (was: omega-gate kill).
         assert sr["should_trade"] is False
-        assert "volume_degraded_below_economic_minimum" in sr["reason"]
+        assert "blocked_by_gods_eye" in sr["reason"]
+
+
+# ---------------------------------------------------------------------------
+# DQAF-20260807-001 Option A: God's Eye HARD VETO (Chop Filter)
+# (IC 雷霆裁决 — 2026-08-07) — health < 0.55 OR chop ⇒ BLOCKED_BY_GODSEYE.
+# Abolishes the fail-open "never blocks" contract after the 08-06 XAU
+# evidence (3 longs entered at 24h-range highs under chop/health 0.52, all
+# lost).  Risk-control floor only — signal generation untouched.
+# ---------------------------------------------------------------------------
+class TestGodsEyeHardVeto:
+    @staticmethod
+    def _approved_portfolio_risk(volume: float = 0.04) -> MagicMock:
+        pr = _mock_portfolio_risk()
+        pr.check.return_value = SimpleNamespace(
+            verdict=SimpleNamespace(value="approved"),
+            adjusted_volume=volume,
+            reason="",
+        )
+        return pr
+
+    def _run(
+        self,
+        *,
+        health: float,
+        chop: bool,
+        mode: str,
+        conf: float,
+        volume: float,
+    ) -> dict:
+        import core.runtime.strategy_evaluator as se
+        from core.execution.strategy_decision import StrategyDecision
+
+        strategy = MagicMock()
+        strategy.config = None
+        strategy.evaluate.return_value = StrategyDecision(
+            strategy_name="h1_swing",
+            magic=93200,
+            should_trade=True,
+            direction="long",
+            confidence=conf,
+            volume=volume,
+            sl=0.5,
+            tp=1.5,
+            hard_sl=1.0,
+        )
+
+        eq = _mock_execution_queue()
+        eq.is_pending_open.return_value = False
+        eq.is_unattributed_blocked.return_value = False
+
+        gods_eye = SimpleNamespace(
+            health_score=health,
+            confidence_modifier=1.0,
+            recommended_mode=mode,
+            chop_detected=chop,
+            anomaly_score=0.1,
+            macro_bias="neutral",
+        )
+
+        _original_ood = se._get_ood_gateway
+        se._get_ood_gateway = lambda: SimpleNamespace(
+            check=lambda *a, **k: SimpleNamespace(status="ok", reason="ok")
+        )
+        try:
+            result = evaluate_strategy_lines(
+                strategy_lines={"h1_swing": strategy},
+                feature_vector=np.ones(40, dtype=np.float32),
+                micro_feature_vector=np.ones(9, dtype=np.float32),
+                mid_price=2000.0,
+                bid=1999.5,
+                ask=2000.5,
+                current_atr=5.0,
+                regime_info=_minimal_regime_info(),
+                regime_gate=None,
+                portfolio_risk=self._approved_portfolio_risk(volume=volume),
+                execution_queue=eq,
+                tracker=MagicMock(),
+                pnl_ledger=MagicMock(),
+                current_positions={},
+                gods_eye_verdict=gods_eye,
+                base_dir="",
+            )
+        finally:
+            se._get_ood_gateway = _original_ood
+        return result["strategy_results"][0]
+
+    def test_health_052_defensive_chop_vetoes(self):
+        """Production replay — h1@09:44Z (health=0.52, defensive, chop=True,
+        conf=0.8758, vol=0.04).  Pre-fix: 0.04×ramp(0.52)=0.028 ≥ 0.02 floor →
+        WOULD TRADE (and lost -77.9).  Post-fix: BLOCKED_BY_GODSEYE.
+        """
+        sr = self._run(health=0.52, chop=True, mode="defensive", conf=0.8758, volume=0.04)
+        assert sr["should_trade"] is False
+        assert sr["volume"] == 0.0
+        assert "blocked_by_gods_eye" in sr["reason"]
+
+    def test_health_below_055_alone_vetoes(self):
+        """health < 0.55 alone (no chop) ⇒ veto."""
+        sr = self._run(health=0.50, chop=False, mode="defensive", conf=0.80, volume=0.04)
+        assert sr["should_trade"] is False
+        assert sr["volume"] == 0.0
+        assert "blocked_by_gods_eye" in sr["reason"]
+
+    def test_chop_alone_vetoes(self):
+        """chop=True alone (health=0.667, cautious) ⇒ veto — production
+        m15@14:15Z (lost -66.4)."""
+        sr = self._run(health=0.667, chop=True, mode="cautious", conf=0.539, volume=0.04)
+        assert sr["should_trade"] is False
+        assert sr["volume"] == 0.0
+        assert "blocked_by_gods_eye" in sr["reason"]
+
+    def test_health_055_boundary_not_vetoed(self):
+        """Boundary: health exactly 0.55 (>= threshold) + no chop ⇒ NOT vetoed
+        (veto triggers strictly below 0.55)."""
+        sr = self._run(health=0.55, chop=False, mode="normal", conf=0.80, volume=0.04)
+        assert sr["should_trade"] is True
+        assert "blocked_by_gods_eye" not in sr["reason"]
+
+    def test_healthy_normal_eye_not_vetoed(self):
+        """Healthy GodsEye (health=0.875, normal, no chop) ⇒ no veto —
+        FIX-20260806-007 healthy-case behaviour preserved."""
+        sr = self._run(health=0.875, chop=False, mode="normal", conf=0.877, volume=0.04)
+        assert sr["should_trade"] is True
+        assert "blocked_by_gods_eye" not in sr["reason"]

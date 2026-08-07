@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-06T10:32:08Z
+> **自动生成**: 2026-08-07T01:51:09Z
 
 ## Package-Level Dependencies
 
@@ -576,13 +576,15 @@
 - `_audit_trail_mislabel_20260806.py` → (无内部依赖)
 - `_audit_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_band_extremes_20260805.py` → (无内部依赖)
+- `_audit_xau_entry_structure_20260807.py` → (无内部依赖)
+- `_audit_xau_journal_pnl_null_20260806.py` → (无内部依赖)
+- `_audit_xau_longs_20260807.py` → (无内部依赖)
 - `_audit_xau_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_votes_pnl_20260805.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_mypy_scope.py` → (无内部依赖)
-- `_probe_ai_tick_20260806.py` → (无内部依赖)
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)

@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260807-001
+- **Docket ID**: DQAF-20260807-001
+- **日期**: 2026-08-07
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU 低健康开单过度放行 — 08-06 09:44Z 首单 GodsEye health=0.52 仍成交 (三单全 SHORT 追逐, "-$144 学费"); m30 ticket 4448694178 (11:20Z 开/13:09:55Z zombie 检出/09:47Z 平) 平仓后 `data/state/execution_state.json` pending_settlement_tickets 恒空 → PnL 永久不可对账。
+  - [Layer 2 — 中间异常]: (GodsEye) `_gods_eye_health_vol_mult` 死区斜坡 (FIX-20260806-007 Option B2) 仅缩量不硬断 — health=0.52 时 volume×~0.36 仍 ≥0.02 Ω 终门成交; (Zombie) bridge-direct journal 写入把持仓放 position_manager 但不进 known_open_tickets → pre_mgmt_zombie_cleared 循环 `_z_open is not None` 条件为 False → 仅 `clear_position()` 无 settlement enqueue → 无 corpse。
+  - [Layer 3 — 根因]: (1) L2 (contract-violation RC-06) — Cut 7 fail-open 教条 "God's Eye NEVER blocks outright" 使低健康/choppy 期无硬风控底线 (Defensive/choppy 本应拒单); (2) L2 (state-leak RC-03) — zombie-clear 的 settlement enqueue 依赖已知仓位字典, 对桥接直写逃逸的持仓结构上不可见。
+- **证据引用**:
+  - Source 1: `data/logs/intent_20260806T072045Z.log` 09:44Z 首单 health=0.52 (GodsEye fail-open 放行实证)
+  - Source 2: `data/state/execution_state.json` pending_settlement_tickets 空 + 审计 (m30 4448694178 从未入队, zombie 逃逸实证)
+  - Source 3: `core/runtime/live_cycle.py` pre_mgmt_zombie_cleared `_z_open is not None` 条件 gate (根因代码锚点)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: TREND_CHASE_FAILOPEN_LOW_EDGE / ZOMBIE_ESCAPE_NO_CORPSE
+
 ### CCT-20260806-003
 - **Docket ID**: DQAF-20260806-003
 - **日期**: 2026-08-06

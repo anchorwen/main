@@ -20,6 +20,26 @@
 
 ---
 
+### ReB-20260807-TREND_CHASE_FAILOPEN_LOW_EDGE
+- **Pattern Signature**: `TREND_CHASE_FAILOPEN_LOW_EDGE`
+- **Date Cataloged**: 2026-08-07
+- **Source Docket**: DQAF-20260807-001
+- **Related**: FIX-20260807-001 (RESOLVED — Option A Chop Filter), DQAF-20260806-003 (deadband ramp origin), TECH_DEBT-010 (Option C cold-explore, DEFERRED 8/19 后)
+
+**定义**: 一个带健康度/模式信号的入场闸门以 "NEVER blocks outright (fail-open)" 为教条, 对 Defensive/choppy 状态只缩量不硬断 → 低健康期仍过度开单 (08-06 09:44Z health=0.52 首单成交, 三单全 SHORT "-$144 学费"). 与 BTC 侧的区别: 乘数斜坡 (`_gods_eye_health_vol_mult`) 只让 volume 收敛到 floor 上, 从不把 decision 打成零 → 风控底线在闸门层缺失, 依赖 Ω 终门兜底 (但终门只在 volume 跌破 floor 时拦, 健康态恰在 floor 之上).
+- **预防**: (1) 对 Defensive/choppy 状态必须存在硬否决路径 (`should_trade=False + volume=0`), 显式状态 BLOCKED_BY_GODSEYE 向下游传递, 不得仅依赖缩放; (2) 闸门语义分层: fail-closed (拒单) 用于风险状态, fail-open (放行) 仅用于数据不足/可观测性缺口, 绝不可用于已确认的风险状态; (3) 修复层级 ≥ 根因层级 — 闸门契约 (L2) 必须改契约本身, 不能靠下游 Ω 门兜底.
+- **检测**: `data/logs/intent_*.log` 中 `gods_eye_blocked_entry` 事件计数 + `gods_eye_health`/`chop_detected` 字段审计; 对每笔实盘开单校验其 `gods_eye_health ≥ 0.55 AND chop=False` 契约; 定期扫描 XAU/BTC 首单 health 分布 (低健康放行 = 红旗).
+
+### ReB-20260807-ZOMBIE_ESCAPE_NO_CORPSE
+- **Pattern Signature**: `ZOMBIE_ESCAPE_NO_CORPSE`
+- **Date Cataloged**: 2026-08-07
+- **Source Docket**: DQAF-20260807-001
+- **Related**: FIX-20260807-001 (RESOLVED — unconditional enqueue + field fallback), DQAF-20260726-012 (GHOST_BOOTSTRAP_RESTORE_MUTUAL_EXCLUSION — 同族幽灵仓位), DQAF-20260709-002 (BROKER_STATE_NOT_CONSULTED_BEFORE_UNTRACK)
+
+**定义**: 一个仓位状态机有两条并行写入路径 — 主路径 (known_open_tickets → settlement → PnL corpse) 与桥接直写路径 (bridge-direct journal → position_manager 但不进 known_open_tickets). 当老化清理 (pre_mgmt_zombie_cleared) 的 settlement enqueue 以 `_z_open is not None` 为 gate 时, 桥接直写逃逸的持仓在 `_z_open=None` 分支下只 `clear_position()` 不 enqueue → 仓位从 MT5 消失却永远无 PnL 尸体 → 资金对账永久缺口 (实证 m30 4448694178, settlement queue 空).
+- **预防**: (1) "任何退出 MT5 的持仓必须留下 PnL 尸体" 设为不变量 — settlement enqueue 只 guard 队列存在性, 不 guard 仓位字典 (enqueue 字段可空, 尸体仍可写); (2) 多写入路径必须收敛到单一注册点 (known_open_tickets), 桥接直写也必须注册 — 至少用快照字段 (position_manager) 回退重建 settlement 入队; (3) zombie 清理路径的每一条 clear_position 都必须有对偶 settlement 动作 (corpse 强制写).
+- **检测**: `execution_state.json` pending_settlement_tickets 与 position_manager 快照 + journal 最近平仓票号三方对账; 出现 "已平仓票号不在 settlement 队列也不在 journal corpse" 即逃逸红旗 (Iron Law #11 脚本: position_ticket 严格去重对账).
+
 ### ReB-20260806-THRESHOLD_RESONANCE_VOLUME_SHAVE
 - **Pattern Signature**: `THRESHOLD_RESONANCE_VOLUME_SHAVE`
 - **Date Cataloged**: 2026-08-06

@@ -68,6 +68,14 @@ _ATR_BUFFER_MIN_SAMPLES: int = 10  # minimum buffer_sample entries required to a
 # but NO LONGER used as a circuit breaker — replaced by ATR ratio gate above.
 _V9_M5_VOL_ZSCORE_IDX: int = 5  # 0-indexed, for OOD diagnostic logging only
 
+# DQAF-20260807-001 (IC 雷霆裁决 — Option A Chop Filter): God's Eye HARD
+# VETO threshold on NEW entries.  When health < this (Defensive) OR chop is
+# detected, the entry is blocked outright (BLOCKED_BY_GODSEYE) instead of
+# the previous fail-open reduce-only behaviour.  Calibrated from the 08-06
+# XAU evidence: h1@09:44 entered with health=0.52 + chop and lost -77.9;
+# m15@14:15 with chop=true lost -66.4.
+_GODS_EYE_HARD_BLOCK_HEALTH: float = 0.55
+
 # Module-level cache for ATR buffer_sample (refreshed every 60s from disk).
 # regime_detector_state.json is updated each cycle by the RegimeDetector,
 # so a short TTL keeps us in sync without re-reading on every strategy eval.
@@ -1091,9 +1099,17 @@ def evaluate_strategy_lines(
         # ── Cut 7: God's Eye cross-instrument consensus gate ────────────
         # FIX-20260625-090: Modulates confidence and volume based on
         # multi-TF alignment, cross-instrument consistency, chop, and
-        # anomaly scores.  God's Eye NEVER blocks a trade outright
-        # (fail-open for entries) — it reduces confidence and volume.
-        # Only exception: "shadow" mode forces shadow (no real money).
+        # anomaly scores.
+        # DQAF-20260807-001 (IC 雷霆裁决 — Option A Chop Filter): the old
+        # "God's Eye NEVER blocks a trade outright (fail-open for entries)"
+        # contract was abolished.  08-06 实证 — 3 XAU longs entered at
+        # 24h-range high percentiles (80.5%/73.2%/56.6%) under chop or
+        # health=0.52, all exited at a loss (-77.9/-66.4/m30 无账) — proved
+        # fail-open lets trend-following signals "buy the top".  New
+        # contract: when health < 0.55 (Defensive) OR chop is detected,
+        # pass an explicit BLOCKED_BY_GODSEYE status downstream
+        # (should_trade=False, volume=0).  Risk-control floor only; signal
+        # generation untouched.  "shadow" mode still forces shadow.
         if gods_eye_verdict is not None and decision.should_trade:
             _gev = gods_eye_verdict
             _ge_health = getattr(_gev, "health_score", 1.0)
@@ -1103,47 +1119,75 @@ def evaluate_strategy_lines(
             _ge_anomaly = getattr(_gev, "anomaly_score", 0.0)
             _ge_macro = getattr(_gev, "macro_bias", "neutral")
 
-            # ── Mode-based gating ──
-            if _ge_mode == "shadow":
-                # God's Eye in shadow: force shadow mode (no real money)
-                from core.execution.regime_gate import get_stricter_mode
+            # ── Option A: God's Eye HARD VETO on new entries (IC Order) ──
+            if _ge_health < _GODS_EYE_HARD_BLOCK_HEALTH or _ge_chop:
+                decision.should_trade = False
+                decision.volume = 0.0
+                decision.reason = (
+                    decision.reason or ""
+                ) + f"gods_eye:blocked_by_gods_eye" f"(h={_ge_health:.2f},chop={_ge_chop})"
+                print(
+                    json.dumps(
+                        {
+                            "event": "gods_eye_blocked_entry",
+                            "time": _utc_iso(),
+                            "strategy": sname,
+                            "direction": decision.direction,
+                            "gods_eye_health": round(_ge_health, 4),
+                            "chop_detected": _ge_chop,
+                            "mode": _ge_mode,
+                            "confidence": round(decision.confidence, 4),
+                            "volume": 0.0,
+                            "reason": decision.reason,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            else:
+                # ── Mode-based gating ──
+                if _ge_mode == "shadow":
+                    # God's Eye in shadow: force shadow mode (no real money)
+                    from core.execution.regime_gate import get_stricter_mode
 
-                gate_mode = get_stricter_mode(gate_mode, "shadow")
-                decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
-            elif _ge_mode == "defensive":
-                # Defensive: require higher confidence floor
-                if decision.confidence < 0.50:
-                    decision.should_trade = False
-                    decision.reason = (
-                        f"gods_eye:defensive_confidence_floor"
-                        f"(conf={decision.confidence:.3f}<0.50)"
-                    )
-                else:
+                    gate_mode = get_stricter_mode(gate_mode, "shadow")
                     decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
-            elif _ge_mode == "cautious":
-                # Cautious: modest confidence reduction
-                decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
-            # "normal": no modification
+                elif _ge_mode == "defensive":
+                    # Defensive: require higher confidence floor
+                    if decision.confidence < 0.50:
+                        decision.should_trade = False
+                        decision.reason = (
+                            f"gods_eye:defensive_confidence_floor"
+                            f"(conf={decision.confidence:.3f}<0.50)"
+                        )
+                    else:
+                        decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
+                elif _ge_mode == "cautious":
+                    # Cautious: modest confidence reduction
+                    decision.confidence = round(decision.confidence * _ge_conf_mod, 4)
+                # "normal": no modification
 
-            # ── Health-based volume modulation ──
-            # FIX-20260730-010: Removed max(0.01, ...) floor — Ω Phase 2.
-            # Volume floor is now enforced ONLY at the final settlement gate.
-            # DQAF-20260806-003 Option B2 (IC Approved): _health_vol via
-            # deadband ramp — healthy GodsEye (health >= 0.70) no longer
-            # shaves volume, so a healthy eye cannot push an economically
-            # viable volume below the min_economic floor (threshold resonance).
-            if decision.should_trade:
-                _health_vol = _gods_eye_health_vol_mult(_ge_health)
-                decision.volume = round(decision.volume * _health_vol, 4)
-                # Append God's Eye diagnostic to reason
-                _ge_tag = f"+gods_eye:{_ge_mode}" f"_h={_ge_health:.2f}" f"_cm={_ge_conf_mod:.2f}"
-                if _ge_chop:
-                    _ge_tag += "_chop"
-                if _ge_anomaly > 0.3:
-                    _ge_tag += f"_anom={_ge_anomaly:.2f}"
-                if _ge_macro != "neutral":
-                    _ge_tag += f"_macro={_ge_macro}"
-                decision.reason = (decision.reason or "") + _ge_tag
+                # ── Health-based volume modulation ──
+                # FIX-20260730-010: Removed max(0.01, ...) floor — Ω Phase 2.
+                # Volume floor is now enforced ONLY at the final settlement gate.
+                # DQAF-20260806-003 Option B2 (IC Approved): _health_vol via
+                # deadband ramp — healthy GodsEye (health >= 0.70) no longer
+                # shaves volume, so a healthy eye cannot push an economically
+                # viable volume below the min_economic floor (threshold resonance).
+                if decision.should_trade:
+                    _health_vol = _gods_eye_health_vol_mult(_ge_health)
+                    decision.volume = round(decision.volume * _health_vol, 4)
+                    # Append God's Eye diagnostic to reason
+                    _ge_tag = (
+                        f"+gods_eye:{_ge_mode}" f"_h={_ge_health:.2f}" f"_cm={_ge_conf_mod:.2f}"
+                    )
+                    if _ge_chop:
+                        _ge_tag += "_chop"
+                    if _ge_anomaly > 0.3:
+                        _ge_tag += f"_anom={_ge_anomaly:.2f}"
+                    if _ge_macro != "neutral":
+                        _ge_tag += f"_macro={_ge_macro}"
+                    decision.reason = (decision.reason or "") + _ge_tag
 
         # Apply session + health volume multipliers
         # FIX-20260730-010: Removed max(0.01, ...) floor — Ω Phase 2.

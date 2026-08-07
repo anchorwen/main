@@ -479,6 +479,32 @@ def _save_recent_prices(state: Any, base_dir: str) -> None:
         pass
 
 
+def _zombie_settlement_fields(
+    z_open: dict[str, Any] | None,
+    z_pm: Any,
+) -> tuple[str, float, float, str, int, list[str]]:
+    """Build settlement-enqueue fields for an aged zombie, with fallbacks.
+
+    DQAF-20260807-001 (IC 雷霆裁决 — Zombie 逃逸原子修补): bridge-direct
+    journal writes can leave a position in position_manager but ABSENT from
+    known_open_tickets (``z_open`` is None).  Fall back to the position_manager
+    snapshot so every aged zombie still enqueues a settlement entry — i.e.
+    every position that leaves MT5 leaves a PnL corpse (verified deal or
+    settlement-timeout record).  Returns ``(side, entry_price, volume,
+    strategy, magic, brain_ids)``.
+    """
+    _o = z_open or {}
+    _side = str(_o.get("side", "")) or str(getattr(z_pm, "side", ""))
+    _entry = float(_o.get("entry_price", 0) or getattr(z_pm, "entry_price", 0))
+    _vol = float(_o.get("volume", 0) or getattr(z_pm, "volume", 0))
+    _strat = str(_o.get("strategy", "")) or str(getattr(z_pm, "strategy_name", ""))
+    _magic = int(_o.get("magic", 0) or 0)
+    _bids = list(_o.get("brain_ids", []) or []) or list(
+        getattr(z_pm, "supporting_brain_ids", []) or []
+    )
+    return _side, _entry, _vol, _strat, _magic, _bids
+
+
 # ── Daily ops auto-scheduler ────────────────────────────────────────────
 
 # FIX-20260531-009: state paths derived from config.base_dir at call site
@@ -2662,32 +2688,33 @@ def execute_live_cycle(
                                     flush=True,
                                 )
                             # ── FIX-20260730-011 (L3): Enqueue aged zombies to settlement ──
+                            # DQAF-20260807-001 (IC 雷霆裁决 — Zombie 逃逸原子修补):
+                            # enqueue ALWAYS, even when known_open_tickets lacks the
+                            # ticket.  Bridge-direct journal writes escaped
+                            # known_open_tickets tracking, leaving position_manager
+                            # entries with NO settlement lifecycle → PnL corpse lost
+                            # (m30 4448694178 @08-06 实证: 11:20Z 开仓, 13:09Z
+                            # zombie_cleared, 结算队列空 → PnL 永久无账).  Fields
+                            # fall back to the position_manager snapshot so every
+                            # aged zombie leaves a PnL record (verified deal or
+                            # settlement timeout corpse).
                             if _aged_zombies:
                                 for _zt in sorted(_aged_zombies):
                                     _z_open = state.known_open_tickets.pop(_zt, None)
                                     _z_pm = state.position_manager.get_position(ticket=_zt)
-                                    if (
-                                        _z_open is not None
-                                        and state.pending_settlement_tickets is not None
-                                    ):
+                                    if state.pending_settlement_tickets is not None:
+                                        _z_side, _z_entry, _z_vol, _z_strat, _z_magic, _z_bids = (
+                                            _zombie_settlement_fields(_z_open, _z_pm)
+                                        )
                                         state.pending_settlement_tickets.enqueue(
                                             ticket=_zt,
                                             symbol=config.symbol,
-                                            side=str(
-                                                _z_open.get("side", "")
-                                                or getattr(_z_pm, "side", "")
-                                            ),
-                                            entry_price=float(
-                                                _z_open.get("entry_price", 0)
-                                                or getattr(_z_pm, "entry_price", 0)
-                                            ),
-                                            volume=float(
-                                                _z_open.get("volume", 0)
-                                                or getattr(_z_pm, "volume", 0)
-                                            ),
-                                            strategy=str(_z_open.get("strategy", "")),
-                                            magic=int(_z_open.get("magic", 0) or 0),
-                                            brain_ids=list(_z_open.get("brain_ids", []) or []),
+                                            side=_z_side,
+                                            entry_price=_z_entry,
+                                            volume=_z_vol,
+                                            strategy=_z_strat,
+                                            magic=_z_magic,
+                                            brain_ids=_z_bids,
                                             estimated_pnl=None,
                                             estimated_close_price=None,
                                             cycle=state.loop_iteration,

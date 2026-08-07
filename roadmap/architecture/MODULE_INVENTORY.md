@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-06T10:32:08Z
-> **扫描模块数**: 798
+> **自动生成**: 2026-08-07T01:51:09Z
+> **扫描模块数**: 800
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -532,7 +532,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 24 | 5121 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5148 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 15 | 2559 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
@@ -561,7 +561,7 @@
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
 | `strategy_builder.py` | ✅ active | — | 6 | 1313 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 48 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 6 | 1406 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 6 | 1450 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -662,13 +662,15 @@
 | `_audit_trail_mislabel_20260806.py` | ✅ active | — | 3 | 281 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
+| `_audit_xau_entry_structure_20260807.py` | ✅ active | — | 2 | 127 | — | |
+| `_audit_xau_journal_pnl_null_20260806.py` | ✅ active | — | 1 | 92 | — | |
+| `_audit_xau_longs_20260807.py` | ✅ active | — | 2 | 106 | — | |
 | `_audit_xau_two_longs_20260805.py` | ✅ active | — | 1 | 38 | — | |
 | `_audit_xau_votes_pnl_20260805.py` | ✅ active | — | 4 | 173 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_mypy_scope.py` | ✅ active | — | 2 | 55 | — | |
-| `_probe_ai_tick_20260806.py` | ✅ active | — | 2 | 87 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
