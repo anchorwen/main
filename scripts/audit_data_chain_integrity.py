@@ -8,15 +8,21 @@ audit_data_chain_integrity.py — 全数据链完整性审计 (Data Chain Integr
 
 【统计口径声明】 (Iron Law #11 — 脚本先行, stdout 是唯一合法证据源)
   1. 本脚本只读 --data-dir 下的数据文件, 绝不修改任何 .json/.jsonl (只读审计)。
-  2. 去重逻辑: ledger 按 event_id 去重; journal 按 message_id 去重; ticket 为 position_ticket
-     (open 取 detail.order, close 取 position_ticket)。
-  3. 指数定义: 6 段独立健康分 (满分 100, 每 fault 按 Sev 权重扣分, 下限 0)
+  2. 去重逻辑: ledger 按 event_id 去重; journal 按 message_id 去重。
+  3. 生命周期对账 (孤儿/close-without-open) 用**不可变身份** join (FIX-20260807-001
+     resolve_identity): position_identifier 优先, 回退 position_ticket → detail.order → ticket。
+     MT5 partial-close/netting 换票不误判孤儿。
+  4. 指数定义: 6 段独立健康分 (满分 100, 每 fault 按 Sev 权重扣分, 下限 0)
      → Data Chain Integrity Index = 加权和, 权重: S4记账 0.25 / S3派发 0.20 /
        S2决策 0.15 / S1入口 0.15 / S6对账 0.15 / S5投影 0.10。
-  4. Sev 惩罚: Sev1 -25 / Sev2 -12 / Sev3 -5 / Sev4 -1。
-  5. 已知基线噪音 (IC 2026-08-06 裁决 "绝对视而不见") 标记 baseline=true,
-     不计入指数, 单独清单报告。用 --include-baseline 可计入。
-  6. 输出: 人类可读报告 (stdout) + --json 机器可读 + --baseline-write/--baseline-read 回归比对。
+  5. Sev 惩罚: Sev1 -25 / Sev2 -12 / Sev3 -5 / Sev4 -1。
+  6. 已知基线噪音 (IC 裁决 "绝对视而不见") + 设计行为 + 生成器信号, 标记 baseline=true,
+     不计入指数, 单独清单报告。用 --include-baseline 可计入:
+       - auto_orphan_rejected 合成收尾 (cleanup_orphan_opens 拒绝单清理, 设计)
+       - 影子风暴拒单 (XAUUSD 缺c + magic=null + vol=0.05, 桥防护网挡下的生成器信号)
+       - 零开单休眠态快照静默 (journal 无近期 open/close)
+       - S6_HEALTH_CRITICAL / S4_QUARANTINE_RESIDUE (IC 2026-08-06 基线噪音)
+  7. 输出: 人类可读报告 (stdout) + --json 机器可读 + --baseline-write/--baseline-read 回归比对。
 
 用法:
   python scripts/audit_data_chain_integrity.py --data-dir data_btc
@@ -159,6 +165,56 @@ def _segment_score(faults: list[dict]) -> int:
     for f in fresh:
         total -= SEV_PENALTY.get(f["sev"], 1)
     return max(0, int(round(total)))
+
+
+def _as_int(value: Any) -> int | None:
+    """宽容 int 转换 (容纳字符串形式的 ticket)。"""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_identity(obj: dict) -> int | None:
+    """复刻 resolve_identity() (FIX-20260708-001 / ticket_resolver.py):
+    不可变 position_identifier 优先 (跨 MT5 partial-close/netting 换票稳定),
+    否则回退 mutable ticket (position_ticket → detail.order → ticket)。
+
+    position_identifier 在 close 腿上等于原始开仓 ticket, 因此在 netting 换票后
+    close 腿仍能精确回链到 open 腿 —— 避免把换票误判为孤儿平仓。
+    """
+    pid = _as_int(obj.get("position_identifier"))
+    if pid:
+        return pid
+    t = _as_int(obj.get("position_ticket"))
+    if t:
+        return t
+    t = _as_int((obj.get("detail") or {}).get("order"))
+    if t:
+        return t
+    return _as_int(obj.get("ticket"))
+
+
+def _is_shadow_storm_reject(obj: dict, detail: dict) -> bool:
+    """影子风暴签名 (incident_shadow_storm_resolved_20260806 / DQAF-20260807-004):
+    symbol=XAUUSD(缺 'c') + magic=None + volume=0.05 — v9 shadow 路径幽灵单,
+    被桥 Dedup Guard / Symbol 校验挡下 (retcode 10018)。链忠实记录了拒绝结果,
+    属生成器行为信号而非链断层 → scoped-out (baseline), 不计入指数。
+    """
+    sym = str(obj.get("symbol") or "")
+    if sym != "XAUUSD":
+        return False
+    magic = obj.get("magic")
+    if magic not in (None, "", 0):
+        return False
+    try:
+        v = obj.get("volume")
+        vol = float(v) if v is not None else 0.0
+    except (TypeError, ValueError):
+        return False
+    return vol == 0.05
 
 
 # ---------------------------------------------------------------------------
@@ -364,13 +420,17 @@ def s3_dispatch_execution(dd: Path, now: datetime) -> list[dict]:
     opened: set[int] = set()
     closed: set[int] = set()
     ghost_vol = 0
-    rejected = 0
+    rejected_storm = 0
+    rejected_genuine = 0
     ack_no_order = 0
     pnl_null_close = 0
     outbox_locked = 0
+    rejected_open_ids: set[str] = set()
+    last_open_ts: datetime | None = None
+    last_close_ts: datetime | None = None
     totals = {"open": 0, "close": 0, "other": 0}
     null_pnl_cats: dict[str, dict] = {
-        cat: {"count": 0, "samples": [], "dates": set()}
+        cat: {"count": 0, "samples": [], "dates": set(), "unlinked": 0}
         for cat in ("legacy_backfill", "auto_orphan_rejected", "corpse_missing", "intent_pending")
     }
 
@@ -383,17 +443,15 @@ def s3_dispatch_execution(dd: Path, now: datetime) -> list[dict]:
         detail = obj.get("detail")
         if not isinstance(detail, dict):
             detail = {}
-        ticket = obj.get("position_ticket") or detail.get("order")
-        if ticket:
-            try:
-                ticket = int(ticket)
-            except (TypeError, ValueError):
-                ticket = None
+        ident = _resolve_identity(obj)
+        ts = _parse_dt(obj.get("recorded_at"))
 
         if action == "open":
             totals["open"] += 1
-            if ticket:
-                opened.add(ticket)
+            if ident:
+                opened.add(ident)
+            if ts and (last_open_ts is None or ts > last_open_ts):
+                last_open_ts = ts
             if isinstance(vol, (int, float)) and vol <= 0:
                 ghost_vol += 1
                 faults.append(
@@ -402,19 +460,26 @@ def s3_dispatch_execution(dd: Path, now: datetime) -> list[dict]:
                         "S3_GHOST_VOLUME",
                         1,
                         "开仓 ghost 体积",
-                        f"ticket={ticket} volume={vol}",
+                        f"ident={ident} volume={vol}",
                     )
                 )
             if ack == "rejected":
-                rejected += 1
-            elif ticket is None and ack == "accepted":
+                if _is_shadow_storm_reject(obj, detail):
+                    rejected_storm += 1
+                else:
+                    rejected_genuine += 1
+                if obj.get("message_id"):
+                    rejected_open_ids.add(str(obj["message_id"]))
+            elif ident is None and ack == "accepted":
                 ack_no_order += 1
         elif action == "close":
             totals["close"] += 1
             mid = obj.get("message_id", "") or ""
             is_legacy = mid.startswith("close_orphan_backfill") or mid.startswith("ghost_cleanup")
-            if ticket and not is_legacy:
-                closed.add(ticket)
+            if ident and not is_legacy:
+                closed.add(ident)
+            if ts and (last_close_ts is None or ts > last_close_ts):
+                last_close_ts = ts
             if isinstance(vol, (int, float)) and vol <= 0:
                 ghost_vol += 1
             pnl = obj.get("pnl")
@@ -432,14 +497,18 @@ def s3_dispatch_execution(dd: Path, now: datetime) -> list[dict]:
                 else:
                     cat = "intent_pending"  # 未成交平仓意图, 属正常, 不报
                 null_pnl_cats[cat]["count"] += 1
-                if len(null_pnl_cats[cat]["samples"]) < 3 and ticket:
-                    null_pnl_cats[cat]["samples"].append(f"ticket={ticket} {mid[:44]}")
+                if len(null_pnl_cats[cat]["samples"]) < 3 and ident:
+                    null_pnl_cats[cat]["samples"].append(f"ident={ident} {mid[:44]}")
                 if cat == "corpse_missing" or cat == "auto_orphan_rejected":
                     null_pnl_cats[cat]["dates"].add(str(obj.get("recorded_at", ""))[:10])
+                if cat == "auto_orphan_rejected":
+                    oid = obj.get("open_message_id")
+                    if not oid or str(oid) not in rejected_open_ids:
+                        null_pnl_cats[cat]["unlinked"] += 1
         else:
             totals["other"] += 1
 
-    # 孤儿平仓: close 无对应 open
+    # 孤儿平仓: close 无对应 open (position_identifier 不可变身份回链, FIX-20260708-001)
     orphan_closes = closed - opened
     if orphan_closes:
         faults.append(
@@ -448,15 +517,34 @@ def s3_dispatch_execution(dd: Path, now: datetime) -> list[dict]:
                 "S3_ORPHAN_CLOSE",
                 1,
                 "孤儿平仓 (close 无 open)",
-                f"tickets={sorted(orphan_closes)[:8]} count={len(orphan_closes)}",
+                f"identities={sorted(orphan_closes)[:8]} count={len(orphan_closes)}",
             )
         )
     if ghost_vol:
         faults.append(
             _fault("s3", "S3_GHOST_VOLUME_TOTAL", 2, "ghost 体积记录数", f"count={ghost_vol}")
         )
-    if rejected:
-        faults.append(_fault("s3", "S3_DISPATCH_REJECTED", 2, "派发被拒", f"count={rejected}"))
+    if rejected_genuine:
+        faults.append(
+            _fault(
+                "s3",
+                "S3_DISPATCH_REJECTED",
+                2,
+                "派发被拒 (真实成交意图, 桥返回 retcode)",
+                f"count={rejected_genuine}",
+            )
+        )
+    if rejected_storm:
+        faults.append(
+            _fault(
+                "s3",
+                "S3_DISPATCH_REJECTED_STORM",
+                2,
+                "派发被拒 (影子风暴生成器信号, 桥防护网挡下)",
+                f"count={rejected_storm}",
+                True,
+            )
+        )
     if ack_no_order:
         faults.append(
             _fault(
@@ -488,13 +576,25 @@ def s3_dispatch_execution(dd: Path, now: datetime) -> list[dict]:
                 )
             )
         elif cat == "auto_orphan_rejected":
+            linked = info["count"] - info["unlinked"]
+            if info["unlinked"]:
+                faults.append(
+                    _fault(
+                        "s3",
+                        "S3_AUTO_ORPHAN_UNLINKED",
+                        2,
+                        "auto_orphan_rejected 无法回链到 rejected open (真异常)",
+                        f"count={info['unlinked']} dates={sorted(info['dates'])}",
+                    )
+                )
             faults.append(
                 _fault(
                     "s3",
                     "S3_AUTO_ORPHAN_REJECTED",
                     2,
-                    "auto_orphan_rejected 平仓无 PnL (活动信号)",
-                    f"count={info['count']} dates={sorted(info['dates'])}",
+                    "auto_orphan_rejected 合成收尾 (设计, cleanup_orphan_opens 拒绝单清理)",
+                    f"count={info['count']} linked={linked} unlinked={info['unlinked']}",
+                    True,
                 )
             )
 
@@ -516,13 +616,21 @@ def s3_dispatch_execution(dd: Path, now: datetime) -> list[dict]:
                     last_snap = ts
         age = _safe_age_minutes(last_snap, now)
         if age is not None and age > 24 * 60:
+            # 零开单/休眠防御态: journal 无近期 open/close → 快照按持仓写入 (trail_dispatch),
+            # 静默是设计行为 (health_checks 亦视 "no positions open" 为 PASS)。
+            # 仅当 journal 仍在活跃管理持仓而快照停写时, 才是真实停滞。
+            recent = [t for t in (last_open_ts, last_close_ts) if t is not None]
+            last_activity = max(recent) if recent else None
+            act_age = _safe_age_minutes(last_activity, now)
+            dormant = act_age is None or act_age > 24 * 60
             faults.append(
                 _fault(
                     "s3",
                     "S3_POS_SNAPSHOT_STALE",
                     2,
                     "position_snapshots 停滞",
-                    f"last={last_snap} age={age:.0f}min",
+                    f"last={last_snap} age={age:.0f}min dormant={dormant} (journal 休眠=设计)",
+                    baseline=dormant,
                 )
             )
         unopened = snap_tickets - opened
@@ -659,24 +767,18 @@ def s4_ledger_ssot(dd: Path, now: datetime) -> list[dict]:
                     dup_msg += 1
                 msg_seen.add(mid)
             action = obj.get("action")
-            detail = obj.get("detail")
-            if not isinstance(detail, dict):
-                detail = {}
-            ticket = obj.get("position_ticket") or detail.get("order")
-            try:
-                ticket = int(ticket) if ticket else None
-            except (TypeError, ValueError):
-                ticket = None
-            if not ticket:
+            # 生命周期对账用不可变身份 (position_identifier → ticket 回退, FIX-20260708-001)
+            ident = _resolve_identity(obj)
+            if not ident:
                 continue
             if action == "open":
-                opened.add(ticket)
+                opened.add(ident)
             elif action == "close":
                 mid = str(obj.get("message_id", "") or "")
                 # 历史 backfill/cleanup 假记录 (孤儿清账产物) 不参与生命周期对账
                 if mid.startswith("close_orphan_backfill") or mid.startswith("ghost_cleanup"):
                     continue
-                closed.add(ticket)
+                closed.add(ident)
         if dup_msg:
             faults.append(
                 _fault("s4", "S4_DUP_MESSAGE_ID", 2, "重复 message_id", f"count={dup_msg}")

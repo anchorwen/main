@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-07T15:30:57Z
+> **自动生成**: 2026-08-07T16:23:16Z
 
 ## Package-Level Dependencies
 
@@ -593,6 +593,8 @@
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)
+- `_verify_data_chain_findings_20260807.py` → (无内部依赖)
+- `_verify_data_chain_findings_20260807b.py` → (无内部依赖)
 - `_verify_governance_evaluator.py` → `core.brains.services.brain_promotion`, `core.deployment.governance_evaluator`, `core.governance.governance_rule_engine`, `core.governance.governance_service`
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)

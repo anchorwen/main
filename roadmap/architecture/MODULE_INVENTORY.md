@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-07T15:30:57Z
-> **扫描模块数**: 806
+> **自动生成**: 2026-08-07T16:23:16Z
+> **扫描模块数**: 808
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -679,6 +679,8 @@
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
+| `_verify_data_chain_findings_20260807.py` | ✅ active | — | 7 | 367 | — | |
+| `_verify_data_chain_findings_20260807b.py` | ✅ active | — | 9 | 268 | — | |
 | `_verify_governance_evaluator.py` | ✅ active | — | 3 | 155 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 221 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |
@@ -704,7 +706,7 @@
 | `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
-| `audit_data_chain_integrity.py` | ✅ active | — | 16 | 996 | — | |
+| `audit_data_chain_integrity.py` | ✅ active | — | 19 | 1098 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
 | `audit_data_final.py` | ✅ active | — | 5 | 246 | — | |
 | `audit_data_health_journal.py` | ✅ active | — | 2 | 174 | — | |
