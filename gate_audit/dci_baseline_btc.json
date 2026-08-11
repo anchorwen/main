@@ -1,0 +1,29 @@
+{
+  "data_dir": "data_btc",
+  "index": 85,
+  "grade": "🟡",
+  "segment_scores": {
+    "s1": 100,
+    "s2": 100,
+    "s3": 58,
+    "s4": 75,
+    "s5": 100,
+    "s6": 100
+  },
+  "fresh_fault_codes": [
+    "S3_GHOST_VOLUME_TOTAL",
+    "S3_ORPHAN_CLOSE",
+    "S3_SNAPSHOT_ORPHAN",
+    "S4_CLOSE_WITHOUT_OPEN"
+  ],
+  "fault_counts": {
+    "fresh": 4,
+    "baseline_scoped": 4,
+    "by_sev": {
+      "sev1": 2,
+      "sev2": 1,
+      "sev3": 1,
+      "sev4": 0
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "data_dir": "data",
+  "index": 92,
+  "grade": "🟢",
+  "segment_scores": {
+    "s1": 100,
+    "s2": 100,
+    "s3": 59,
+    "s4": 100,
+    "s5": 100,
+    "s6": 100
+  },
+  "fresh_fault_codes": [
+    "S3_DISPATCH_REJECTED",
+    "S3_GHOST_VOLUME_TOTAL",
+    "S3_PNL_NULL_CORPSE",
+    "S3_SNAPSHOT_ORPHAN"
+  ],
+  "fault_counts": {
+    "fresh": 4,
+    "baseline_scoped": 8,
+    "by_sev": {
+      "sev1": 0,
+      "sev2": 3,
+      "sev3": 1,
+      "sev4": 0
+    }
+  }
+}
