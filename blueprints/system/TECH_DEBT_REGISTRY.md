@@ -23,6 +23,7 @@
 | TECH_DEBT-014 | 2026-08-11 | L2 | runtime-live | **非休市时段背景零星击杀 (低频偶发阻塞)**: 全史 **386/905 (43%)** 击杀散布 0-23h, 典型 1-3 次/日, 已被 launcher 自动重启吸收, 不构成阻断级威胁. 高峰段 17:00Z n=33 / 20:00Z n=39 / 11-12:00Z n=23-29. 另有**每日 12:15→13:00 逐日 +5min 漂移单杀** (连续 12 天精确 +5min/天后封顶 13:00, 来源未定). | 8/19 Flow46 决战结束后随 TECH_DEBT-013 一并排查: 逐条击杀时刻 × intent 阻塞点关联, 确认低频阻塞根因与漂移单杀来源. 低优先级. |
 | TECH_DEBT-015 | 2026-08-11 | L2 | deployment | **launcher 停机无自动恢复 (运维空窗, DevOps Debt)**: 08-10 02:44 北京 外部 CTRL_C_EVENT (SIGINT) 广播停机双 launcher (DQAF-20260811-001), 因 launcher 是子进程 supervisor **自身无重启机制**, 停机后 **5.8h 无跟进重启** (历史 ~20 次 SIGINT 均 0.1-0.2min 内被拉起, 本次唯一例外). 系统行为正确 (优雅排空, 零数据损坏), 缺陷在运维恢复链. | 8/19 Flow46 决战结束后清偿: ① 运维纪律 — SIGINT 后 5min 内拉起双 launcher; ② launcher 级心跳 supervisor (独立 schtasks 探测 + 原子拉起, 需双开防护锁防止双实例). 决战前**零代码**. |
 | TECH_DEBT-016 | 2026-08-11 | L2 | deployment | **one_click_supervisor 跨系统误匹配 (双开风险, DevOps Debt)**: `D:\cursor\scripts\one_click_supervisor.ps1` (常驻 PID 2544) 用 **`*scripts/live_intent_loop.py*` 全局通配** 识别 intent — 会误认 D:\future 的 intent 为其管理对象, 若其管理逻辑触发 → 与 D:\future launcher 双重拉起 → **intent 双实例风险**. 当前每品种单 intent 无重复 (未爆发), 属潜伏隐患. | 8/19 Flow46 决战结束后清偿: supervisor 匹配白名单化 (只匹配 D:\cursor 完整路径, 不跨 RepoRoot 匹配). 低优先级, 潜伏未爆发. |
+| TECH_DEBT-017 | 2026-08-13 | L3 | runtime-live | **intent_loop 降级路径 UnboundLocalError 崩溃 (The Unbound Local)**: XAU intent_loop 8/11 00:31 → 8/13 00:45 共 **38 次** `intent exited with code 1` — MT5 not initialised → `positions_get` 抛 RuntimeError → `FaultTolerantContext [DEGRADE]` 降级路径访问未绑定局部变量 → `UnboundLocalError: '_positions'` (`live_cycle.py:1520`) + `'_EVENT_STREAM_MODE'` (`live_intent_loop.py:2732`). 每日 21:00-22:00Z 休市窗 11 连崩 (8/11、8/12 连续) + 启动竞态崩溃 (8/12 18:25 / 8/13 00:45). launcher 5-30s 自动恢复兜底, **零实盘交易损失** (8/12 首单 01:20-05:10 窗口引擎正常). 副作用: intent log 重启后句柄丢失 → 8/11 后双链 intent log 断流, 诊断线索黑盒化. | 8/19 Flow46 决战结束后与 TECH_DEBT-008/013 合并清偿: DEGRADE 降级路径变量初始化补齐 (入口 try 前绑定 `_positions`/`_EVENT_STREAM_MODE` 或重构降级分支) + 红线文件 mypy 债同批. 红线冻结前 **8/19 前零触碰**. |
 
 ---
 
@@ -150,3 +151,25 @@
 - **风险**: 若该 supervisor 检测到 D:\future intent 死亡并尝试拉起 → 与 D:\future launcher 双重拉起 → **双实例 intent**. 当前每品种单 intent (XAU 12000 / BTC 13996) 无重复 = 未爆发, 纯潜伏.
 - **修复方案** (8/19 后, 低优先级): supervisor 匹配白名单化 — 只匹配 `D:\cursor\scripts\live_intent_loop.py` 完整路径, 不跨 RepoRoot 匹配.
 - **关联**: DQAF-20260811-001 (启动健康核查环节发现)
+
+## TECH_DEBT-017 Detail — intent_loop 降级路径 UnboundLocalError 崩溃 (The Unbound Local)
+
+- **现象**: XAU intent_loop 8/11 00:31 → 8/13 00:45 共 **38 次** `[launcher] intent exited with code 1`; launcher 每轮自动 respawn (5s→30s 递增, restart 1/50→11/50 多轮循环).
+- **完整 traceback** (`data/logs/live_launcher_20260811T003149Z.log` L66455-66472):
+  ```
+  [intent] ERROR:core.runtime.fault_handler:FaultTolerantContext [DEGRADE] component=MT5_IPC:positions_get:startup_reconciliation error=RuntimeError: MT5 not initialised (command=positions_get)
+  [intent] {"event": "fatal_error", ... "type": "<class 'UnboundLocalError'>", "message": "cannot access local variable '_EVENT_STREAM_MODE'..."}
+  [intent]   File "D:\future\scripts\live_intent_loop.py", line 2319, in main
+  [intent]   File "D:\future\core\runtime\live_cycle.py", line 1520, in execute_live_cycle
+  [intent]     _open_tickets = {p.ticket for p in _positions}
+  [intent] UnboundLocalError: cannot access local variable '_positions' where it is not associated with a value
+  [intent]   File "D:\future\scripts\live_intent_loop.py", line 2732, in main
+  [intent]     if not _EVENT_STREAM_MODE:
+  [intent] UnboundLocalError: cannot access local variable '_EVENT_STREAM_MODE' where it is not associated with a value
+  ```
+- **根因**: **L3 架构缺陷** — `FaultTolerantContext [DEGRADE]` 路径 (MT5 IPC 未初始化 → `positions_get` 抛 `RuntimeError`) 访问未绑定局部变量 `_positions`/`_EVENT_STREAM_MODE` → 降级分支崩溃. 降级处理缺变量初始化兜底.
+- **触发规律**: ① 每日 21:00-22:00Z 休市窗 11 连崩 (8/11、8/12 连续, 与 TECH_DEBT-013 watchdog 击杀窗重叠); ② 启动竞态 (8/12 18:25 MT5 未初始化、8/13 00:45 启动).
+- **代价**: 决策循环中断, 但 `execution_state` 周期保存 + launcher 5-30s 恢复 + 重启后 journal 引导 `known_open_tickets` → **服务连续性保持** (8/12 首单 SHORT m30 @4391 01:20-05:10 完整闭环, 引擎正常). **零实盘交易损失**. 副作用: intent log 重启后文件句柄丢失 → 8/11 后双链 intent log 停写 → 诊断线索断流 (黑盒观测, 仅依赖 execution_state + journal).
+- **红线**: `core/runtime/live_cycle.py` + `scripts/live_intent_loop.py` 均属 **RED_LINE_FROZEN_ALLOWANCE** (TECH_DEBT-008) — **8/19 前零触碰** (IC 雷霆裁决, 2026-08-13: 为修休市报错改核心 live_cycle 极度违背红线纪律).
+- **修复方案** (8/19 后, 与 TECH_DEBT-008/013 合并): ① DEGRADE 降级路径变量初始化补齐 (入口 try 前绑定 `_positions = []` / `_EVENT_STREAM_MODE` 默认值, 或重构降级分支为独立函数); ② 同批清偿红线文件 mypy 债 (TECH_DEBT-008); ③ 与休市市场日历适配合并 (TECH_DEBT-013).
+- **关联**: TECH_DEBT-008 (红线冻结同文件域), TECH_DEBT-013 (休市窗叠加), TECH_DEBT-014 (背景击杀), ReB 候选 `INTENT_DEGRADE_UNBOUND_LOCAL_CRASH`
