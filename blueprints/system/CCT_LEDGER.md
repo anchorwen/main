@@ -27,6 +27,20 @@
 
 ---
 
+### CCT-20260816-001
+- **Docket ID**: DQAF-20260816-001
+- **日期**: 2026-08-16
+- **置信度**: confirmed (全层)
+- **因果链**:
+  - [Layer 1 — 症状]: CI shard-2 `test_flow46_alignment.py::TestCombinedInference::test_predict_is_yA_plus_r` → `ModuleNotFoundError: No module named 'lightgbm'` → `1 failed, 600 passed` exit=1 → GitHub 推送未成功 (CI 失败日志)
+  - [Layer 2 — 根因]: pyproject.toml `[project].dependencies` 漏声明运行时依赖 lightgbm (同类缺口: xgboost/scikit-learn/joblib) — CI 仅 `pip install -e ".[dev]"` 从 pyproject 装依赖 → 全新环境缺包; 8/3 新增硬 import 测试首次暴露 (此前全部 import 均函数内惰性 → CI 长期全绿掩盖; FIX-20260624-107 曾以 except ImportError 掩盖同根因)
+- **证据引用**:
+  - Source 1: [CI Log] 用户提供 — `test_predict_is_yA_plus_r - ModuleNotFoundError: No module named 'lightgbm'` / `1 failed, 600 passed` / exit=1
+  - Source 2: [pyproject.toml:6-29] dependencies/dev 均无 lightgbm; [Dockerfile:38-41] 生产运行时显式安装 lightgbm>=4.3,<5.0 等 4 包 (镜像清单与 pyproject 漂移)
+  - Source 3: [core import] lightgbm_brain_adapter.py:49 / meta_signal_filter.py:218 / meta_exit_engine.py:139 / transfer_adapter.py:97,150,250 — 生产运行时 5 处 import lightgbm; [FIX_REGISTRY.md:973] FIX-20260624-107 同根因 patch 掩盖先例
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260816-MANIFEST_OMISSION
+
 ### CCT-20260807-003
 - **Docket ID**: DQAF-20260807-003
 - **日期**: 2026-08-07

@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260816-MANIFEST_OMISSION
+- **Pattern Signature**: `MANIFEST_OMISSION`
+- **Date Cataloged**: 2026-08-16
+- **Source Docket**: DQAF-20260816-001
+- **Related**: FIX-20260816-001 (RESOLVED — L2 根治), FIX-20260624-107 (同根因 patch 掩盖先例 — except ImportError 遮缺包)
+
+**定义**: 运行时依赖被一个部署清单声明 (Dockerfile `pip install <explicit list>`) 却从包清单 (pyproject.toml `[project].dependencies`) 遗漏 → CI / `pip install .` 全新环境缺包。若所有 import 均为函数内惰性执行, CI 测试套件可长期全绿掩盖缺口, 直到新增一个硬 import 的测试首次暴露 (实证: FIX-20260803-007 `test_predict_is_yA_plus_r` L133 硬 import lightgbm)。关键签名: (1) 双清单并存 (Dockerfile + pyproject) 且内容漂移; (2) 生产核心模块惰性 import 缺失包 (不 import 即不崩); (3) 存在 except ImportError 掩盖路径 (FIX-20260624-107)。
+- **预防** (IMPLEMENTED): 单清单真源 — pyproject `[project].dependencies` 必须为所有运行时依赖唯一权威声明, 与 Dockerfile 显式 install 列表逐项对齐; 禁止用 except ImportError 掩盖缺包 (应让缺失在测试/启动即暴露); 硬 import 契约测试须在清单中声明其依赖。
+- **检测**: 脚本对比 Dockerfile pip install 显式列表 vs pyproject `[project].dependencies` 求差; grep `except.*ImportError` 于缺包敏感路径 (meta_signal_filter/adapters); 新测试硬 import 第三方包时 lint 提示清单声明。
+
 ### ReB-20260807-STATEFUL_GATE_MULTIPROCESS_DRIFT
 - **Pattern Signature**: `STATEFUL_GATE_MULTIPROCESS_DRIFT`
 - **Date Cataloged**: 2026-08-07
