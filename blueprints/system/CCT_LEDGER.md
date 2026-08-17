@@ -1794,3 +1794,18 @@
   - Source 3: 修复后 `python scripts/_monitor_direction_concentration.py --data-dirs data data_btc` → XAU CRITICAL (86% SHORT / 100% trades)
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: MONITOR_TRIPLE_BLIND_SPOT / D1_WELL_CROSS_ASSET_POISONING
+
+### CCT-20260817-001
+- **Docket ID**: DQAF-20260817-001
+- **日期**: 2026-08-17
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 8/17 XAU 订单 TP 持仓中大幅缩窄 (4500875936: 84.3→25.7 点 / 4501482790: 34.4→13.5 点), SL 全程不动, 运行中 RR 崩到 0.527/0.385 (min_rr_ratio=0.85 均跌破), 盈利曾达 R=+2.108 仍被收窄目标侵蚀.
+  - [Layer 2 — 中间异常]: compute_trail_tp (core/execution/position_manager.py:1707, FIX-20260713-008) atr_ratio=current_atr/entry_atr ≤0.80 触发 → TP candidate = anchor ∓ trail_mult×current_atr×1.75×_tf_scale 向内收窄, "TP only moves INWARD — never widens"; SL 由独立 Chandelier 引擎管理 (trail_activation_atr 未达 → SL 不动), 两引擎零耦合.
+  - [Layer 3 — 根因]: L3 架构缺陷 — TP 缩窄下限与 SL 距离/RR 无耦合: TP Floor (tp_min_distance_atr×bracket_atr, max()/min() 语义) 是 upper bound 防激进非 lower bound 保 RR; Proximity Gate 仅防末程移动; 只缩不放 (ATR 恢复不复原) → 窄目标持久化负期望.
+- **证据引用**:
+  - Source 1: `core/execution/position_manager.py:1707` compute_trail_tp (触发条件 atr_ratio≤0.80, TP Floor max()/min() 语义)
+  - Source 2: journal 事件 4500875936 02:35 modify_sltp label="trail" comment="tp" (TP 84.3→25.7)
+  - Source 3: `scripts/_audit_xau_tp_shrink_20260817.py` stdout (RR 轨迹 1.73→0.527 / 0.98→0.385, 触发 ATR ratio 0.791/0.790)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL

@@ -295,3 +295,15 @@
 - **Fix**: FIX-20260807-002 — trend_isolation_gates.py 新增 `apply_spatial_zscore_gate` (4e): LONG H1_z>+1.5 (ranging/chop 收紧 +1.0) → SpatialGateResult(blocked=True) 硬否决 (should_trade=False/volume=0); SHORT H1_z<−1.5 (ranging −1.0) → volume_mult=0.5 降额; config 可覆盖阈值 (同 4c ADX 模式). `extract_h1_price_zscore` 走 schema registry 动态索引 (v9_institutional_40 H1_Price_ZScore, 非硬编码索引位). strategy_line.py counter-trend 动作块后接线 (避开 `_ct_vol_mult` 覆写) + spatial_zscore_gate JSON 事件. 回归锁 19 测试.
 - **ReB**: TREND_CHASE_NO_POSITION_GATE
 - **Status**: **CLOSED** — FIX-20260807-002 (IC 雷霆裁决 Option A+C, 8/19 前禁止 Option B)
+
+- **Docket ID**: DQAF-20260817-001
+- **Date**: 2026-08-17
+- **Severity**: Sev 2
+- **Title**: XAU TP 持仓中大幅缩窄、SL 不动 → 运行中 RR 坍缩 (TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL)
+- **Evidence**: Iron Law #11 探针 (scripts/_audit_xau_tp_shrink_20260817.py, 留工作树): 8/17 journal + position_snapshots — 4500875936 (h1_swing SHORT) TP 84.3→25.7 点 (02:35 label="trail"/comment="tp"), RR 1.73→**0.527**, SL 4451.41 全程未动; 4501482790 (m15_swing SHORT) TP 34.4→13.5 点, RR 0.98→**0.385**. 两策略 min_rr_ratio=0.85 (configs/live.yaml) 均跌破. 盈利曾达 R=+2.108 (4500875936).
+- **DA**: TP trailing (FIX-20260713-008, position_manager.py:1707 compute_trail_tp) 在 atr_ratio=current_atr/entry_atr ≤0.80 时把 TP 向内收窄 (candidate = anchor ∓ trail_mult×current_atr×1.75×_tf_scale) 且只缩不放; 缩窄下限与 SL 距离/RR 零耦合 → RR 坍缩.
+- **AR**: "SL 也应移动只是未触发" → 被推反 (Chandelier trail_activation_atr h1=0.7/m15=0.4 未达, 快照 trail_fired=false); "TP 缩窄合理 (锁利润)" → 被 RR<0.85 负期望推翻 (止盈空间<止损空间); "仅今日偶然" → FIX-20260709-004 前案 (RR 1.66→0.08) 证明系统性复发.
+- **Root Cause**: L3 (architecture-incomplete) — TP Floor (tp_min_distance_atr×bracket_atr, max()/min() 语义) 是 upper bound 防"太激进(太远)", 非 lower bound 保 RR; Proximity Gate 仅防末程; bracket inversion guard 仅防 TP 穿 SL 不防 RR<1; 只缩不放.
+- **Fix (缓解)**: 投委会 2026-08-17 行动令 — 物理冻结 m15/m30/h1_swing (configs/live.yaml enabled:false, commit 09f09ea2) 切断新开仓; **TECH_DEBT-019** 建档 (三条修复蓝图 8/19 后清偿: ①RR 硬底线 max(Dynamic_TP_dist, Current_SL_dist×min_rr_ratio) ②波动率对称耦合 ③弹性恢复). 在仓 2 单继续 trail/watchdog 管理至平仓. 根因修复 Deferred (8/19 决战冻结期零代码).
+- **ReB**: TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL
+- **Status**: **CLOSED (mitigated)** — 冻结缓解已落地 + TECH_DEBT-019 根因修复 Deferred 至 8/19 后

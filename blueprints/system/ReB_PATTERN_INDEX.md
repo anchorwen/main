@@ -1656,3 +1656,12 @@
 - **定义**: 测试代码把运行时 base_dir 指向实盘目录 (`StrategyLineConfig(base_dir="data"/"data_btc")`), 而 `record_brain_votes()` 每 evaluate() cycle 无条件追加 `{base_dir}/brain_votes/{date}.jsonl` → 全量 pytest 每次运行把 test_brain_01/b1/b2 测试投票 (brain_status=unknown, strategy=test_line/barrier_12bar/micro_3bar 等) 写入实盘投票台账。测试与实盘共享写入路径, 无隔离边界 → 台账被测试数据毒化, 审计脚本读到幻影脑。污染时间戳与 pytest 运行窗口精确重合 (22:51Z 启动即 14:51Z 首行)。
 - **预防**: (1) 测试构造的任何运行时 config 的 base_dir 必须指向隔离目录 (pytest tmp 或 OS temp), 严禁字面 `"data"`/`"data_btc"` (FIX-20260804-010 `config_factory.TEST_BASE_DIR` 单收敛点); (2) 新增 `record_brain_votes` 调用链的测试必须显式注入 base_dir; (3) 台账污染检测: 对 `data/brain_votes/*.jsonl` 定期审计 brain_id 是否在已知生产脑清单内, 出现 test_* 即红旗; (4) 全量 pytest 结束后核对台账行数变化, 新增行数应≈0 (测试必须零写入实盘)。
 - **检测**: `python scripts/audits/_audit_xau_votes_today.py --date YYYY-MM-DD --data-dir data` 输出中出现 test_brain_01/b1/b2 即污染; `data/brain_votes/{date}.jsonl` 中出现 strategy=test_line 行即污染。
+
+### ReB-20260817-TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL
+- **Pattern Signature**: `TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL`
+- **Date Cataloged**: 2026-08-17
+- **Source Docket**: DQAF-20260817-001
+- **Related**: FIX-20260713-008 (TP trailing 激活), FIX-20260709-004 (前案 RR 1.66→0.08), TECH_DEBT-019
+- **定义**: TP 动态追踪 (ATR 收缩时向内收窄) 与 SL 距离/RR **零耦合** — TP Floor 用 max()/min() 语义只防"太激进(TP 太远)", 不保"RR≥1"; Proximity Gate 仅防末程; TP 只缩不放 → 波动率收缩后运行中 RR 坍缩 (0.527/0.385), 止盈空间<止损空间负期望, 且 SL 引擎独立 (Chandelier) 全程不动. FIX-20260709-004 曾修同族 (只放大 candidate 距离未堵 RR 耦合缺口) → 复发.
+- **预防**: (1) trail_dispatch 下发前注入 RR 耦合断言 `TP_floor_dist = max(Dynamic_TP_dist, Current_SL_dist × min_rr_ratio)`; (2) 波动率对称耦合 — ATR 收缩收紧 TP 时 SL 同步同比例收紧, 维持 RR≥1.0 数学期望; (3) 弹性恢复 — Proximity 70% 警戒线内 ATR 恢复时 TP 复放至开仓初始距离 (废除只缩不放).
+- **检测**: 对在仓单快照 (position_snapshots.jsonl) 周期计算运行中 RR = TP 距离/SL 距离, 跌破策略 min_rr_ratio 即告警; `scripts/_audit_xau_tp_shrink_20260817.py` 可复现. 8/19 决战冻结期零代码, 清偿随 TECH_DEBT-019.
