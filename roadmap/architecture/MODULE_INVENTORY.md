@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-07T16:23:16Z
-> **扫描模块数**: 808
+> **自动生成**: 2026-08-17T05:45:26Z
+> **扫描模块数**: 817
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -658,29 +658,38 @@
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
 | `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
 | `_audit_entry_timing_20260807.py` | ✅ active | — | 5 | 301 | — | |
+| `_audit_export_m5_20260817.py` | ✅ active | — | 3 | 150 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
+| `_audit_live_health_20260814.py` | ✅ active | — | 16 | 475 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
+| `_audit_shadow_pnl_august_20260812.py` | ✅ active | — | 3 | 139 | — | |
+| `_audit_shadow_pnl_replay_20260812.py` | ✅ active | — | 5 | 248 | — | |
 | `_audit_storm_sender_20260806.py` | ✅ active | — | 1 | 130 | — | |
 | `_audit_trail_mislabel_20260806.py` | ✅ active | — | 3 | 281 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
+| `_audit_xau_entry_quality_20260810.py` | ✅ active | — | 7 | 285 | — | |
 | `_audit_xau_entry_structure_20260807.py` | ✅ active | — | 2 | 127 | — | |
+| `_audit_xau_first_open_20260812.py` | ✅ active | — | 4 | 158 | — | |
 | `_audit_xau_journal_pnl_null_20260806.py` | ✅ active | — | 1 | 92 | — | |
 | `_audit_xau_longs_20260807.py` | ✅ active | — | 2 | 106 | — | |
+| `_audit_xau_mt5_reconciliation_20260813.py` | ✅ active | — | 5 | 228 | — | |
+| `_audit_xau_period_exit_match_20260813.py` | ✅ active | — | 7 | 361 | — | |
+| `_audit_xau_pnl_after_volume_increase_20260813.py` | ✅ active | — | 5 | 224 | — | |
+| `_audit_xau_pnl_detail_20260813.py` | ✅ active | — | 3 | 217 | — | |
+| `_audit_xau_spatial_gate_20260810.py` | ✅ active | — | 4 | 153 | — | |
+| `_audit_xau_tp_shrink_20260817.py` | ✅ active | — | 2 | 162 | — | |
 | `_audit_xau_two_longs_20260805.py` | ✅ active | — | 1 | 38 | — | |
 | `_audit_xau_votes_pnl_20260805.py` | ✅ active | — | 4 | 173 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_mypy_scope.py` | ✅ active | — | 2 | 55 | — | |
-| `_probe_zombie_4454299643_20260807.py` | ✅ active | — | 1 | 65 | — | |
 | `_reconcile_zombie_4454299643_20260807.py` | ✅ active | — | 3 | 200 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
-| `_verify_data_chain_findings_20260807.py` | ✅ active | — | 7 | 367 | — | |
-| `_verify_data_chain_findings_20260807b.py` | ✅ active | — | 9 | 268 | — | |
 | `_verify_governance_evaluator.py` | ✅ active | — | 3 | 155 | — | |
 | `alert_dispatcher.py` | ✅ active | AlertCard | 7 | 221 | — | |
 | `analyze_90501_institutional.py` | 📄 config | — | 0 | 262 | — | |

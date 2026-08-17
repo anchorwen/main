@@ -24,6 +24,8 @@
 | TECH_DEBT-015 | 2026-08-11 | L2 | deployment | **launcher 停机无自动恢复 (运维空窗, DevOps Debt)**: 08-10 02:44 北京 外部 CTRL_C_EVENT (SIGINT) 广播停机双 launcher (DQAF-20260811-001), 因 launcher 是子进程 supervisor **自身无重启机制**, 停机后 **5.8h 无跟进重启** (历史 ~20 次 SIGINT 均 0.1-0.2min 内被拉起, 本次唯一例外). 系统行为正确 (优雅排空, 零数据损坏), 缺陷在运维恢复链. | 8/19 Flow46 决战结束后清偿: ① 运维纪律 — SIGINT 后 5min 内拉起双 launcher; ② launcher 级心跳 supervisor (独立 schtasks 探测 + 原子拉起, 需双开防护锁防止双实例). 决战前**零代码**. |
 | TECH_DEBT-016 | 2026-08-11 | L2 | deployment | **one_click_supervisor 跨系统误匹配 (双开风险, DevOps Debt)**: `D:\cursor\scripts\one_click_supervisor.ps1` (常驻 PID 2544) 用 **`*scripts/live_intent_loop.py*` 全局通配** 识别 intent — 会误认 D:\future 的 intent 为其管理对象, 若其管理逻辑触发 → 与 D:\future launcher 双重拉起 → **intent 双实例风险**. 当前每品种单 intent 无重复 (未爆发), 属潜伏隐患. | 8/19 Flow46 决战结束后清偿: supervisor 匹配白名单化 (只匹配 D:\cursor 完整路径, 不跨 RepoRoot 匹配). 低优先级, 潜伏未爆发. |
 | TECH_DEBT-017 | 2026-08-13 | L3 | runtime-live | **intent_loop 降级路径 UnboundLocalError 崩溃 (The Unbound Local)**: XAU intent_loop 8/11 00:31 → 8/13 00:45 共 **38 次** `intent exited with code 1` — MT5 not initialised → `positions_get` 抛 RuntimeError → `FaultTolerantContext [DEGRADE]` 降级路径访问未绑定局部变量 → `UnboundLocalError: '_positions'` (`live_cycle.py:1520`) + `'_EVENT_STREAM_MODE'` (`live_intent_loop.py:2732`). 每日 21:00-22:00Z 休市窗 11 连崩 (8/11、8/12 连续) + 启动竞态崩溃 (8/12 18:25 / 8/13 00:45). launcher 5-30s 自动恢复兜底, **零实盘交易损失** (8/12 首单 01:20-05:10 窗口引擎正常). 副作用: intent log 重启后句柄丢失 → 8/11 后双链 intent log 断流, 诊断线索黑盒化. | 8/19 Flow46 决战结束后与 TECH_DEBT-008/013 合并清偿: DEGRADE 降级路径变量初始化补齐 (入口 try 前绑定 `_positions`/`_EVENT_STREAM_MODE` 或重构降级分支) + 红线文件 mypy 债同批. 红线冻结前 **8/19 前零触碰**. |
+| TECH_DEBT-018 | 2026-08-13 | L3 | observability | **`META_FILTER_WIRED_STALE` 假阳性 — 崩溃循环下 intent log 停写盲区 (The Silent Monad)**: `check_meta_filter_state` (health_checks.py:394-486) head-read 最新 2 个 `intent_*.log` 前 64KB 定位 `meta_pipeline_wired` 事件, wired_age > 360min → WARN. TECH_DEBT-017 崩溃循环 (8/11 00:31 → 8/13 00:45) 致 XAU intent log 8/11 08:32 后**停写** (stdout 落 launcher log `[intent]` 行, 不轮换新 intent_*.log) → health check 读到 **8/11 00:31:59Z 陈旧事件** → wired_age=2808min → 每日假 WARN (2026-08-12T23:19:59Z 钉钉实测). **MetaFilter 实际健康**: 当前进程 PID 18052 于 8/13 00:45:12.684Z `meta_pipeline_wired` 成功 (lgb_loaded=true, micro_scaler_loaded=true, dims=40) + long/short 塔加载 + meta_filter_gate_init (conformal_warm). 8/12 21:11-21:55 休市 11 连崩每次重启也均成功 wired. 非 MetaFilter 故障, 纯监控工具盲区. | 8/19 Flow46 决战结束后随 TECH_DEBT-017 清偿: health check 崩溃循环下回退读 launcher log `[intent]` 行 (wire 时间戳可跨崩溃恢复) 或引入 `meta_pipeline_wired` 独立持久化 SSOT 事件文件. 决战前**零代码**. |
+| TECH_DEBT-019 | 2026-08-17 | L3 | execution-orders | **TP/SL 动态追踪解耦 RR 坍缩 (The Decoupled Bracket)**: `compute_trail_tp` (FIX-20260713-008) 在 ATR 收缩 ≤0.80×entry_atr 时把 TP 向内收窄且**只缩不放**，但缩窄下限与 SL 距离/RR **零耦合** — TP Floor (`tp_min_distance_atr×bracket_atr`) 用 `max()` 语义仅防"太激进(太远)"不保"RR≥1"；Proximity Gate 仅防末程移动。8/17 实证 (DQAF-20260817-001): h1_swing RR 1.73→**0.527** / m15_swing RR 0.98→**0.385** (策略 `min_rr_ratio=0.85` 均跌破), SL 全生命周期未动而盈利曾达 R=+2.108 → 止盈空间<止损空间负期望结构. FIX-20260709-004 曾修同类 RR 1.66→0.08, 仅堵 candidate 距离未堵 RR 耦合缺口 → 复发. | 8/19 Flow46 决战结束后清偿 (投委会 2026-08-17 行动令 + 三条蓝图): ①**RR 硬底线** `TP_floor_dist = max(Dynamic_TP_dist, Current_SL_dist × min_rr_ratio)` — trail_dispatch 下发前注入最终 RR 耦合断言; ②**波动率对称耦合** — ATR 收缩触发 TP 收紧时 SL 同步同比例收紧, 维持 RR≥1.0 数学期望; ③**弹性恢复** — Proximity 70% 警戒线内 ATR 恢复时 TP 复放至开仓初始距离, 废除"只缩不放". 决战前**零代码**, 严禁触碰 execution_trail_stop 模块. |
 
 ---
 
@@ -136,6 +138,27 @@
 - **修复方案** (8/19 后, 低优先级): 逐条击杀时刻 × intent 日志关联, 确认是否同源 (MT5 IPC 偶发) 或独立缺陷.
 - **关联**: TECH_DEBT-013 (同 watchdog 域)
 
+## TECH_DEBT-019 Detail — TP/SL 动态追踪解耦 RR 坍缩 (The Decoupled Bracket)
+
+- **文件**: `core/execution/position_manager.py:1707` (`compute_trail_tp`); `core/execution/trail_stop_engine.py` (TrailPolicy 字段 `tp_proximity_ratio`/`tp_min_distance_atr`/`tp_min_step`); `core/runtime/trail_dispatch.py:152` (TP 派发)
+- **根因 (L3 架构缺陷)**: TP trailing (FIX-20260713-008, 2026-07-13 全盘激活, TrailPolicy 默认 0.7/1.5/0.15) 在 `atr_ratio = current_atr/entry_atr ≤ 0.80` 时把 TP 向内收窄 (`candidate = anchor ∓ trail_mult × current_atr × 1.75 × _tf_scale`), 且注释明示 "TP only moves INWARD — never widens". 但**向内缩窄的下限与 SL 距离/RR 无耦合**:
+  - **TP Floor 语义方向反了**: `tp_min_distance_atr×bracket_atr` 用 `max()`(short)/`min()`(long) 选择 → 是 **upper bound 防"太激进(太远)"**, 不是 lower bound 防"太保守(太近)" — TP 可无限缩到 SL 之内
+  - **Proximity Gate** (`tp_proximity_ratio=0.7`) 仅防价格走完 70% 旅程后移动, 不保 RR
+  - **Bracket inversion guard** 仅在 TP 穿过 SL 时释放 TP=0, 不防 RR<1
+  - **只缩不放**: ATR 恢复不复原 → 窄目标持久化
+- **8/17 实证** (DQAF-20260817-001; 脚本 `scripts/_audit_xau_tp_shrink_20260817.py`):
+  - ticket 4500875936 (h1_swing SHORT): TP 84.3→25.7 点 (02:35 `label="trail"`/`comment="tp"`), RR 1.73→**0.527**, SL 4451.41 全生命周期未动, 盈利曾达 R=+2.108
+  - ticket 4501482790 (m15_swing SHORT): TP 34.4→13.5 点 (03:05), RR 0.98→**0.385**
+  - 两策略 `min_rr_ratio=0.85` (configs/live.yaml) 均跌破; 4502364037 (05:05 开) ATR 未收缩未触发
+  - 触发阈值精确吻合: h1 ATR ratio 0.791 / m15 ratio 0.790 (≤0.80)
+- **历史前案**: FIX-20260709-004 "trailing-TP collapse on h1/h4 swings RR 1.66→0.08" — bracket_atr per-TF scaling 仅放大 candidate 距离, **未堵 RR 耦合缺口** → 今日复发
+- **修复蓝图** (投委会 2026-08-17 行动令, 8/19 后实施):
+  1. **RR 硬底线**: `TP_floor_distance = max(Dynamic_TP_dist, Current_SL_dist × min_rr_ratio)` — trail_dispatch.py 下发前注入最终 RR 耦合断言, 波动率收缩致 TP 距离跌破底线时止步于底线, 禁止继续向内侵蚀
+  2. **波动率对称耦合 (Symmetric Volatility Tightening)**: `atr_ratio ≤ 0.80` 收紧 TP 的同时旁路触发辅助 `SL_Volatility_Trail` 同步收紧 SL — 利润端与风险端同比例缩小, 缩减的绝对空间内维持 `RR ≥ 1.0` 数学期望
+  3. **弹性恢复 (Elastic Expansion)**: 废除"只缩不放" — 当前价格未越过 Proximity 警戒线 (70%) 时, ATR 恢复允许 TP 跟随向外延展, 最高恢复至开仓初始 TP 距离
+- **纪律**: 8/19 Flow46 决战前**零代码**, 严禁触碰 `execution_trail_stop` / `position_manager.compute_trail_tp` 模块 (8/19 冻结期)
+- **关联**: DQAF-20260817-001 (Sev 2), FIX-20260713-008 (激活案), FIX-20260709-004 (前案), ReB `TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL`, TECH_DEBT-007 (trail 遥测同族)
+
 ## TECH_DEBT-015 Detail — launcher 停机无自动恢复 (运维空窗)
 
 - **事件**: 2026-08-10T18:44:11.113288Z (02:44 北京) 双 launcher 收到外部 CTRL_C_EVENT (SIGINT), 优雅停机 (DQAF-20260811-001). 用户 01:44 入睡 → 排除人为; 系统事件/调度任务/launcher 自重启/内部 watchdog/仓库停机脚本 全部证伪 → 信号源未 100% 锁定 (最可能: 后台 agent/工具停机-重启循环的停机半步).
@@ -173,3 +196,14 @@
 - **红线**: `core/runtime/live_cycle.py` + `scripts/live_intent_loop.py` 均属 **RED_LINE_FROZEN_ALLOWANCE** (TECH_DEBT-008) — **8/19 前零触碰** (IC 雷霆裁决, 2026-08-13: 为修休市报错改核心 live_cycle 极度违背红线纪律).
 - **修复方案** (8/19 后, 与 TECH_DEBT-008/013 合并): ① DEGRADE 降级路径变量初始化补齐 (入口 try 前绑定 `_positions = []` / `_EVENT_STREAM_MODE` 默认值, 或重构降级分支为独立函数); ② 同批清偿红线文件 mypy 债 (TECH_DEBT-008); ③ 与休市市场日历适配合并 (TECH_DEBT-013).
 - **关联**: TECH_DEBT-008 (红线冻结同文件域), TECH_DEBT-013 (休市窗叠加), TECH_DEBT-014 (背景击杀), ReB 候选 `INTENT_DEGRADE_UNBOUND_LOCAL_CRASH`
+
+## TECH_DEBT-018 Detail — `META_FILTER_WIRED_STALE` 假阳性 (The Silent Monad)
+
+- **现象**: 2026-08-12T23:19:59Z 钉钉告警 `meta_filter_state — META_FILTER_WIRED_STALE / MetaFilter wired 2808min ago (LGB=True, cal=False, micro_scaler=True, dims=40)`. 同期 `FEATURE_STORE_COLD_START` 伴随告警 (uptime 0.0 min < grace 10 min, 设计降级).
+- **health check 机制** (`core/observability/health_checks.py` `check_meta_filter_state`, L394-486, FIX-20260610-007 event-interception): glob `intent_*.log` 按名称倒序取最新 2 个, **head-read 前 64KB**, 扫描 `"event": "meta_pipeline_wired"` → 若 wired_age > 360min → `META_FILTER_WIRED_STALE` WARN. Secondary fallback: `meta_filter_state.json` (已知不可靠, lazy serialization 陈旧).
+- **根因链**: ① TECH_DEBT-017 崩溃-重启循环 (8/11→8/13 共 38 次) 中 intent stdout 被 launcher 捕获进 `live_launcher_20260811T003149Z.log` 的 `[intent]` 行, **不再轮换新 `intent_*.log` 文件** (8/11 08:32 后无任何新文件) → ② health check 只能读到 `intent_20260811T003150Z.log` 内 8/11 00:31:59.509Z 的陈旧 wired 事件 → ③ wired_age 计算为 2808min (8/11 00:31:59 → 8/12 23:19:59) > 360 阈值 → 假 WARN.
+- **实证 MetaFilter 健康**: launcher log `[intent]` 行显示 8/12 21:11:19Z → 8/13 00:45:12Z 每次重启均成功 wired; 当前进程 PID 18052 (启动 8/13 00:45:04Z) 完成 `meta_pipeline_wired` (lgb_loaded=true, cal=false, micro_scaler_loaded=true, dims=40) → `meta_filter_long_loaded` / `meta_filter_short_loaded` → `meta_filter_gate_init` (threshold=0.4, conformal_warm=true, conformal_threshold 0.47618). MetaFilter stage2 过滤全程在位.
+- **分类**: 非 MetaFilter 故障, **纯监控工具盲区** — health check 依赖 intent log 文件流, 而崩溃循环使该文件流断流. 属 TECH_DEBT-017 次生症状.
+- **红线**: 8/19 前零触碰 (IC Hold Fast Order 维持全线冻结; health check 属 observability 域, 但修复动机来自崩溃循环场景 → 归入 8/19 决战收口).
+- **修复方案** (8/19 后, 随 TECH_DEBT-017): ① health check 增加 launcher log 兜底 — `[intent]` 行扫描 `meta_pipeline_wired` (跨崩溃恢复, 反映真实 wired 时间); ② 或引入 `meta_pipeline_wired` 独立持久化事件文件 (SSOT, 与 intent log 生命周期解耦); ③ `FEATURE_STORE_COLD_START` 告警本身为设计行为, 无需处理.
+- **关联**: TECH_DEBT-017 (根因同源), TECH_DEBT-011 (同族审计工具盲区), TECH_DEBT-013 (休市窗 crash 循环来源)

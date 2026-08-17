@@ -556,7 +556,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   m15_swing:
-    enabled: true
+    enabled: false
     timeframe: M15
     magic: 90310
     brain_types:
@@ -601,7 +601,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   m30_swing:
-    enabled: true
+    enabled: false
     timeframe: M30
     magic: 90320
     brain_types:
@@ -677,7 +677,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.1
   h1_swing:
-    enabled: true
+    enabled: false
     timeframe: H1
     magic: 90330
     brain_types:

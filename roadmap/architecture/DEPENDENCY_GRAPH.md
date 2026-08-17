@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-07T16:23:16Z
+> **自动生成**: 2026-08-17T05:45:26Z
 
 ## Package-Level Dependencies
 
@@ -572,29 +572,38 @@
 - `_audit_dupe_category_20260805.py` → (无内部依赖)
 - `_audit_entry_regime_20260807.py` → (无内部依赖)
 - `_audit_entry_timing_20260807.py` → (无内部依赖)
+- `_audit_export_m5_20260817.py` → (无内部依赖)
 - `_audit_idempotent_key_20260805.py` → (无内部依赖)
+- `_audit_live_health_20260814.py` → (无内部依赖)
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
+- `_audit_shadow_pnl_august_20260812.py` → (无内部依赖)
+- `_audit_shadow_pnl_replay_20260812.py` → (无内部依赖)
 - `_audit_storm_sender_20260806.py` → (无内部依赖)
 - `_audit_trail_mislabel_20260806.py` → (无内部依赖)
 - `_audit_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_band_extremes_20260805.py` → (无内部依赖)
+- `_audit_xau_entry_quality_20260810.py` → (无内部依赖)
 - `_audit_xau_entry_structure_20260807.py` → (无内部依赖)
+- `_audit_xau_first_open_20260812.py` → (无内部依赖)
 - `_audit_xau_journal_pnl_null_20260806.py` → (无内部依赖)
 - `_audit_xau_longs_20260807.py` → (无内部依赖)
+- `_audit_xau_mt5_reconciliation_20260813.py` → (无内部依赖)
+- `_audit_xau_period_exit_match_20260813.py` → (无内部依赖)
+- `_audit_xau_pnl_after_volume_increase_20260813.py` → (无内部依赖)
+- `_audit_xau_pnl_detail_20260813.py` → (无内部依赖)
+- `_audit_xau_spatial_gate_20260810.py` → (无内部依赖)
+- `_audit_xau_tp_shrink_20260817.py` → (无内部依赖)
 - `_audit_xau_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_votes_pnl_20260805.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_mypy_scope.py` → (无内部依赖)
-- `_probe_zombie_4454299643_20260807.py` → (无内部依赖)
 - `_reconcile_zombie_4454299643_20260807.py` → `core.ledger.services.journal_cleanup`, `core.ledger.services.journal_gate`
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)
-- `_verify_data_chain_findings_20260807.py` → (无内部依赖)
-- `_verify_data_chain_findings_20260807b.py` → (无内部依赖)
 - `_verify_governance_evaluator.py` → `core.brains.services.brain_promotion`, `core.deployment.governance_evaluator`, `core.governance.governance_rule_engine`, `core.governance.governance_service`
 - `alert_dispatcher.py` → (无内部依赖)
 - `analyze_90501_institutional.py` → (无内部依赖)
