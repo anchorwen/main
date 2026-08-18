@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-17T05:45:26Z
+> **自动生成**: 2026-08-18T18:07:54Z
 > **扫描模块数**: 817
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -264,7 +264,7 @@
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_netting.py` | ✅ active | NettedDecision, PortfolioNettingConfig, PortfolioNettingGate | 10 | 403 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 531 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 58 | 2396 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 61 | 2525 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 28 | 955 | — | |
 | `pwin_chain.py` | ✅ active | PWinResolution | 6 | 712 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
@@ -283,7 +283,7 @@
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 137 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 10 | 461 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 12 | 556 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 | `trend_isolation_gates.py` | ✅ active | SpatialGateResult | 4 | 382 | — | |
 | `trend_volume_guard.py` | ✅ active | — | 3 | 345 | — | |
@@ -544,7 +544,7 @@
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
 | `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 676 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
-| `position_registration.py` | ✅ active | — | 1 | 344 | — | |
+| `position_registration.py` | ✅ active | — | 1 | 348 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
 | `pre_close_context.py` | ✅ active | PreCloseContext | 8 | 145 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 432 | — | |
@@ -567,7 +567,7 @@
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
 | `timeframe_scaling.py` | ✅ active | — | 1 | 60 | — | |
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
-| `trail_dispatch.py` | ✅ active | — | 1 | 428 | — | |
+| `trail_dispatch.py` | ✅ active | — | 1 | 510 | — | |
 | `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 205 | — | |
 
 ## core/schemas
@@ -658,7 +658,7 @@
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
 | `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
 | `_audit_entry_timing_20260807.py` | ✅ active | — | 5 | 301 | — | |
-| `_audit_export_m5_20260817.py` | ✅ active | — | 3 | 150 | — | |
+| `_audit_export_m5_20260817.py` | ✅ active | — | 3 | 153 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_live_health_20260814.py` | ✅ active | — | 16 | 475 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |

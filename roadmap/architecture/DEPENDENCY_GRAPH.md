@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-17T05:45:26Z
+> **自动生成**: 2026-08-18T18:07:54Z
 
 ## Package-Level Dependencies
 
@@ -499,7 +499,7 @@
 - `time_utils.py` → (无内部依赖)
 - `timeframe_scaling.py` → (无内部依赖)
 - `trade_notify.py` → `core.runtime.time_utils`
-- `trail_dispatch.py` → (无内部依赖)
+- `trail_dispatch.py` → `core.execution.trail_stop_engine`
 - `typed_clock.py` → (无内部依赖)
 
 ### `core/schemas/`

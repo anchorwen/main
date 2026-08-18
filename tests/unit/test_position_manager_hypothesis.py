@@ -194,6 +194,11 @@ def test_trail_monotonic_never_widens(initial_price, atr, n_steps, trend_strengt
                 f"[{i}] SL widened: {prev_sl:.2f} → {pos.current_sl:.2f} "
                 f"(price={price:.2f}, trail_mult={pos.trail_multiplier})"
             )
+            # TECH_DEBT-019: TP must never exceed the opening target — the
+            # elastic-expansion path is capped at initial_tp (training contract).
+            assert (
+                pos.current_tp <= tp + 1e-9
+            ), f"[{i}] TP widened past initial_tp: {pos.current_tp:.2f} > {tp:.2f}"
             prev_sl = pos.current_sl
 
 
@@ -844,6 +849,7 @@ class TestPartialTP:
         assert trigger1
         # Simulate that the caller executed the partial TP and set the flag
         pos = pm.get_position(12)
+        assert pos is not None
         pos.partial_tp_triggered = True
         # Second: blocked by flag
         trigger2, _, _ = pm.should_partial_tp(mid=2300.0, ticket=12)

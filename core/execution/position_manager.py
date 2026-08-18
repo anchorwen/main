@@ -22,19 +22,47 @@ import hashlib
 import json
 import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from core.execution.trail_stop_engine import TrailPolicy, TrailStopEngine
+from core.execution.trail_stop_engine import (
+    TrailPolicy,
+    TrailStopEngine,
+    compute_rr_floor_price,
+)
 
 if TYPE_CHECKING:
     from core.execution.meta_exit_engine import ExitEvaluation
 
 # ── Data model ────────────────────────────────────────────────────────────
+
+# TECH_DEBT-019 §3: elastic-expansion hysteresis band upper edge.
+# Legacy trigger for TP tightening is atr_ratio <= 0.80.  With an RR contract
+# (tp_min_rr_ratio > 0), ATR recovery re-expands TP once ratio >= 0.85 — the
+# 0.80–0.85 dead band prevents TP oscillating bidirectionally when ATR hovers
+# near the trigger (second debounce layer beyond tp_min_step).
+_EXPAND_THRESHOLD = 0.85
+
+
+def _policy_from_dict(d: dict[str, Any] | None) -> TrailPolicy | None:
+    """Reconstruct a TrailPolicy from a JSON-serialized dict (TECH_DEBT-019).
+
+    JSON turns the ``graduated_lock_levels`` tuple-of-tuples into a list of
+    lists — restore the tuple shape before constructing the frozen dataclass.
+    None/empty → None (legacy positions fall back to the engine default).
+    """
+    if not d:
+        return None
+    restored = dict(d)
+    if isinstance(restored.get("graduated_lock_levels"), list):
+        restored["graduated_lock_levels"] = [
+            tuple(level) for level in restored["graduated_lock_levels"]
+        ]
+    return TrailPolicy(**restored)
 
 
 @dataclass
@@ -133,6 +161,10 @@ class ActivePosition:
     # When set, TrailStopEngine reads exclusively from this policy.
     # When None, the engine falls back to its default policy.
     trail_policy: TrailPolicy | None = None
+    # TECH_DEBT-019: RR hard-floor TP price bound by the most recent cycle (0.0 = none).
+    # Telemetry analogue to ratchet_floor_r — lets offline audit scripts reconstruct
+    # when the RR floor bound the trailing TP.
+    rr_floor_tp: float = 0.0
 
     # COLD exploration flag — bypass trailing stop to collect uncensored labels
     # for ConformalOU online calibration (FIX-20260527-004 architect directive)
@@ -847,6 +879,31 @@ class ActivePositionManager:
         return self._trail_engine.compute_trail_stop(
             pos, current_atr, pre_close_atr_mult_override=pre_close_atr_mult_override
         )
+
+    def compute_volatility_trail_sl(
+        self,
+        ticket: int | None = None,
+        atr_ratio: float = 0.0,
+    ) -> float | None:
+        """TECH_DEBT-019 §2: symmetric volatility SL tightening.  Delegates to TrailStopEngine."""
+        pos = self._get_pos(ticket)
+        if pos is None:
+            return None
+        return self._trail_engine.compute_volatility_trail_sl(pos, atr_ratio)
+
+    def get_effective_trail_policy(self, ticket: int | None = None) -> TrailPolicy:
+        """Return the position's per-strategy TrailPolicy or the engine default.
+
+        Mirrors the resolution inside compute_trail_tp — single accessor so
+        trail_dispatch and the RR guard read the exact same policy the TP
+        trail used (no drift between the two consumption points).
+        """
+        pos = self._get_pos(ticket)
+        if pos is not None:
+            _pol = pos.trail_policy
+            if _pol is not None:
+                return _pol
+        return self._trail_engine.default_policy
 
     def should_breakeven(
         self,
@@ -1711,9 +1768,13 @@ class ActivePositionManager:
         mid: float | None = None,
         disable_dynamic_tp: bool = False,
     ) -> float | None:
-        """Return new TP if it should be tightened based on ATR contraction.
+        """Return new TP on ATR contraction (tighten) or recovery (expand).
 
-        TP only moves INWARD (closer to entry) — never widens.
+        Legacy contract: TP only moves INWARD (closer to entry) — never widens.
+        TECH_DEBT-019 §3: with an RR contract (``tp_min_rr_ratio`` > 0), ATR
+        recovery elastically re-expands TP outward, capped at ``initial_tp`` and
+        the Proximity home-stretch gate.  §1 keeps the trailing TP distance
+        >= ``min_rr`` × current SL distance (RR hard floor).
 
         disable_dynamic_tp: pre-close aggressive phase guard (CRITICAL CORRECTION 1).
         When True, return None immediately — keep existing TP unchanged.  Setting
@@ -1778,8 +1839,6 @@ class ActivePositionManager:
             return None  # never profitable — leave original TP alone
 
         atr_ratio = current_atr / pos.entry_atr
-        if atr_ratio > 0.80:
-            return None
 
         # ── FIX-20260709-004 (L3): bracket_atr per-TF scaling ──
         _bracket_atr = getattr(pos, "bracket_atr", 0.0) or 0.0
@@ -1798,6 +1857,18 @@ class ActivePositionManager:
         _proximity_ratio = getattr(_tp, "tp_proximity_ratio", 0.0)
         _min_distance_atr = getattr(_tp, "tp_min_distance_atr", 0.0)
         _min_step = getattr(_tp, "tp_min_step", 0.0)
+        # TECH_DEBT-019: RR contract gate — 0.0 = disabled (structural/legacy
+        # zero-change); > 0 arms the RR hard floor + elastic expansion.
+        _min_rr = getattr(_tp, "tp_min_rr_ratio", 0.0)
+        _elastic = _min_rr > 0
+
+        # ── TECH_DEBT-019 §3: elastic-expansion gate ──
+        # Legacy contract: ATR recovery (ratio > 0.80) → None (TP only shrinks).
+        # With an RR contract (min_rr > 0), ATR recovery >= 0.85 re-expands TP
+        # outward (handled in the branches); the 0.80–0.85 dead band suppresses
+        # movement in BOTH directions to prevent ATR-trigger oscillation.
+        if atr_ratio > 0.80 and (not _elastic or atr_ratio < _EXPAND_THRESHOLD):
+            return None
 
         # ── FIX-20260713-008 §1: Dynamic SL Anchor ──
         # Anchor follows the current SL — which already tracks highest_high
@@ -1815,6 +1886,8 @@ class ActivePositionManager:
             candidate = anchor + tp_distance
 
             # ── FIX-20260713-008 §2: Proximity Gate (Home-Stretch Guard) ──
+            # Shared by tighten AND expand — the finish line must not move once
+            # price has covered >= tp_proximity_ratio of the entry→TP journey.
             if _proximity_ratio > 0 and mid is not None and mid > 0:
                 _journey_total = pos.current_tp - pos.entry_price  # entry→TP total distance
                 _journey_covered = mid - pos.entry_price  # how far price has already run
@@ -1831,15 +1904,40 @@ class ActivePositionManager:
                 _floor = anchor + _min_distance_atr * _bracket_atr
                 candidate = max(candidate, _floor)
 
-            if candidate < pos.current_tp:
-                # ── FIX-20260713-008 §4: Min-step Debounce ──
+            # ── TECH_DEBT-019 §1: RR hard floor (long) ──
+            # TP distance (from entry) must stay >= min_rr × current SL distance.
+            # Clamped by initial_tp so a deep SL can never push TP past the
+            # opening target (training contract).  Entry-time check_minimum_rr
+            # guarantees initial RR >= min_rr, so this cap rarely binds.
+            if _min_rr > 0:
+                _rr_floor = compute_rr_floor_price(
+                    pos.side, pos.entry_price, pos.current_sl, _min_rr
+                )
+                if _rr_floor is not None:
+                    pos.rr_floor_tp = _rr_floor
+                    candidate = max(candidate, _rr_floor)
+                    if pos.initial_tp > 0:
+                        candidate = min(candidate, pos.initial_tp)
+
+            # ── TECH_DEBT-019 §3: elastic expansion (long) ──
+            if atr_ratio <= 0.80:
+                # tighten — only inward
+                if candidate < pos.current_tp:
+                    # ── FIX-20260713-008 §4: Min-step Debounce ──
+                    if _min_step > 0 and abs(candidate - pos.current_tp) < _min_step:
+                        return None
+                    return round(candidate, 3)
+                return None
+            # expand — only outward, never past initial_tp
+            if candidate > pos.current_tp:
                 if _min_step > 0 and abs(candidate - pos.current_tp) < _min_step:
                     return None
                 return round(candidate, 3)
+            return None
         else:
             candidate = anchor - tp_distance
 
-            # ── FIX-20260713-008 §2: Proximity Gate (short) ──
+            # ── FIX-20260713-008 §2: Proximity Gate (short) — shared tighten/expand ──
             if _proximity_ratio > 0 and mid is not None and mid > 0:
                 _journey_total = pos.entry_price - pos.current_tp
                 _journey_covered = pos.entry_price - mid
@@ -1859,12 +1957,36 @@ class ActivePositionManager:
                 _floor = anchor - _min_distance_atr * _bracket_atr
                 candidate = max(candidate, _floor)
 
-            if candidate > pos.current_tp:
-                # ── FIX-20260713-008 §4: Min-step Debounce ──
+            # ── TECH_DEBT-019 §1: RR hard floor (short) ──
+            # The two floors pull in OPPOSITE directions for SHORT: anchor floor
+            # uses max() (don't be too far from entry), RR floor uses min()
+            # (TP must stay at least min_rr × SL distance from entry).  Applied
+            # strictly in this order, then capped at initial_tp.
+            if _min_rr > 0:
+                _rr_floor = compute_rr_floor_price(
+                    pos.side, pos.entry_price, pos.current_sl, _min_rr
+                )
+                if _rr_floor is not None:
+                    pos.rr_floor_tp = _rr_floor
+                    candidate = min(candidate, _rr_floor)
+                    if pos.initial_tp > 0:
+                        candidate = max(candidate, pos.initial_tp)
+
+            # ── TECH_DEBT-019 §3: elastic expansion (short) ──
+            if atr_ratio <= 0.80:
+                # tighten — only inward (TP moves up toward entry)
+                if candidate > pos.current_tp:
+                    # ── FIX-20260713-008 §4: Min-step Debounce ──
+                    if _min_step > 0 and abs(candidate - pos.current_tp) < _min_step:
+                        return None
+                    return round(candidate, 3)
+                return None
+            # expand — only outward (TP moves down), never past initial_tp
+            if candidate < pos.current_tp:
                 if _min_step > 0 and abs(candidate - pos.current_tp) < _min_step:
                     return None
                 return round(candidate, 3)
-        return None
+            return None
 
     # ── Layer 3: Time / regime-based exit ───────────────────────────────
 
@@ -2190,6 +2312,11 @@ class ActivePositionManager:
                         "entry_consensus": getattr(pos, "entry_consensus", {}) or {},
                         "model_horizons": getattr(pos, "model_horizons", {}) or {},
                         "brain_consensus_hash": self._compute_consensus_hash(pos),
+                        # TECH_DEBT-019: persist the per-strategy RR contract so a
+                        # restart-surviving position keeps its tp_min_rr_ratio (the
+                        # RR floor / elastic expansion would otherwise silently
+                        # fall back to the 0.0 default and lose the protection).
+                        "trail_policy": asdict(pos.trail_policy) if pos.trail_policy else None,
                     }
                 )
             payload: dict[str, Any] = {
@@ -2288,6 +2415,7 @@ class ActivePositionManager:
                 breakeven_threshold_atr=float(
                     d.get("breakeven_threshold_atr", self.breakeven_threshold_atr)
                 ),
+                trail_policy=_policy_from_dict(d.get("trail_policy")),  # TECH_DEBT-019
             )
 
         def _build_position_v3(d: dict[str, Any]) -> ActivePosition | None:
@@ -2331,6 +2459,7 @@ class ActivePositionManager:
                 model_horizons={
                     str(k): int(v) for k, v in (d.get("model_horizons", {}) or {}).items()
                 },
+                trail_policy=_policy_from_dict(d.get("trail_policy")),  # TECH_DEBT-019
             )
             # Stash v3 fields for downstream reconciliation
             pos._v3_consensus_hash = str(d.get("brain_consensus_hash", ""))

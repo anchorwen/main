@@ -16,6 +16,7 @@ Physically isolated Risk Exit subsystem. Computes Chandelier trailing stop level
 - `decay_start_r`, `decay_full_r`, `decay_enabled`: nonlinear decay from base→min
 - `ratchet_enabled`, `ratchet_arm_r`, `ratchet_giveback_r`, `ratchet_breakeven_floor_r`: profit ratchet floor (FIX-20260708-004)
 - `tp_proximity_ratio`, `tp_min_distance_atr`, `tp_min_step`: TP trailing structural parity (FIX-20260713-008) — active by default (0.7 / 1.5 / 0.15), set to 0.0 to opt out per-strategy
+- `tp_min_rr_ratio`: RR coupling contract (TECH_DEBT-019, FIX-20260819-001) — 0.0 = disabled (structural/legacy zero-change); >0 (e.g. 0.85) arms the three-mechanism RR contract: ① RR hard floor (trailing TP distance stays ≥ this × current SL distance, entry reference) ② symmetric SL_Volatility_Trail (ATR contraction ≤0.80 that tightens TP also tightens SL by the same ratio) ③ elastic expansion (ATR recovery ≥0.85 re-expands TP outward up to `initial_tp`, hysteresis dead-band 0.80–0.85). Injected at registration from `sl.min_rr_ratio` (`position_registration.py`), persisted via save_state v3 (`trail_policy`).
 
 ### Chandelier Formula
 ```
@@ -52,7 +53,20 @@ See [execution_orders.md](execution_orders.md) for consolidated Fix History.
 See [Chandelier Formula](#chandelier-formula) and [Regime Adaptation](#regime-adaptation) above — the trail computation pipeline (Market State → Regime Multiplier → Chandelier Formula → Activation Watermark → Nonlinear Decay → TrailResult) serves as this module's Data Flow documentation.
 
 ## Known Issues
-No known issues.
+
+### RESOLVED — TP/SL dynamic-trail RR collapse (TECH_DEBT-019, DQAF-20260817-001, Sev 2)
+
+`compute_trail_tp` (FIX-20260713-008) tightened TP inward when
+`atr_ratio ≤ 0.80`, but the tighten floor was **decoupled from the SL
+distance/RR** — the TP could collapse to a reward:risk < 1.  Live evidence:
+h1_swing RR 1.73→0.527, m15_swing RR 0.98→0.385 (both `min_rr_ratio=0.85`
+breached; SL never moved while profit reached +2.1R).  Fixed in
+FIX-20260819-001 (three mechanisms gated behind `tp_min_rr_ratio > 0`; zero
+change when disabled).  See `TECH_DEBT_REGISTRY.md` #019 and DQAF docket.
+
+- **Remaining**: elastic expansion's `_EXPAND_THRESHOLD = 0.85` (dead-band
+  upper edge) is a tuning constant — Deferred calibration, monitor via
+  `rr_current` / `tp_rr_floor_fired` snapshot telemetry.
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
@@ -60,6 +74,8 @@ No known issues.
 | `TrailStopEngine.compute_trail_stop(pos, market_state)` → `TrailResult` | position_manager, trail_dispatch | Stable |
 | `TrailStopEngine.should_breakeven(pos, market_state)` → `bool` | position_manager | Stable |
 | `TrailPolicy` dataclass (immutable per-strategy config) | live_cycle, trail_dispatch | Stable |
+| `compute_rr_floor_price(side, entry, sl, min_rr)` → `float\|None` | position_manager, trail_dispatch (single RR-distance convergence point, FIX-20260819-001) | Stable |
+| `TrailStopEngine.compute_volatility_trail_sl(pos, atr_ratio)` → `float\|None` | position_manager wrapper → trail_dispatch (symmetric SL tightening, FIX-20260819-001) | Stable |
 
 ## Verification
 ```bash

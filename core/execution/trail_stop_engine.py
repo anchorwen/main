@@ -111,6 +111,39 @@ class TrailPolicy:
     tp_min_distance_atr: float = 1.5  # 0=disabled; 1.5=TP floor in bracket_atr units (TP must stay ≥ this × bracket_atr from anchor)
     tp_min_step: float = 0.15  # 0=disabled (caller's exit_min_step applies); >0=override min step for TP-only changes
 
+    # ── TECH_DEBT-019: RR 耦合修复 (RR floor / symmetric tightening / elastic expansion) ──
+    # 0.0=disabled (structural/legacy zero-change); >0 (e.g. 0.85) arms the
+    # three-mechanism RR contract for the trailing bracket:
+    #   ① trailing TP distance stays >= this × current SL distance (RR hard floor)
+    #   ② ATR contraction also tightens the SL (SL_Volatility_Trail)
+    #   ③ ATR recovery elastically re-expands TP up to initial_tp
+    tp_min_rr_ratio: float = 0.0
+
+
+def compute_rr_floor_price(
+    side: str,
+    entry_price: float,
+    current_sl: float,
+    min_rr_ratio: float,
+) -> float | None:
+    """TECH_DEBT-019 §1: minimum TP price (entry reference) preserving RR >= min_rr.
+
+    RR convention matches ``check_minimum_rr()`` and the audit scripts: both TP
+    distance and SL distance are measured from entry.
+      - LONG:  tp >= entry + min_rr × (entry − current_sl), requires entry > SL
+      - SHORT: tp <= entry − min_rr × (current_sl − entry), requires SL > entry
+    Returns None when the RR contract is disabled (min_rr <= 0) or the risk leg
+    has closed (post-breakeven SL crossed entry → sl_dist <= 0 → zero constraint).
+    Single convergence point for RR distance math (compute_trail_tp + trail_dispatch).
+    """
+    if min_rr_ratio <= 0 or current_sl <= 0:
+        return None
+    if side == "long":
+        sl_dist = entry_price - current_sl
+        return None if sl_dist <= 0 else entry_price + min_rr_ratio * sl_dist
+    sl_dist = current_sl - entry_price
+    return None if sl_dist <= 0 else entry_price - min_rr_ratio * sl_dist
+
 
 # ── Trail Stop Engine ──────────────────────────────────────────────────────
 
@@ -308,6 +341,68 @@ class TrailStopEngine:
             if candidate >= pos.current_sl - tp.min_step:
                 return None
             return round(candidate, 3)
+
+    def compute_volatility_trail_sl(
+        self,
+        pos: ActivePosition,
+        atr_ratio: float,
+    ) -> float | None:
+        """TECH_DEBT-019 §2: Symmetric Volatility Tightening (SL_Volatility_Trail).
+
+        When M5 realized volatility contracts (atr_ratio <= 0.80) and the TP
+        trail tightens the profit target, the risk leg (SL) is tightened by the
+        SAME ratio so the reduced absolute bracket space keeps the open-time RR
+        expectation (>= 1.0 when min_rr_ratio ~ 1).  The Chandelier geometry
+        (bracket_atr, FIX-20260709-006) is untouched — this is an additive,
+        bounded override on top of the normal SL trail:
+          - LONG:  sl_dist = entry − current_sl; target = entry − sl_dist × atr_ratio
+          - SHORT: sl_dist = current_sl − entry; target = entry + sl_dist × atr_ratio
+        Protected by the profit ratchet floor (FIX-20260708-004, defensive —
+        the ratchet is applied upstream in compute_trail_stop so this only binds
+        in inconsistent state), max_lock_atr ceiling (FIX-20260709-006), and
+        min_step debounce (retcode 10025).
+        Gated off when min_rr_ratio == 0 (structural/legacy zero-change) and
+        post-breakeven (SL already past entry — risk already locked).
+        """
+        tp = self._resolve_policy(pos)
+        # Gate must mirror compute_trail_tp's tightening trigger (atr_ratio <= 0.80)
+        # exactly — at the boundary the TP tightens, so the SL must too, or the
+        # symmetric coupling (TECH_DEBT-019 §2) silently breaks at atr_ratio == 0.80.
+        if pos.entry_atr <= 0 or not (0 < atr_ratio <= 0.80):
+            return None
+        if getattr(tp, "tp_min_rr_ratio", 0.0) <= 0:
+            return None
+        _geom_atr = self._resolve_geometry_atr(pos)
+
+        if pos.side == "long":
+            if pos.current_sl >= pos.entry_price:
+                return None  # post-breakeven — risk already locked
+            sl_dist = pos.entry_price - pos.current_sl
+            target = pos.entry_price - sl_dist * atr_ratio
+            _ratchet_r = self._ratchet_lock_r(pos, tp)
+            if _ratchet_r is not None:
+                pos.ratchet_floor_r = _ratchet_r
+                target = max(target, pos.entry_price + _ratchet_r * pos.entry_atr)
+            if tp.max_lock_atr > 0 and _geom_atr > 0:
+                target = min(target, pos.entry_price + tp.max_lock_atr * _geom_atr)
+            if target <= pos.current_sl + tp.min_step:
+                return None
+            return round(target, 3)
+        elif pos.side == "short":
+            if pos.current_sl <= pos.entry_price:
+                return None  # post-breakeven — risk already locked
+            sl_dist = pos.current_sl - pos.entry_price
+            target = pos.entry_price + sl_dist * atr_ratio
+            _ratchet_r = self._ratchet_lock_r(pos, tp)
+            if _ratchet_r is not None:
+                pos.ratchet_floor_r = _ratchet_r
+                target = min(target, pos.entry_price - _ratchet_r * pos.entry_atr)
+            if tp.max_lock_atr > 0 and _geom_atr > 0:
+                target = max(target, pos.entry_price - tp.max_lock_atr * _geom_atr)
+            if target >= pos.current_sl - tp.min_step:
+                return None
+            return round(target, 3)
+        return None
 
     def should_breakeven(
         self,

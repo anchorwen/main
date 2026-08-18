@@ -16,6 +16,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.execution.trail_stop_engine import compute_rr_floor_price
+
 
 def compute_and_dispatch_trail(
     *,
@@ -152,9 +154,34 @@ def compute_and_dispatch_trail(
     _trail_tp = pm.compute_trail_tp(
         current_atr, ticket=pos.ticket, mid=mid, disable_dynamic_tp=_disable_tp
     )
+    _tp_tightened = False
     if _trail_tp is not None and abs(_trail_tp - pos.current_tp) >= config.exit_min_step:
         _reasons.append("tp")
         _final_tp = _trail_tp
+        # TECH_DEBT-019 §2 trigger: TP actually moved INWARD this cycle (LONG
+        # lower / SHORT higher).  Elastic expansion (outward) never arms the SL
+        # volatility trail — only genuine ATR-contraction tightening does.
+        _tp_tightened = (pos.side == "long" and _trail_tp < pos.current_tp) or (
+            pos.side == "short" and _trail_tp > pos.current_tp
+        )
+
+    # ── TECH_DEBT-019 §2: Symmetric Volatility Tightening (SL_Volatility_Trail) ──
+    # When ATR contraction tightened the TP, tighten the risk leg by the SAME
+    # ratio so the reduced absolute bracket space keeps the open-time RR
+    # expectation.  Bounded: fires only when TP actually tightened AND
+    # atr_ratio <= 0.80; the engine skips post-breakeven and floors the result
+    # at the ratchet lock / max_lock.  min_step suppresses retcode 10025 resends.
+    _sl_vol_trail_fired = False
+    if _tp_tightened and pos.entry_atr > 0:
+        _atr_ratio_trail = current_atr / pos.entry_atr
+        if _atr_ratio_trail <= 0.80:
+            _sl_vol = pm.compute_volatility_trail_sl(pos.ticket, _atr_ratio_trail)
+            if _sl_vol is not None and abs(_sl_vol - _final_sl) >= config.exit_min_step:
+                _final_sl = (
+                    max(_final_sl, _sl_vol) if pos.side == "long" else min(_final_sl, _sl_vol)
+                )
+                _reasons.append("sl_vol_trail")
+                _sl_vol_trail_fired = True
 
     # ── FIX-20260707-009: Bracket Integrity Guard ──
     # Last line of defence before dispatch.  If the trailing SL has
@@ -172,6 +199,33 @@ def compute_and_dispatch_trail(
         elif pos.side == "short" and _final_sl <= _final_tp:
             _final_tp = 0.0
             _reasons.append("tp_released_bracket_inversion")
+        else:
+            # ── TECH_DEBT-019 §1: RR hard floor — dispatch-time final assertion ──
+            # Registry-mandated "下发前注入最终 RR 耦合断言".  Uses the cycle's FINAL
+            # SL (post-breakeven / post-SL_Volatility_Trail) so the dispatched pair
+            # always satisfies RR >= min_rr.  Self-heals an already-collapsed TP in
+            # one clamp (stable thereafter — min_step suppresses 10025 resends).
+            # min_rr == 0 → zero-change (structural/legacy).
+            _tp_eff = pm.get_effective_trail_policy(pos.ticket)
+            _rr_min = getattr(_tp_eff, "tp_min_rr_ratio", 0.0)
+            if _rr_min > 0:
+                _rr_floor = compute_rr_floor_price(pos.side, pos.entry_price, _final_sl, _rr_min)
+                if _rr_floor is not None:
+                    if pos.side == "long":
+                        _clamped = (
+                            min(max(_final_tp, _rr_floor), pos.initial_tp)
+                            if pos.initial_tp > 0
+                            else max(_final_tp, _rr_floor)
+                        )
+                    else:
+                        _clamped = (
+                            max(min(_final_tp, _rr_floor), pos.initial_tp)
+                            if pos.initial_tp > 0
+                            else min(_final_tp, _rr_floor)
+                        )
+                    if abs(_clamped - _final_tp) >= config.exit_min_step:
+                        _final_tp = _clamped
+                        _reasons.append("tp_rr_floor")
 
     # ── DQAF-20260710-004: Trailing TP Market-Price Feasibility Gate ──
     # FIX-20260707-009 guards bracket inversion (SL >= TP) but does NOT
@@ -232,6 +286,20 @@ def compute_and_dispatch_trail(
             _reasons.append("sl_released_stoplevel_violation")
             _final_sl = pos.current_sl  # revert: keep existing SL unchanged
 
+    # ── TECH_DEBT-019 telemetry: dispatched-pair RR (entry reference) ──
+    _rr_current: float | None = None
+    if _final_tp > 0 and _final_sl > 0 and pos.entry_price > 0:
+        _rr_tp_d = (
+            _final_tp - pos.entry_price if pos.side == "long" else pos.entry_price - _final_tp
+        )
+        _rr_sl_d = (
+            pos.entry_price - _final_sl if pos.side == "long" else _final_sl - pos.entry_price
+        )
+        if _rr_sl_d > 0:
+            _rr_current = _rr_tp_d / _rr_sl_d
+    _rr_floor_tp_diag = round(getattr(pos, "rr_floor_tp", 0.0), 3) or None
+    _tp_rr_floor_fired = "tp_rr_floor" in _reasons
+
     # ── Diagnostic log ──
     print(
         json.dumps(
@@ -262,6 +330,13 @@ def compute_and_dispatch_trail(
                 "breakeven_triggered_flag": pos.breakeven_triggered,
                 "final_sl": round(_final_sl, 3),
                 "final_tp": round(_final_tp, 3),
+                # TECH_DEBT-019: RR coupling telemetry — lets the daily audit
+                # assert rr_current >= tp_min_rr_ratio snapshot-by-snapshot.
+                "atr_ratio": round(current_atr / pos.entry_atr, 4) if pos.entry_atr > 0 else None,
+                "rr_current": round(_rr_current, 4) if _rr_current is not None else None,
+                "rr_floor_price": _rr_floor_tp_diag,
+                "tp_rr_floor_fired": _tp_rr_floor_fired,
+                "sl_vol_trail_fired": _sl_vol_trail_fired,
                 "reasons": _reasons,
                 "exit_min_step": config.exit_min_step,
                 "pm_min_step": getattr(pm, "min_step", "N/A"),
@@ -322,6 +397,13 @@ def compute_and_dispatch_trail(
                     "trailing_sl_distance": _trail_dist,
                     "current_atr": round(current_atr, 4),
                     "entry_atr": round(pos.entry_atr, 4),
+                    # TECH_DEBT-019: RR contract evidence for offline audit —
+                    # assert rr_current >= tp_min_rr_ratio (when min_rr > 0 and
+                    # pre-breakeven), flag any surviving collapse.
+                    "rr_current": round(_rr_current, 6) if _rr_current is not None else None,
+                    "tp_min_rr_ratio": getattr(
+                        pm.get_effective_trail_policy(pos.ticket), "tp_min_rr_ratio", 0.0
+                    ),
                     **({} if not _sl_uninitialized else {"sl_uninitialized": True}),
                 },
                 ensure_ascii=False,

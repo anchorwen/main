@@ -18,7 +18,11 @@ from __future__ import annotations
 import pytest
 
 from core.execution.position_manager import ActivePosition, ActivePositionManager
-from core.execution.trail_stop_engine import TrailPolicy, TrailStopEngine
+from core.execution.trail_stop_engine import (
+    TrailPolicy,
+    TrailStopEngine,
+    compute_rr_floor_price,
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
@@ -250,3 +254,122 @@ def test_per_position_policy_overrides_default(engine, long_pos):
     engine.adjust_trail_for_regime(long_pos, current_atr=5.0, regime_info={"regime": "low"})
     # Uses custom trail_atr_mult_low=2.0, not default 1.5
     assert long_pos.trail_multiplier == 2.0
+
+
+# ── TECH_DEBT-019: RR floor pure function ──────────────────────────────────
+
+
+def test_rr_floor_long() -> None:
+    """LONG floor = entry + min_rr × (entry − SL), measured from entry."""
+    assert compute_rr_floor_price("long", 2500.0, 2490.0, 0.85) == pytest.approx(
+        2500.0 + 0.85 * 10.0
+    )
+
+
+def test_rr_floor_short() -> None:
+    """SHORT floor = entry − min_rr × (SL − entry) — TP must stay at least
+    min_rr × SL-distance from entry (matches DQAF-20260817-001 4500875936)."""
+    assert compute_rr_floor_price("short", 2500.0, 2650.0, 0.85) == pytest.approx(
+        2500.0 - 0.85 * 150.0
+    )
+
+
+def test_rr_floor_disabled_when_min_rr_zero() -> None:
+    """min_rr <= 0 → None → zero constraint (structural/legacy zero-change)."""
+    assert compute_rr_floor_price("long", 2500.0, 2490.0, 0.0) is None
+    assert compute_rr_floor_price("short", 2500.0, 2650.0, -1.0) is None
+
+
+def test_rr_floor_none_when_no_sl() -> None:
+    """current_sl <= 0 (uninitialized) → None."""
+    assert compute_rr_floor_price("long", 2500.0, 0.0, 0.85) is None
+
+
+def test_rr_floor_none_post_breakeven_long() -> None:
+    """LONG SL crossed entry (breakeven) → sl_dist <= 0 → risk leg closed → None."""
+    assert compute_rr_floor_price("long", 2500.0, 2505.0, 0.85) is None
+    assert compute_rr_floor_price("long", 2500.0, 2500.0, 0.85) is None
+
+
+def test_rr_floor_none_post_breakeven_short() -> None:
+    """SHORT SL crossed entry → None."""
+    assert compute_rr_floor_price("short", 2500.0, 2495.0, 0.85) is None
+
+
+# ── TECH_DEBT-019 §2: Symmetric Volatility Tightening (SL_Volatility_Trail) ──
+
+
+def _rr_policy() -> TrailPolicy:
+    """TrailPolicy with the RR contract armed (min_rr = 0.85)."""
+    return TrailPolicy(
+        trail_atr_mult=2.0,
+        trail_atr_mult_low=1.5,
+        trail_atr_mult_high=3.0,
+        breakeven_threshold_atr=1.0,
+        trail_activation_atr=1.0,
+        min_trail_mult=0.8,
+        max_lock_atr=1.5,
+        tp_min_rr_ratio=0.85,
+    )
+
+
+@pytest.fixture
+def vol_engine() -> TrailStopEngine:
+    return TrailStopEngine(default_policy=_rr_policy())
+
+
+def _arm_policy(pos: ActivePosition) -> None:
+    """Attach the RR-armed TrailPolicy to a position."""
+    pos.trail_policy = _rr_policy()
+
+
+def test_vol_trail_long_tightens_at_boundary(vol_engine, long_pos):
+    """atr_ratio == 0.80 (the exact tightening trigger) must tighten SL too —
+    the symmetric coupling must not break at the boundary."""
+    _arm_policy(long_pos)
+    # entry=2500, SL=2490 → sl_dist=10; target = 2500 − 10×0.8 = 2492
+    assert vol_engine.compute_volatility_trail_sl(long_pos, 0.80) == pytest.approx(2492.0)
+
+
+def test_vol_trail_long_contracts_more(vol_engine, long_pos):
+    """Deeper contraction (0.5) tightens SL proportionally more (2495)."""
+    _arm_policy(long_pos)
+    assert vol_engine.compute_volatility_trail_sl(long_pos, 0.50) == pytest.approx(2495.0)
+
+
+def test_vol_trail_short_mirror(vol_engine, short_pos):
+    """SHORT mirror: SL=2510, sl_dist=10 → target = 2500 + 10×0.8 = 2508."""
+    _arm_policy(short_pos)
+    assert vol_engine.compute_volatility_trail_sl(short_pos, 0.80) == pytest.approx(2508.0)
+
+
+def test_vol_trail_disabled_when_min_rr_zero(engine, long_pos):
+    """Structural/legacy zero-change: no RR contract → no SL volatility trail."""
+    assert engine.compute_volatility_trail_sl(long_pos, 0.60) is None
+
+
+def test_vol_trail_skipped_when_atr_ratio_above_threshold(vol_engine, long_pos):
+    """atr_ratio > 0.80 (no TP tightening) → None."""
+    _arm_policy(long_pos)
+    assert vol_engine.compute_volatility_trail_sl(long_pos, 0.81) is None
+    assert vol_engine.compute_volatility_trail_sl(long_pos, 1.0) is None
+
+
+def test_vol_trail_skipped_when_atr_ratio_nonpositive(vol_engine, long_pos):
+    """atr_ratio <= 0 → None (no contraction to mirror)."""
+    _arm_policy(long_pos)
+    assert vol_engine.compute_volatility_trail_sl(long_pos, 0.0) is None
+
+
+def test_vol_trail_skipped_post_breakeven_long(vol_engine, long_pos):
+    """SL already crossed entry → risk locked → never re-open risk."""
+    _arm_policy(long_pos)
+    long_pos.current_sl = 2505.0  # > entry
+    assert vol_engine.compute_volatility_trail_sl(long_pos, 0.60) is None
+
+
+def test_vol_trail_skipped_post_breakeven_short(vol_engine, short_pos):
+    """SHORT SL crossed entry → None."""
+    _arm_policy(short_pos)
+    short_pos.current_sl = 2495.0  # < entry
+    assert vol_engine.compute_volatility_trail_sl(short_pos, 0.60) is None

@@ -12,6 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from core.runtime.position_registration import register_dispatched_positions
 
 
@@ -206,6 +208,122 @@ class TestRegisterDispatchedPositions:
 
         assert result["registered_count"] == 1
         pm.register_position.assert_called_once()
+
+    def test_injects_sl_min_rr_into_trail_policy(self) -> None:
+        """TECH_DEBT-019: sl.min_rr_ratio from the strategy config must reach
+        register_position's TrailPolicy.tp_min_rr_ratio — the single injection
+        point for the RR contract (position_registration.py L256-259)."""
+        config = SimpleNamespace(
+            exit_management_enabled=True,
+            no_mt5=False,
+            strategy_configs={
+                "test_swing": {
+                    "sl": {"min_rr_ratio": 0.85},
+                    "tp": {"partial_tp_enabled": False},
+                    "exit": {
+                        "trail_atr_mult": 2.0,
+                        "trail_atr_mult_low": 1.5,
+                        "trail_atr_mult_high": 3.0,
+                        "breakeven_threshold_atr": 1.0,
+                        "trail_activation_atr": 1.0,
+                    },
+                }
+            },
+            position_state_path="/tmp/state.json",
+            exit_trail_activation_atr=1.0,
+        )
+        pm = MagicMock()
+        decision = _make_decision()
+        dr = _make_dispatch_result(journal_entry={"intent_id": "intent_rr_001"})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jpath = Path(tmpdir) / "live_trade_journal.jsonl"
+            jpath.write_text(
+                json.dumps(
+                    {
+                        "message_id": "intent_rr_001",
+                        "position_ticket": 6001,
+                        "entry_price": 4700.0,
+                        "side": "long",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = register_dispatched_positions(
+                config=config,
+                position_manager=pm,
+                known_open_tickets={},
+                loop_iteration=1,
+                dispatch_results=[dr],
+                eval_summary={"decisions_map": {"test_swing": decision}},
+                brains=[],
+                journal_path=jpath,
+                current_atr=6.0,
+                mid_price=4700.0,
+            )
+
+        assert result["registered_count"] == 1
+        call_kwargs = pm.register_position.call_args.kwargs
+        tp = call_kwargs["trail_policy"]
+        assert tp.tp_min_rr_ratio == pytest.approx(0.85)
+
+    def test_trail_policy_min_rr_defaults_zero(self) -> None:
+        """No sl.min_rr_ratio in the config → 0.0 → RR contract disabled
+        (zero-change for strategies without an RR contract)."""
+        config = SimpleNamespace(
+            exit_management_enabled=True,
+            no_mt5=False,
+            strategy_configs={
+                "test_swing": {
+                    "tp": {"partial_tp_enabled": False},
+                    "exit": {
+                        "trail_atr_mult": 2.0,
+                        "trail_atr_mult_low": 1.5,
+                        "trail_atr_mult_high": 3.0,
+                        "breakeven_threshold_atr": 1.0,
+                        "trail_activation_atr": 1.0,
+                    },
+                }
+            },
+            position_state_path="/tmp/state.json",
+            exit_trail_activation_atr=1.0,
+        )
+        pm = MagicMock()
+        decision = _make_decision()
+        dr = _make_dispatch_result(journal_entry={"intent_id": "intent_rr_000"})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jpath = Path(tmpdir) / "live_trade_journal.jsonl"
+            jpath.write_text(
+                json.dumps(
+                    {
+                        "message_id": "intent_rr_000",
+                        "position_ticket": 6002,
+                        "entry_price": 4700.0,
+                        "side": "long",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            register_dispatched_positions(
+                config=config,
+                position_manager=pm,
+                known_open_tickets={},
+                loop_iteration=1,
+                dispatch_results=[dr],
+                eval_summary={"decisions_map": {"test_swing": decision}},
+                brains=[],
+                journal_path=jpath,
+                current_atr=6.0,
+                mid_price=4700.0,
+            )
+
+        call_kwargs = pm.register_position.call_args.kwargs
+        assert call_kwargs["trail_policy"].tp_min_rr_ratio == 0.0
 
     def test_skip_when_ticket_not_in_journal(self) -> None:
         config = SimpleNamespace(

@@ -253,6 +253,10 @@ def register_dispatched_positions(
                         "trail_activation_atr",
                         getattr(config, "exit_trail_activation_atr", 1.0),
                     ),
+                    # TECH_DEBT-019: per-strategy RR contract for the trailing
+                    # bracket (RR floor / symmetric SL tightening / elastic
+                    # expansion).  0.0 = disabled → structural/legacy zero-change.
+                    tp_min_rr_ratio=_s_cfg.get("sl", {}).get("min_rr_ratio", 0.0),
                 ),
                 cold_explore=getattr(decision, "cold_explore", False),
             )
