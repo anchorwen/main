@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-19T10:56:56Z
+> **自动生成**: 2026-08-19T11:45:07Z
 > **扫描模块数**: 820
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -457,7 +457,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 867 | — | |
-| `group_consensus.py` | ✅ active | — | 1 | 190 | — | |
+| `group_consensus.py` | ✅ active | — | 1 | 195 | — | |
 | `parliament_service.py` | ✅ active | ParliamentService | 11 | 315 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 
@@ -532,7 +532,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5158 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5174 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 18 | 2667 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
@@ -819,7 +819,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2828 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2833 | — | |
 | `live_launcher.py` | ✅ active | — | 16 | 1282 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |

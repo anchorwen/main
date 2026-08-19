@@ -120,6 +120,11 @@ def compute_contract_group_consensus(
 
         # Apply correlation penalty from group history
         if correlation_tracker is not None:
+            # ── TECH_DEBT-017 (L3): Scope-Safe Pre-binding ──
+            # get_correlation_penalty DEGRADE 时 dynamic_volume 永不绑定 → 块外
+            # return dict (L187) UnboundLocalError (同类潜伏缺陷). 预绑定 raw_volume
+            # (与 else 分支一致, correlation penalty 不可用时退回无惩罚仓位).
+            dynamic_volume = raw_volume
             with FaultTolerantContext(
                 level=FaultLevel.DEGRADE,
                 component="CorrelationTracker:penalty",

@@ -65,6 +65,7 @@ BrainDecisionProposal[] → DynamicBrainWeighter.apply_weights()
 ## Fix History
 | Fix ID | Date | Summary | Root Cause |
 |--------|------|---------|------------|
+| FIX-20260819-004 | 2026-08-19 | cursor-agent | (pending) | **TECH_DEBT-017 清偿 (DQAF-20260819-004): group_consensus CorrelationTracker:penalty 降级路径作用域陷阱** — FTC(DEGRADE) 吞 get_correlation_penalty 异常后 dynamic_volume 永不绑定 → 块外 return dict UnboundLocalError. 修复: FTC 块前预绑定 `dynamic_volume = raw_volume`. 回归锁: test_tech_debt_017_scope_safety.py. | L3 — FTC 契约吞异常 × 调用点未预绑定变量 |
 | FIX-20260629-179 | 2026-06-29 | cursor-agent | 87d82919 | Register h1_directional contract group: add H1_DIRECTIONAL_GROUP to contract_groups.py + ALL_GROUPS. Wire into strategy_builder.py with SwingStrategy construction. Fixes Swing_V10_H1_Directional (PF=81.10) being silently skipped every cycle due to unknown_contract_group_at_build. This was the root cause of XAU not trading since 2026-06-26. | config-drift |
 | FIX-20260629-174 | 2026-06-29 | **DQAF-174 L2: Unified weighting contract — capacity allocation alignment**: group_consensus.py capacity allocation path switched from bare weighter.get_weights() (PnL-only dynamic_scale) to base_weight × dynamic_scale. vote_weight=0 brains now receive 0 capacity allocation, ending the shadow-brain budget theft anomaly. Same contract as contract_groups.py voting path. | RC-06 |
 | FIX-20260607-011 | 2026-06-07 | Vote weight decoupling: base_weight × dynamic_scale with fail-fast gate | RC-09 |

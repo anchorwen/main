@@ -1840,3 +1840,22 @@
   - Source 4: 修复后 `python -m mypy --follow-imports=normal` 5 文件 EXIT=0 + 针对性回归 296 passed + 回归锁 3 passed
 - **是否被推翻**: 否 (AR: "type: ignore 压制即可" 被推翻 — 告警 bug 是运行时异常非类型问题, 压制让静默永久化; "state._alert_hub 恒 None 是设计" 被推翻 — 全模块零赋值)
 - **关联 ReB Pattern**: FROZEN_DEBT_MASKING_LIVE_BUG / LIVE_ALERT_HUB_SIG_DRIFT
+
+### CCT-20260819-004
+- **Docket ID**: DQAF-20260819-004
+- **日期**: 2026-08-19
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 8/11→8/13 休市期 intent_loop 每天 11 连崩共 38 次 — 每个休市周期引擎在 5s→30s respawn 循环中反复死亡, 无完整周期存活, 恢复瞬间状态重置 (known_open_tickets/governance 快照扰动).
+  - [Layer 2 — 中间异常]: 降级路径抛 UnboundLocalError (继承 NameError): live_cycle.py startup_reconciliation `_positions` 在 mt5_call_with_timeout 抛 RuntimeError (MT5 IPC 未初始化/休市/离线) 后永不绑定 (Python 作用域语义 — 块内 RHS 抛出则变量名不在局部命名空间) → 块外 `set(state.known_open_tickets.keys()) - _open_tickets` 崩溃; live_intent_loop.py `_EVENT_STREAM_MODE` 原赋值点在循环体中部, 异常跳转路径 (DEGRADE/except) 跳过赋值 → L2743 引用崩. UnboundLocalError 不在 except 元组 (RuntimeError, ValueError, KeyError, TypeError, OSError) → 穿透传播 → 进程 exit 1 → launcher 无限 respawn.
+  - [Layer 3 — 根因]: L3 (architecture-incomplete) — FTC(level∈{DEGRADE/LOG/IGNORE}) 契约"吞异常继续执行" × Python 作用域语义冲突; fault_handler.py docstring L141-158 官方自述陷阱 ("Always pre-initialise variables before the `with` block") 但调用点未系统性预绑定 → 每个 DEGRADE 块都是潜在 UnboundLocalError 地雷. 系统扫描全库 20+ FTC 块确认: 缺陷点 4 (live_cycle L1509/1843, group_consensus L123, live_intent_loop 循环顶) vs 安全点均已有预绑定 (live_cycle L2039/3520/4717/4921, management_phase L1060/1372/1517/527, group_consensus L64).
+- **证据引用**:
+  - Source 1: `blueprints/system/TECH_DEBT_REGISTRY.md:212-227` — 38 次崩溃 traceback 完整记录 (两处 UnboundLocalError)
+  - Source 2: `core/runtime/fault_handler.py:141-158` — 官方自述作用域陷阱 docstring; `:221-239` DEGRADE 吞异常语义 (return True, caller checks ctx.exception)
+  - Source 3: `core/runtime/live_cycle.py:1509-1596` — 修复后 pre-binding + `_skip_recon` 守卫 + known_open_tickets 保留
+  - Source 4: `core/runtime/live_cycle.py:1854-1865` — `_eq: float = 0.0` 预绑定
+  - Source 5: `scripts/live_intent_loop.py:2305-2311` — `while True` 循环顶部 `_EVENT_STREAM_MODE = True`
+  - Source 6: `core/parliament/group_consensus.py:122-135` — `dynamic_volume = raw_volume` 预绑定
+  - Source 7: 回归锁 `tests/runtime/test_tech_debt_017_scope_safety.py` 5 passed
+- **是否被推翻**: 否 (AR: "休市崩溃可忽略" 被推翻 — 38 次/11 连崩 = 引擎无法存活完整休市周期; "加 UnboundLocalError 进 except" 被推翻 — 需显式降级语义)
+- **关联 ReB Pattern**: FTC_SCOPE_TRAP_UNBOUNDLOCAL

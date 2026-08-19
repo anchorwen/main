@@ -230,6 +230,7 @@
 - **红线**: `core/runtime/live_cycle.py` + `scripts/live_intent_loop.py` 均属 **RED_LINE_FROZEN_ALLOWANCE** (TECH_DEBT-008) — **8/19 前零触碰** (IC 雷霆裁决, 2026-08-13: 为修休市报错改核心 live_cycle 极度违背红线纪律).
 - **修复方案** (8/19 后, 与 TECH_DEBT-008/013 合并): ① DEGRADE 降级路径变量初始化补齐 (入口 try 前绑定 `_positions = []` / `_EVENT_STREAM_MODE` 默认值, 或重构降级分支为独立函数); ② 同批清偿红线文件 mypy 债 (TECH_DEBT-008); ③ 与休市市场日历适配合并 (TECH_DEBT-013).
 - **关联**: TECH_DEBT-008 (红线冻结同文件域), TECH_DEBT-013 (休市窗叠加), TECH_DEBT-014 (背景击杀), ReB 候选 `INTENT_DEGRADE_UNBOUND_LOCAL_CRASH`
+- **清偿状态**: **CLOSED ✅ (2026-08-19, 清偿序列第三目标)** — FIX-20260819-004 (DQAF-20260819-004): **L3 架构级 Scope-Safe Pre-binding 4 处** (红线 8/19 到期后执行, 与 TECH_DEBT-008 同批). ① live_cycle startup_reconciliation `_positions: list[Any] | None = None` 预绑定 + `_skip_recon` 布尔守卫 (DEGRADE/MT5 超时 → 跳过 reconciliation, **known_open_tickets 保留**不丢持仓跟踪 — 修正原方案 `_positions=[]` 会清空持仓跟踪的缺陷); ② live_cycle PnL_to_equity `_eq: float = 0.0`; ③ live_intent_loop `while True` 循环体最顶层 `_EVENT_STREAM_MODE = True` (原方案入口绑定改为循环顶 — 覆盖每次循环迭代的异常跳转); ④ group_consensus CorrelationTracker:penalty `dynamic_volume = raw_volume` (系统扫描发现的第 4 处同类潜伏缺陷). 回归锁 5 测试 (1 behavioral + 4 static 顺序断言). ReB: `FTC_SCOPE_TRAP_UNBOUNDLOCAL`. 注: 修复方案中"同批清偿 TECH_DEBT-008"已完成 (FIX-20260819-003), "休市日历适配合并"归属 TECH_DEBT-013/014 另行清偿.
 
 ## TECH_DEBT-018 Detail — `META_FILTER_WIRED_STALE` 假阳性 (The Silent Monad)
 

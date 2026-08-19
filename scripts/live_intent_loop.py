@@ -2303,6 +2303,11 @@ def main(argv: list[str] | None = None) -> int:
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
             pass  # Guard failure must never prevent the main loop from starting
         while True:
+            # ── TECH_DEBT-017 (L3): Scope-Safe Pre-binding ──
+            # _EVENT_STREAM_MODE 必须在循环体最顶层绑定 — 异常跳转路径 (DEGRADE/except)
+            # 可能跳过循环中部的原赋值点 (L2553) → 后续引用 UnboundLocalError
+            # (8/11→8/13 38 次崩溃次因). 中部赋值保留 (幂等, 供调试切换).
+            _EVENT_STREAM_MODE = True
             state.last_heartbeat = time.time()
             if _shutdown_flag[0]:
                 print(

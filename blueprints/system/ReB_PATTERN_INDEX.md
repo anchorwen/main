@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260819-FTC_SCOPE_TRAP_UNBOUNDLOCAL
+- **Pattern Signature**: `FTC_SCOPE_TRAP_UNBOUNDLOCAL`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-004
+- **Related**: FIX-20260819-004 (RESOLVED), TECH_DEBT-017, DQAF-20260616-101 (timeout-wrapped MT5 IPC 引入 DEGRADE 触发面)
+
+**定义**: FaultTolerantContext 吞异常级别 (DEGRADE/LOG/IGNORE) 的块内, 若唯一赋值语句的 RHS 抛异常, Python 作用域语义使该变量名**永不绑定**到局部命名空间 — 块外引用即 UnboundLocalError (继承 NameError, 不在调用方宽 except 元组内 → 穿透崩溃). 关键签名: (1) `with FaultTolerantContext(level=DEGRADE/LOG/IGNORE)`; (2) 块内首次绑定变量仅通过调用式赋值 (RHS 可为外部调用); (3) 块外有引用; (4) 块前无预绑定. 与 CRASH 级别无关 (异常 re-raise 传播, 块后不可达). fault_handler.py docstring 官方自述陷阱, 但**无机制强制调用点遵守** → 每次新增 DEGRADE 块都是潜在地雷.
+- **预防** (IMPLEMENTED): ① **Scope-Safe Pre-binding 契约** — 每个 FTC(DEGRADE/LOG/IGNORE) 块内首次绑定变量必须在 `with` 块前最顶层预绑定安全默认值 (镜像 fault_handler.py docstring: "Always pre-initialise variables before the with block"); ② 新代码审查标准 — 新增 FTC 块必须双检: 块内变量是否块外引用 + 是否预绑定; ③ 回归锁静态断言 — 预绑定语句文本位置必须先于 FTC component 标记 (test_tech_debt_017_scope_safety.py 4 处 static 顺序断言, 未来删除/后移预绑定即 FAIL).
+- **检测**: 回归锁 test_tech_debt_017_scope_safety.py (static 顺序断言); 代码审查: grep `FaultTolerantContext` + `level=FaultLevel.(DEGRADE|LOG|IGNORE)` 块, 检查块前预绑定; AST 工具可扩展: 扫描 FTC 块内赋值变量 × 块外引用 × 无预绑定.
+
 ### ReB-20260819-CROSS_ASSET_JOURNAL_CONTAMINATION
 - **Pattern Signature**: `CROSS_ASSET_JOURNAL_CONTAMINATION`
 - **Date Cataloged**: 2026-08-19

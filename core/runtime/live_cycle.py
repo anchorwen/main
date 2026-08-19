@@ -1506,6 +1506,12 @@ def execute_live_cycle(
     # stale_exit_allowed bypasses the reentry guard → restart-immediate-trade.
     # ── On first cycle, reconcile positions closed during downtime ──
     if state.loop_iteration == 1 and state.known_open_tickets and not config.no_mt5:
+        # ── TECH_DEBT-017 (L3): Scope-Safe Pre-binding ──
+        # DEGRADE (MT5 IPC 未初始化/休市/离线) 时 mt5_call_with_timeout 抛 RuntimeError,
+        # FTC DEGRADE 吞异常继续 → _positions 永不绑定 → 块外访问 UnboundLocalError
+        # (8/11→8/13 共 38 次崩溃主因). 预绑定 None → 降级/超时均跳过 reconciliation,
+        # known_open_tickets 保留 (MT5 不可用时刻不丢持仓跟踪, 与 L1518 注释本意一致).
+        _positions: list[Any] | None = None
         with FaultTolerantContext(
             level=FaultLevel.DEGRADE,
             component="MT5_IPC:positions_get:startup_reconciliation",
@@ -1515,13 +1521,16 @@ def execute_live_cycle(
                 mt5_worker.positions_get, symbol=config.symbol, timeout=5.0
             )
             if _positions is _MT5_TIMEOUT_SENTINEL:
-                _positions = []  # timeout → skip reconciliation this cycle
+                _positions = None  # timeout → skip reconciliation this cycle
             else:
                 _positions = _positions or []
         try:
-            _open_tickets = {p.ticket for p in _positions}
+            _skip_recon = _positions is None  # DEGRADE 吞异常 / MT5 超时 → 本轮跳过
+            _open_tickets: set[int] = (
+                set() if _skip_recon else {p.ticket for p in (_positions or [])}
+            )
             _gone_tickets = set(state.known_open_tickets.keys()) - _open_tickets
-            if _gone_tickets:
+            if _gone_tickets and not _skip_recon:
                 _gone_dict = {
                     t: state.known_open_tickets[t]
                     for t in _gone_tickets
@@ -1579,10 +1588,12 @@ def execute_live_cycle(
                                 state.consecutive_sl_hits[_strategy] = _curr
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError):
                     pass
-            # Filter to only currently-open positions AFTER reconciliation
-            state.known_open_tickets = {
-                t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
-            }
+            # Filter to only currently-open positions AFTER reconciliation.
+            # TECH_DEBT-017: DEGRADE/timeout 时保留 known_open_tickets (不丢持仓跟踪).
+            if not _skip_recon:
+                state.known_open_tickets = {
+                    t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
+                }
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):
             pass
 
@@ -1840,6 +1851,11 @@ def execute_live_cycle(
 
                     # ── Budget recording ──
                     if mt5_worker is not None:
+                        # ── TECH_DEBT-017 (L3): Scope-Safe Pre-binding ──
+                        # account_info DEGRADE 时 _eq 永不绑定 → 块外 _pnl_pct 折算
+                        # UnboundLocalError (同类潜伏缺陷). 预绑定 0.0 → DEGRADE 时
+                        # pnl_pct=0 (与 account_info 返回 equity=0 的既有行为一致).
+                        _eq: float = 0.0
                         with FaultTolerantContext(
                             level=FaultLevel.DEGRADE,
                             component="MT5_IPC:account_info:PnL_to_equity",
