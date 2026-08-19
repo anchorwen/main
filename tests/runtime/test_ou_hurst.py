@@ -8,10 +8,7 @@ Target: >=90% line / >=80% branch coverage (pure mathematical function).
 
 from __future__ import annotations
 
-import pytest
-
 from core.runtime.ou_hurst import compute_tf_ou_hurst
-
 
 # ── Insufficient data ─────────────────────────────────────────────────────
 
@@ -176,7 +173,7 @@ def test_xau_like_prices():
 
 def test_large_dataset_only_last_21_used():
     """1000 prices → only last 21 matter."""
-    prices = list(range(1000))
+    prices: list[float] = list(range(1000))  # TECH_DEBT-009: int→float numeric tower, 运行时值不变
     result_full = compute_tf_ou_hurst(prices)
     result_last = compute_tf_ou_hurst(prices[-21:])
     assert result_full == result_last

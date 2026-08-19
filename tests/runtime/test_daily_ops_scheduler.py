@@ -7,13 +7,9 @@ Covers _save_daily_ops_state and run_scheduled_daily_ops.
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from core.runtime.daily_ops_scheduler import (
     _save_daily_ops_state,

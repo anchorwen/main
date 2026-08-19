@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import cast
 
 import pytest
 
@@ -90,7 +91,9 @@ class TestKeyboardInterruptGuard:
             ctx = FaultTolerantContext(
                 level=level,
                 component="test",
-                allow_ignore_reason="test" if level == FaultLevel.IGNORE else "",
+                allow_ignore_reason="test"
+                if cast(object, level) == FaultLevel.IGNORE
+                else "",  # TECH_DEBT-009: L88 continue 已收窄 level≠IGNORE, 恒 False 比较绕过 strict_equality
             )
             with pytest.raises(KeyboardInterrupt):
                 with ctx:
@@ -123,9 +126,13 @@ class TestCrashLoopProtection:
         # Patch Path so _record_crash writes to our temp dir
         monkeypatch.setattr(
             "core.runtime.fault_handler.Path",
-            lambda p: state_path if p == "data/state/last_good_state.json" else __import__("pathlib").Path(p),
+            lambda p: state_path
+            if p == "data/state/last_good_state.json"
+            else __import__("pathlib").Path(p),
         )
-        real_record = __import__("core.runtime.fault_handler", fromlist=["_record_crash"])._record_crash
+        real_record = __import__(
+            "core.runtime.fault_handler", fromlist=["_record_crash"]
+        )._record_crash
         real_record("test_component")
         assert state_path.exists()
         data = json.loads(state_path.read_text())
@@ -137,7 +144,9 @@ class TestCrashLoopProtection:
         state_path = tmp_path / "last_good_state.json"
         monkeypatch.setattr(
             "core.runtime.fault_handler.Path",
-            lambda p: state_path if p == "data/state/last_good_state.json" else __import__("pathlib").Path(p),
+            lambda p: state_path
+            if p == "data/state/last_good_state.json"
+            else __import__("pathlib").Path(p),
         )
         _check_crash_loop()  # Should not raise
 
@@ -153,7 +162,9 @@ class TestCrashLoopProtection:
         state_path.write_text(json.dumps(state))
         monkeypatch.setattr(
             "core.runtime.fault_handler.Path",
-            lambda p: state_path if p == "data/state/last_good_state.json" else __import__("pathlib").Path(p),
+            lambda p: state_path
+            if p == "data/state/last_good_state.json"
+            else __import__("pathlib").Path(p),
         )
 
         with pytest.raises(SystemExit) as exc_info:
@@ -172,7 +183,9 @@ class TestCrashLoopProtection:
         state_path.write_text(json.dumps(state))
         monkeypatch.setattr(
             "core.runtime.fault_handler.Path",
-            lambda p: state_path if p == "data/state/last_good_state.json" else __import__("pathlib").Path(p),
+            lambda p: state_path
+            if p == "data/state/last_good_state.json"
+            else __import__("pathlib").Path(p),
         )
         _check_crash_loop()  # Should not raise — only 1 crash in window
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import threading
 import time as _time
+from typing import cast
 
 import pytest
 
@@ -87,7 +88,9 @@ class TestThreadTask:
 
         scheduler.start()
         assert started.wait(timeout=2.0)
-        assert task.status == TaskStatus.RUNNING
+        assert (
+            cast(object, task.status) == TaskStatus.RUNNING
+        )  # TECH_DEBT-009: L86 已收窄 PENDING, start() 副作用不被静态追踪
 
         done.set()
         _time.sleep(0.1)

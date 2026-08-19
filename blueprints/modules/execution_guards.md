@@ -49,6 +49,16 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 
+### FIX-20260819-005 — TECH_DEBT-009 清偿: unified 模式潜伏测试债 (2026-08-19)
+
+**Root Cause**: L3 (testing) — `python -m mypy core/ apps/ scripts/ tests/` unified 检查 (follow_imports 全链, 暴露导入泛型) 暴露 236 类型错误/62 测试文件, isolated per-file 模式 (pre-commit/baseline 语义) 不可见 → 潜伏债。strategy_line.py 1 处: `reason=_spatial.reason` (str|None) 传 `DecisionContext.reason` (str) — SpatialGate blocked=True 契约 reason 恒非 None (`trend_isolation_gates.py:365` blocked 分支总设置), 类型字段未收窄。
+
+**Change**: `core/execution/strategy_line.py:1389` — `cast(str, _spatial.reason)` + 契约注释 (纯类型层 no-op, 零运行时变化)。tests/ 235 处分散修复: 统一 **cast-not-ignore** 方法论 (warn_unused_ignores=true 下 type:ignore 会 isolated 模式 unused-ignore 阻断 commit; cast 双模式干净)。主要形态: comparison-overlap 绕过 (`cast(Any, cb.state)`)、dict|None 链式索引 (`cast(dict[Any,Any], x)["key"]`)、method-assign 绕过 (`cast(Any, cls)._m = MagicMock()`)、非法输入探针 (`cast(Any, None)` / `cast(Any, 0.00001)` 保留值)、tuple 解包 object (`path = cast(Any, path)`)、assert 契约收窄 (X|None → `assert x is not None  # 契约说明`)、ServiceContainer 普通 attribute assert 持久收窄、私有探针返回句柄 (`_make` 返回 `(c, cast(Any, c._v9), cast(Any, c._micro))` — 实例属性类型由 __init__ 固定, 属性赋值不改类型)。
+
+**Verification**: 全量 unified mypy tests/ = 0 (残留 179 全在 scripts/archive + _audit forensic 豁免域); verify --quick PASS; 全量 pytest 回归。
+
+**Known Issues**: 若未来将 tests/ 纳入 verify --full 统一检查域, 门禁现已干净。forensic 探针 (_audit_*.py) 仍豁免。
+
 ### FIX-20260703-001 — TECH_DEBT-005 Phase 3: Dynamic SessionDetector cutover (2026-07-03)
 
 **Root Cause**: RC-09 — config-drift. Hardcoded `_SESSIONS` table + `detect_session()` static branch diverged from broker reality; static time-window logic (weekend blocks, session loops, CME-inherited rollover table) was the sole authority.

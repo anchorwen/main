@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-19T11:45:07Z
+> **自动生成**: 2026-08-19T13:58:08Z
 > **扫描模块数**: 820
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -279,7 +279,7 @@
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_context.py` | ✅ active | StrategyEvaluationContext | 0 | 85 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 19 | 2156 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 19 | 2159 | — | |
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 137 | — | |

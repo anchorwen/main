@@ -7,8 +7,9 @@ Part of Test 1: protocol dedicated test suite.
 
 from __future__ import annotations
 
-from core.protocol.services.resilience import CircuitBreaker, CircuitState, RateLimiter
+from typing import cast
 
+from core.protocol.services.resilience import CircuitBreaker, CircuitState, RateLimiter
 
 # ── CircuitBreaker ────────────────────────────────────────────────────────
 
@@ -97,7 +98,9 @@ class TestCircuitBreakerReset:
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
         cb.reset()
-        assert cb.state == CircuitState.CLOSED
+        assert (
+            cast(object, cb.state) == CircuitState.CLOSED
+        )  # TECH_DEBT-009: L98 已收窄 OPEN, reset() 副作用不被静态追踪
         assert cb.get_status()["failure_count"] == 0
 
     def test_reset_clears_failure_count(self):

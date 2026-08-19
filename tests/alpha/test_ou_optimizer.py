@@ -6,7 +6,6 @@ Covers: calc_ou_params, compute_adx, compute_trend_mute, KalmanHalfLifeFilter.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from core.alpha.ou_optimizer import (
     KalmanHalfLifeFilter,
@@ -14,7 +13,6 @@ from core.alpha.ou_optimizer import (
     compute_adx,
     compute_trend_mute,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # calc_ou_params
@@ -89,6 +87,7 @@ def test_calc_ou_params_two_points():
     assert isinstance(result["theta"], float)
     assert isinstance(result["z_score"], float)
     assert isinstance(result["mu"], float)
+
 
 def test_calc_ou_params_mean_reverting_short_series():
     """Short mean-reverting series → theta > 0, half_life finite."""
@@ -171,9 +170,7 @@ class TestKalmanHalfLifeFilter:
 
     def test_custom_noise_params(self):
         """Custom process/measurement noise are respected."""
-        kf = KalmanHalfLifeFilter(
-            initial_theta=0.01, process_noise=0.005, measurement_noise=0.02
-        )
+        kf = KalmanHalfLifeFilter(initial_theta=0.01, process_noise=0.005, measurement_noise=0.02)
         assert kf.Q == 0.005
         assert kf.R == 0.02
 

@@ -6,7 +6,6 @@ Covers FeatureGate, _RollingStats, SignalHealthMonitor, and run_signal_health_ch
 
 from __future__ import annotations
 
-import math
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -74,13 +73,17 @@ class TestFeatureGate:
 
     def test_micro_all_zeros_returns_cold_start(self) -> None:
         mv = np.zeros(9, dtype=np.float64)
-        result = FeatureGate.check(feature_vector=np.ones(40), micro_vector=mv, atr=1.0, mid_price=1.0)
+        result = FeatureGate.check(
+            feature_vector=np.ones(40), micro_vector=mv, atr=1.0, mid_price=1.0
+        )
         assert not result.passed
         assert result.reason_code == "FEATURE_COLD_START"
 
     def test_micro_with_data_passes(self) -> None:
         mv = np.array([1.0] * 9, dtype=np.float64)
-        result = FeatureGate.check(feature_vector=np.ones(40), micro_vector=mv, atr=1.0, mid_price=1.0)
+        result = FeatureGate.check(
+            feature_vector=np.ones(40), micro_vector=mv, atr=1.0, mid_price=1.0
+        )
         assert result.passed
 
     def test_no_feature_vector_passes_sanity_checks(self) -> None:
@@ -98,13 +101,16 @@ class TestFeatureGate:
 
     def test_exception_in_validation_safe_fallback(self) -> None:
         """Any exception in feature validation returns safe FAIL."""
+
         # Create an object that will raise during iteration
         class BadVector:
             @property
             def flat(self):
                 raise RuntimeError("boom")
+
             def ravel(self):
                 return self
+
         result = FeatureGate.check(feature_vector=BadVector())
         assert not result.passed
         assert result.reason_code == "FEATURE_ZERO_VECTOR"
@@ -322,13 +328,15 @@ class TestSignalHealthMonitor:
 
     def test_derive_spread_action(self) -> None:
         m = self.make_monitor()
-        actions = m._derive_actions({
-            "spread_expansion": {
-                "warning": True,
-                "current_spread_pct": 0.05,
-                "spread_median_pct": 0.001,
+        actions = m._derive_actions(
+            {
+                "spread_expansion": {
+                    "warning": True,
+                    "current_spread_pct": 0.05,
+                    "spread_median_pct": 0.001,
+                }
             }
-        })
+        )
         assert any(a["action"] == "reduce_new_position_sizes" for a in actions)
 
     def test_dedup_keep_most_restrictive(self) -> None:

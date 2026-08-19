@@ -1,5 +1,7 @@
 """Tests for meta_exit_engine.py — multi-factor exit urgency scoring."""
 
+from typing import Any
+
 from core.execution.meta_exit_engine import (
     ExitEvaluation,
     ExitFeatureSnapshot,
@@ -10,8 +12,10 @@ from core.execution.meta_exit_engine import (
 # ── Helpers ──
 
 
-def _snap(**overrides) -> ExitFeatureSnapshot:
-    defaults = {
+def _snap(**overrides: Any) -> ExitFeatureSnapshot:
+    # TECH_DEBT-009: 混合类型值 dict 显式注解 — 否则 mypy 推断 dict[str, object]
+    # → ExitFeatureSnapshot(**defaults) spread 报 arg-type. 运行时值不变.
+    defaults: dict[str, Any] = {
         "current_r": 0.0,
         "peak_r": 0.5,
         "drawdown_r": 0.5,

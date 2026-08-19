@@ -202,7 +202,8 @@ class TestExecuteExitSuccess:
         wd = ExitWatchdog(data_dir=str(tmp_path))
         dispatch_fn = MagicMock(return_value={"dispatched": True, "intent_id": "test_001"})
         # Mock ACK to return success — avoids retry loop
-        wd._poll_ack = MagicMock(return_value={"ack_status": "accepted"})
+        # TECH_DEBT-009: __dict__ 注入规避 method-assign (mypy) + B010 (ruff)
+        wd.__dict__["_poll_ack"] = MagicMock(return_value={"ack_status": "accepted"})
 
         result = wd.execute_exit(
             position_ticket=123456,
@@ -230,7 +231,7 @@ class TestExecuteExitSuccess:
         # FIX-20260627-147: mock _poll_ack to skip 5s ACK polling timeout.
         # Without a real bridge, _poll_ack times out on every attempt
         # (5 attempts × 5s timeout + backoff = ~15s).
-        wd._poll_ack = lambda intent_id, timeout=5.0: {"ack_status": "accepted"}
+        wd.__dict__["_poll_ack"] = lambda intent_id, timeout=5.0: {"ack_status": "accepted"}
 
         wd.execute_exit(
             position_ticket=999888,
@@ -266,7 +267,8 @@ class TestExecuteExitRetry:
             return {"dispatched": True, "intent_id": f"test_{call_count[0]}"}
 
         # Mock ACK to succeed on second attempt
-        wd._poll_ack = MagicMock(return_value={"ack_status": "accepted"})
+        # TECH_DEBT-009: __dict__ 注入规避 method-assign (mypy) + B010 (ruff)
+        wd.__dict__["_poll_ack"] = MagicMock(return_value={"ack_status": "accepted"})
 
         result = wd.execute_exit(
             position_ticket=123456,

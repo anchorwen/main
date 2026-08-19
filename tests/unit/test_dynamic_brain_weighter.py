@@ -288,6 +288,7 @@ class TestPnLStoreIntegration:
         # Record winning signals for B1 → healthy, high Sharpe (≥30 for engine)
         for i in range(35):
             sid = pnl.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None  # TECH_DEBT-009: 成功记录返回非 None 类型收窄
             pnl.settle_one(sid, 101.0 + i * 0.05)
 
         tracker = BrainPerformanceTracker()
@@ -307,6 +308,7 @@ class TestPnLStoreIntegration:
         # Only 2 samples in P&L → insufficient
         for _ in range(2):
             sid = pnl.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None  # TECH_DEBT-009: 成功记录返回非 None 类型收窄
             pnl.settle_one(sid, 101.0)
 
         tracker = BrainPerformanceTracker()
@@ -324,6 +326,7 @@ class TestPnLStoreIntegration:
         pnl = BrainPnLStore()
         for i in range(20):
             sid = pnl.record_signal("Brain_PnL", "XAUUSDc", "long", 100.0)
+            assert sid is not None  # TECH_DEBT-009: 成功记录返回非 None 类型收窄
             pnl.settle_one(sid, 101.0 + i * 0.05)
 
         tracker = BrainPerformanceTracker()
@@ -342,6 +345,7 @@ class TestPnLStoreIntegration:
         pnl = BrainPnLStore()
         for i in range(35):
             sid = pnl.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None  # TECH_DEBT-009: 成功记录返回非 None 类型收窄
             pnl.settle_one(sid, 101.0 + i * 0.05)
 
         tracker = BrainPerformanceTracker()

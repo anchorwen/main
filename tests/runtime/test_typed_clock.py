@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import time as _time
+from typing import Any, cast
 
 import pytest
 
@@ -123,7 +124,11 @@ class TestMonotonicInstant:
         from dataclasses import FrozenInstanceError
 
         with pytest.raises(FrozenInstanceError):
-            t._raw = 999.0
+            cast(
+                Any, t
+            )._raw = (
+                999.0  # TECH_DEBT-009: 故意写被 static 拒绝的 frozen 赋值, cast(Any) 类型层绕过
+            )
 
     def test_object_setattr_is_bypassable_and_caught_by_ci(self) -> None:
         """object.__setattr__ CAN bypass frozen=True at runtime.
@@ -157,13 +162,13 @@ class TestWallInstant:
         """WallInstant has NO __sub__ → AttributeError."""
         t = WallInstant(1000.0)
         with pytest.raises(TypeError):
-            _ = t - t
+            _ = cast(Any, t) - t  # TECH_DEBT-009: 故意测试 WallInstant 无 __sub__
 
     def test_no_addition(self) -> None:
         """WallInstant has NO __add__ → AttributeError."""
         t = WallInstant(1000.0)
         with pytest.raises(TypeError):
-            _ = t + Duration(5.0)
+            _ = cast(Any, t) + Duration(5.0)  # TECH_DEBT-009: 故意测试 WallInstant 无 __add__
 
     def test_comparison(self) -> None:
         """WallInstant supports ==, <, > but not arithmetic."""
@@ -201,7 +206,7 @@ class TestWallInstant:
         from dataclasses import FrozenInstanceError
 
         with pytest.raises(FrozenInstanceError):
-            t._raw = 999.0
+            cast(Any, t)._raw = 999.0  # TECH_DEBT-009: 故意 frozen 赋值 (WallInstant)
 
     def test_object_setattr_bypass_documented(self) -> None:
         """object.__setattr__ bypass — CI AST scanner is the enforcement layer."""
@@ -280,7 +285,7 @@ class TestDuration:
         from dataclasses import FrozenInstanceError
 
         with pytest.raises(FrozenInstanceError):
-            d._raw = 999.0
+            cast(Any, d)._raw = 999.0  # TECH_DEBT-009: 故意 frozen 赋值 (Duration)
 
     def test_object_setattr_bypass_documented(self) -> None:
         """object.__setattr__ bypass — CI AST scanner is the enforcement layer."""
@@ -315,7 +320,7 @@ class TestTypeIncompatibility:
         wall = WallInstant(1000.0)
         mono = MonotonicInstant(100.0)
         with pytest.raises(TypeError):
-            _ = wall - mono
+            _ = cast(Any, wall) - mono  # TECH_DEBT-009: 故意测试 WallInstant 无 __sub__ (跨类型)
 
     def test_mono_cannot_add_wall(self) -> None:
         """MonotonicInstant + WallInstant → NotImplemented."""

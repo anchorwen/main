@@ -1,20 +1,18 @@
 """Unit tests for core.observability._health_helpers — SF #28 extraction validation."""
+
 from __future__ import annotations
 
 import json
 import os
 import tempfile
-from pathlib import Path
-
-import pytest
 
 from core.observability._health_helpers import (
     _age_minutes,
-    _utc_iso,
     _safe_json_load,
     _safe_jsonl_count,
     _safe_jsonl_last,
     _safe_jsonl_tail_stats,
+    _utc_iso,
 )
 
 
@@ -174,7 +172,7 @@ class TestSafeJsonlLast:
     def test_invalid_json_line_skipped(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write('{"valid": 1}\n')
-            f.write('not json\n')
+            f.write("not json\n")
             f.write('{"valid": 3}\n')
             path = f.name
         try:
@@ -218,8 +216,12 @@ class TestSafeJsonlTailStats:
 
     def test_pnl_null_detected(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-            f.write('{"action": "close", "pnl": null, "label": "unknown", "ack_status": "closed"}\n')
-            f.write('{"action": "close", "pnl": null, "label": "unknown", "ack_status": "closed"}\n')
+            f.write(
+                '{"action": "close", "pnl": null, "label": "unknown", "ack_status": "closed"}\n'
+            )
+            f.write(
+                '{"action": "close", "pnl": null, "label": "unknown", "ack_status": "closed"}\n'
+            )
             path = f.name
         try:
             stats = _safe_jsonl_tail_stats(path)
@@ -230,8 +232,12 @@ class TestSafeJsonlTailStats:
 
     def test_retry_counted(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-            f.write('{"action": "close", "pnl": 0, "label": "breakeven", "ack_status": "rejected"}\n')
-            f.write('{"action": "close", "pnl": 0, "label": "breakeven", "ack_status": "rejected"}\n')
+            f.write(
+                '{"action": "close", "pnl": 0, "label": "breakeven", "ack_status": "rejected"}\n'
+            )
+            f.write(
+                '{"action": "close", "pnl": 0, "label": "breakeven", "ack_status": "rejected"}\n'
+            )
             path = f.name
         try:
             stats = _safe_jsonl_tail_stats(path)
@@ -254,7 +260,7 @@ class TestSafeJsonlTailStats:
     def test_invalid_json_lines_skipped(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write('{"action": "close", "pnl": 1, "label": "sl_hit", "ack_status": "closed"}\n')
-            f.write('garbage line\n')
+            f.write("garbage line\n")
             f.write('{"action": "close", "pnl": 2, "label": "tp_hit", "ack_status": "closed"}\n')
             path = f.name
         try:

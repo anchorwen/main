@@ -18,7 +18,7 @@ import logging
 import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -1386,7 +1386,10 @@ class StrategyLine(StrategyEvaluateProtocol):
                 supporting_count=support_count,
                 total_count=total_count,
                 regime_mode=regime_gate_mode,
-                reason=_spatial.reason,
+                # TECH_DEBT-009: SpatialGate blocked=True 契约 reason 恒非 None
+                # (trend_isolation_gates.py:365 blocked 分支总设置 reason);
+                # 类型字段 str|None 未收窄 → cast 纯类型层, 零运行时改变.
+                reason=cast(str, _spatial.reason),
             )
         if _spatial.volume_mult != 1.0:
             _ct_vol_mult = _ct_vol_mult * _spatial.volume_mult
