@@ -2,10 +2,13 @@
 
 FIX-20260619-062: Tier 2 zero-coverage breakout.
 """
+
 from __future__ import annotations
-from unittest.mock import MagicMock, patch
-import pytest
+
+from unittest.mock import patch
+
 from core.brains.services.brain_registry_service import BrainRegistryService
+
 
 class TestBrainRegistryService:
     def test_init_with_entries(self) -> None:

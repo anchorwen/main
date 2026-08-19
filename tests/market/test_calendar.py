@@ -7,19 +7,23 @@ Part of Test 3: market dedicated test suite.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
 from core.market.calendar import evaluate_pre_close, evaluate_utc_blackout
-
 
 # ── Test configs ──────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def empty_config():
-    return {"schema_version": "v1", "weekly_blackout": {}, "fixed_blackouts": [], "session_buffers": {}}
+    return {
+        "schema_version": "v1",
+        "weekly_blackout": {},
+        "fixed_blackouts": [],
+        "session_buffers": {},
+    }
 
 
 @pytest.fixture
@@ -72,9 +76,7 @@ class TestUTCBlackout:
     def test_fixed_blackout_expired(self):
         config = {
             "weekly_blackout": {},
-            "fixed_blackouts": [
-                {"start": "2026-06-17T10:00:00Z", "end": "2026-06-17T14:00:00Z"}
-            ],
+            "fixed_blackouts": [{"start": "2026-06-17T10:00:00Z", "end": "2026-06-17T14:00:00Z"}],
             "session_buffers": {},
         }
         now = datetime(2026, 6, 17, 15, 0, tzinfo=UTC)  # after
@@ -84,7 +86,15 @@ class TestUTCBlackout:
     def test_no_tzinfo_assumes_utc(self):
         """Naive datetime is treated as UTC."""
         now = datetime(2026, 6, 20, 12, 0)  # Saturday, no tzinfo
-        blocked, _ = evaluate_utc_blackout(now_utc=now, symbol=None, config={"weekly_blackout": {"utc_weekend": True}, "fixed_blackouts": [], "session_buffers": {}})
+        blocked, _ = evaluate_utc_blackout(
+            now_utc=now,
+            symbol=None,
+            config={
+                "weekly_blackout": {"utc_weekend": True},
+                "fixed_blackouts": [],
+                "session_buffers": {},
+            },
+        )
         assert blocked is True
 
 
@@ -105,7 +115,16 @@ class TestPreClose:
 
     def test_returns_expected_keys(self):
         now = datetime(2026, 6, 17, 12, 0, tzinfo=UTC)
-        result = evaluate_pre_close(now_utc=now, symbol=None, config={"weekly_blackout": {}, "fixed_blackouts": [], "session_buffers": {"enabled": False}, "close_sessions": []})
+        result = evaluate_pre_close(
+            now_utc=now,
+            symbol=None,
+            config={
+                "weekly_blackout": {},
+                "fixed_blackouts": [],
+                "session_buffers": {"enabled": False},
+                "close_sessions": [],
+            },
+        )
         assert "in_pre_close" in result
         assert "no_new_positions" in result
         assert "must_flatten" in result

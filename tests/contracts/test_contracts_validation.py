@@ -6,7 +6,6 @@ Targets: CalibratorState, PositionClosed, PositionOpened, ProtocolOverride.
 
 from __future__ import annotations
 
-import math
 from datetime import UTC, datetime
 
 import pytest
@@ -111,7 +110,6 @@ class TestCalibratorContract:
 
     def test_calibrator_nan_in_history_detected(self) -> None:
         """NaN p_win values in history must be flagged."""
-        import math
 
         from core.contracts.calibrator_contract import CalibratorHistoryEntry, CalibratorState
 
@@ -186,12 +184,22 @@ class TestPositionEvents:
         from core.contracts.position_events import PositionClosed
 
         event = PositionClosed(
-            position_ticket=1, symbol="X", side="long", strategy="s",
-            magic=1, entry_price=1.0, close_price=1.0, closed_volume=0.01,
-            remaining_volume=0.0, original_volume=0.01, pnl=0.0, label="breakeven",
+            position_ticket=1,
+            symbol="X",
+            side="long",
+            strategy="s",
+            magic=1,
+            entry_price=1.0,
+            close_price=1.0,
+            closed_volume=0.01,
+            remaining_volume=0.0,
+            original_volume=0.01,
+            pnl=0.0,
+            label="breakeven",
         )
         # Frozen dataclass — mutation through __setattr__ should raise
         import dataclasses
+
         with pytest.raises(dataclasses.FrozenInstanceError):
             event.__setattr__("pnl", 999.0)
 

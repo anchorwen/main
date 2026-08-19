@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -146,8 +147,12 @@ class TestStateProjectionDivergence:
             if isinstance(entry, dict):
                 events_seen.append(f"close:{entry.get('payload', {})}")
 
-        projector.register_handler("position_open", handle_open)
-        projector.register_handler("position_close", handle_close)
+        projector.register_handler(
+            "position_open", cast(Any, handle_open)
+        )  # TECH_DEBT-009: 回调签名 (A3)
+        projector.register_handler(
+            "position_close", cast(Any, handle_close)
+        )  # TECH_DEBT-009: 回调签名 (A3)
 
         for record in mixed_wal:
             if record.type == "phantom_stub":

@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import time
+from typing import Any, cast
 
 import pytest
 
@@ -41,13 +42,17 @@ class TestBridgeResult:
     def test_ok_returns_value_none(self) -> None:
         with Kernel().success_scope() as proof:
             result = CapResult.ok(42, proof)
-        value, error = bridge_result(result)
+        value, error = bridge_result(
+            cast(Any, result)
+        )  # TECH_DEBT-009: CapResult[T] 桥接泛型收窄 (A3)
         assert value == 42
         assert error is None
 
     def test_err_returns_none_error(self) -> None:
-        result = CapResult.err("something broke")
-        value, error = bridge_result(result)
+        result: CapResult[Any] = CapResult.err(
+            "something broke"
+        )  # TECH_DEBT-009: err 无值泛型无法推断 (A3)
+        value, error = bridge_result(cast(Any, result))
         assert value is None
         assert error == "something broke"
 
@@ -56,7 +61,9 @@ class TestBridgeResult:
         # Valid proof
         with Kernel().success_scope() as proof:
             result = CapResult.ok("hello", proof)
-        value, error = bridge_result(result)
+        value, error = bridge_result(
+            cast(Any, result)
+        )  # TECH_DEBT-009: CapResult[T] 桥接泛型收窄 (A3)
         assert value == "hello"
         assert error is None
 
@@ -70,7 +77,9 @@ class TestBridgeLegacy:
 
         result = bridge_legacy(good_fn, 21, error_types=(ValueError,))
         assert result.is_ok()
-        value, error = bridge_result(result)
+        value, error = bridge_result(
+            cast(Any, result)
+        )  # TECH_DEBT-009: CapResult[T] 桥接泛型收窄 (A3)
         assert value == 42
         assert error is None
 
@@ -80,7 +89,9 @@ class TestBridgeLegacy:
 
         result = bridge_legacy(bad_fn, error_types=(ValueError, TypeError))
         assert not result.is_ok()
-        _value, error = bridge_result(result)
+        _value, error = bridge_result(
+            cast(Any, result)
+        )  # TECH_DEBT-009: CapResult[T] 桥接泛型收窄 (A3)
         assert error is not None
         assert "bad input" in error
 
@@ -101,7 +112,9 @@ class TestBridgeResultOrRaise:
         assert bridge_result_or_raise(result) == "data"
 
     def test_err_raises(self) -> None:
-        result = CapResult.err("fatal error")
+        result: CapResult[Any] = CapResult.err(
+            "fatal error"
+        )  # TECH_DEBT-009: err 无值泛型无法推断 (A3)
         with pytest.raises(RuntimeError, match="fatal error"):
             bridge_result_or_raise(result)
 

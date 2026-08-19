@@ -7,7 +7,6 @@ Pure numpy functions, fully deterministic with seed.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from core.features.data_augmentation import (
     _sample_vol_scales,
@@ -104,7 +103,8 @@ class TestAugmentFromRecipeConfig:
         X = np.array([[1.0], [2.0]])
         y = np.array([0, 1])
         Xo, yo = augment_from_recipe_config(
-            X, y,
+            X,
+            y,
             {"enabled": True, "volatility_scaling": [0.5], "noise_std": 0.0},
             seed=42,
         )

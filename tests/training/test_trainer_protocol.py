@@ -48,6 +48,9 @@ class TestTrainResult:
             extra={"epochs": 100},
         )
         assert r.n_parameters == 15_000
+        assert (
+            r.val_metrics is not None
+        )  # TECH_DEBT-009: val_metrics 可选字段, 已构造契约下恒非 None
         assert r.val_metrics["val_loss"] == 0.15
         assert r.scaler_path == Path("/tmp/scaler.pkl")
 

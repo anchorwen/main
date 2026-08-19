@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -147,7 +148,7 @@ class TestPhantomConcurrentStress:
         assert ok, f"Phantom WAL chain broken: {reason}"
 
         # Reset to shared WAL
-        set_phantom_wal(None)
+        set_phantom_wal(cast(Any, None))  # TECH_DEBT-009: A3 探针
 
 
 # ── Test 3: Hash chain survives rapid rotation ────────────────────────────
@@ -246,7 +247,9 @@ class TestDiskFullBehavior:
         wal = WriteAheadLog(
             WALConfig(
                 path=tmp_wal_dir / "tight_quota.jsonl",
-                disk_quota_mb=0.00001,  # ~10 bytes — impossibly tight
+                disk_quota_mb=cast(
+                    Any, 0.00001
+                ),  # ~10 bytes — impossibly tight (TECH_DEBT-009: A3 探针)
             )
         )
         wal.append({"x": 1})
@@ -262,7 +265,7 @@ class TestDiskFullBehavior:
         pw = init_phantom_wal(
             WALConfig(
                 path=phantom_path,
-                disk_quota_mb=0.00001,  # Tiny quota
+                disk_quota_mb=cast(Any, 0.00001),  # Tiny quota (TECH_DEBT-009: A3 探针)
             )
         )
 
@@ -277,7 +280,7 @@ class TestDiskFullBehavior:
             pass
 
         # Cleanup
-        set_phantom_wal(None)
+        set_phantom_wal(cast(Any, None))  # TECH_DEBT-009: A3 探针
 
 
 # ── Test 6: NTP offset / clock skew simulation ────────────────────────────
@@ -294,6 +297,9 @@ class TestClockSkewBehavior:
         for i in range(10):
             wal.append({"event": f"clock_test_{i}"})
             record = wal.read(i)
+            assert (
+                record is not None
+            )  # TECH_DEBT-009: wal.read 返回 WALRecord|None, 已 append 契约下恒非 None
             timestamps.append(record.timestamp_wall)
 
         # All timestamps populated

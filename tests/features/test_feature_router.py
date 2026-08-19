@@ -2,10 +2,13 @@
 
 FIX-20260619-050: Tier 2 zero-coverage breakout #5.
 """
+
 from __future__ import annotations
-import numpy as np
+
 import pytest
-from core.features.feature_router import FeatureRouter, FeatureMissingError, SchemaNotFoundError
+
+from core.features.feature_router import FeatureMissingError, FeatureRouter, SchemaNotFoundError
+
 
 class TestFeatureRouter:
     def test_unknown_schema_raises(self) -> None:
@@ -15,6 +18,7 @@ class TestFeatureRouter:
 
     def test_get_router_returns_singleton(self) -> None:
         from core.features.feature_router import get_router
+
         r1 = get_router()
         r2 = get_router()
         assert r1 is r2

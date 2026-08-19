@@ -18,10 +18,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from core.parliament.group_consensus import compute_contract_group_consensus
-
 
 # ── Test-data factories ─────────────────────────────────────────────────────
 
@@ -31,7 +28,9 @@ def _brain_info(brain_id="B1", contract_group="barrier_12bar", **kw):
     return {"brain_id": brain_id, "contract_group": contract_group, **kw}
 
 
-def _proposal(direction="long", confidence=0.8, brain_id="B1", contract_group="barrier_12bar", **kw):
+def _proposal(
+    direction="long", confidence=0.8, brain_id="B1", contract_group="barrier_12bar", **kw
+):
     """Build a mock proposal (SimpleNamespace) with relevant fields."""
     defaults = {
         "direction": direction,
@@ -58,9 +57,15 @@ def _mock_weighter_class():
     return mock
 
 
-def _mock_alloc_decision(should_trade=True, direction="long", confidence=0.7,
-                         agreement_level="majority", active_groups=None,
-                         dissenting_groups=None, reason=""):
+def _mock_alloc_decision(
+    should_trade=True,
+    direction="long",
+    confidence=0.7,
+    agreement_level="majority",
+    active_groups=None,
+    dissenting_groups=None,
+    reason="",
+):
     """Build a mock AllocationDecision."""
     return SimpleNamespace(
         should_trade=should_trade,
@@ -112,15 +117,26 @@ def test_empty_proposals_returns_neutral():
 def test_no_trade_returns_neutral_with_reason():
     """resolve_conflicts says should_trade=False → neutral with reason."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.7, total_count=1, brain_ids=["B1"],
+        direction="long",
+        confidence=0.7,
+        total_count=1,
+        brain_ids=["B1"],
     )
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH, return_value=_mock_alloc_decision(
-             should_trade=False, direction="neutral", confidence=0.0,
-             agreement_level="none", reason="no_quorum",
-         )):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(
+            _RESOLVE_PATH,
+            return_value=_mock_alloc_decision(
+                should_trade=False,
+                direction="neutral",
+                confidence=0.0,
+                agreement_level="none",
+                reason="no_quorum",
+            ),
+        ),
+    ):
         result = compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.9, "B1")],
             brains=[_brain_info("B1")],
@@ -144,14 +160,21 @@ def test_no_trade_returns_neutral_with_reason():
 def test_normal_consensus_returns_direction():
     """Full flow with one proposal → direction=long, confidence=0.7."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.7, total_count=1, brain_ids=["B1"],
+        direction="long",
+        confidence=0.7,
+        total_count=1,
+        brain_ids=["B1"],
     )
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH,
-               return_value=_mock_alloc_decision(should_trade=True, direction="long", confidence=0.7)), \
-         patch(_VOLUME_PATH, _mock_volume_fn):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(
+            _RESOLVE_PATH,
+            return_value=_mock_alloc_decision(should_trade=True, direction="long", confidence=0.7),
+        ),
+        patch(_VOLUME_PATH, _mock_volume_fn),
+    ):
         result = compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.85, "B1", "barrier_12bar")],
             brains=[_brain_info("B1", "barrier_12bar")],
@@ -174,14 +197,18 @@ def test_normal_consensus_returns_direction():
 def test_consensus_extra_includes_allocation_fields():
     """consensus_extra carries agreement_level, active_groups, dissenting_groups."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.8, total_count=1, brain_ids=["B1"],
+        direction="long",
+        confidence=0.8,
+        total_count=1,
+        brain_ids=["B1"],
     )
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH,
-               return_value=_mock_alloc_decision(agreement_level="majority")), \
-         patch(_VOLUME_PATH, _mock_volume_fn):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(_RESOLVE_PATH, return_value=_mock_alloc_decision(agreement_level="majority")),
+        patch(_VOLUME_PATH, _mock_volume_fn),
+    ):
         result = compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.8, "B1")],
             brains=[_brain_info("B1")],
@@ -199,15 +226,18 @@ def test_consensus_extra_includes_allocation_fields():
 def test_consensus_extra_counts_voters():
     """consensus_extra.voter_count reflects total voters from group signals."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.75, total_count=3,
+        direction="long",
+        confidence=0.75,
+        total_count=3,
         brain_ids=["B1", "B2", "B3"],
     )
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH,
-               return_value=_mock_alloc_decision()), \
-         patch(_VOLUME_PATH, _mock_volume_fn):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()),
+        patch(_VOLUME_PATH, _mock_volume_fn),
+    ):
         result = compute_contract_group_consensus(
             raw_proposals=[
                 _proposal("long", 0.8, "B1"),
@@ -231,15 +261,23 @@ def test_consensus_extra_counts_voters():
 def test_consensus_short_direction():
     """Short direction propagates correctly."""
     mock_gs = SimpleNamespace(
-        direction="short", confidence=0.75, total_count=1, brain_ids=["B1"],
+        direction="short",
+        confidence=0.75,
+        total_count=1,
+        brain_ids=["B1"],
     )
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH,
-               return_value=_mock_alloc_decision(should_trade=True, direction="short",
-                                                  confidence=0.75, agreement_level="full")), \
-         patch(_VOLUME_PATH, _mock_volume_fn):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(
+            _RESOLVE_PATH,
+            return_value=_mock_alloc_decision(
+                should_trade=True, direction="short", confidence=0.75, agreement_level="full"
+            ),
+        ),
+        patch(_VOLUME_PATH, _mock_volume_fn),
+    ):
         result = compute_contract_group_consensus(
             raw_proposals=[_proposal("short", 0.75, "B1")],
             brains=[_brain_info("B1")],
@@ -259,16 +297,21 @@ def test_consensus_short_direction():
 def test_total_budget_triggers_capacity_allocation():
     """When total_budget > 0, CapitalAllocator.allocate_capacity is called."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.8, total_count=1, brain_ids=["B1"],
+        direction="long",
+        confidence=0.8,
+        total_count=1,
+        brain_ids=["B1"],
     )
     mock_alloc = MagicMock()
     mock_alloc.allocate_capacity.return_value = {"B1": 0.03}
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()), \
-         patch(_VOLUME_PATH, _mock_volume_fn), \
-         patch(_CAP_ALLOC_PATH, return_value=mock_alloc):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()),
+        patch(_VOLUME_PATH, _mock_volume_fn),
+        patch(_CAP_ALLOC_PATH, return_value=mock_alloc),
+    ):
         result = compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.8, "B1")],
             brains=[_brain_info("B1")],
@@ -287,14 +330,19 @@ def test_total_budget_triggers_capacity_allocation():
 def test_zero_budget_skips_capacity_allocation():
     """total_budget=0 → CapitalAllocator is never instantiated."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.8, total_count=1, brain_ids=["B1"],
+        direction="long",
+        confidence=0.8,
+        total_count=1,
+        brain_ids=["B1"],
     )
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()), \
-         patch(_VOLUME_PATH, _mock_volume_fn), \
-         patch(_CAP_ALLOC_PATH) as mock_cap_class:
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()),
+        patch(_VOLUME_PATH, _mock_volume_fn),
+        patch(_CAP_ALLOC_PATH) as mock_cap_class,
+    ):
         compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.8, "B1")],
             brains=[_brain_info("B1")],
@@ -315,7 +363,10 @@ def test_zero_budget_skips_capacity_allocation():
 def test_regime_info_propagated_to_volume():
     """regime_info dict is passed through to compute_volume."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.8, total_count=1, brain_ids=["B1"],
+        direction="long",
+        confidence=0.8,
+        total_count=1,
+        brain_ids=["B1"],
     )
     captured_regime = []
 
@@ -323,10 +374,12 @@ def test_regime_info_propagated_to_volume():
         captured_regime.append(regime)
         return base_volume
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()), \
-         patch(_VOLUME_PATH, _capture_volume):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()),
+        patch(_VOLUME_PATH, _capture_volume),
+    ):
         compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.8, "B1")],
             brains=[_brain_info("B1")],
@@ -343,7 +396,10 @@ def test_regime_info_propagated_to_volume():
 def test_regime_info_none_defaults_to_normal():
     """When regime_info is None or missing regime key, default='normal'."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.8, total_count=1, brain_ids=["B1"],
+        direction="long",
+        confidence=0.8,
+        total_count=1,
+        brain_ids=["B1"],
     )
     captured_regime = []
 
@@ -351,10 +407,12 @@ def test_regime_info_none_defaults_to_normal():
         captured_regime.append(regime)
         return base_volume
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()), \
-         patch(_VOLUME_PATH, _capture_volume):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()),
+        patch(_VOLUME_PATH, _capture_volume),
+    ):
         compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.8, "B1")],
             brains=[_brain_info("B1")],
@@ -374,14 +432,18 @@ def test_regime_info_none_defaults_to_normal():
 def test_more_proposals_than_brains_fills_empty():
     """If len(proposals) > len(brains), missing brain_info defaults to {}."""
     mock_gs = SimpleNamespace(
-        direction="long", confidence=0.8, total_count=2,
+        direction="long",
+        confidence=0.8,
+        total_count=2,
         brain_ids=["B1", "B2"],
     )
 
-    with patch(_WEIGHTER_PATH, _mock_weighter_class()), \
-         patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}), \
-         patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()), \
-         patch(_VOLUME_PATH, _mock_volume_fn):
+    with (
+        patch(_WEIGHTER_PATH, _mock_weighter_class()),
+        patch(_ALL_GROUPS_PATH, return_value={"barrier_12bar": mock_gs}),
+        patch(_RESOLVE_PATH, return_value=_mock_alloc_decision()),
+        patch(_VOLUME_PATH, _mock_volume_fn),
+    ):
         result = compute_contract_group_consensus(
             raw_proposals=[_proposal("long", 0.8, "B1"), _proposal("short", 0.6, "B2")],
             brains=[_brain_info("B1")],  # only 1 brain_info for 2 proposals

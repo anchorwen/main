@@ -13,6 +13,8 @@
     空 endpoint (mt5 file 适配器) → 不注入 (零行为变化)。
 """
 
+from typing import Any, cast
+
 import pytest
 
 from core.contracts.exceptions import DataIntegrityError
@@ -85,7 +87,11 @@ def test_mt5_file_adapter_requires_no_endpoint(tmp_path):
 def test_zmq_adapter_constructor_requires_order_endpoint():
     """ZMQCommunicationAdapter 构造必传 order_endpoint — 无默认端口兜底."""
     with pytest.raises(TypeError):
-        ZMQCommunicationAdapter()  # type: ignore[call-arg]  # 签名必传, 无默认
+        # cast(Any): unified 模式下签名真实 (order_endpoint 必传) → 直接调用会报
+        # call-arg; isolated 模式下该类是 Any → 无参调用合法 → 显式 ignore 变 unused
+        # (warn_unused_ignores). cast(Any) 在类型层遮蔽签名, 运行时仍是真类 → 无参
+        # 调用照样抛 TypeError, 双模式 (isolated/unified) 均干净。
+        cast(Any, ZMQCommunicationAdapter)()
 
 
 # ── Blueprint A: Shadow Veto ────────────────────────────────────────────

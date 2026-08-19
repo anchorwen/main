@@ -10,20 +10,18 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from core.deployment.brain_lifecycle_manager import (
+    BrainLifecycleManager,
     IntegrityReport,
     ReferenceAuditReport,
     RegistrationReport,
     RetirementReport,
-    BrainLifecycleManager,
     _utc_now_compact,
     _utc_now_iso,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # _utc_now_iso / _utc_now_compact
@@ -167,14 +165,16 @@ class TestFindConfigByBrainId:
             brains_dir = root / "configs" / "brains"
             brains_dir.mkdir(parents=True)
             (brains_dir / "test.json").write_text(
-                json.dumps({"brain_id": "target_brain"}), encoding="utf-8",
+                json.dumps({"brain_id": "target_brain"}),
+                encoding="utf-8",
             )
             # Create minimal manager with mocked live.yaml to avoid file access error
             live_yaml = root / "configs" / "live.yaml"
             live_yaml.parent.mkdir(parents=True, exist_ok=True)
             live_yaml.write_text("live_trading:\n  symbol: XAUUSDc\nstrategy_lines: {}\n")
             mgr = BrainLifecycleManager(
-                project_root=root, brains_dir=str(brains_dir),
+                project_root=root,
+                brains_dir=str(brains_dir),
                 live_yaml_path=str(live_yaml),
             )
             found = mgr._find_config_by_brain_id("target_brain")
@@ -190,7 +190,8 @@ class TestFindConfigByBrainId:
             live_yaml.parent.mkdir(parents=True, exist_ok=True)
             live_yaml.write_text("live_trading:\n  symbol: XAUUSDc\nstrategy_lines: {}\n")
             mgr = BrainLifecycleManager(
-                project_root=root, brains_dir=str(brains_dir),
+                project_root=root,
+                brains_dir=str(brains_dir),
                 live_yaml_path=str(live_yaml),
             )
             found = mgr._find_config_by_brain_id("nonexistent")
@@ -202,13 +203,15 @@ class TestFindConfigByBrainId:
             brains_dir = root / "configs" / "brains"
             brains_dir.mkdir(parents=True)
             (brains_dir / "normalization.json").write_text(
-                json.dumps({"brain_id": "norm_target"}), encoding="utf-8",
+                json.dumps({"brain_id": "norm_target"}),
+                encoding="utf-8",
             )
             live_yaml = root / "configs" / "live.yaml"
             live_yaml.parent.mkdir(parents=True, exist_ok=True)
             live_yaml.write_text("live_trading:\n  symbol: XAUUSDc\nstrategy_lines: {}\n")
             mgr = BrainLifecycleManager(
-                project_root=root, brains_dir=str(brains_dir),
+                project_root=root,
+                brains_dir=str(brains_dir),
                 live_yaml_path=str(live_yaml),
             )
             found = mgr._find_config_by_brain_id("norm_target")
@@ -228,7 +231,8 @@ class TestInit:
             live_yaml = root / "configs" / "live.yaml"
             live_yaml.write_text("live_trading:\n  symbol: XAUUSDc\nstrategy_lines: {}\n")
             mgr = BrainLifecycleManager(
-                project_root=root, live_yaml_path=str(live_yaml),
+                project_root=root,
+                live_yaml_path=str(live_yaml),
             )
             assert mgr._project_root == root
             assert mgr._live_yaml_path == live_yaml
@@ -243,7 +247,8 @@ class TestInit:
             live_yaml = root / "configs" / "live.yaml"
             live_yaml.write_text("live_trading:\n  symbol: XAUUSDc\nstrategy_lines: {}\n")
             mgr = BrainLifecycleManager(
-                project_root=root, live_yaml_path=str(live_yaml),
+                project_root=root,
+                live_yaml_path=str(live_yaml),
             )
             assert mgr._brains_dir.name == "brains"
             assert mgr._retired_dir.name == "retired"
@@ -262,7 +267,8 @@ class TestLoadLiveYamlErrors:
             live_yaml = root / "configs" / "live.yaml"
             live_yaml.write_text("live_trading:\n  symbol: XAUUSDc\nstrategy_lines: {}\n")
             mgr = BrainLifecycleManager(
-                project_root=root, live_yaml_path=str(live_yaml),
+                project_root=root,
+                live_yaml_path=str(live_yaml),
             )
             # Now point to a non-existent file
             mgr._live_yaml_path = root / "nonexistent.yaml"
@@ -276,7 +282,8 @@ class TestLoadLiveYamlErrors:
             live_yaml = root / "configs" / "live.yaml"
             live_yaml.write_text("live_trading:\n  symbol: XAUUSDc\nstrategy_lines: {}\n")
             mgr = BrainLifecycleManager(
-                project_root=root, live_yaml_path=str(live_yaml),
+                project_root=root,
+                live_yaml_path=str(live_yaml),
             )
             # Override with empty file
             empty_file = root / "empty.yaml"

@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -46,8 +47,16 @@ class TestTwoIndependentWALs:
 
         assert len(wal1) == 2
         assert len(wal2) == 2
-        assert wal1.read(0).payload["msg"] == "wal1-1"
-        assert wal2.read(0).payload["msg"] == "wal2-1"
+        rec1 = wal1.read(0)
+        assert (
+            rec1 is not None
+        )  # TECH_DEBT-009: wal.read 返回 WALRecord|None, 已 append 契约下恒非 None
+        assert rec1.payload["msg"] == "wal1-1"
+        rec2 = wal2.read(0)
+        assert (
+            rec2 is not None
+        )  # TECH_DEBT-009: wal.read 返回 WALRecord|None, 已 append 契约下恒非 None
+        assert rec2.payload["msg"] == "wal2-1"
 
         # Both have valid hash chains
         ok1, reason1 = wal1.verify_integrity()
@@ -112,8 +121,16 @@ class TestPhantomIndependentWAL:
         main_wal.append({"role": "main"})
         phantom_wal.append({"role": "phantom"})
 
-        assert main_wal.read(0).payload["role"] == "main"
-        assert phantom_wal.read(0).payload["role"] == "phantom"
+        rec_main = main_wal.read(0)
+        assert (
+            rec_main is not None
+        )  # TECH_DEBT-009: wal.read 返回 WALRecord|None, 已 append 契约下恒非 None
+        assert rec_main.payload["role"] == "main"
+        rec_phantom = phantom_wal.read(0)
+        assert (
+            rec_phantom is not None
+        )  # TECH_DEBT-009: wal.read 返回 WALRecord|None, 已 append 契约下恒非 None
+        assert rec_phantom.payload["role"] == "phantom"
 
         # Phantom has different config
         assert phantom_wal._config.fsync_on_write is False
@@ -144,7 +161,7 @@ class TestPhantomIndependentWAL:
         assert len(pw) == 1
 
         # Reset to shared WAL for safety
-        set_phantom_wal(None)
+        set_phantom_wal(cast(Any, None))  # TECH_DEBT-009: A3 探针
 
 
 class TestDiskQuota:
@@ -171,7 +188,9 @@ class TestDiskQuota:
         wal = WriteAheadLog(
             WALConfig(
                 path=tmp_wal_dir / "tiny_quota.jsonl",
-                disk_quota_mb=0.0001,  # ~100 bytes — will be exceeded quickly
+                disk_quota_mb=cast(
+                    Any, 0.0001
+                ),  # ~100 bytes — will be exceeded quickly (TECH_DEBT-009: A3 探针)
             )
         )
         # First append is small
@@ -188,7 +207,7 @@ class TestDiskQuota:
         wal = WriteAheadLog(
             WALConfig(
                 path=tmp_wal_dir / "empty_quota.jsonl",
-                disk_quota_mb=0.001,  # tiny quota
+                disk_quota_mb=cast(Any, 0.001),  # tiny quota (TECH_DEBT-009: A3 探针)
             )
         )
         # Don't append anything — file is empty

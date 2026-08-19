@@ -2,9 +2,11 @@
 
 FIX-20260619-049: Tier 2 zero-coverage breakout #4.
 """
+
 from __future__ import annotations
-import pytest
+
 from core.features.ofi_collector import OFICollector
+
 
 class TestOFICollector:
     def test_init_defaults(self) -> None:

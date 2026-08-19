@@ -15,6 +15,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from core.contracts.phantom_contract import (
@@ -301,7 +303,9 @@ class TestPhantomProduction:
         assert len(stubs) == 0
 
     def test_no_wal_configured_safe_noop(self) -> None:
-        set_phantom_wal(None)  # Test: deliberately pass None to test no-WAL path
+        set_phantom_wal(
+            cast(Any, None)
+        )  # Test: deliberately pass None to test no-WAL path (TECH_DEBT-009: A3 探针)
 
         def _pred(x: int) -> bool:
             return x > 0

@@ -7,10 +7,7 @@ Target: ≥85% line coverage on core/strategies/structural_swing_v1.py.
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
@@ -172,9 +169,7 @@ def test_nan_atr_blocks_trend() -> None:
     atr_val=st.floats(0.5, 20.0, allow_nan=False, allow_infinity=False),
 )
 @settings(max_examples=200)
-def test_barrier_sl_tp_ordering(
-    direction: str, ref_price: float, atr_val: float
-) -> None:
+def test_barrier_sl_tp_ordering(direction: str, ref_price: float, atr_val: float) -> None:
     """SL must always protect against adverse movement, TP in favorable direction."""
     strat = StructuralSwingV1(sl_atr_mult=3.0, tp_atr_mult=1.5)
     entry, sl, tp = strat._compute_barriers(direction, ref_price, atr_val)
@@ -205,9 +200,9 @@ def test_barrier_tp_minimum_floor(sl_mult: float, tp_mult: float, atr_val: float
     sl_dist = abs(entry - sl)
     tp_dist = abs(tp - entry)
 
-    assert tp_dist >= sl_dist * 0.3 - 1e-9, (
-        f"TP dist ({tp_dist:.4f}) < 0.3 × SL dist ({sl_dist:.4f})"
-    )
+    assert (
+        tp_dist >= sl_dist * 0.3 - 1e-9
+    ), f"TP dist ({tp_dist:.4f}) < 0.3 × SL dist ({sl_dist:.4f})"
 
 
 # ============================================================================
@@ -239,9 +234,7 @@ def test_evaluate_with_random_data_never_crashes(seed: int) -> None:
     strat = StructuralSwingV1()
 
     for idx in range(50, n):
-        result = strat.evaluate(
-            m5_open, m5_high, m5_low, m5_close, h1_close, bar_index=idx
-        )
+        result = strat.evaluate(m5_open, m5_high, m5_low, m5_close, h1_close, bar_index=idx)
         # Must not crash. May return None or a signal.
         if result is not None:
             assert result.direction in ("long", "short")

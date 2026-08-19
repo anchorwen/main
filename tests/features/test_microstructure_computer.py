@@ -23,7 +23,6 @@ from core.features.computers.microstructure_computer import (
     _safe_div,
 )
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # _safe_div
 # ═══════════════════════════════════════════════════════════════════════════
@@ -121,7 +120,11 @@ class TestResampleOHLC:
         highs = np.array([1.5, 2.5, 3.5])
         lows = np.array([0.5, 1.5, 2.5])
         rc, ro, rh, rl = MicrostructureFeatureComputer._resample_ohlc(
-            closes, opens, highs, lows, 1,
+            closes,
+            opens,
+            highs,
+            lows,
+            1,
         )
         assert np.array_equal(rc, closes)
         assert np.array_equal(ro, opens)
@@ -134,7 +137,11 @@ class TestResampleOHLC:
         highs = np.array([1.2, 2.2, 3.2, 4.2, 5.2, 6.2])
         lows = np.array([0.8, 1.8, 2.8, 3.8, 4.8, 5.8])
         rc, ro, rh, rl = MicrostructureFeatureComputer._resample_ohlc(
-            closes, opens, highs, lows, 3,
+            closes,
+            opens,
+            highs,
+            lows,
+            3,
         )
         assert len(rc) == 2  # 6 // 3
         assert ro[0] == 0.5  # first open of group 0

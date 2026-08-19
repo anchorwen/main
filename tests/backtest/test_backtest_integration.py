@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 from core.backtest.data_feed import Bar, DataFeed
 from core.backtest.engine import BacktestEngine
@@ -45,7 +46,9 @@ def _make_bars(n: int = 200, start_price: float = 2000.0, trend: float = 0.3) ->
 class TestRuleBasedStrategies:
     def test_barrier_rule_returns_none_on_short_history(self):
         bar = Bar(datetime.now(), 2000, 2005, 1995, 2002, 100)
-        assert _barrier_rule(bar, None, {"current_atr": 5.0}, []) is None
+        assert (
+            _barrier_rule(bar, cast(Any, None), {"current_atr": 5.0}, []) is None
+        )  # TECH_DEBT-009: 无 portfolio 探针 (A3)
 
     def test_barrier_rule_breaks_out_long(self):
         bars = _make_bars(30)
@@ -59,7 +62,9 @@ class TestRuleBasedStrategies:
             200,
         )
         history = bars + [_make_bars(10, start_price=2050, trend=-0.1)[0]]
-        signal = _barrier_rule(breakout_bar, None, {"current_atr": 5.0}, history[-30:])
+        signal = _barrier_rule(
+            breakout_bar, cast(Any, None), {"current_atr": 5.0}, history[-30:]
+        )  # TECH_DEBT-009: 无 portfolio 探针 (A3)
         # May or may not signal depending on exact values
         # Just verify it returns a valid format if it does
         if signal:
@@ -69,11 +74,15 @@ class TestRuleBasedStrategies:
 
     def test_micro_rule_returns_none_on_short_history(self):
         bar = Bar(datetime.now(), 2000, 2005, 1995, 2002, 100)
-        assert _micro_rule(bar, None, {"current_atr": 3.0}, [bar]) is None
+        assert (
+            _micro_rule(bar, cast(Any, None), {"current_atr": 3.0}, [bar]) is None
+        )  # TECH_DEBT-009: 无 portfolio 探针 (A3)
 
     def test_statarb_rule_returns_none_on_short_history(self):
         bar = Bar(datetime.now(), 2000, 2005, 1995, 2002, 100)
-        assert _statarb_rule(bar, None, {"current_atr": 5.0}, [bar]) is None
+        assert (
+            _statarb_rule(bar, cast(Any, None), {"current_atr": 5.0}, [bar]) is None
+        )  # TECH_DEBT-009: 无 portfolio 探针 (A3)
 
     def test_statarb_detects_extreme_z_score(self):
         """Generate bars where last close is 3 std below mean → should trigger long."""
@@ -84,7 +93,9 @@ class TestRuleBasedStrategies:
         history = bars[:-1] + [
             Bar(datetime.now(), extreme_low, extreme_low + 2, extreme_low - 2, extreme_low, 100)
         ]
-        signal = _statarb_rule(history[-1], None, {"current_atr": 5.0}, history)
+        signal = _statarb_rule(
+            history[-1], cast(Any, None), {"current_atr": 5.0}, history
+        )  # TECH_DEBT-009: 无 portfolio 探针 (A3)
         if signal:
             assert signal["direction"] == "long"
 

@@ -7,16 +7,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from core.brains.services.onnx_worker import run_worker
 
 
 class TestRunWorker:
     def test_load_failure_sends_error_and_returns(self) -> None:
         conn = MagicMock()
-        with patch("onnxruntime.InferenceSession", side_effect=RuntimeError("load err")), \
-             patch("onnxruntime.set_default_logger_severity"):
+        with (
+            patch("onnxruntime.InferenceSession", side_effect=RuntimeError("load err")),
+            patch("onnxruntime.set_default_logger_severity"),
+        ):
             run_worker(conn, "/fake/model.onnx")
 
         conn.send.assert_called_once()
@@ -30,8 +30,10 @@ class TestRunWorker:
         mock_session.get_inputs.return_value = [MagicMock(name="input")]
         mock_session.get_outputs.return_value = []
 
-        with patch("onnxruntime.InferenceSession", return_value=mock_session), \
-             patch("onnxruntime.set_default_logger_severity"):
+        with (
+            patch("onnxruntime.InferenceSession", return_value=mock_session),
+            patch("onnxruntime.set_default_logger_severity"),
+        ):
             run_worker(conn, "/fake/model.onnx")
 
         conn.send.assert_not_called()
@@ -43,8 +45,10 @@ class TestRunWorker:
         mock_session.get_inputs.return_value = [MagicMock(name="input")]
         mock_session.get_outputs.return_value = []
 
-        with patch("onnxruntime.InferenceSession", return_value=mock_session), \
-             patch("onnxruntime.set_default_logger_severity"):
+        with (
+            patch("onnxruntime.InferenceSession", return_value=mock_session),
+            patch("onnxruntime.set_default_logger_severity"),
+        ):
             run_worker(conn, "/fake/model.onnx")
 
     def test_invalid_request_type_sends_error(self) -> None:
@@ -54,8 +58,10 @@ class TestRunWorker:
         mock_session.get_inputs.return_value = [MagicMock(name="input")]
         mock_session.get_outputs.return_value = []
 
-        with patch("onnxruntime.InferenceSession", return_value=mock_session), \
-             patch("onnxruntime.set_default_logger_severity"):
+        with (
+            patch("onnxruntime.InferenceSession", return_value=mock_session),
+            patch("onnxruntime.set_default_logger_severity"),
+        ):
             run_worker(conn, "/fake/model.onnx")
 
         error_call = conn.send.call_args_list[0]

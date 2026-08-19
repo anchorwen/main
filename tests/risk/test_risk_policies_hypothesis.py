@@ -102,9 +102,7 @@ def test_position_limit_policy_invariants(
     is_open=st.booleans(),
 )
 @settings(max_examples=300)
-def test_drawdown_policy_invariants(
-    current_dd: float, max_dd: float, is_open: bool
-) -> None:
+def test_drawdown_policy_invariants(current_dd: float, max_dd: float, is_open: bool) -> None:
     """DrawdownPolicy: 3-tier system — DENY, ALLOW_LIMITED, ALLOW."""
     from core.risk.risk_policies import DrawdownPolicy
 
@@ -124,9 +122,9 @@ def test_drawdown_policy_invariants(
             assert result.get("constraint", {}).get("force_reduce_only") is True
     elif current_dd >= max_dd * 0.8:
         # Tier 2: warning zone
-        assert result["status"] == RiskDecisionStatus.ALLOW_LIMITED, (
-            f"dd={current_dd:.2f}%, max={max_dd}%, expected ALLOW_LIMITED, got {result['status']}"
-        )
+        assert (
+            result["status"] == RiskDecisionStatus.ALLOW_LIMITED
+        ), f"dd={current_dd:.2f}%, max={max_dd}%, expected ALLOW_LIMITED, got {result['status']}"
         assert result["constraint"]["max_risk_fraction"] == 0.5
     else:
         # Tier 3: safe
@@ -138,13 +136,11 @@ def test_drawdown_policy_invariants(
     max_dd=st.floats(0.01, 50.0, allow_nan=False),
 )
 @settings(max_examples=100)
-def test_drawdown_policy_never_exceeds_max_dd_deny(
-    current_dd: float, max_dd: float
-) -> None:
+def test_drawdown_policy_never_exceeds_max_dd_deny(current_dd: float, max_dd: float) -> None:
     """When current_dd < max_dd * 0.8, must be ALLOW (clean path)."""
-    from core.risk.risk_policies import DrawdownPolicy
-
     import math
+
+    from core.risk.risk_policies import DrawdownPolicy
 
     if not math.isfinite(current_dd) or not math.isfinite(max_dd):
         return  # skip NaN/Inf
@@ -153,9 +149,9 @@ def test_drawdown_policy_never_exceeds_max_dd_deny(
         policy = DrawdownPolicy(max_drawdown_pct=max_dd)
         intent = MockIntent(_is_open=True)
         result = policy.evaluate(intent, MagicMock(), {"current_drawdown_pct": current_dd})
-        assert result["status"] == RiskDecisionStatus.ALLOW, (
-            f"dd={current_dd} < 0.8×max={max_dd} should be ALLOW, got {result['status']}"
-        )
+        assert (
+            result["status"] == RiskDecisionStatus.ALLOW
+        ), f"dd={current_dd} < 0.8×max={max_dd} should be ALLOW, got {result['status']}"
 
 
 # ============================================================================
@@ -270,13 +266,15 @@ def test_mode_policy_liquidation_allows_close_intent() -> None:
 # ============================================================================
 def test_risk_service_picks_most_restrictive() -> None:
     """The most restrictive policy result must dominate."""
-    from core.risk.risk_policies import DrawdownPolicy, PositionLimitPolicy
     from core.risk.risk_evaluation_service import RiskEvaluationService
+    from core.risk.risk_policies import DrawdownPolicy, PositionLimitPolicy
 
-    svc = RiskEvaluationService([
-        PositionLimitPolicy(max_open_positions=1),
-        DrawdownPolicy(max_drawdown_pct=10.0),
-    ])
+    svc = RiskEvaluationService(
+        [
+            PositionLimitPolicy(max_open_positions=1),
+            DrawdownPolicy(max_drawdown_pct=10.0),
+        ]
+    )
 
     intent = MockIntent(_is_open=True, intent_id="test-1")
     snapshot = MockControlSnapshot.with_mode("active")
@@ -312,8 +310,12 @@ def test_signal_rejects_invalid_side() -> None:
     with pytest.raises(ValueError, match="side"):
         Signal(
             schema_version="signal.v1",
-            signal_id="s1", strategy_id="st1", symbol="XAUUSDc",
-            side="foobar", strength=0.5, confidence=0.5,
+            signal_id="s1",
+            strategy_id="st1",
+            symbol="XAUUSDc",
+            side="foobar",
+            strength=0.5,
+            confidence=0.5,
             generated_at=datetime.now(UTC),
         )
 
@@ -327,8 +329,12 @@ def test_signal_rejects_out_of_bounds_strength() -> None:
     with pytest.raises(ValueError, match="strength"):
         Signal(
             schema_version="signal.v1",
-            signal_id="s1", strategy_id="st1", symbol="XAUUSDc",
-            side="buy", strength=1.5, confidence=0.5,
+            signal_id="s1",
+            strategy_id="st1",
+            symbol="XAUUSDc",
+            side="buy",
+            strength=1.5,
+            confidence=0.5,
             generated_at=datetime.now(UTC),
         )
 
@@ -342,8 +348,12 @@ def test_signal_rejects_negative_confidence() -> None:
     with pytest.raises(ValueError, match="confidence"):
         Signal(
             schema_version="signal.v1",
-            signal_id="s1", strategy_id="st1", symbol="XAUUSDc",
-            side="buy", strength=0.5, confidence=-0.1,
+            signal_id="s1",
+            strategy_id="st1",
+            symbol="XAUUSDc",
+            side="buy",
+            strength=0.5,
+            confidence=-0.1,
             generated_at=datetime.now(UTC),
         )
 
@@ -356,8 +366,12 @@ def test_signal_accepts_valid_input() -> None:
 
     s = Signal(
         schema_version="signal.v1",
-        signal_id="s1", strategy_id="st1", symbol="XAUUSDc",
-        side="buy", strength=0.8, confidence=0.75,
+        signal_id="s1",
+        strategy_id="st1",
+        symbol="XAUUSDc",
+        side="buy",
+        strength=0.8,
+        confidence=0.75,
         generated_at=datetime.now(UTC),
         reason="test",
     )
@@ -372,9 +386,7 @@ def test_signal_accepts_valid_input() -> None:
     side=st.sampled_from(["buy", "sell", "hold", "flat"]),
 )
 @settings(max_examples=200)
-def test_signal_valid_range_never_rejects(
-    strength: float, confidence: float, side: str
-) -> None:
+def test_signal_valid_range_never_rejects(strength: float, confidence: float, side: str) -> None:
     """Any combination of valid inputs must construct successfully."""
     from datetime import UTC, datetime
 
@@ -383,7 +395,11 @@ def test_signal_valid_range_never_rejects(
     # Must not raise
     Signal(
         schema_version="signal.v1",
-        signal_id="s1", strategy_id="st1", symbol="XAUUSDc",
-        side=side, strength=strength, confidence=confidence,
+        signal_id="s1",
+        strategy_id="st1",
+        symbol="XAUUSDc",
+        side=side,
+        strength=strength,
+        confidence=confidence,
         generated_at=datetime.now(UTC),
     )
