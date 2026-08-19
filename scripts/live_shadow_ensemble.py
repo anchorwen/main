@@ -281,7 +281,9 @@ def _resolve_swing35_feature_vector(
         try:
             from core.features.computers.daily_computer import DailyFeatureComputer
 
-            cross_assets = {name: str(p) for name, p in _XAU_CROSS_CSVS.items() if p.exists()}
+            cross_assets: dict[str, str | Path] = {
+                name: p for name, p in _XAU_CROSS_CSVS.items() if p.exists()
+            }
             comp = DailyFeatureComputer(
                 d1_csv=str(_XAU_D1_CSV),
                 h4_csv=str(_XAU_H4_CSV),

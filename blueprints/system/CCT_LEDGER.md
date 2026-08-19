@@ -1824,3 +1824,19 @@
   - Source 3: `scripts/_audit_xau_tp_shrink_20260817.py` stdout (RR 轨迹 1.73→0.527 / 0.98→0.385, 触发 ATR ratio 0.791/0.790)
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL
+
+### CCT-20260819-003
+- **Docket ID**: DQAF-20260819-003
+- **日期**: 2026-08-19
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 5 红线文件 8 处 mypy 错误被 RED_LINE_FROZEN_ALLOWANCE 冻结 (TECH_DEBT-008), 其中 live_intent_loop.py zombie-fuse 告警块在引擎死循环熔断时**从不送达** — 熔断信号全静默, 运维侧只能读到本地 watchdog_kill.log, 无人收到钉钉/告警.
+  - [Layer 2 — 中间异常]: zombie-fuse 块三重错配全触发: `_ah = getattr(state, "_alert_hub", None)` 恒 None (全模块零 `_alert_hub=` 赋值) → fallback 构造 `LiveAlertHub(log_dir=..., ding_webhook_url=...)` — 两参数在现行签名 (base_dir/symbol/dingtalk_url/dingtalk_secret) 中不存在 → TypeError; `.fire(...)` 方法不存在 (现行 `send_critical`) → AttributeError; 整块被 `except (RuntimeError, ValueError, KeyError, TypeError, OSError): pass` (BLE001:FOG) 吞掉 → 熔断信号从未送达.
+  - [Layer 3 — 根因]: L2 (RC-06 contract-violation) — LiveAlertHub 接口演进后 zombie-fuse 调用点未迁移 (构造参数 + 方法 + state 字段三错配), 叠加 BLE001 吞异常 → 告警全静默. 其余 7 处 L1 — 类型声明与实现不一致 (market_ingress `_compute_atr_from_rates`), 调用处未传必参 (live_cycle DataHealthService/feature_vector_sample), 不必要的 str() 转换 (shadow_ensemble), 变量名复用 (governance_scheduler `_jm`). 冻结清单 = 掩蔽层, 真实危险是行为级静默.
+- **证据引用**:
+  - Source 1: `scripts/live_intent_loop.py:2413-2431` zombie-fuse 告警块 (修复前: `getattr(state, "_alert_hub", None)` + `LiveAlertHub(log_dir=..., ding_webhook_url=...)` + `.fire(...)`)
+  - Source 2: `scripts/_mypy_scope.py` RED_LINE_FROZEN_ALLOWANCE (修复前 5 文件 8 错)
+  - Source 3: `core/observability/live_alert_hub.py` 现行契约 `__init__(base_dir, *, symbol, dingtalk_url, dingtalk_secret)` + `send_critical(reason, detail)` (无 log_dir/ding_webhook_url/fire)
+  - Source 4: 修复后 `python -m mypy --follow-imports=normal` 5 文件 EXIT=0 + 针对性回归 296 passed + 回归锁 3 passed
+- **是否被推翻**: 否 (AR: "type: ignore 压制即可" 被推翻 — 告警 bug 是运行时异常非类型问题, 压制让静默永久化; "state._alert_hub 恒 None 是设计" 被推翻 — 全模块零赋值)
+- **关联 ReB Pattern**: FROZEN_DEBT_MASKING_LIVE_BUG / LIVE_ALERT_HUB_SIG_DRIFT

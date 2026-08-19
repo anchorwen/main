@@ -1,1 +1,3 @@
-{}
+{
+  "tests/deployment/test_tech_debt_010_death_of_defaults.py": 1
+}

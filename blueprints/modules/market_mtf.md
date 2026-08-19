@@ -49,6 +49,7 @@ Completed M15 bars: [{time, open, high, low, close, hl2, ohlc4}, ...]
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260819-003 | 2026-08-19 | cursor-agent | (pending) | **TECH_DEBT-008 清偿: `_compute_atr_from_rates` 签名补 None 声明** — 实现已含 `rates is None` 短路返回 0.0 (FaultTolerantContext rates 为 Any|None), 签名未声明 → 红线类型债 (TECH_DEBT-008 冻结). 签名改 `rates: list[dict[str, float]] | None`, 行为零变化 (None 已处理). | L1 — 类型声明与实现不一致 |
 | FIX-20260805-003 | 2026-08-05 | cursor-agent | — | **RBI-1 清偿: merge 脚本回迁 `scripts/_merge_aligned_multitf_data.py` (8/19 补给仪式阻断移除)**. 08-01 归档至 scripts/archive/ (gitignore 区=退役语义) 致 ROOT=parent.parent 少退一层 → DATA_RAW 指向 D:\future\scripts\data\raw (不存在) → 补给仪式首步 [FATAL] BTC backbone not found. 回迁修复 + 过时 Next 提示修正 (build_btc_expected_r_dataset→build_btc_dataset_from_ssot) + 预存 B007 清偿. 验证: ROOT->D:\future, 干跑 EXIT=0 (50,000 bars). | RC-09 — config-drift: 非退役脚本被误归档 |
 | FIX-20260523-004 | 2026-05-23 | cursor-agent | — | MTFPriceService created: decoupled M15 bar reconstruction from M5 tick history. Bar-boundary gating ensures M15 brain only evaluated at 00/15/30/45. Enabled statarb_m15 with dedicated OU brain config. | RC-06 (missing infrastructure — M15 mid_price pipeline never implemented) |
 

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-19T05:51:51Z
+> **自动生成**: 2026-08-19T10:56:56Z
 > **扫描模块数**: 820
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -532,10 +532,10 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5154 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5158 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 18 | 2667 | — | |
-| `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
+| `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
 | `modify_trail_dispatch.py` | ✅ active | — | 1 | 168 | — | |
@@ -688,7 +688,7 @@
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
-| `_mypy_scope.py` | ✅ active | — | 2 | 55 | — | |
+| `_mypy_scope.py` | ✅ active | — | 2 | 51 | — | |
 | `_reconcile_zombie_4454299643_20260807.py` | ✅ active | — | 3 | 200 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
@@ -819,12 +819,12 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2817 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2828 | — | |
 | `live_launcher.py` | ✅ active | — | 16 | 1282 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |
-| `live_shadow_ensemble.py` | ✅ active | — | 12 | 551 | — | |
+| `live_shadow_ensemble.py` | ✅ active | — | 12 | 553 | — | |
 | `live_shadow_intent_producer.py` | ✅ active | — | 7 | 260 | — | |
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
@@ -1028,7 +1028,7 @@
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
 | `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
-| `governance_scheduler.py` | ✅ active | — | 9 | 935 | — | |
+| `governance_scheduler.py` | ✅ active | — | 9 | 937 | — | |
 | `label_builder.py` | ✅ active | — | 19 | 1047 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |

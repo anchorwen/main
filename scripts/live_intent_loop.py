@@ -2410,16 +2410,27 @@ def main(argv: list[str] | None = None) -> int:
                     try:  # BLE001:FOG (was: FOG/LAC)
                         from core.observability.live_alert_hub import LiveAlertHub
 
-                        _ah = getattr(state, "_alert_hub", None)
+                        # TECH_DEBT-008: 修复 zombie-fuse 告警全静默 bug — LiveAlertHub
+                        # 构造参数签名漂移 (base_dir/symbol, 非 log_dir/ding_webhook_url)
+                        # + 告警方法漂移 (send_critical, 非 fire()) + state._alert_hub
+                        # 恒 None (从未赋值) 三重合 → 旧代码 TypeError+AttributeError 被
+                        # BLE001:FOG 吞掉 → 熔断信号从未送达, 只剩本地 watchdog_kill.log.
+                        # 优先复用 main() 已构造的 alert_hub (args.alert=True 时携带真实
+                        # webhook), 否则 fallback 构造 (无 webhook → send_critical 入队
+                        # → 队列满时 _write_fallback_alert 落盘, 不再全静默).
+                        _ah = alert_hub or getattr(state, "_alert_hub", None)
                         if _ah is None:
-                            _ah = LiveAlertHub(
-                                log_dir=f"{config.base_dir}/logs",
-                                ding_webhook_url=getattr(config, "ding_webhook_url", ""),
+                            _zm_symbol = args.symbol or (
+                                "BTCUSDc" if "btc" in str(config.base_dir).lower() else "XAUUSDc"
                             )
-                        _ah.fire(
+                            _ah = LiveAlertHub(
+                                base_dir=config.base_dir,
+                                symbol=_zm_symbol,
+                                dingtalk_url=args.dingtalk_webhook or "",
+                                dingtalk_secret=args.dingtalk_secret or "",
+                            )
+                        _ah.send_critical(
                             "zombie_cycle_fuse_blown",
-                            severity="critical",
-                            title="[DQAF-002] 连续循环异常熔断触发",
                             detail={
                                 "consecutive_errors": _consec,
                                 "last_error_type": type(exc).__name__,

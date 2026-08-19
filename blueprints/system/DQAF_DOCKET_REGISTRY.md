@@ -308,3 +308,15 @@
 - **Fix (缓解)**: 投委会 2026-08-17 行动令 — 物理冻结 m15/m30/h1_swing (configs/live.yaml enabled:false, commit 09f09ea2) 切断新开仓; **TECH_DEBT-019** 建档 (三条修复蓝图 8/19 后清偿: ①RR 硬底线 max(Dynamic_TP_dist, Current_SL_dist×min_rr_ratio) ②波动率对称耦合 ③弹性恢复). 在仓 2 单继续 trail/watchdog 管理至平仓. 根因修复 Deferred (8/19 决战冻结期零代码).
 - **ReB**: TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL
 - **Status**: **CLOSED (mitigated)** — 冻结缓解已落地 + TECH_DEBT-019 根因修复 Deferred 至 8/19 后
+
+- **Docket ID**: DQAF-20260819-003
+- **Date**: 2026-08-19
+- **Severity**: Sev 2
+- **Title**: TECH_DEBT-008 清偿 — zombie-fuse 熔断告警静默 (LIVE_ALERT_HUB_SIG_DRIFT / FROZEN_DEBT_MASKING_LIVE_BUG)
+- **Evidence**: 8 处 RED_LINE_FROZEN_ALLOWANCE unified 错误, `python -m mypy --follow-imports=normal` 精确复现. live_intent_loop.py:2413-2431 zombie-fuse 告警块三重错配: `_ah = getattr(state, "_alert_hub", None)` 恒 None (全模块零 `_alert_hub =` 赋值) → fallback `LiveAlertHub(log_dir=f"{config.base_dir}/logs", ding_webhook_url=...)` — `log_dir`/`ding_webhook_url` 参数不存在 (实际签名 `base_dir`/`symbol`/`dingtalk_url`/`dingtalk_secret`) → TypeError; `.fire("zombie_cycle_fuse_blown", ...)` 方法不存在 (现行 `send_critical(reason, detail)`) → AttributeError; 整块被 `except (RuntimeError, ValueError, KeyError, TypeError, OSError): pass` (BLE001:FOG) 吞掉 → 熔断信号从未送达, 只剩本地 watchdog_kill.log + `_os_module._exit(3)`.
+- **DA**: zombie-fuse 是引擎死循环的**最后生存信号** — 静默化 = 运维在引擎已死时毫不知情 (仅本地 log); 8 处类型债中 6 处纯声明/调用点 (L1, 零行为风险), 危险分子是 zombie-fuse 行为级缺陷 (L2).
+- **AR**: "type: ignore 压制即可" → 被推翻 (告警 bug 是运行时 TypeError/AttributeError 非类型问题, 压制只会让静默永久化); "state._alert_hub 恒 None 是设计" → 被推翻 (全模块 grep 零赋值, 从无此状态字段, 每 cycle fallback 构造必 TypeError).
+- **Root Cause**: L2 (RC-06 contract-violation) — LiveAlertHub 接口演进后 zombie-fuse 调用点未迁移 (构造参数 + 方法 + state 字段三错配), 叠加 BLE001 吞异常 → 熔断告警全静默. 其余 7 处 L1 — 类型声明与实现不一致 / 调用处未传必参 / 变量名复用 (market_ingress ×2 / live_cycle ×2 / shadow_ensemble ×1 / governance_scheduler ×1).
+- **Fix**: FIX-20260819-003 — zombie-fuse 块改 `_ah = alert_hub or getattr(state, "_alert_hub", None)` (main 局部变量 args.alert=True 时带真实 webhook) → None 时 fallback `LiveAlertHub(base_dir=config.base_dir, symbol=<args.symbol 或 base_dir 推导>, dingtalk_url=args.dingtalk_webhook or "", dingtalk_secret=args.dingtalk_secret or "")` + `_ah.send_critical("zombie_cycle_fuse_blown", detail={consecutive_errors/last_error_type/last_error/last_traceback/cycle_count})`; 保留 BLE001:FOG (fuse 触发不阻断 exit). 其余 7 处: market_ingress `_compute_atr_from_rates` 签名补 `| None` (实现已 None-guard) ×2; live_cycle feature_vector_sample 调用处 `list()` 转换 + `DataHealthService(base_dir, symbol, mode="light")` ×2; live_shadow_ensemble cross_assets 去 `str()` 注解 `dict[str, str | Path]` ×1; governance_scheduler `_jm` → `_leaked_metrics` ×1. **RED_LINE_FROZEN_ALLOWANCE 全数删除** + `pre_commit_mypy.py --update-baseline` 重生成 (仅剩 test_tech_debt_010 隔离模式 unused-ignore 伪差 1, 非新债). 回归锁 3 (tests/deployment/test_tech_debt_008_alert_hub_contract.py).
+- **ReB**: FROZEN_DEBT_MASKING_LIVE_BUG / LIVE_ALERT_HUB_SIG_DRIFT
+- **Status**: **CLOSED** — FIX-20260819-003 (8 处根因清除, mypy unified EXIT=0, 针对性回归 296 + 新锁 3 全绿)

@@ -53,8 +53,12 @@ _TF_STR_TO_MT5: dict[str, int] = {
 }
 
 
-def _compute_atr_from_rates(rates: list[dict[str, float]], period: int = 14) -> float:
-    """Compute ATR from MT5 rates array — pure math, no I/O."""
+def _compute_atr_from_rates(rates: list[dict[str, float]] | None, period: int = 14) -> float:
+    """Compute ATR from MT5 rates array — pure math, no I/O.
+
+    #10 hot-path: 调用侧 (FaultTolerantContext) rates 为 Any|None, 实现已含
+    ``rates is None`` 短路返回 0.0; 签名补齐 None 声明消除红线类型债 (TECH_DEBT-008).
+    """
     import numpy as np
 
     if rates is None or len(rates) < period + 1:

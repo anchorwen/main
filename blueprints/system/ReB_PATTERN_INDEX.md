@@ -1685,3 +1685,21 @@
 - **定义**: TP 动态追踪 (ATR 收缩时向内收窄) 与 SL 距离/RR **零耦合** — TP Floor 用 max()/min() 语义只防"太激进(TP 太远)", 不保"RR≥1"; Proximity Gate 仅防末程; TP 只缩不放 → 波动率收缩后运行中 RR 坍缩 (0.527/0.385), 止盈空间<止损空间负期望, 且 SL 引擎独立 (Chandelier) 全程不动. FIX-20260709-004 曾修同族 (只放大 candidate 距离未堵 RR 耦合缺口) → 复发.
 - **预防**: (1) trail_dispatch 下发前注入 RR 耦合断言 `TP_floor_dist = max(Dynamic_TP_dist, Current_SL_dist × min_rr_ratio)`; (2) 波动率对称耦合 — ATR 收缩收紧 TP 时 SL 同步同比例收紧, 维持 RR≥1.0 数学期望; (3) 弹性恢复 — Proximity 70% 警戒线内 ATR 恢复时 TP 复放至开仓初始距离 (废除只缩不放).
 - **检测**: 对在仓单快照 (position_snapshots.jsonl) 周期计算运行中 RR = TP 距离/SL 距离, 跌破策略 min_rr_ratio 即告警; `scripts/_audit_xau_tp_shrink_20260817.py` 可复现. 8/19 决战冻结期零代码, 清偿随 TECH_DEBT-019.
+
+### ReB-20260819-FROZEN_DEBT_MASKING_LIVE_BUG
+- **Pattern Signature**: `FROZEN_DEBT_MASKING_LIVE_BUG`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-003
+- **Related**: FIX-20260819-003, TECH_DEBT-008, ReB-20260819-LIVE_ALERT_HUB_SIG_DRIFT
+- **定义**: 静态类型债冻结清单 (RED_LINE_FROZEN_ALLOWANCE / mypy-baseline) 把"会说话的类型错误"当作纯静态问题冻结推迟, 而**同一代码行上的运行时异常被 BLE001 宽 except 吞掉** → 冻结掩盖了行为级静默缺陷. 表现: 8 处类型错中 7 处确为 L1 声明/调用点 (冻结无害), 但第 8 处 zombie-fuse 告警块是 L2 行为缺陷 — 类型错误只是它"被冻结点名"的方式, 真实故障 (熔断告警永不送达) 一直在线下运行. 冻结 = 把修复信号当噪音归档.
+- **预防**: (1) 冻结任何 mypy 错误前, 逐行检查该错误所在代码块是否有运行时异常路径被宽 except 吞没 — 类型错误点往往就是静默逻辑缺陷点; (2) 冻结条目必须附"该错误是纯类型还是行为"定性, 行为级一律立即修, 禁止推迟; (3) 清偿冻结债务时按"根因分层"逐处归类 (L1/L2/L3), 不能全部当 L1 类型债一起刷; (4) BLE001 宽 except 后接 logging 会掩盖信号 — 关键告警路径 (熔断/健康/风控) 禁止吞异常, 吞之前先问"这个异常被吞会怎样".
+- **检测**: 清偿冻结清单时逐条 `grep` 错误行所在 try/except 块, 检查是否有 `except (..., TypeError, OSError): pass` 覆盖运行时调用点; 对含外部接口调用的行 (LiveAlertHub/Webhook/API) 用 `python -m mypy --follow-imports=normal` 复现确认非纯类型.
+
+### ReB-20260819-LIVE_ALERT_HUB_SIG_DRIFT
+- **Pattern Signature**: `LIVE_ALERT_HUB_SIG_DRIFT`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-003
+- **Related**: FIX-20260819-003, TECH_DEBT-008
+- **定义**: 外部接口 (LiveAlertHub) 构造参数签名与方法演进后, 历史调用点未迁移 — 三重错配: 构造 kwargs (log_dir/ding_webhook_url 已死, 现行 base_dir/symbol/dingtalk_url/dingtalk_secret), 方法名 (fire() 已死, 现行 send_critical), 状态字段引用 (state._alert_hub 从未存在). 若调用点被 BLE001 宽 except 包裹 → 每次调用抛异常被吞, 接口升级的信号全部丢失.
+- **预防**: (1) 接口演进必须同步 grep 全仓调用点 (构造 kwargs + 方法名 + 状态字段三向), 不能只改定义; (2) 对"吞异常"的调用块加一次性告警 (首次异常落盘/打点), 防永久静默; (3) LiveAlertHub 类增加 `__init_subclass__`/descriptor 层防御? 否 — 正确做法是调用点测试锁契约 (`tests/deployment/test_tech_debt_008_alert_hub_contract.py` 锁构造/方法/hasattr(fire)==False).
+- **检测**: `grep -rn "LiveAlertHub("` 全仓核对构造 kwargs; `grep -rn "\.fire("` 在 observability 域内应为 0; 回归锁 `test_tech_debt_008_alert_hub_contract.py` 每次 CI 断言契约不变.

@@ -561,9 +561,11 @@ def run_governance_cycle(
                 _dict_leaks,
             )
             for _bid in _dict_leaks:
-                _jm = all_metrics[_bid]
-                if isinstance(_jm, dict):
-                    all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _jm)
+                # TECH_DEBT-008: 换用独立变量名 — _jm 已在上方绑定 dict[str,Any],
+                # 复用导致与 all_metrics[_bid] (BrainPnLMetrics) 类型冲突。
+                _leaked_metrics = all_metrics[_bid]
+                if isinstance(_leaked_metrics, dict):
+                    all_metrics[_bid] = _dict_to_pnl_metrics(_bid, _leaked_metrics)
         if all_metrics:
             # ── DQAF-063 P0: Ghost registration guard ──
             # PnL ledger retains archived brain metrics indefinitely (no GC).

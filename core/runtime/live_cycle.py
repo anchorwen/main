@@ -4051,7 +4051,7 @@ def execute_live_cycle(
                 session_volume_mult=session_info.get("volume_mult", 1.0),
                 health_volume_mult=state._last_health_volume_mult or 1.0,
                 hurst=_m5_hurst,  # FIX-20260607-143: trend maturity observability
-                feature_vector_sample=_fv_sample,
+                feature_vector_sample=(list(_fv_sample) if _fv_sample is not None else None),
                 data_dir=config.base_dir,
             )
 
@@ -4147,7 +4147,11 @@ def execute_live_cycle(
                         DataHealthService,
                     )
 
-                    _dh = DataHealthService()
+                    _dh = DataHealthService(
+                        base_dir=config.base_dir,
+                        symbol=config.symbol,
+                        mode="light",  # per-cycle <50ms: 仅 CRITICAL 级, tail reads
+                    )
                     _alert_method = getattr(_dh, "record_incident", None)
                     if _alert_method is not None:
                         _alert_method(

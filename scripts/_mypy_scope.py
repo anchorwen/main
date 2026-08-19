@@ -30,13 +30,9 @@ FORENSIC_PREFIXES: tuple[str, ...] = (
 # Unified-check error allowances for red-line frozen files (see module docstring).
 # Post-8/19 cleanup trigger: fix the root causes, then REMOVE the entry + re-run
 # `python scripts/pre_commit_mypy.py --update-baseline`.
-RED_LINE_FROZEN_ALLOWANCE: dict[str, int] = {
-    "core/runtime/market_ingress.py": 2,  # _compute_atr_from_rates Any|None arg (None-guard post-8/19)
-    "core/runtime/live_cycle.py": 1,  # DataHealthService() LIGHT-mode base_dir/symbol (fail-open best-effort)
-    "scripts/live_intent_loop.py": 3,  # LiveAlertHub sig drift → base_dir + evaluate_and_dispatch (zombie-fuse alert fail-open)
-    "scripts/live_shadow_ensemble.py": 1,  # cross_assets dict[str,str] vs str|Path invariance
-    "scripts/training/governance_scheduler.py": 1,  # FIX-043 leak conversion _jm typing
-}
+# TECH_DEBT-008 已清偿 (FIX-20260819-003): 8 处根因清除 (含 zombie-fuse 告警静默),
+# allowance 全数删除 — 冻结期结束。
+RED_LINE_FROZEN_ALLOWANCE: dict[str, int] = {}
 
 
 def is_forensic(rel_path: str) -> bool:
