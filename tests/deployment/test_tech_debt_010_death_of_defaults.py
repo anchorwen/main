@@ -153,6 +153,73 @@ def test_shadow_veto_passes_with_stub_adapter(tmp_path, monkeypatch):
     assert built[0][1][0].adapter_name == "stub"
 
 
+def test_shadow_veto_accepts_explicit_stub_env_declaration(tmp_path, monkeypatch):
+    """QUANTOS_SHADOW_ADAPTER=stub 显式声明 → 影子容器合法构建 (CI fixture 场景).
+
+    CI 基线生成 (ci_prepare_v9_shadow_fixtures.py) 是确定性 stub-only 场景,
+    经声明通道绕过生产 live.yaml 的 mt5_zmq 继承 (DQAF-20260819-006).
+    """
+    from apps.engine import bootstrap_v9
+
+    cfg_dir = tmp_path / "configs"
+    cfg_dir.mkdir()
+    # 生产 live.yaml 声明 mt5_zmq (仓库现状) — 未声明 env 时必被 veto
+    (cfg_dir / "live.yaml").write_text("adapter:\n  name: mt5_zmq\n", encoding="utf-8")
+    monkeypatch.setattr(bootstrap_v9, "_repo_root", lambda: tmp_path)
+    monkeypatch.setenv("QUANTOS_SHADOW_ADAPTER", "stub")
+
+    built = []
+
+    class _FakeRegistry:
+        def register(self, *a, **k):
+            return None
+
+    class _FakeGov:
+        def register_brain(self, *a, **k):
+            return None
+
+    class _FakeContainer:
+        def __init__(self):
+            self.brain_registry = _FakeRegistry()
+            self.governance_service = _FakeGov()
+
+        def build(self):
+            return self
+
+    class _FakeServiceContainer:
+        def __init__(self, *a, **k):
+            built.append(("container", a, k))
+
+        def build(self):
+            return _FakeContainer()
+
+    monkeypatch.setattr(bootstrap_v9, "ServiceContainer", _FakeServiceContainer)
+    monkeypatch.setattr(bootstrap_v9, "_wire_meta_pipeline", lambda *a, **k: None)
+
+    container = bootstrap_v9.build_v9_shadow_container()
+    assert container.brain_registry is not None
+    assert container.governance_service is not None
+    # env 声明 stub 优先于 live.yaml 的 mt5_zmq
+    assert built[0][1][0].adapter_name == "stub"
+
+
+def test_shadow_veto_env_network_adapter_still_blocked(tmp_path, monkeypatch):
+    """QUANTOS_SHADOW_ADAPTER=mt5_zmq 显式声明 → veto 照常拦截 (谓词零削弱).
+
+    声明通道不豁免网络适配器 — 任何来源解析到网络适配器一律宕机.
+    """
+    from apps.engine import bootstrap_v9
+
+    cfg_dir = tmp_path / "configs"
+    cfg_dir.mkdir()
+    # live.yaml 是 stub, 但 env 显式声明网络适配器 → 仍被 veto
+    (cfg_dir / "live.yaml").write_text("adapter:\n  name: stub\n", encoding="utf-8")
+    monkeypatch.setattr(bootstrap_v9, "_repo_root", lambda: tmp_path)
+    monkeypatch.setenv("QUANTOS_SHADOW_ADAPTER", "mt5_zmq")
+    with pytest.raises(DataIntegrityError, match="Shadow Veto"):
+        bootstrap_v9.build_v9_shadow_container()
+
+
 # ── Blueprint C5: modify_trail_dispatch endpoint 注入 ───────────────────
 
 

@@ -410,6 +410,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/normalize_journal_pnl.py",  # FIX-20260627-148: MT5 terminal path auto-resolve
         "scripts/backfill_journal_pnl.py",
         "scripts/analyze_shadow_exit.py",  # FIX-20260703-002: T24 V6 shadow analysis
+        "scripts/ci_prepare_v9_shadow_fixtures.py",  # FIX-20260819-006: CI shadow fixture prep (stub-declared)
     ],
     "runtime_state": [
         "core/state/",

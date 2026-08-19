@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-19T13:58:08Z
+> **自动生成**: 2026-08-19T14:26:25Z
 > **扫描模块数**: 820
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -10,7 +10,7 @@
 |------|------|----|------|------|------|------|
 | `backtest_runner.py` | ✅ active | BacktestRunner, BacktestResult | 6 | 154 | — | |
 | `batch_processor.py` | ✅ active | BatchProcessor | 3 | 78 | — | |
-| `bootstrap_v9.py` | ✅ active | — | 6 | 240 | — | |
+| `bootstrap_v9.py` | ✅ active | — | 7 | 259 | — | |
 | `cli.py` | ✅ active | — | 42 | 1559 | — | |
 | `communication_ops_cli.py` | ✅ active | — | 7 | 137 | — | |
 | `communication_summary_contract.py` | ✅ active | — | 1 | 71 | — | |
@@ -757,7 +757,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 759 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 760 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -766,7 +766,7 @@
 | `check_symbol_liveness.py` | ✅ active | LivenessVerdict | 8 | 364 | — | |
 | `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1179 | — | |
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |
-| `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
+| `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 188 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
 | `clean_ledger_bloat.py` | ✅ active | — | 2 | 192 | — | |
 | `cleanup_claude_transcripts.py` | ✅ active | — | 2 | 100 | — | |

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from core.brains.services.brain_registry_loader import BrainRegistryLoader
@@ -169,10 +170,32 @@ def build_v9_shadow_runtime_loop():
     return container.build_runtime_loop()
 
 
-def build_v9_shadow_container() -> ServiceContainer:
-    """Build a fully wired ServiceContainer for V9 shadow mode."""
+def _resolve_shadow_adapter_name(live_yaml_path: Path) -> str:
+    """Resolve the adapter name for a shadow container build.
+
+    Priority: QUANTOS_SHADOW_ADAPTER (explicit declaration by a legitimate shadow
+    builder — CI fixture prep / tests) > configs/live.yaml > 'stub'.
+    The Shadow Veto below still hard-blocks ANY network adapter regardless of how
+    the name was resolved — this channel only lets a caller declare a NON-network
+    adapter explicitly. CI baseline generation (stub feature sources, no MT5/ZMQ)
+    is a deterministic stub-only scenario and must not inherit the production
+    adapter name (DQAF-20260819-006).
+    """
+    override = os.environ.get("QUANTOS_SHADOW_ADAPTER", "").strip()
+    if override:
+        return override
     import yaml
 
+    adapter_name = "stub"
+    if live_yaml_path.exists():
+        with open(live_yaml_path, encoding="utf-8") as f:
+            live_cfg = yaml.safe_load(f) or {}
+        adapter_name = live_cfg.get("adapter", {}).get("name", "stub")
+    return adapter_name
+
+
+def build_v9_shadow_container() -> ServiceContainer:
+    """Build a fully wired ServiceContainer for V9 shadow mode."""
     # ── The Shadow Veto (TECH_DEBT-010, Blueprint A) ──────────────────────
     # 影子系统永不发起真实网络请求。adapter_name 若解析为生产网络适配器
     # (mt5_zmq / mt5 / fix / file_queue 等非 stub), 直接宕机 (DataIntegrityError)。
@@ -182,11 +205,7 @@ def build_v9_shadow_container() -> ServiceContainer:
     # FIX-20260806-006 声称的缓解从未提交)。此 veto 为物理硬断言, 不短路不告警。
     _NETWORK_ADAPTERS = {"mt5", "mt5_zmq", "fix", "file_queue"}
     live_yaml_path = _repo_root() / "configs" / "live.yaml"
-    adapter_name = "stub"
-    if live_yaml_path.exists():
-        with open(live_yaml_path, encoding="utf-8") as f:
-            live_cfg = yaml.safe_load(f) or {}
-        adapter_name = live_cfg.get("adapter", {}).get("name", "stub")
+    adapter_name = _resolve_shadow_adapter_name(live_yaml_path)
     if adapter_name in _NETWORK_ADAPTERS:
         raise DataIntegrityError(
             "Shadow Veto (TECH_DEBT-010 Blueprint A): 影子容器禁止加载生产网络适配器 "

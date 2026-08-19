@@ -7,6 +7,7 @@ Run after ``pip install -e ".[dev]"`` from the checkout root.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -18,6 +19,13 @@ def _write_json(path: str, payload: object) -> None:
 
 
 def main() -> int:
+    # CI fixture prep is definitionally stub-isolated: the shadow container is
+    # built with pure in-memory stub feature sources (no MT5/ZMQ). Declare stub
+    # explicitly so the Shadow Veto (TECH_DEBT-010 Blueprint A, bootstrap_v9)
+    # sees a declared non-network adapter instead of inheriting the repo's
+    # production adapter name (mt5_zmq) from configs/live.yaml (DQAF-20260819-006).
+    os.environ.setdefault("QUANTOS_SHADOW_ADAPTER", "stub")
+
     # Ensure imports resolve when executed as a script
     repo_root = Path(__file__).resolve().parents[1]
     if str(repo_root) not in sys.path:
