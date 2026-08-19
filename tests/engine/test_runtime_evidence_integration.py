@@ -1,6 +1,7 @@
 """Runtime evidence integration tests."""
 
 import json
+from typing import Any, cast
 
 from core.execution.paper_gateway import PaperExecutionGateway
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
@@ -65,6 +66,7 @@ class TestRuntimeEvidenceWriter:
         pipeline = _pipeline()
         result = pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {"runtime_cycle_id": "cycle_a"})
         record, path = writer.write_result(runtime_cycle_id="cycle_a", result=result)
+        path = cast(Any, path)  # TECH_DEBT-009: write_result 返回 object, 运行时恒为 Path
         assert record.runtime_cycle_id == "cycle_a"
         assert path.exists()
         payload = json.loads(path.read_text(encoding="utf-8").strip())

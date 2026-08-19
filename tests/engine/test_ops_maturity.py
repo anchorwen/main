@@ -1,4 +1,5 @@
 import time
+from typing import cast
 
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.lifecycle_manager import LifecycleManager
@@ -16,7 +17,7 @@ from core.observability.audit_log import StructuredAuditLog
 
 class TestAlertRule:
     def test_fires_on_condition(self):
-        rule = AlertRule("test", lambda ctx: ctx.get("x") > 5, cooldown_seconds=0)
+        rule = AlertRule("test", lambda ctx: cast(int, ctx.get("x")) > 5, cooldown_seconds=0)
         assert rule.should_fire({"x": 10})
         assert not rule.should_fire({"x": 1})
 
@@ -36,8 +37,8 @@ class TestAlertService:
     def test_evaluate_fires_matching_rules(self):
         channel = InMemoryAlertChannel()
         svc = AlertService(channels=[channel])
-        svc.add_rule(AlertRule("a", lambda ctx: ctx.get("x") > 5, cooldown_seconds=0))
-        svc.add_rule(AlertRule("b", lambda ctx: ctx.get("y") > 10, cooldown_seconds=0))
+        svc.add_rule(AlertRule("a", lambda ctx: cast(int, ctx.get("x")) > 5, cooldown_seconds=0))
+        svc.add_rule(AlertRule("b", lambda ctx: cast(int, ctx.get("y")) > 10, cooldown_seconds=0))
 
         fired = svc.evaluate({"x": 10, "y": 2})
         assert len(fired) == 1
@@ -198,6 +199,7 @@ class TestLifecycleManager:
     def test_state_save_on_shutdown(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c = ServiceContainer(cfg).build()
+        assert c.governance_service is not None  # TECH_DEBT-009: 容器构建契约
         c.governance_service.register_brain("test", "live")
         sp = StatePersistence(str(tmp_path / "state"))
         lm = LifecycleManager(c, state_persistence=sp)
@@ -211,11 +213,13 @@ class TestLifecycleManager:
     def test_state_restore_on_startup(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c1 = ServiceContainer(cfg).build()
+        assert c1.governance_service is not None  # TECH_DEBT-009: 容器构建契约
         c1.governance_service.register_brain("alpha", "live")
         sp = StatePersistence(str(tmp_path / "state"))
         sp.save_governance_state(c1.governance_service, "restore_test")
 
         c2 = ServiceContainer(cfg).build()
+        assert c2.governance_service is not None  # TECH_DEBT-009: 容器构建契约
         lm = LifecycleManager(c2, state_persistence=sp)
         result = lm.startup(restore_state=True, state_label="restore_test")
 

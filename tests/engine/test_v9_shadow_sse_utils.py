@@ -1,5 +1,6 @@
 import json
 from http.client import HTTPConnection
+from typing import Any, cast
 
 from apps.engine.main_v9_shadow import (
     SessionStreamPlan,
@@ -301,7 +302,9 @@ def test_runtime_summary_sse_server_returns_error_event_for_invalid_boolean_quer
         ShadowSessionManager, SessionStreamPlan, host="127.0.0.1", port=0
     )
     try:
-        host, port = server.server_address
+        host, port = cast(
+            Any, server.server_address
+        )  # TECH_DEBT-009: typeshed 标注 _RetAddress, 运行时实为 (host, port) -> cast(Any) 类型层绕过
 
         import threading
 
@@ -339,7 +342,9 @@ def test_runtime_summary_sse_server_falls_back_to_default_error_prefix_for_inval
         ShadowSessionManager, SessionStreamPlan, host="127.0.0.1", port=0
     )
     try:
-        host, port = server.server_address
+        host, port = cast(
+            Any, server.server_address
+        )  # TECH_DEBT-009: typeshed 标注 _RetAddress, 运行时实为 (host, port) -> cast(Any) 类型层绕过
 
         import threading
 
@@ -443,7 +448,9 @@ def test_runtime_summary_sse_server_returns_error_event_for_conflicting_feature_
         ShadowSessionManager, SessionStreamPlan, host="127.0.0.1", port=0
     )
     try:
-        host, port = server.server_address
+        host, port = cast(
+            Any, server.server_address
+        )  # TECH_DEBT-009: typeshed 标注 _RetAddress, 运行时实为 (host, port) -> cast(Any) 类型层绕过
 
         import threading
 
@@ -482,7 +489,9 @@ def test_runtime_summary_sse_server_falls_back_to_default_error_prefix_when_plan
         ShadowSessionManager, SessionStreamPlan, host="127.0.0.1", port=0
     )
     try:
-        host, port = server.server_address
+        host, port = cast(
+            Any, server.server_address
+        )  # TECH_DEBT-009: typeshed 标注 _RetAddress, 运行时实为 (host, port) -> cast(Any) 类型层绕过
 
         import threading
 

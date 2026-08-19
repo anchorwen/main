@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 # ── _result_to_proposal tests ──
 
@@ -86,7 +87,7 @@ def test_record_shadow_from_ensemble(tmp_path: Path):
     from scripts.shadow_decision_recorder import record_shadow_from_ensemble
 
     store = JsonlLedgerStore(str(tmp_path))
-    results = [
+    results: list[dict[str, Any]] = [
         {
             "brain_id": "Brain_A",
             "brain_type": "onnx_v9",

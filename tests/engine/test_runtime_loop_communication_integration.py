@@ -223,6 +223,10 @@ def test_runtime_loop_allowed_path_integrates_communication_chain(tmp_path):
 
     assert result.verdict.status.name == "ALLOW"
     assert result.dispatch_result.status == DispatchStatus.PROTOCOL_VALIDATED
+    assert (
+        result.communication_record is not None
+    )  # TECH_DEBT-009: dispatch 契约下恒写 communication_record
+    assert result.communication_ledger_path is not None  # TECH_DEBT-009: dispatch 契约下恒写 ledger
     assert result.communication_record.record_id == "communication_record_001"
     assert result.communication_ledger_path.name == stream_jsonl_filename(
         "exec_bridge", LEDGER_STREAM_COMMUNICATIONS
@@ -514,6 +518,10 @@ def test_runtime_loop_falls_back_to_record_summary_when_operations_view_is_unava
         trigger={"symbol": "XAUUSD"}, feature_source={"f": 1.0}
     )
 
+    assert (
+        result.communication_record is not None
+    )  # TECH_DEBT-009: dispatch 契约下恒写 communication_record
+    assert result.communication_ledger_path is not None  # TECH_DEBT-009: dispatch 契约下恒写 ledger
     assert result.communication_record.record_id == "communication_record_001"
     assert result.communication_ledger_path.name == stream_jsonl_filename(
         "exec_bridge", LEDGER_STREAM_COMMUNICATIONS
@@ -794,6 +802,10 @@ def test_runtime_loop_end_to_end_communication_stack_matches_operations_view(tmp
 
     assert result.verdict.status.name == "ALLOW"
     assert result.dispatch_result.status == DispatchStatus.PROTOCOL_VALIDATED
+    assert (
+        result.communication_record is not None
+    )  # TECH_DEBT-009: dispatch 契约下恒写 communication_record
+    assert result.communication_ledger_path is not None  # TECH_DEBT-009: dispatch 契约下恒写 ledger
     msg_id = result.communication_record.message_id
     assert result.communication_ledger_path.exists()
     roundtrip = communication_reader.find_by_message_id(

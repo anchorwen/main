@@ -85,6 +85,9 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"bid": 1999.0, "ask": 2000.0})
+        assert (
+            fill is not None
+        )  # TECH_DEBT-009: FillSimulator.simulate 返回 Fill|None, 可成交契约下恒非 None
         assert fill.price == 2000.0
         assert fill.quantity == 10.0
 
@@ -95,6 +98,9 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"bid": 1999.0, "ask": 2000.0})
+        assert (
+            fill is not None
+        )  # TECH_DEBT-009: FillSimulator.simulate 返回 Fill|None, 可成交契约下恒非 None
         assert fill.price == 1999.0
 
     def test_limit_order_not_executable_returns_none(self):
@@ -114,6 +120,9 @@ class TestFillSimulator:
         fill = FillSimulator(FillSimulationConfig(max_fill_ratio=0.25)).simulate(
             request, state, {"price": 2000.0}
         )
+        assert (
+            fill is not None
+        )  # TECH_DEBT-009: FillSimulator.simulate 返回 Fill|None, 可成交契约下恒非 None
         assert fill.quantity == 2.5
 
     def test_partial_fill_by_available_quantity(self):
@@ -123,6 +132,9 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"price": 2000.0, "available_quantity": 3})
+        assert (
+            fill is not None
+        )  # TECH_DEBT-009: FillSimulator.simulate 返回 Fill|None, 可成交契约下恒非 None
         assert fill.quantity == 3.0
 
     def test_slippage_buy_and_sell(self):
@@ -136,8 +148,12 @@ class TestFillSimulator:
         sm.acknowledge(sell_state)
         sm.accept(sell_state)
         simulator = FillSimulator(FillSimulationConfig(slippage_bps=10))
-        assert simulator.simulate(buy, buy_state, {"price": 100.0}).price == 100.1
-        assert simulator.simulate(sell, sell_state, {"price": 100.0}).price == 99.9
+        fill_buy = simulator.simulate(buy, buy_state, {"price": 100.0})
+        assert fill_buy is not None  # TECH_DEBT-009: 链式调用拆解以类型收窄, 运行时值不变
+        assert fill_buy.price == 100.1
+        fill_sell = simulator.simulate(sell, sell_state, {"price": 100.0})
+        assert fill_sell is not None  # TECH_DEBT-009: 链式调用拆解以类型收窄, 运行时值不变
+        assert fill_sell.price == 99.9
 
     def test_min_liquidity_quantity_blocks_small_fill(self):
         sm = OrderStateMachine()

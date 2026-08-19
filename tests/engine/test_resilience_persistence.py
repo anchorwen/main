@@ -1,4 +1,5 @@
 import time
+from typing import Any, cast
 
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.replay_isolation import (
@@ -33,7 +34,9 @@ class TestCircuitBreaker:
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
         time.sleep(0.15)
-        assert cb.state == CircuitState.HALF_OPEN
+        assert (
+            cast(object, cb.state) == CircuitState.HALF_OPEN
+        )  # TECH_DEBT-009: comparison-overlap 绕过 (A3)
         assert cb.allow_request() is True
 
     def test_half_open_success_resets(self):
@@ -60,7 +63,9 @@ class TestCircuitBreaker:
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
         cb.reset()
-        assert cb.state == CircuitState.CLOSED
+        assert (
+            cast(object, cb.state) == CircuitState.CLOSED
+        )  # TECH_DEBT-009: comparison-overlap 绕过 (A3)
         assert cb.allow_request() is True
 
     def test_status(self):
@@ -146,6 +151,8 @@ class TestStatePersistence:
     def test_save_all(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c = ServiceContainer(cfg).build()
+        assert c.governance_service is not None  # TECH_DEBT-009: 容器构建契约 (L149 register_brain)
+        assert c.position_tracker is not None  # TECH_DEBT-009: 容器构建契约 (L150 open_position)
         c.governance_service.register_brain("test", "live")
         c.position_tracker.open_position(
             position_id="p1", symbol="X", side="long", quantity=1, entry_price=100
@@ -191,7 +198,9 @@ class TestReplayIsolation:
             requested_at=datetime(2026, 4, 24, 12, 0, 1),
         )
         result = adapter.dispatch(req, env)
-        assert result.status.value == "protocol_validated"
+        assert (
+            cast(Any, result.status).value == "protocol_validated"
+        )  # TECH_DEBT-009: DispatchResult.status 静态 str, 运行时为 DispatchStatus 枚举
         assert result.trace["replay_mode"] is True
         assert adapter.get_captured_count() == 1
 

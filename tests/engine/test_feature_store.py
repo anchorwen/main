@@ -118,6 +118,7 @@ class TestLocalFeatureStore:
             [_record(base, 1.0, 0.1), _record(base + timedelta(minutes=1), 2.0, 0.2)]
         )
         latest = store.latest("XAUUSD", "M1", schema_name="technical_v1")
+        assert latest is not None  # TECH_DEBT-009: latest 返回 dict|None, 已写入记录契约下恒非 None
         assert latest.values["ema_bias"] == 2.0
 
     def test_query_missing_partition_empty(self, tmp_path):

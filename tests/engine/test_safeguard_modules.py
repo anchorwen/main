@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -441,7 +442,9 @@ class TestBarSyncPoller:
             with patch.dict("sys.modules", {"MetaTrader5": mock_mt5}):
                 import core.protocol.event_bar_sync as bsync
 
-                bsync.BarSyncPoller._init_mt5 = MagicMock()
+                cast(
+                    Any, bsync.BarSyncPoller
+                )._init_mt5 = MagicMock()  # TECH_DEBT-009: method-assign 规避 (A3)
                 result = poller.wait_for_new_bar(timeout_seconds=0.05)
                 assert result is None
 

@@ -50,7 +50,9 @@ class TestRuntimeEvidenceReader:
         reader = RuntimeEvidenceReader(str(tmp_path))
         records = reader.read_cycle("cycle_a")
         assert len(records) == 1
-        assert reader.latest_cycle("cycle_a")["runtime_cycle_id"] == "cycle_a"
+        latest = reader.latest_cycle("cycle_a")
+        assert latest is not None  # TECH_DEBT-009: latest_cycle 已写入记录契约下恒非 None
+        assert latest["runtime_cycle_id"] == "cycle_a"
         assert reader.list_cycle_ids() == ["cycle_a"]
 
     def test_missing_cycle_returns_empty(self, tmp_path):

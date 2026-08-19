@@ -111,6 +111,38 @@ def _fake_decision_ledger_path() -> Path:
     )
 
 
+# ---- shadow veto test sync (FIX-20260819-002) ----
+
+
+def apply_shadow_veto_stub(monkeypatch) -> None:
+    """Stub the Shadow Veto's live.yaml read (FIX-20260819-002 test sync).
+
+    Shadow CLI/session-stream tests build the shadow container to verify
+    output contracts with stub feature data — a legitimate stub-adapter
+    scenario. The veto (bootstrap_v9.build_v9_shadow_container) reads the real
+    configs/live.yaml (adapter=mt5_zmq) at build time and hard-crashes. This
+    helper intercepts only that one file read so adapter resolves to "stub";
+    every other file (brains / meta pipeline / model artifacts) still loads
+    from the real repo — container behavior is identical to pre-veto
+    (EnvironmentConfig.development defaulted adapter_name="stub").
+    """
+    import builtins
+    import io
+    import os
+
+    from apps.engine import bootstrap_v9
+
+    real_open = builtins.open
+    live_yaml = os.fspath(bootstrap_v9._repo_root() / "configs" / "live.yaml")
+
+    def _open(path, *args, **kwargs):
+        if os.fspath(path) == live_yaml:
+            return io.StringIO("adapter:\n  name: stub\n")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", _open)
+
+
 # ---- cli helpers ----
 
 

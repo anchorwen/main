@@ -206,6 +206,9 @@ class TestInspectionServiceWithExecutionTimeline:
             execution_event_reader=ExecutionEventReader(str(tmp_path)),
         )
         trace = svc.get_message_trace(date_key="2026-04-24", target="exec_bridge", message_id="m1")
+        assert (
+            trace is not None
+        )  # TECH_DEBT-009: get_message_trace 返回 dict|None, 已写入契约下恒非 None
         assert trace["execution_timeline"]["event_count"] == 2
         assert trace["execution_timeline"]["is_terminal"] is True
 
@@ -217,6 +220,9 @@ class TestInspectionServiceWithExecutionTimeline:
 
         svc = CommunicationInspectionService(record_reader=CommunicationRecordReader(str(tmp_path)))
         trace = svc.get_message_trace(date_key="2026-04-24", target="exec_bridge", message_id="m1")
+        assert (
+            trace is not None
+        )  # TECH_DEBT-009: get_message_trace 返回 dict|None, 已写入契约下恒非 None
         assert trace["execution_timeline"] is None
 
     def test_correlation_delivery_summary_includes_execution_stats(self, tmp_path):

@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from apps.engine.main_v9_shadow import (
     SessionStreamPlan,
     prepare_results,
@@ -13,6 +15,7 @@ from apps.engine.v9_shadow_sse import (
 )
 from core.ledger.services.communication_operations_service import CommunicationOperationsService
 from tests.engine.shadow_testkit import (
+    apply_shadow_veto_stub,
     assert_client_error_terminal_message,
     assert_completed_flow_alignment,
     assert_error_flow_alignment,
@@ -119,6 +122,18 @@ def assert_mirror_field_alignment(
 # ---- real input integration tests ----
 
 
+@pytest.fixture(autouse=True)
+def _shadow_veto_stub(monkeypatch):
+    """Sync v9 shadow session-stream tests to Shadow Veto (FIX-20260819-002).
+
+    These tests build the shadow container to verify session-stream output
+    contracts with stub feature data — the veto's legitimate stub-adapter
+    path. Intercept only the veto's live.yaml read (adapter -> stub); all
+    other repo reads (brains/meta/models) stay real.
+    """
+    apply_shadow_veto_stub(monkeypatch)
+
+
 def test_v9_shadow_real_batch_integration_completed_contract():
     args = type(
         "Args",
@@ -202,9 +217,11 @@ def test_v9_shadow_real_batch_integration_completed_contract():
     # → Parliament may abstain entirely. Locally produces 1 open + 1 abstain.
     assert total_opens >= 0, f"Expected non-negative opens, got {total_opens} ({actions})"
     # Mirror checks
-    for other in [sse_completed["data"]["data"]["stats"]["side_actions"],
-                  client_completed["data"]["data"]["stats"]["side_actions"],
-                  rendered_json["stats"]["side_actions"]]:
+    for other in [
+        sse_completed["data"]["data"]["stats"]["side_actions"],
+        client_completed["data"]["data"]["stats"]["side_actions"],
+        rendered_json["stats"]["side_actions"],
+    ]:
         assert other == actions, f"Mirror mismatch: {actions} != {other}"
 
 

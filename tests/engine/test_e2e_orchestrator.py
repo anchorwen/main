@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 from apps.engine.orchestrator import DecisionCycleOrchestrator
 from apps.engine.runtime_loop import RuntimeLoop
@@ -276,7 +277,9 @@ class TestGovernanceRuleEngine:
         )
         assert len(fired) >= 1
         assert any(r["transition_to"] == "frozen" for r in fired)
-        assert gs.get_brain_state("bad")["status"] == "frozen"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("bad"))["status"] == "frozen"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
 
     def test_auto_promote_healthy(self):
         gs = GovernanceService()
@@ -288,7 +291,9 @@ class TestGovernanceRuleEngine:
             }
         )
         assert any(r["transition_to"] == "live" for r in fired)
-        assert gs.get_brain_state("good")["status"] == "live"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("good"))["status"] == "live"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
 
     def test_auto_demote_degraded_live(self):
         gs = GovernanceService()
@@ -308,9 +313,13 @@ class TestGovernanceRuleEngine:
             }
         )
         assert any(r.get("transition_to") == "probation" for r in fired)
-        assert gs.get_brain_state("degraded")["status"] == "probation"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("degraded"))["status"] == "probation"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
         # guard: other_live was not evaluated → stays live
-        assert gs.get_brain_state("other_live")["status"] == "live"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("other_live"))["status"] == "live"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
 
     def test_custom_rule(self):
         gs = GovernanceService()
@@ -326,7 +335,9 @@ class TestGovernanceRuleEngine:
         )
         fired = engine.evaluate({"custom": {"reject_rate": 0.7}})
         assert len(fired) == 1
-        assert gs.get_brain_state("custom")["status"] == "frozen"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("custom"))["status"] == "frozen"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
 
     def test_no_matching_rules(self):
         gs = GovernanceService()
@@ -337,7 +348,9 @@ class TestGovernanceRuleEngine:
                 "stable": {"health_signal": "stable", "sample_count": 5, "composite_mean": 0.6},
             }
         )
-        assert gs.get_brain_state("stable")["status"] == "live"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("stable"))["status"] == "live"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
 
     def test_with_audit_log(self, tmp_path):
         gs = GovernanceService()

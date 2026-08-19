@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 
@@ -164,6 +165,9 @@ class TestExecutionEventWriterReader:
             venue_order_id="ord_123",
             quantity={"filled": 100},
         )
+        path = cast(
+            Any, path
+        )  # TECH_DEBT-009: write_from_venue_payload 返回 object, 运行时恒为 Path
         assert event.event_type == "filled"
         assert event.venue_order_id == "ord_123"
         assert path.exists()

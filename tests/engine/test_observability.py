@@ -190,6 +190,7 @@ class TestTracingContext:
         ctx = TracingContext()
         root = ctx.start_span("cycle")
         ctx.start_span("sub")
+        assert ctx.current_span is not None  # TECH_DEBT-009: start_span 后 current_span 恒非 None
         ctx.end_span(ctx.current_span)
         ctx.end_span(root)
         summary = ctx.get_trace_summary()

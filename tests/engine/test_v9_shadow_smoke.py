@@ -59,6 +59,7 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_SUMMARY_SOURCE,
 )
 from tests.engine.shadow_testkit import (
+    apply_shadow_veto_stub,
     build_blocked_manager_result,
     build_fallback_manager_result,
     run_engine_cli,
@@ -66,6 +67,18 @@ from tests.engine.shadow_testkit import (
 )
 
 STALE_SUMMARY_SOURCE = "stale_summary_source"
+
+
+@pytest.fixture(autouse=True)
+def _shadow_veto_stub(monkeypatch):
+    """Sync v9 shadow CLI tests to Shadow Veto (FIX-20260819-002).
+
+    These tests build the shadow container to verify CLI/session output
+    contracts with stub feature data — the veto's legitimate stub-adapter
+    path. Intercept only the veto's live.yaml read (adapter -> stub); all
+    other repo reads (brains/meta/models) stay real.
+    """
+    apply_shadow_veto_stub(monkeypatch)
 
 
 def run_cli(*args: str) -> str:
@@ -408,7 +421,7 @@ def test_v9_shadow_load_short_feature_source_from_json():
     feature_source = load_feature_source_from_json("D:/cursor/data/snapshots/v9_shadow_short.json")
 
     assert len(feature_source) == 40
-    assert abs(feature_source["M15_RSI_14"]) == 29.0   # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
+    assert abs(feature_source["M15_RSI_14"]) == 29.0  # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
     assert abs(feature_source["M15_Hurst"]) == 0.13  # FIX-016: 0.26 × |-0.5| = 0.13
 
 
@@ -428,7 +441,9 @@ def test_v9_shadow_load_feature_batch_from_json():
         batch[2]["description"] == "Invert the M15 feature group to trigger an open short decision."
     )
     assert batch[1]["feature_source"]["H1_Hurst"] == 0.05  # FIX-016: valid Hurst floor
-    assert abs(batch[2]["feature_source"]["M15_RSI_14"]) == 29.0   # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
+    assert (
+        abs(batch[2]["feature_source"]["M15_RSI_14"]) == 29.0
+    )  # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
 
 
 def test_v9_shadow_load_feature_samples_from_dir():
@@ -459,7 +474,9 @@ def test_v9_shadow_load_feature_samples_from_dir():
     assert samples[1]["feature_source"]["H1_Hurst"] == 0.35  # FIX-016: valid Hurst for edge_deny
     assert samples[2]["feature_source"]["H1_Hurst"] == 0.05  # FIX-016: valid Hurst floor
     assert samples[3]["feature_source"]["H1_Hurst"] == 0.21
-    assert abs(samples[4]["feature_source"]["M15_RSI_14"]) == 29.0   # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
+    assert (
+        abs(samples[4]["feature_source"]["M15_RSI_14"]) == 29.0
+    )  # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
 
 
 def test_v9_shadow_load_feature_samples_from_dir_uses_embedded_metadata(tmp_path):
@@ -551,7 +568,9 @@ def test_v9_shadow_cli_feature_dir_json_output():
     assert all(item["side"] in ("long", "short", "flat") for item in payload)
 
 
-@pytest.mark.skip(reason="FIX-125: Meta Pipeline probes archived — shadow behavior fundamentally changed. Needs redesign.")
+@pytest.mark.skip(
+    reason="FIX-125: Meta Pipeline probes archived — shadow behavior fundamentally changed. Needs redesign."
+)
 def test_v9_shadow_cli_json_with_stats_output():
     output = json.loads(
         run_cli(
@@ -576,7 +595,9 @@ def test_v9_shadow_cli_json_with_stats_output():
     assert output["stats"]["total"] == 2
     # FIX-125: Meta Pipeline archived — directional opens replace flat.abstain
     actions = output["stats"]["side_actions"]
-    assert sum(actions.values()) == 2 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
+    assert (
+        sum(actions.values()) == 2 and True
+    )  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
     assert output["stats"]["risk_dispatches"] == {"deny.skipped": 2}
     assert output["results"][0]["scenario"] == "long_case"
     assert all(item["scenario"] in {"long_case", "short_case"} for item in output["results"])
@@ -746,7 +767,9 @@ def test_v9_shadow_json_with_stats_output_includes_communication_operation_mirro
     assert output["stats"]["total"] == 1
     # FIX-125: Meta Pipeline archived — directional opens replace flat.abstain
     actions = output["stats"]["side_actions"]
-    assert sum(actions.values()) == 1 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
+    assert (
+        sum(actions.values()) == 1 and True
+    )  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
 
 
 def test_v9_shadow_apply_stable_output_contract_normalizes_summary_only_payload():
@@ -931,7 +954,9 @@ def test_v9_shadow_cli_out_multi_base_writes_summary_json_stats_using_recommende
     assert stats_payload["total"] == 2
     # FIX-125: Meta Pipeline archived
     actions = stats_payload["side_actions"]
-    assert sum(actions.values()) == 2 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
+    assert (
+        sum(actions.values()) == 2 and True
+    )  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
 
 
 def test_v9_shadow_cli_out_multi_base_rejects_removed_legacy_by_mode_overrides(tmp_path):
@@ -1071,7 +1096,9 @@ def test_v9_shadow_session_sse_completed_flow_smoke():
     assert completed_manager["data"]["stats"]["total"] == 1
     # FIX-125: Meta Pipeline archived — directional opens
     actions = completed_manager["data"]["stats"]["side_actions"]
-    assert sum(actions.values()) == 1 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
+    assert (
+        sum(actions.values()) == 1 and True
+    )  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
     assert completed_sse["data"]["data"]["meta"]["output_mode"] == "session_stream"
     assert completed_sse["data"]["data"]["stats"]["total"] == 1
     assert completed_sse["data"]["data"]["results"]["scenario"] == "short"
@@ -1160,7 +1187,9 @@ def test_v9_shadow_cli_write_and_check_baseline_smoke(tmp_path):
     assert baseline_payload["stats"]["total"] == 1
     # FIX-125: Meta Pipeline archived — directional opens
     actions = baseline_payload["stats"]["side_actions"]
-    assert sum(actions.values()) == 1 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
+    assert (
+        sum(actions.values()) == 1 and True
+    )  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
 
     check_stdout, exit_code = run_cli_allow_exit(
         "--scenario",
@@ -1555,7 +1584,9 @@ def test_v9_shadow_render_json_output_summary_stats_and_stream_helpers():
     assert json_output["stats"]["total"] == 2
     # FIX-125: Meta Pipeline archived — directional opens
     actions = json_output["stats"]["side_actions"]
-    assert sum(actions.values()) == 2 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
+    assert (
+        sum(actions.values()) == 2 and True
+    )  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
     assert "scenario=long" in summary_output
     assert "scenario=short" in summary_output
     assert "--- compact_stats ---" in summary_output

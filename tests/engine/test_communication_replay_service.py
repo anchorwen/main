@@ -840,6 +840,9 @@ def test_communication_replay_service_runtime_summary_projection_matches_message
         target="exec_bridge",
         message_id="message_001",
     )
+    assert (
+        plan is not None
+    )  # TECH_DEBT-009: build_message_replay_plan 返回 dict|None, 消息已写入契约下恒非 None
 
     execution_result = {
         "status": "executed",

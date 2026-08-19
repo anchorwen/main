@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.communication_record import CommunicationRecord
@@ -117,6 +118,7 @@ def test_communication_record_writer_persists_jsonl(tmp_path):
     )
 
     record, ledger_path = writer.write_record(envelope, result)
+    ledger_path = cast(Any, ledger_path)  # TECH_DEBT-009: write_record 返回 object, 运行时恒为 Path
 
     assert record.correlation_id == "corr_001"
     assert ledger_path.exists()

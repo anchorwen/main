@@ -1,5 +1,7 @@
 """Tests for champion_challenger module."""
 
+from typing import Any
+
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from core.governance.governance_service import GovernanceService
 
@@ -15,6 +17,14 @@ def _populate_tracker(tracker, brain_id, scores, outcomes=None):
                 "execution_outcome": outcome,
             },
         )
+
+
+def _brain_state(gov: GovernanceService, name: str) -> dict[str, Any]:
+    state = gov.get_brain_state(name)
+    assert (
+        state is not None
+    )  # TECH_DEBT-009: get_brain_state 返回 dict|None, 已注册 brain 契约下恒非 None
+    return state
 
 
 # ── run_promotion_cycle tests ──
@@ -88,8 +98,8 @@ def test_challenger_beats_champion_promotion():
     assert report["promotions"][0]["lane"] == "sur"
 
     # Verify state changes
-    assert gov.get_brain_state("V9")["status"] == "probation"  # demoted
-    assert gov.get_brain_state("V9_v2")["status"] == "live"  # promoted
+    assert _brain_state(gov, "V9")["status"] == "probation"  # demoted
+    assert _brain_state(gov, "V9_v2")["status"] == "live"  # promoted
 
 
 def test_challenger_delta_too_small():
@@ -109,8 +119,8 @@ def test_challenger_delta_too_small():
     assert report["promotions"] == []
 
     # No state changes
-    assert gov.get_brain_state("XGB")["status"] == "live"
-    assert gov.get_brain_state("XGB_v2")["status"] == "candidate"
+    assert _brain_state(gov, "XGB")["status"] == "live"
+    assert _brain_state(gov, "XGB_v2")["status"] == "candidate"
 
 
 def test_dry_run_does_not_apply():
@@ -129,8 +139,8 @@ def test_dry_run_does_not_apply():
     assert report["promotions"][0]["promoted_challenger"]["action"] == "would_promote"
 
     # State should NOT have changed
-    assert gov.get_brain_state("V9")["status"] == "live"
-    assert gov.get_brain_state("V9_v2")["status"] == "candidate"
+    assert _brain_state(gov, "V9")["status"] == "live"
+    assert _brain_state(gov, "V9_v2")["status"] == "candidate"
 
 
 def test_multi_lane_independence():
@@ -157,8 +167,8 @@ def test_multi_lane_independence():
     mtx_promos = [p for p in report["promotions"] if p["lane"] == "mtx"]
     assert len(mtx_promos) == 0
 
-    assert gov.get_brain_state("V9_v2")["status"] == "live"
-    assert gov.get_brain_state("XGB")["status"] == "live"
+    assert _brain_state(gov, "V9_v2")["status"] == "live"
+    assert _brain_state(gov, "XGB")["status"] == "live"
 
 
 def test_ineligibility_reason():

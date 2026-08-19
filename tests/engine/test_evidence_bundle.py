@@ -194,6 +194,7 @@ class TestEvidenceBundleService:
         c = ServiceContainer(
             EnvironmentConfig.development(str(tmp_path / "data"), enable_metrics=False),
         ).build()
+        assert c.evidence_bundle is not None  # TECH_DEBT-009: 容器构建契约 (L197 build_bundle)
         result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="ecfg0m")
         payload = json.loads(
             (Path(result["bundle_dir"]) / "engine_config.json").read_text(encoding="utf-8"),

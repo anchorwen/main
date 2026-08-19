@@ -145,6 +145,10 @@ class TestComplianceControlMatrixService:
         c = ServiceContainer(
             EnvironmentConfig.development(str(tmp_path / "data"), ops_maturity_min_score=30.0)
         ).build()
+        assert c.release_registry is not None  # TECH_DEBT-009: 容器构建契约 (L149 registry.path)
+        assert (
+            c.compliance_control_matrix is not None
+        )  # TECH_DEBT-009: 容器构建契约 (L154 generate)
         _register_clean_release(c, tmp_path)
         reg_path = Path(c.release_registry.path)
         records = json.loads(reg_path.read_text(encoding="utf-8"))

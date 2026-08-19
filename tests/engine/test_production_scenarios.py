@@ -40,6 +40,7 @@ class TestStressPositionExhaustion:
             str(tmp_path), max_open_positions=3, enable_idempotency=False
         )
         c = ServiceContainer(cfg).build()
+        assert c.position_tracker is not None  # TECH_DEBT-009: 容器构建契约, 测试作用域内恒非 None
         for i in range(3):
             c.position_tracker.open_position(
                 position_id=f"p{i}", symbol="XAUUSD", side="long", quantity=1.0, entry_price=2000.0
@@ -53,6 +54,7 @@ class TestStressPositionExhaustion:
             str(tmp_path), max_open_positions=2, enable_idempotency=False
         )
         c = ServiceContainer(cfg).build()
+        assert c.position_tracker is not None  # TECH_DEBT-009: 容器构建契约, 测试作用域内恒非 None
         c.position_tracker.open_position(
             position_id="p0", symbol="XAUUSD", side="long", quantity=1.0, entry_price=2000.0
         )
@@ -233,6 +235,8 @@ class TestProductionDay:
         cfg = EnvironmentConfig.production(str(tmp_path / "data"))
         cfg.enable_idempotency = False
         c = ServiceContainer(cfg).build()
+        assert c.governance_service is not None  # TECH_DEBT-009: 容器构建契约
+        assert c.metrics is not None  # TECH_DEBT-009: 容器构建契约 (L256 metrics.get_counter)
         c.governance_service.register_brain("alpha_v1", "live")
         sp = StatePersistence(str(tmp_path / "state"))
         lm = LifecycleManager(c, sp)

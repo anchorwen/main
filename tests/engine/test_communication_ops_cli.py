@@ -310,6 +310,7 @@ def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
     }
 
     stable = build_stable_summary_contract(result)
+    assert stable is not None  # TECH_DEBT-009: build_stable_summary_contract 契约下恒非 None
 
     assert_stable_summary_mirror_fields(
         stable,
@@ -407,6 +408,7 @@ def test_extract_stable_summary_fields_returns_consistent_contract_slice():
     }
 
     stable = extract_stable_summary_fields(result)
+    assert stable is not None  # TECH_DEBT-009: extract_stable_summary_fields 契约下恒非 None
 
     assert_stable_summary_mirror_fields(
         stable,
@@ -430,6 +432,7 @@ def test_extract_stable_summary_fields_omits_unstable_and_missing_fields():
     }
 
     stable = extract_stable_summary_fields(result)
+    assert stable is not None  # TECH_DEBT-009: extract_stable_summary_fields 契约下恒非 None
 
     assert_stable_summary_mirror_fields(
         stable,
@@ -486,6 +489,7 @@ def test_cli_message_view_returns_only_stable_summary_slice_when_extracted(tmp_p
     )
 
     stable = extract_stable_summary_fields(payload)
+    assert stable is not None  # TECH_DEBT-009: extract_stable_summary_fields 契约下恒非 None
 
     assert_stable_summary_mirror_fields(
         stable,
@@ -542,6 +546,7 @@ def test_cli_replay_view_extract_stable_summary_fields_preserves_boundary(tmp_pa
     )
 
     stable = extract_stable_summary_fields(payload)
+    assert stable is not None  # TECH_DEBT-009: extract_stable_summary_fields 契约下恒非 None
 
     assert_stable_summary_mirror_fields(
         stable,

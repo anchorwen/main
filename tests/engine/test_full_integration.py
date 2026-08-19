@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from apps.engine.batch_processor import BatchProcessor
 from apps.engine.runtime_loop import RuntimeLoop
@@ -143,6 +144,7 @@ class TestBatchProcessor:
     def test_batch_decision_cycles(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
+        assert c.metrics is not None  # TECH_DEBT-009: 容器构建契约 (L156 metrics.get_counter)
         loop = _build_loop(c, tmp_path)
         orch = c.build_orchestrator(loop)
 
@@ -184,7 +186,11 @@ class TestBatchProcessor:
 
         orch = c.build_orchestrator(FailingLoop())
         batch = BatchProcessor(orch)
-        triggers = [{"symbol": "XAUUSD"}, {"symbol": "XAUUSD", "fail": True}, {"symbol": "XAUUSD"}]
+        triggers: list[dict[Any, Any]] = [
+            {"symbol": "XAUUSD"},
+            {"symbol": "XAUUSD", "fail": True},
+            {"symbol": "XAUUSD"},
+        ]
         result = batch.run_batch(triggers, {"f": 1.0})
 
         assert result["total"] == 3
@@ -218,6 +224,7 @@ class TestOrchestratorErrorRecovery:
     def test_decision_cycle_error_returns_graceful_outcome(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
+        assert c.metrics is not None  # TECH_DEBT-009: 容器构建契约 (L231 metrics.get_counter)
 
         class BrokenLoop:
             def run_decision_cycle(self, trigger, feature_source):
@@ -236,6 +243,11 @@ class TestFullSystemIntegration:
         """One-shot integration: build → cycle → venue events → feedback → governance → persist."""
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
+        assert c.governance_service is not None  # TECH_DEBT-009: 容器构建契约
+        assert c.position_tracker is not None  # TECH_DEBT-009: 容器构建契约
+        assert c.metrics is not None  # TECH_DEBT-009: 容器构建契约
+        assert c.diagnostics is not None  # TECH_DEBT-009: 容器构建契约
+        assert c.health_check is not None  # TECH_DEBT-009: 容器构建契约
         c.governance_service.register_brain("alpha", "live")
 
         loop = _build_loop(c, tmp_path)

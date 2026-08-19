@@ -113,7 +113,7 @@ class TestConcurrencyCircuitBreaker:
                 for _ in range(50):
                     cb.record_failure()
                     cb.record_success()
-            except Exception as e:  # BLE001:REVIEWED
+            except Exception as e:  # noqa: BLE001  # REVIEWED (FTC 降级吞异常测试模式)
                 errors.append(e)
 
         threads = [threading.Thread(target=hammer) for _ in range(10)]
@@ -202,7 +202,7 @@ class TestConcurrencyBrainTracker:
             try:
                 for _i in range(50):
                     bt.record_outcome("brain_a", {"composite_score": 0.5})
-            except Exception as e:  # BLE001:REVIEWED
+            except Exception as e:  # noqa: BLE001  # REVIEWED (FTC 降级吞异常测试模式)
                 errors.append(e)
 
         threads = [threading.Thread(target=record) for _ in range(10)]
@@ -227,7 +227,7 @@ class TestConcurrencyGovernance:
                     gs.transition("x", "frozen", "test")
                     gs.transition("x", "probation", "test")
                     gs.transition("x", "live", "test")
-            except Exception as e:  # BLE001:REVIEWED
+            except Exception as e:  # noqa: BLE001  # REVIEWED (FTC 降级吞异常测试模式)
                 errors.append(e)
 
         threads = [threading.Thread(target=flip) for _ in range(5)]
@@ -236,6 +236,9 @@ class TestConcurrencyGovernance:
         for t in threads:
             t.join(timeout=5)
         state = gs.get_brain_state("x")
+        assert (
+            state is not None
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None, 已注册 brain 契约下恒非 None
         assert state["status"] in ("live", "frozen", "probation")
 
 
@@ -252,7 +255,7 @@ class TestConcurrencyPositionTracker:
                         position_id=pid, symbol="X", side="long", quantity=1, entry_price=100
                     )
                     pt.close_position(pid, 101)
-            except Exception as e:  # BLE001:REVIEWED
+            except Exception as e:  # noqa: BLE001  # REVIEWED (FTC 降级吞异常测试模式)
                 errors.append(e)
 
         threads = [threading.Thread(target=ops, args=(t,)) for t in range(5)]

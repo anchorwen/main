@@ -38,6 +38,12 @@ class TestSelfAssembly:
     def test_full_zero_config_lifecycle(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
+        assert (
+            c.diagnostics is not None
+        )  # TECH_DEBT-009: 容器构建契约 (L60 diagnostics.build_snapshot)
+        assert (
+            c.health_check is not None
+        )  # TECH_DEBT-009: 容器构建契约 (L63 health_check.readiness)
         orch = c.build_orchestrator()
 
         outcome = orch.run_cycle({"symbol": "XAUUSD"}, {"f": 1.0})
@@ -91,6 +97,12 @@ class TestSelfAssembly:
     def test_brain_registration_and_governance(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
+        assert (
+            c.brain_registry is not None
+        )  # TECH_DEBT-009: 容器构建契约 (L95 brain_registry.register)
+        assert (
+            c.governance_service is not None
+        )  # TECH_DEBT-009: 容器构建契约 (L102-105 governance_service)
 
         c.brain_registry.register(
             {

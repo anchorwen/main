@@ -36,6 +36,9 @@ class TestSignalOrderRequestBuilder:
             OrderSizingPolicy(base_quantity=10), default_venue="PAPER"
         )
         request = builder.build(_signal(strength=0.5, confidence=0.8), {"price": 2000})
+        assert (
+            request is not None
+        )  # TECH_DEBT-009: build 返回 OrderRequest|None, 可成交信号契约下恒非 None
         assert request.symbol == "XAUUSD"
         assert request.side == "buy"
         assert request.quantity == 4.0
@@ -57,6 +60,8 @@ class TestSignalOrderRequestBuilder:
             _signal(extensions={"order_type": "limit", "limit_price": 1999.0}), {}
         )
         fallback = builder.build(_signal(extensions={"order_type": "limit"}), {"price": 2000.0})
+        assert explicit is not None  # TECH_DEBT-009: build 返回 OrderRequest|None, 类型收窄
+        assert fallback is not None  # TECH_DEBT-009: build 返回 OrderRequest|None, 类型收窄
         assert explicit.limit_price == 1999.0
         assert fallback.limit_price == 2000.0
 
@@ -75,6 +80,9 @@ class TestExecutionGatewayRouter:
         gateway = PaperExecutionGateway()
         router.register("PAPER", gateway)
         request = SignalOrderRequestBuilder().build(_signal(), {"price": 2000})
+        assert (
+            request is not None
+        )  # TECH_DEBT-009: build 返回 OrderRequest|None, 类型收窄后传入 submit_order
         order = router.submit_order(request, {"price": 2000})
         assert order.status == "filled"
         assert len(router.list_orders()) == 1
@@ -82,6 +90,9 @@ class TestExecutionGatewayRouter:
     def test_missing_gateway_rejected(self):
         router = ExecutionGatewayRouter()
         request = SignalOrderRequestBuilder().build(_signal(), {"price": 2000})
+        assert (
+            request is not None
+        )  # TECH_DEBT-009: build 返回 OrderRequest|None, 类型收窄后传入 submit_order
         with pytest.raises(ValueError):
             router.submit_order(request, {"price": 2000})
 

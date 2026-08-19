@@ -131,6 +131,8 @@ class TestArchitectureInvariants:
         cfg = EnvironmentConfig.production(str(tmp_path))
         cfg.enable_idempotency = False
         c = ServiceContainer(cfg).build()
+        assert c.governance_service is not None  # TECH_DEBT-009: 容器构建契约 (L134 register_brain)
+        assert c.metrics is not None  # TECH_DEBT-009: 容器构建契约 (L158 metrics.get_counter)
         c.governance_service.register_brain("alpha", "live")
 
         from apps.engine.system_facade import SystemFacade

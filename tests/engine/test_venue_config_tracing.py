@@ -185,6 +185,10 @@ class TestConfigHotReload:
         f = base / "engine_config.json"
         f.write_text(json.dumps({"ops_maturity_min_score": 40.0}), encoding="utf-8")
         c = ServiceContainer(EnvironmentConfig.development(str(base))).build()
+        assert (
+            c.config_hot_reload is not None
+        )  # TECH_DEBT-009: 容器构建契约 (L190 check_and_reload)
+        assert c.operations_timeline is not None  # TECH_DEBT-009: 容器构建契约 (L195 list_events)
         time.sleep(0.05)
         f.write_text(json.dumps({"ops_maturity_min_score": 51.0}), encoding="utf-8")
         changes = c.config_hot_reload.check_and_reload()

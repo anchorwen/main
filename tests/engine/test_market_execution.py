@@ -12,6 +12,9 @@ class TestPositionTracker:
         )
         assert len(pt.list_open()) == 1
         closed = pt.close_position("p1", exit_price=2050.0)
+        assert (
+            closed is not None
+        )  # TECH_DEBT-009: close_position 返回 dict|None, 已开仓契约下恒非 None
         assert closed["realized_pnl"] == 50.0
         assert len(pt.list_open()) == 0
         assert len(pt.list_closed()) == 1
@@ -22,6 +25,9 @@ class TestPositionTracker:
             position_id="p1", symbol="XAUUSD", side="short", quantity=2.0, entry_price=2000.0
         )
         closed = pt.close_position("p1", exit_price=1980.0)
+        assert (
+            closed is not None
+        )  # TECH_DEBT-009: close_position 返回 dict|None, 已开仓契约下恒非 None
         assert closed["realized_pnl"] == 40.0
 
     def test_risk_context(self):
@@ -102,6 +108,9 @@ class TestExecutionManager:
             message_id="m1", event_type="partially_filled", filled_quantity=1.0, price=2010.0
         )
         order = em.get_order("m1")
+        assert (
+            order is not None
+        )  # TECH_DEBT-009: get_order 返回 dict|None, 已注册订单契约下恒非 None
         assert order["filled_quantity"] == 2.0
         assert order["average_price"] == 2005.0
         assert order["status"] == "partial"

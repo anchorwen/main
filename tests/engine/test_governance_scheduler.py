@@ -73,6 +73,9 @@ def test_critical_brain_auto_freeze():
 
     # Verify state actually changed
     state = gov.get_brain_state("Brain_B")
+    assert (
+        state is not None
+    )  # TECH_DEBT-009: get_brain_state 返回 dict|None, 已注册 brain 契约下恒非 None
     assert state["status"] == "frozen"
 
 
@@ -109,6 +112,9 @@ def test_dry_run_does_not_apply():
 
     # State should NOT have changed
     state = gov.get_brain_state("Brain_D")
+    assert (
+        state is not None
+    )  # TECH_DEBT-009: get_brain_state 返回 dict|None, 已注册 brain 契约下恒非 None
     assert state["status"] == "live"
 
 
@@ -128,6 +134,9 @@ def test_eligible_for_promotion_flagged_not_auto():
     assert flagged[0]["recommendation"] == "eligible_for_promotion"
     # Status should NOT have changed (promotion requires confirmation)
     state = gov.get_brain_state("Brain_E")
+    assert (
+        state is not None
+    )  # TECH_DEBT-009: get_brain_state 返回 dict|None, 已注册 brain 契约下恒非 None
     assert state["status"] == "candidate"
 
 
@@ -145,6 +154,7 @@ def test_maintain_observe_skipped():
 
 
 # ── FIX-20260621-043: Journal metrics type normalization tests ──
+
 
 def test_journal_dict_converted_to_brain_pnl_metrics():
     """Journal dicts must be converted to BrainPnLMetrics before use.
@@ -175,6 +185,7 @@ def test_journal_dict_converted_to_brain_pnl_metrics():
     # Must be a BrainPnLMetrics instance (not a dict)
     assert not isinstance(result, dict), "Must NOT be dict — would cause AttributeError downstream"
     from core.feedback.brain_pnl_ledger import BrainPnLMetrics
+
     assert isinstance(result, BrainPnLMetrics), "Must be BrainPnLMetrics dataclass"
 
     # Verify field mapping
@@ -229,6 +240,7 @@ def test_governance_cycle_with_pnl_store_no_dict_crash(tmp_path: Path):
     gov.register_brain("Brain_J", "candidate")
 
     from core.feedback.brain_pnl_ledger import BrainPnLStore
+
     store = BrainPnLStore()
     # Populate PnP store via public API: record a signal + settle
     store.record_signal(
@@ -246,7 +258,11 @@ def test_governance_cycle_with_pnl_store_no_dict_crash(tmp_path: Path):
     # (default base_dir="data_btc" would inject live brain metrics on dev machines)
     # This must NOT raise AttributeError
     report = run_governance_cycle(
-        tracker, gov, dry_run=True, pnl_store=store, base_dir=str(tmp_path),
+        tracker,
+        gov,
+        dry_run=True,
+        pnl_store=store,
+        base_dir=str(tmp_path),
     )
     assert report["brains_assessed"] >= 1
 

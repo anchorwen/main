@@ -98,6 +98,9 @@ class TestServiceContainer:
     def test_diagnostics_snapshot(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
+        assert (
+            c.diagnostics is not None
+        )  # TECH_DEBT-009: 容器构建契约 (L101 diagnostics.build_snapshot)
         snap = c.diagnostics.build_snapshot()
         assert "generated_at" in snap
         assert snap["metrics"] is not None

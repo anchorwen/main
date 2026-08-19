@@ -1,5 +1,7 @@
 """Alpha performance store tests."""
 
+from typing import Any, cast
+
 import pytest
 
 from apps.engine.cli import main
@@ -44,7 +46,9 @@ class TestAlphaPerformanceSnapshot:
         with pytest.raises(ValueError):
             AlphaPerformanceSnapshot("", {})
         with pytest.raises(ValueError):
-            AlphaPerformanceSnapshot("alpha1", [])
+            AlphaPerformanceSnapshot(
+                "alpha1", cast(dict[str, Any], [])
+            )  # TECH_DEBT-009: 非法输入探针 list→dict 类型层绕过
 
 
 class TestAlphaPerformanceStore:

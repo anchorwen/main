@@ -201,6 +201,7 @@ def test_communication_inspection_service_summarizes_attempts(tmp_path):
     record = reader.find_by_message_id(
         date_key="2026-04-24", target="exec_bridge", message_id="message_003"
     )
+    assert record is not None  # TECH_DEBT-009: find_by_message_id 已写入契约下恒非 None
     summary = service.summarize_attempts(record)
 
     assert summary["attempt_count"] == 2

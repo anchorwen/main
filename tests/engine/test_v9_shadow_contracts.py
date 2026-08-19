@@ -82,6 +82,7 @@ def assert_single_result_completed_meta(
     assert "generated_at" in meta
     result_payload = completed_event["data"]["data"]["results"]
     stable_fields = extract_stable_summary_fields(payload)
+    assert stable_fields is not None  # TECH_DEBT-009: extract_stable_summary_fields 契约下恒非 None
     for key, value in payload.items():
         assert result_payload[key] == value
     for key, value in stable_fields.items():

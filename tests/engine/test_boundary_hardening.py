@@ -1,6 +1,7 @@
 """Boundary hardening tests for core paths: risk, governance, execution, signals."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from apps.engine.system_facade import SystemFacade
 from core.contracts.enums import RiskDecisionStatus
@@ -114,7 +115,9 @@ class TestGovernanceBoundaries:
         gs.register_brain("a", "live")
         gs.transition("a", "frozen", "test")
         gs.transition("a", "frozen", "test2")
-        assert gs.get_brain_state("a")["status"] == "frozen"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("a"))["status"] == "frozen"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
 
     def test_register_duplicate_preserves_first(self):
         gs = GovernanceService()
@@ -134,7 +137,9 @@ class TestGovernanceBoundaries:
         gs.register_brain("new", "live")
         engine = GovernanceRuleEngine.with_default_rules(gs)
         engine.evaluate({"new": {"health_signal": "unknown"}})
-        assert gs.get_brain_state("new")["status"] == "live"
+        assert (
+            cast(dict[Any, Any], gs.get_brain_state("new"))["status"] == "live"
+        )  # TECH_DEBT-009: get_brain_state 返回 dict|None 链式
 
     def test_frozen_brain_excluded_from_active(self):
         gs = GovernanceService()

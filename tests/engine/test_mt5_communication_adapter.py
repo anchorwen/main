@@ -76,6 +76,7 @@ def test_service_container_uses_mt5_adapter_when_configured(tmp_path):
         },
     )
     container = ServiceContainer(cfg).build()
+    assert container.dispatcher is not None  # TECH_DEBT-009: 容器构建契约 (L92 dispatcher.dispatch)
     envelope = CommunicationEnvelope(
         schema_version=SCHEMA_COMMUNICATION_ENVELOPE,
         message_id="message_mt5_001",

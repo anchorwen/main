@@ -239,6 +239,8 @@ class TestComplianceAuditService:
         c = ServiceContainer(
             EnvironmentConfig.development(str(tmp_path / "data"), ops_maturity_min_score=30.0)
         ).build()
+        assert c.release_registry is not None  # TECH_DEBT-009: 容器构建契约 (L243 registry.path)
+        assert c.compliance_audit is not None  # TECH_DEBT-009: 容器构建契约 (L248 audit.generate)
         _register_clean_release(c, tmp_path)
         reg_path = Path(c.release_registry.path)
         records = json.loads(reg_path.read_text(encoding="utf-8"))
@@ -254,6 +256,8 @@ class TestComplianceAuditService:
         c = ServiceContainer(
             EnvironmentConfig.development(str(tmp_path / "data"), ops_maturity_min_score=50.0)
         ).build()
+        assert c.release_registry is not None  # TECH_DEBT-009: 容器构建契约 (L258 registry.path)
+        assert c.compliance_audit is not None  # TECH_DEBT-009: 容器构建契约 (L263 audit.generate)
         _register_clean_release(c, tmp_path)
         reg_path = Path(c.release_registry.path)
         records = json.loads(reg_path.read_text(encoding="utf-8"))
