@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260819-005
+- **Docket ID**: DQAF-20260819-005
+- **日期**: 2026-08-19
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 全量 `python -m mypy core/ apps/ scripts/ tests/` (unified 模式) 报 236 类型错误 / 62 测试文件; pre-commit isolated 模式 (`follow_imports=skip`) 全绿 → 两模式结果不一致. 证据: 命令 stdout 逐文件错误列表; pre_commit_mypy.py 基线 0 新增.
+  - [Layer 2 — 中间异常]: unified 模式 follow_imports 真实解析 → 暴露 isolated 模式**跳过导入**掩盖的泛型签名债 (非 Any 化容器/函数签名缺类型参数, 仅在统一解析跨模块边界时暴露); 测试域 A3 潜伏债务 (TECH_DEBT-009, 8/19 后清偿档). FIX-20260819-002 引入的 `# type: ignore[call-arg]` 在 isolated 模式触发 warn_unused_ignores → 直接 ignore 策略双向冲突.
+  - [Layer 3 — 根因]: RC-A3_LATENT_TEST_DEBT — 测试代码类型标注债长期未入 unified 检查面 (隔离模式屏蔽), 结构性潜伏至 8/19 清偿序列最后一块.
+- **证据引用**:
+  - Source 1: `python -m mypy core/ apps/ scripts/ tests/` — 236 错误/62 文件 (唯一合法证据源)
+  - Source 2: `scripts/pre_commit_mypy.py` isolated 基线 — 0 新增, 双模式对照
+  - Source 3 (root cause): TECH_DEBT_REGISTRY.md TECH_DEBT-009 — A3 潜伏测试债 (mypy 236 错误/62 测试文件), 清偿序列 010✅→008✅→017✅→009✅
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260819-UNIFIED_TEST_DEBT_A3_LATENT
+
 ### CCT-20260819-002
 - **Docket ID**: DQAF-20260819-002
 - **日期**: 2026-08-19

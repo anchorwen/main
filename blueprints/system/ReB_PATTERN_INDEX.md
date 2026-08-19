@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260819-UNIFIED_TEST_DEBT_A3_LATENT
+- **Pattern Signature**: `UNIFIED_TEST_DEBT_A3_LATENT`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-005
+- **Related**: FIX-20260819-005 (RESOLVED), TECH_DEBT-009, DQAF-20260816-001 (MANIFEST_OMISSION — CI 面同类潜伏)
+
+**定义**: 类型债在 isolated mypy 模式 (`follow_imports=skip`, pre-commit/baseline 使用) 下被**跳过导入**结构性掩盖, 仅在 unified 模式 (`python -m mypy core/ apps/ scripts/ tests/`, follow_imports 真实解析) 暴露 — 全量 236 错误/62 测试文件, pre-commit isolated 基线却 0 新增, 双模式结果不一致 = 潜伏债务真实存在但常规门禁不可见. 关键签名: (1) 仅统一解析跨模块边界时出现的泛型签名债 (非 Any 化容器/函数签名); (2) isolated 模式全绿 + unified 模式报错并存; (3) 修复 `# type: ignore` 在 isolated 触发 warn_unused_ignores → 双模式冲突.
+- **预防** (IMPLEMENTED): ① **cast-not-ignore 策略** — 仅 unified 可见的错误禁用裸 `# type: ignore` (isolated 触发 unused-ignore 阻塞 commit), 一律 `cast(...)` 纯类型层 no-op 双模式干净; 高重构成本且零安全风险的孤立警告允许 `# type: ignore` + 明确注释; ② **零运行时行为改变纪律** — 全批纯类型层修改, 97 文件业务逻辑分支零触碰; ③ unified 面纳入清偿序列标准验证 (`python -m mypy core/ apps/ scripts/ tests/` = 0 为完成定义).
+- **检测**: `python -m mypy core/ apps/ scripts/ tests/` (unified); 双模式对照 pre_commit_mypy.py (isolated 基线) + 全量 unified 应一致.
+
 ### ReB-20260819-FTC_SCOPE_TRAP_UNBOUNDLOCAL
 - **Pattern Signature**: `FTC_SCOPE_TRAP_UNBOUNDLOCAL`
 - **Date Cataloged**: 2026-08-19
