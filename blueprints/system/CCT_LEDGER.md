@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260819-006
+- **Docket ID**: DQAF-20260819-006
+- **日期**: 2026-08-19
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: GitHub Actions 6/6 push 失败 — `DataIntegrityError: Shadow Veto ... adapter_name='mt5_zmq'` at `bootstrap_v9.py:191`（ci-windows.yml:72 + daily-ops.yml:52 fixture-prep 步骤）
+  - [Layer 2 — 中间异常]: CI 影子回归基线生成管线（`rebuild_formal_baseline_suites` → `write_batch_regression_baselines` → `run_scenario` → `build_v9_shadow_runtime_loop`）构建影子容器时，adapter 名唯一解析自仓库生产 `configs/live.yaml` (mt5_zmq)，无显式声明通道 → 合法 stub 构建被误判"影子连真桥"
+  - [Layer 3 — 根因]: L3 架构缺陷 — Shadow Veto (FIX-20260819-002) 契约缺"合法影子构建者显式声明适配器"输入面；veto 谓词正确（网络适配器一律拦），缺的是**解析来源通道**（单源读生产配置）
+- **证据引用**:
+  - Source 1: 用户 traceback — `ci_prepare_v9_shadow_fixtures.py:180` / `main_v9_shadow.py:1120`/`:1287`/`:390` / `bootstrap_v9.py:168`/`:191`
+  - Source 2: `.github/workflows/ci-windows.yml:72` + `daily-ops.yml:52` — 双 workflow fixture-prep 步骤均跑该脚本
+  - Source 3 (root cause): FIX_REGISTRY FIX-20260819-002 commit `9b41dc88` — veto 引入者（今日 push，回归时间点吻合）
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260819-VETO_NO_DECLARED_ADAPTER_CHANNEL
+
 ### CCT-20260819-005
 - **Docket ID**: DQAF-20260819-005
 - **日期**: 2026-08-19

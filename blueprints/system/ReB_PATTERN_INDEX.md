@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260819-VETO_NO_DECLARED_ADAPTER_CHANNEL
+- **Pattern Signature**: `VETO_NO_DECLARED_ADAPTER_CHANNEL`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-006
+- **Related**: FIX-20260819-006 (RESOLVED), FIX-20260819-002 (Shadow Veto 引入者), FIX-20260521-009 (stub adapter 契约)
+
+**定义**: 硬断言防御门 (fail-closed veto) 的判定输入**单源解析自生产配置**, 无"合法调用者显式声明"通道 → 合法确定性场景 (CI 影子回归基线生成 / 批量重放) 被误伤. 关键签名: (1) veto 谓词本身正确 (网络适配器在影子模式 = 非法); (2) adapter 名唯一来自生产 live.yaml; (3) 存在合法影子构建者 (CI stub 场景) 却无声明途径 → 全 push CI 阻断.
+- **预防** (IMPLEMENTED): ① 防御门判定输入支持**显式声明通道** — `QUANTOS_SHADOW_ADAPTER` env 显式声明优先于生产配置 (但**任何来源**解析到被禁止值仍一律拦, 谓词零削弱); ② 合法场景入口 (CI fixture prep) 在**模块级**声明其 stub-only 本质 (`os.environ.setdefault`); ③ 回归锁双方向 — 声明合法值放行 / 声明被禁止值照拦.
+- **检测**: 回归锁 `test_tech_debt_010_death_of_defaults.py` (test_shadow_veto_accepts_explicit_stub_env_declaration / test_shadow_veto_env_network_adapter_still_blocked); CI 推送即校验.
+
 ### ReB-20260819-UNIFIED_TEST_DEBT_A3_LATENT
 - **Pattern Signature**: `UNIFIED_TEST_DEBT_A3_LATENT`
 - **Date Cataloged**: 2026-08-19
