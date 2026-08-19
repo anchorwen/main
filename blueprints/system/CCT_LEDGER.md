@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260819-007
+- **Docket ID**: DQAF-20260819-007
+- **日期**: 2026-08-19
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 触碰 `core/contracts/label_contract.py` 或 `core/ledger/` 的 git commit 被 journal_freeze_gate pre-commit 门禁**假阻断** — 覆盖率恒报 0.0% (目标 80%) → 团队长期用 `JOURNAL_FREEZE_BYPASS` env 豁免. 证据: `scripts/journal_freeze_gate.py` main() 每次 commit 输出 0.0% 阻断消息; 门禁历史豁免注释遍布 FIX_REGISTRY.
+  - [Layer 2 — 中间异常]: 受保护路径覆盖率读数结构性为零 — coverage.json (pytest-cov Windows) 键用反斜杠 (`core\ledger\...`), 门禁 `_PROTECTED_PREFIXES` 用正斜杠 (`core/ledger/`), `_is_protected` 直接 `startswith` 未归一化 → 受保护文件零命中 (实证: fwd 匹配 0 / 反斜杠匹配 28).
+  - [Layer 3 — 根因]: L2 逻辑缺陷 — 路径比较边界未归一化到规范形式 (消费方正斜杠前缀 vs 生成方平台原生反斜杠), 门禁读 0 数据 → 恒假阻断 → 逼出 env 免死金牌.
+- **证据引用**:
+  - Source 1: `scripts/journal_freeze_gate.py` `_is_protected()` / `_read_coverage_pct()` — 双输入面分隔符不一致
+  - Source 2: coverage.json (git 追踪, skip-worktree) — 458 文件全反斜杠键; fwd 匹配 0 vs bs 匹配 28 (实证脚本)
+  - Source 3 (root cause): 修复后实测受保护路径真实覆盖率 19.7% (28 文件, 472/1683 行) < 80% → 门禁从假阻断转为**诚实阻断**
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260819-PATH_SEPARATOR_MISMATCH_FALSE_BLOCK
+
 ### CCT-20260819-006
 - **Docket ID**: DQAF-20260819-006
 - **日期**: 2026-08-19

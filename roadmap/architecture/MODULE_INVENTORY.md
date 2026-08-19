@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-19T14:26:25Z
+> **自动生成**: 2026-08-19T16:12:03Z
 > **扫描模块数**: 820
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -757,7 +757,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 760 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 761 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -811,7 +811,7 @@
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
 | `inject_regime_to_labels.py` | ✅ active | — | 3 | 211 | — | |
 | `inspect_ofi_history.py` | ✅ active | — | 5 | 224 | ✅ | |
-| `journal_freeze_gate.py` | ✅ active | — | 4 | 152 | — | |
+| `journal_freeze_gate.py` | ✅ active | — | 4 | 145 | ✅ | |
 | `live_audit_realtime.py` | ✅ active | — | 4 | 385 | — | |
 | `live_auto_healthcheck.py` | ✅ active | — | 11 | 232 | — | |
 | `live_daily_recap.py` | ✅ active | — | 25 | 941 | — | |

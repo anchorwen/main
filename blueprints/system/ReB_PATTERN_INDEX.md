@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260819-PATH_SEPARATOR_MISMATCH_FALSE_BLOCK
+- **Pattern Signature**: `PATH_SEPARATOR_MISMATCH_FALSE_BLOCK`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-007
+- **Related**: FIX-20260819-007 (RESOLVED), FIX-20260604-087 (freeze gate 源起)
+
+**定义**: 读取外部报告 (coverage.json / manifest) 时, 生成器用平台原生路径分隔符 (Windows 反斜杠), 消费方断言用规范正斜杠前缀, 直接字符串 `startswith` 匹配**未归一化** → 合法文件零命中 → 门禁读 0 数据 → 假阳性阻断 (或假阴性放行). 关键签名: (1) 平台相关生成器 (pytest-cov Windows) vs 硬编码规范前缀; (2) 匹配边界无归一化; (3) 长期存在被 env 免死金牌掩盖, 门禁形同虚设.
+- **预防** (IMPLEMENTED): ① **匹配边界单收敛点归一化** — `_is_protected` 入口 `filepath.replace("\\", "/")` 后前缀匹配, 同时覆盖双输入面 (git staged 路径正斜杠 + 覆盖报告反斜杠); ② **退役 env 免死金牌** — 门禁诚实读真实覆盖率, 紧急例外走文档化 `--no-verify` (Iron Law #0-bis) + 注明理由; ③ 回归锁双分隔符 + 加权计算 + 绕过移除断言.
+- **检测**: 回归锁 `tests/scripts/test_journal_freeze_gate.py` — TestIsProtected (双分隔符命中/相邻未保护不命中) + TestReadCoveragePct (反斜杠键加权 45.0/65.0/0.0) + TestNoEnvBypass (env 不豁免 / 绕过常量已移除).
+
 ### ReB-20260819-VETO_NO_DECLARED_ADAPTER_CHANNEL
 - **Pattern Signature**: `VETO_NO_DECLARED_ADAPTER_CHANNEL`
 - **Date Cataloged**: 2026-08-19

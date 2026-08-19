@@ -185,6 +185,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/ledger/services/",
         "core/infrastructure/",
         "scripts/validators/journal_validator.py",
+        "scripts/journal_freeze_gate.py",  # FIX-20260819-007: 账本冻结门禁 (core/ledger/ 覆盖率守卫)
         "scripts/_reconcile_zombie_4454299643_20260807.py",  # DQAF-20260807-003: IC Step 3 zombie PnL legal reconciliation
     ],
     "contracts_domain": [
