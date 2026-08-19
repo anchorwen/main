@@ -11,12 +11,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any
 
 import pytest
 
 from core.execution.correlation_sizer import apply_sqrt_n_discount
-
 
 # ── Mock StrategyDecision ─────────────────────────────────────────────────
 
@@ -24,6 +22,7 @@ from core.execution.correlation_sizer import apply_sqrt_n_discount
 @dataclass
 class MockDecision:
     """Minimal mock matching StrategyDecision interface used by apply_sqrt_n_discount."""
+
     strategy_name: str = "test_strategy"
     should_trade: bool = True
     direction: str = "long"
@@ -111,7 +110,9 @@ class TestApplySqrtNDiscount:
 
     def test_should_trade_false_is_excluded(self) -> None:
         d1 = MockDecision(strategy_name="active", should_trade=True, direction="long", volume=0.10)
-        d2 = MockDecision(strategy_name="blocked", should_trade=False, direction="long", volume=0.10)
+        d2 = MockDecision(
+            strategy_name="blocked", should_trade=False, direction="long", volume=0.10
+        )
         decisions, results = apply_sqrt_n_discount([d1, d2])
 
         assert d1.volume == 0.10  # unchanged (n=1 effective)

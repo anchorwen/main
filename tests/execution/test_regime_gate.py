@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from core.execution.regime_gate import RegimeGate
 from tests.execution.conftest import (
     generate_ranging_bars,
@@ -170,13 +172,14 @@ class TestRegimeGateCounterTrend:
         gate._m5._kalman = type(
             "FakeKalman", (), {"velocity": lambda s=None: 1.0, "direction": "long", "strength": 0.7}
         )()
-        gate._m5._last_direction = "long"
-        gate._m5._trend_strength = 0.8
+        # TECH_DEBT-009: _m5 静态类型无 _last_direction (white-box 附加私有状态) → cast(Any)
+        cast(Any, gate._m5)._last_direction = "long"
+        cast(Any, gate._m5)._trend_strength = 0.8
         gate._h1._kalman = type(
             "FakeKalman", (), {"velocity": lambda s=None: 1.0, "direction": "long", "strength": 0.7}
         )()
-        gate._h1._last_direction = "long"
-        gate._h1._trend_strength = 0.8
+        cast(Any, gate._h1)._last_direction = "long"
+        cast(Any, gate._h1)._trend_strength = 0.8
 
         # Same direction as primary trend = NOT counter-trend
         assert gate.is_counter_trend(trade_direction="long") is False
@@ -186,13 +189,14 @@ class TestRegimeGateCounterTrend:
         gate._m5._kalman = type(
             "FakeKalman", (), {"velocity": lambda s=None: 1.0, "direction": "long", "strength": 0.7}
         )()
-        gate._m5._last_direction = "long"
-        gate._m5._trend_strength = 0.8
+        # TECH_DEBT-009: _m5 静态类型无 _last_direction (white-box 附加私有状态) → cast(Any)
+        cast(Any, gate._m5)._last_direction = "long"
+        cast(Any, gate._m5)._trend_strength = 0.8
         gate._h1._kalman = type(
             "FakeKalman", (), {"velocity": lambda s=None: 1.0, "direction": "long", "strength": 0.7}
         )()
-        gate._h1._last_direction = "long"
-        gate._h1._trend_strength = 0.8
+        cast(Any, gate._h1)._last_direction = "long"
+        cast(Any, gate._h1)._trend_strength = 0.8
 
         # Opposite direction to primary trend = counter-trend
         assert gate.is_counter_trend(trade_direction="short") is True
@@ -204,13 +208,14 @@ class TestRegimeGateCounterTrend:
             (),
             {"velocity": lambda s=None: 1.0, "direction": "neutral", "strength": 0.0},
         )()
-        gate._m5._last_direction = "neutral"
-        gate._m5._trend_strength = 0.0
+        # TECH_DEBT-009: _m5 静态类型无 _last_direction (white-box 附加私有状态) → cast(Any)
+        cast(Any, gate._m5)._last_direction = "neutral"
+        cast(Any, gate._m5)._trend_strength = 0.0
         gate._h1._kalman = type(
             "FakeKalman", (), {"velocity": lambda s=None: 1.0, "direction": "long", "strength": 0.7}
         )()
-        gate._h1._last_direction = "long"
-        gate._h1._trend_strength = 0.5
+        cast(Any, gate._h1)._last_direction = "long"
+        cast(Any, gate._h1)._trend_strength = 0.5
 
         # Check with neutral primary (M5 neutral, H1 long) — H1 takes priority
         assert gate.is_counter_trend(trade_direction="short") is True
@@ -223,15 +228,16 @@ class TestRegimeGateCounterTrend:
             (),
             {"velocity": lambda s=None: 0.0, "direction": "neutral", "strength": 0.0},
         )()
-        gate._m5._last_direction = "neutral"
-        gate._m5._trend_strength = 0.0
+        # TECH_DEBT-009: _m5 静态类型无 _last_direction (white-box 附加私有状态) → cast(Any)
+        cast(Any, gate._m5)._last_direction = "neutral"
+        cast(Any, gate._m5)._trend_strength = 0.0
         gate._h1._kalman = type(
             "FakeKalman",
             (),
             {"velocity": lambda s=None: 0.0, "direction": "neutral", "strength": 0.0},
         )()
-        gate._h1._last_direction = "neutral"
-        gate._h1._trend_strength = 0.0
+        cast(Any, gate._h1)._last_direction = "neutral"
+        cast(Any, gate._h1)._trend_strength = 0.0
 
         # No primary trend — never counter-trend
         assert gate.is_counter_trend(trade_direction="long") is False

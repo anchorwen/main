@@ -13,10 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from core.execution.ofi_gate import apply_ofi_toxicity_gate
-
 
 # ── Mock make_decision ────────────────────────────────────────────────────
 
@@ -336,4 +333,5 @@ class TestApplyOfiToxicityGate:
             regime_gate_mode="active",
             make_decision=_mock_make_decision,
         )
+        assert result is not None  # TECH_DEBT-009: apply_ofi_toxicity_gate 返回 dict|None 类型收窄
         assert "4.56" in result["reason"]

@@ -13,15 +13,12 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from core.execution.session_detector import (
     CLOSED_STALL_SECONDS,
     REOPEN_CONFIRM_SECONDS,
     TICK_STALL_SECONDS,
     SessionDetector,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SessionDetector — crypto_24_7
@@ -116,7 +113,10 @@ class TestStallProgression:
         sd = SessionDetector()
         sd.probe(tick_time=1000.0, market_type="forex_24_5")
         # Same tick for < TICK_STALL_SECONDS → normal
-        with patch("core.execution.session_detector.time.monotonic", return_value=1000.0 + TICK_STALL_SECONDS - 1):
+        with patch(
+            "core.execution.session_detector.time.monotonic",
+            return_value=1000.0 + TICK_STALL_SECONDS - 1,
+        ):
             result = sd.probe(tick_time=1000.0, market_type="forex_24_5")
             assert result["risk_tier"] == "normal"
 
@@ -127,7 +127,10 @@ class TestStallProgression:
         with patch("core.execution.session_detector.time.monotonic", return_value=1000.0):
             sd.probe(tick_time=1000.0, market_type="forex_24_5")
         # Stall >= TICK_STALL_SECONDS but < CLOSED_STALL_SECONDS
-        with patch("core.execution.session_detector.time.monotonic", return_value=1000.0 + TICK_STALL_SECONDS + 1):
+        with patch(
+            "core.execution.session_detector.time.monotonic",
+            return_value=1000.0 + TICK_STALL_SECONDS + 1,
+        ):
             result = sd.probe(tick_time=1000.0, market_type="forex_24_5")
             assert result["session_name"] == "daily_rollover"
             assert result["risk_tier"] == "reduced"
@@ -139,7 +142,10 @@ class TestStallProgression:
         sd.probe(tick_time=1000.0, market_type="forex_24_5")
         with patch("core.execution.session_detector.time.monotonic", return_value=1000.0):
             sd.probe(tick_time=1000.0, market_type="forex_24_5")
-        with patch("core.execution.session_detector.time.monotonic", return_value=1000.0 + CLOSED_STALL_SECONDS + 1):
+        with patch(
+            "core.execution.session_detector.time.monotonic",
+            return_value=1000.0 + CLOSED_STALL_SECONDS + 1,
+        ):
             result = sd.probe(tick_time=1000.0, market_type="forex_24_5")
             assert result["session_name"] == "market_closed"
             assert result["risk_tier"] == "off"
@@ -205,7 +211,9 @@ class TestReset:
         sd.probe(tick_time=1000.0, market_type="forex_24_5")
         with patch("core.execution.session_detector.time.monotonic", return_value=0.0):
             sd.probe(tick_time=1000.0, market_type="forex_24_5")
-        with patch("core.execution.session_detector.time.monotonic", return_value=TICK_STALL_SECONDS + 1):
+        with patch(
+            "core.execution.session_detector.time.monotonic", return_value=TICK_STALL_SECONDS + 1
+        ):
             sd.probe(tick_time=1000.0, market_type="forex_24_5")
 
         sd.reset()

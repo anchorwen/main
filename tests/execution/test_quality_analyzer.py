@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from core.execution.quality_analyzer import compute_vwap
@@ -50,7 +52,8 @@ class TestComputeVWAP:
             {"price": "2000.5", "volume": "2"},
             {"price": 2001.5, "volume": 1},
         ]
-        result = compute_vwap(fills)
+        # TECH_DEBT-009: 故意混合 str/float 值探针 (测字符串转换) → cast(Any) 诚实表达
+        result = compute_vwap(cast(Any, fills))
         assert result == pytest.approx(2000.833333, rel=1e-5)
 
     def test_equal_weights(self):

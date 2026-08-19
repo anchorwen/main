@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 from core.execution.strategy_context import StrategyEvaluationContext
@@ -17,10 +18,12 @@ from tests.mock_kit.config_factory import TEST_BASE_DIR
 # ── Test helpers ────────────────────────────────────────────────────────────
 
 
-def _ctx(**overrides: object) -> StrategyEvaluationContext:
+def _ctx(**overrides: Any) -> StrategyEvaluationContext:
     """Build a minimal StrategyEvaluationContext for testing."""
-    kwargs: dict[str, object] = dict(
-        feature_vector=None, micro_feature_vector=None, mid_price=2000.0
+    kwargs: dict[str, Any] = (
+        dict(  # TECH_DEBT-009: 混合类型值 → dict[str, Any] (dict[str, object] 报 spread arg-type)
+            feature_vector=None, micro_feature_vector=None, mid_price=2000.0
+        )
     )
     kwargs.update(overrides)
     return StrategyEvaluationContext(**kwargs)

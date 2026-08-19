@@ -5,8 +5,6 @@ Covers: RegimeDirectionGate.__init__, _resolve_trend, filter, reset_streaks.
 
 from __future__ import annotations
 
-import pytest
-
 from core.execution.regime_direction_gate import RegimeDirectionGate
 
 

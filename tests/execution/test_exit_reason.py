@@ -9,6 +9,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from core.execution.exit_reason import (
     ExitReason,
     _classify_exit_reason,
@@ -34,9 +36,10 @@ class TestExitReasonEnum:
 
     def test_member_value_equals_name(self) -> None:
         """Each member's value matches its name."""
-        assert ExitReason.BRAIN_FLIP == "brain_flip"
-        assert ExitReason.SL_HIT == "sl_hit"
-        assert ExitReason.UNKNOWN == "unknown"
+        # TECH_DEBT-009: Enum literal vs str literal strict_equality 非重叠 — 运行时 str 子类按值相等, cast(object) 类型层绕过
+        assert cast(object, ExitReason.BRAIN_FLIP) == "brain_flip"
+        assert cast(object, ExitReason.SL_HIT) == "sl_hit"
+        assert cast(object, ExitReason.UNKNOWN) == "unknown"
 
 
 class TestCooldownTiers:
@@ -128,7 +131,9 @@ class TestClassify:
         assert classify("") == ExitReason.UNKNOWN
 
     def test_non_string_returns_unknown(self) -> None:
-        assert classify(42) == ExitReason.UNKNOWN
+        assert (
+            classify(cast(Any, 42)) == ExitReason.UNKNOWN
+        )  # TECH_DEBT-009: 非法输入探针 (int→str|None 参数) → cast(Any)
 
     # ── P0: Exact-match canonical labels ──
 

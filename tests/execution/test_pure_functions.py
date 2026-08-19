@@ -17,7 +17,6 @@ from core.execution.strategy_line import (
     z_depth_penalty,
 )
 
-
 # ── sigmoid_exhaustion ────────────────────────────────────────────────────
 
 
@@ -102,7 +101,9 @@ class TestTrendMaturityDiscount:
         assert r < 0.8
 
     def test_combined_discount_floored(self):
-        r = trend_maturity_discount(hurst=0.45, trend_strength=0.25, strategy_family="trend_following")
+        r = trend_maturity_discount(
+            hurst=0.45, trend_strength=0.25, strategy_family="trend_following"
+        )
         assert r >= 0.40
 
     def test_swing_strategy_discounts(self):

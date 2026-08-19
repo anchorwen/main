@@ -7,13 +7,10 @@ Covers:
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pytest
 
 from core.execution.market_efficiency import check_market_normalized, compute_kaufman_er
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # compute_kaufman_er
@@ -53,7 +50,9 @@ class TestComputeKaufmanER:
 
     def test_default_period_10(self) -> None:
         """Default period is 10."""
-        prices = list(range(20))
+        prices: list[float] = list(
+            range(20)
+        )  # TECH_DEBT-009: int→float numeric tower, 运行时值不变
         result = compute_kaufman_er(prices)
         assert result == pytest.approx(1.0)
 
