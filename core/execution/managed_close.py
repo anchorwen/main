@@ -269,7 +269,11 @@ def dispatch_managed_close(
                     ignore_protection_flag=ctx.ignore_protection_flag,
                     protection_flag_path=ctx.protection_flag_path,
                     adapter_name=ctx.adapter_name,
-                    extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
+                    # TECH_DEBT-010 Blueprint C: close 路径显式注入 per-symbol endpoint。
+                    extensions={
+                        "mt5_terminal_path": ctx.mt5_terminal_path,
+                        "zmq_order_endpoint": ctx.zmq_order_endpoint,
+                    },
                 ),
                 brain_ids=_close_brain_ids,
                 pnl=pnl,
@@ -333,7 +337,11 @@ def dispatch_managed_close(
                 ignore_protection_flag=ctx.ignore_protection_flag,
                 protection_flag_path=ctx.protection_flag_path,
                 adapter_name=ctx.adapter_name,
-                extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
+                # TECH_DEBT-010 Blueprint C: close 路径显式注入 per-symbol endpoint。
+                extensions={
+                    "mt5_terminal_path": ctx.mt5_terminal_path,
+                    "zmq_order_endpoint": ctx.zmq_order_endpoint,
+                },
             )
             _close_dispatched = True
         except Exception as exc:  # BLE001:FOG (logged, Phase 3b)

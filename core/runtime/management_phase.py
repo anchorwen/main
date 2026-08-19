@@ -98,6 +98,8 @@ def _modify_trail(
         reason=reason,
         brain_ids=brain_ids,
         strategy_name=strategy_name,
+        # TECH_DEBT-010 Blueprint C: per-symbol ZMQ endpoint 显式注入 (FIX-20260613-059c 只修了 open 路径)。
+        zmq_order_endpoint=config.zmq_order_endpoint,
     )
 
 
@@ -1797,7 +1799,11 @@ def execute_management_phase(
                             ignore_protection_flag=config.ignore_protection_flag,
                             protection_flag_path=config.protection_flag_path,
                             adapter_name=config.adapter_name,
-                            extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                            # TECH_DEBT-010 Blueprint C: close 路径显式注入 per-symbol endpoint。
+                            extensions={
+                                "mt5_terminal_path": config.mt5_terminal_path,
+                                "zmq_order_endpoint": config.zmq_order_endpoint,
+                            },
                         )
 
                     _ptp_pnl = None
@@ -1838,7 +1844,11 @@ def execute_management_phase(
                         ignore_protection_flag=config.ignore_protection_flag,
                         protection_flag_path=config.protection_flag_path,
                         adapter_name=config.adapter_name,
-                        extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                        # TECH_DEBT-010 Blueprint C: close 路径显式注入 per-symbol endpoint。
+                        extensions={
+                            "mt5_terminal_path": config.mt5_terminal_path,
+                            "zmq_order_endpoint": config.zmq_order_endpoint,
+                        },
                     )
                     _ptp_dispatched = True
             except (

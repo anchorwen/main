@@ -171,6 +171,7 @@ class ExecutionQueue:
         broker: Any = None,
         close_dispatch_fn: Any = None,
         adapter_name: str = "mt5",
+        zmq_order_endpoint: str = "",  # TECH_DEBT-010 Blueprint C: per-symbol ZMQ endpoint
     ) -> list[DispatchResult]:
         """Process all queued decisions in priority order with stagger delay.
 
@@ -208,6 +209,7 @@ class ExecutionQueue:
                 broker=broker,
                 close_dispatch_fn=close_dispatch_fn,
                 adapter_name=adapter_name,
+                zmq_order_endpoint=zmq_order_endpoint,
             )
         except Exception as _fatal_exc:  # BLE001:FOG (logged, Phase 3b)
             import logging as _fatal_log
@@ -235,6 +237,7 @@ class ExecutionQueue:
         broker: Any = None,
         close_dispatch_fn: Any = None,
         adapter_name: str = "mt5",
+        zmq_order_endpoint: str = "",  # TECH_DEBT-010 Blueprint C: per-symbol ZMQ endpoint
     ) -> list[DispatchResult]:
         """Internal flush implementation — wrapped by fail-closed guard."""
         # Sort by priority (lowest first)
@@ -371,7 +374,11 @@ class ExecutionQueue:
                             ignore_protection_flag=ignore_protection_flag,
                             protection_flag_path=protection_flag_path,
                             adapter_name=adapter_name,
-                            extensions={"mt5_terminal_path": mt5_terminal_path},
+                            # TECH_DEBT-010 Blueprint C: net-out close 显式注入 per-symbol endpoint。
+                            extensions={
+                                "mt5_terminal_path": mt5_terminal_path,
+                                "zmq_order_endpoint": zmq_order_endpoint,
+                            },
                         )
                     # ── Close confirmation poll (timeout 30 s, max 120 iterations) ──
                     if isinstance(_close_result, dict):

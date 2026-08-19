@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from core.brains.services.brain_registry_loader import BrainRegistryLoader
+from core.contracts.exceptions import DataIntegrityError
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.service_container import ServiceContainer
 
@@ -172,14 +173,27 @@ def build_v9_shadow_container() -> ServiceContainer:
     """Build a fully wired ServiceContainer for V9 shadow mode."""
     import yaml
 
-    # Resolve adapter name from live.yaml so production deployments
-    # use the real MT5 adapter instead of the hardcoded stub fallback.
+    # ── The Shadow Veto (TECH_DEBT-010, Blueprint A) ──────────────────────
+    # 影子系统永不发起真实网络请求。adapter_name 若解析为生产网络适配器
+    # (mt5_zmq / mt5 / fix / file_queue 等非 stub), 直接宕机 (DataIntegrityError)。
+    # 无豁免通道 — 影子模式没有合法的真桥派发场景; 实盘派发必须走生产入口
+    # (main_v9.py / live_launcher.py), 严禁借影子容器连真 ZMQ。
+    # 根因: 8/3-8/7 影子风暴 (281 条 message_ 幽灵单经真 ZMQ 5556 达 XAU 桥,
+    # FIX-20260806-006 声称的缓解从未提交)。此 veto 为物理硬断言, 不短路不告警。
+    _NETWORK_ADAPTERS = {"mt5", "mt5_zmq", "fix", "file_queue"}
     live_yaml_path = _repo_root() / "configs" / "live.yaml"
     adapter_name = "stub"
     if live_yaml_path.exists():
         with open(live_yaml_path, encoding="utf-8") as f:
             live_cfg = yaml.safe_load(f) or {}
         adapter_name = live_cfg.get("adapter", {}).get("name", "stub")
+    if adapter_name in _NETWORK_ADAPTERS:
+        raise DataIntegrityError(
+            "Shadow Veto (TECH_DEBT-010 Blueprint A): 影子容器禁止加载生产网络适配器 "
+            f"adapter_name={adapter_name!r}。影子系统永不发起真实 ZMQ/MT5 请求。"
+            "如需实盘派发请走生产入口 (main_v9.py / live_launcher.py); "
+            "影子模式仅允许 stub/mock 适配器。"
+        )
 
     config = EnvironmentConfig.development(
         base_dir=_resolve_data_base_dir(),

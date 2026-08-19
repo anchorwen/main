@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-18T18:07:54Z
-> **扫描模块数**: 817
+> **自动生成**: 2026-08-19T05:51:51Z
+> **扫描模块数**: 820
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -10,7 +10,7 @@
 |------|------|----|------|------|------|------|
 | `backtest_runner.py` | ✅ active | BacktestRunner, BacktestResult | 6 | 154 | — | |
 | `batch_processor.py` | ✅ active | BatchProcessor | 3 | 78 | — | |
-| `bootstrap_v9.py` | ✅ active | — | 6 | 226 | — | |
+| `bootstrap_v9.py` | ✅ active | — | 6 | 240 | — | |
 | `cli.py` | ✅ active | — | 42 | 1559 | — | |
 | `communication_ops_cli.py` | ✅ active | — | 7 | 137 | — | |
 | `communication_summary_contract.py` | ✅ active | — | 1 | 71 | — | |
@@ -212,7 +212,7 @@
 | `scheduled_task_registry.py` | ✅ active | — | 4 | 36 | — | |
 | `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 20 | 483 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
-| `service_container.py` | ✅ active | ServiceContainer | 41 | 638 | — | |
+| `service_container.py` | ✅ active | ServiceContainer | 41 | 650 | — | |
 | `startup_validator.py` | ✅ active | — | 1 | 113 | — | |
 | `state_persistence.py` | ✅ active | StatePersistence | 6 | 101 | — | |
 | `validation_mode.py` | ✅ active | — | 1 | 10 | — | |
@@ -231,7 +231,7 @@
 | `cross_strategy_coordinator.py` | ✅ active | OpposingPosition, ConflictResolution, CrossStrategyCoordinator | 4 | 228 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 279 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
-| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 563 | — | |
+| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 9 | 570 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 342 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 507 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
@@ -245,7 +245,7 @@
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
 | `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 398 | — | |
-| `managed_close.py` | ✅ active | — | 2 | 408 | — | |
+| `managed_close.py` | ✅ active | — | 2 | 416 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 511 | — | |
@@ -257,7 +257,7 @@
 | `microstructure_gate.py` | ✅ active | MicrostructureResult, MicrostructureGate | 3 | 184 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 12 | 159 | — | |
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 406 | — | |
-| `net_out_close_handler.py` | ✅ active | — | 1 | 177 | — | |
+| `net_out_close_handler.py` | ✅ active | — | 1 | 181 | — | |
 | `ofi_gate.py` | ✅ active | — | 1 | 90 | — | |
 | `ood_gateway.py` | ✅ active | OODVerdict, OODConfig, OODGateway | 11 | 456 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
@@ -487,7 +487,7 @@
 | `resilience.py` | ✅ active | CircuitState, CircuitBreaker, RateLimiter | 13 | 153 | — | |
 | `stub_communication_adapter.py` | ✅ active | StubCommunicationAdapter | 2 | 23 | — | |
 | `venue_router.py` | 🧪 stub | VenueAdapter, StubVenueAdapter, VenueRouter | 14 | 116 | — | |
-| `zmq_communication_adapter.py` | ✅ active | CircuitBreakerOpenError, ZMQCommunicationAdapter | 6 | 234 | — | |
+| `zmq_communication_adapter.py` | ✅ active | CircuitBreakerOpenError, ZMQCommunicationAdapter | 6 | 237 | — | |
 | `zmq_receipt_listener.py` | ✅ active | ZMQReceiptListener | 9 | 232 | — | |
 
 ## core/risk
@@ -532,13 +532,13 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5148 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5154 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 18 | 2657 | — | |
+| `management_phase.py` | ✅ active | — | 18 | 2667 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 379 | — | |
 | `mia_close.py` | ✅ active | — | 2 | 192 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
-| `modify_trail_dispatch.py` | ✅ active | — | 1 | 157 | — | |
+| `modify_trail_dispatch.py` | ✅ active | — | 1 | 168 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
@@ -552,7 +552,7 @@
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
 | `restart_state.py` | ✅ active | — | 2 | 490 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
-| `session_guards.py` | ✅ active | — | 3 | 184 | — | |
+| `session_guards.py` | ✅ active | — | 3 | 188 | — | |
 | `settlement_queue.py` | ✅ active | SettlementEntry, SettlementQueue | 14 | 687 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
 | `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 505 | — | |
@@ -655,6 +655,7 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_20260806_07_losses.py` | ✅ active | — | 8 | 359 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
+| `_audit_btc_modify_misroute_exposure_20260819.py` | ✅ active | — | 3 | 222 | — | |
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
 | `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
 | `_audit_entry_timing_20260807.py` | ✅ active | — | 5 | 301 | — | |
@@ -665,6 +666,8 @@
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_audit_shadow_pnl_august_20260812.py` | ✅ active | — | 3 | 139 | — | |
 | `_audit_shadow_pnl_replay_20260812.py` | ✅ active | — | 5 | 248 | — | |
+| `_audit_storm_domain_wal_20260819.py` | ✅ active | — | 1 | 97 | — | |
+| `_audit_storm_forensics_20260819.py` | ✅ active | — | 1 | 108 | — | |
 | `_audit_storm_sender_20260806.py` | ✅ active | — | 1 | 130 | — | |
 | `_audit_trail_mislabel_20260806.py` | ✅ active | — | 3 | 281 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
@@ -817,7 +820,7 @@
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
 | `live_intent_loop.py` | ✅ active | — | 6 | 2817 | — | |
-| `live_launcher.py` | ✅ active | — | 16 | 1271 | — | |
+| `live_launcher.py` | ✅ active | — | 16 | 1282 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |
@@ -829,7 +832,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 37 | 2207 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 40 | 2363 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |

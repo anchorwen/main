@@ -647,6 +647,8 @@ def _dispatch_modify_trail(
         reason=reason,
         brain_ids=brain_ids,
         strategy_name=strategy_name,
+        # TECH_DEBT-010 Blueprint C: per-symbol ZMQ endpoint 显式注入 (FIX-20260613-059c 只修了 open 路径)。
+        zmq_order_endpoint=config.zmq_order_endpoint,
     )
 
 
@@ -4503,6 +4505,8 @@ def execute_live_cycle(
                 protection_flag_path=config.protection_flag_path,
                 broker=broker,
                 close_dispatch_fn=_net_out_close_dispatch_fn,
+                # TECH_DEBT-010 Blueprint C: net-out close 显式注入 per-symbol endpoint。
+                zmq_order_endpoint=config.zmq_order_endpoint,
             )
 
             # ── Quarantine check: block entries on symbols with unconfirmed net-out ──
@@ -4769,8 +4773,10 @@ def execute_live_cycle(
                                                 ignore_protection_flag=config.ignore_protection_flag,
                                                 protection_flag_path=config.protection_flag_path,
                                                 adapter_name=config.adapter_name,
+                                                # TECH_DEBT-010 Blueprint C: force-close 显式注入 endpoint。
                                                 extensions={
-                                                    "mt5_terminal_path": config.mt5_terminal_path
+                                                    "mt5_terminal_path": config.mt5_terminal_path,
+                                                    "zmq_order_endpoint": config.zmq_order_endpoint,
                                                 },
                                             )
                                             state.position_manager.clear_position(

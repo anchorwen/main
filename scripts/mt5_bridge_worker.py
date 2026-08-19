@@ -43,6 +43,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--default-symbol", default="XAUUSDc", help="Trading symbol for reconnect symbol_select"
     )
+    parser.add_argument(
+        "--journal-domain",
+        default=None,
+        choices=["XAU", "BTC"],
+        help=(
+            "Journal Firewall domain (TECH_DEBT-010): XAU ledger admits only XAUUSD/XAUUSDc, "
+            "BTC ledger only BTCUSDc. Defaults to --default-symbol prefix when unset."
+        ),
+    )
     parser.add_argument("--poll-seconds", type=float, default=1.0)
     parser.add_argument("--journal-path", default="data/live_trade_journal.jsonl")
     parser.add_argument("--protection-flag-path", default="data/live_dispatch_block.flag")
@@ -66,8 +75,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--zmq-order-endpoint",
-        default="tcp://127.0.0.1:5556",
-        help="ZMQ PULL endpoint for receiving orders",
+        default=None,
+        help=(
+            "ZMQ PULL endpoint for receiving orders. Death of Defaults (TECH_DEBT-010 "
+            "Blueprint C): must be explicitly provided in --zmq mode — no default port "
+            "fallback (5556 is XAU; BTC bridge must pass its own 5558/15558)."
+        ),
     )
     parser.add_argument(
         "--zmq-ack-endpoint",
@@ -314,6 +327,67 @@ def set_journal_gate(gate: Any | None) -> None:
     _journal_gate = gate
 
 
+# ── The Journal Firewall (TECH_DEBT-010, Blueprint B) ───────────────────
+# XAU 账本只准进 XAUUSD(c), BTC 账本只准进 BTCUSDc。跨域数据 (如 BTC modify
+# 错路由至 XAU 桥) 在写盘前拦截, 打入 cross_domain_warnings.jsonl 审计文件,
+# 坚决保卫 SSOT 纯洁性 (根因: 7/20-8/4 BTC 227 条 modify_sltp 串台进 data/)。
+# 域由 --default-symbol 前缀推导; --journal-domain 可显式覆盖。
+_DOMAIN_SYMBOL_WHITELIST: dict[str, frozenset[str]] = {
+    "XAU": frozenset({"XAUUSD", "XAUUSDc"}),
+    "BTC": frozenset({"BTCUSDc"}),
+}
+_journal_domain: str | None = None
+
+
+def set_journal_domain(domain: str | None) -> None:
+    """Set the module-level journal domain (XAU/BTC/None). Called at startup."""
+    global _journal_domain
+    _journal_domain = domain
+
+
+def _resolve_journal_domain(explicit: str | None, default_symbol: str | None) -> str | None:
+    """Resolve the journal domain from an explicit flag or the service symbol.
+
+    Explicit ``--journal-domain`` wins; otherwise derive from
+    ``--default-symbol`` prefix (XAUUSDc -> XAU, BTCUSDc -> BTC).
+    """
+    if explicit in ("XAU", "BTC"):
+        return explicit
+    if default_symbol:
+        if default_symbol.startswith("XAU"):
+            return "XAU"
+        if default_symbol.startswith("BTC"):
+            return "BTC"
+    return None
+
+
+def _journal_firewall_reason(record: dict[str, Any]) -> str | None:
+    """Return a rejection reason if *record* crosses the journal domain.
+
+    None = admit.  A record whose symbol belongs to a DIFFERENT domain than
+    this bridge's journal is cross-domain contamination and must not enter
+    the SSOT.  Unknown/None symbols cannot be proven cross-domain, so they
+    are logged but admitted (backward compatibility for legacy entries).
+    """
+    domain = _journal_domain
+    if not domain:
+        return None
+    symbol = record.get("symbol")
+    if symbol is None:
+        import logging as _logging
+
+        _logging.getLogger("BridgeJournal").warning(
+            "JournalFirewall: entry missing symbol (domain=%s) — admitted", domain
+        )
+        return None
+    if symbol in _DOMAIN_SYMBOL_WHITELIST[domain]:
+        return None
+    return (
+        f"cross-domain symbol {symbol!r} is not in {domain} domain whitelist "
+        f"{sorted(_DOMAIN_SYMBOL_WHITELIST[domain])}"
+    )
+
+
 def _append_journal(journal_path: Path, record: dict[str, Any], *, gate: Any | None = None) -> None:
     """Append a record to the trade journal with advisory file locking.
 
@@ -346,6 +420,47 @@ def _append_journal(journal_path: Path, record: dict[str, Any], *, gate: Any | N
                 record.get("message_id"),
             )
             return
+
+    # ── Journal Firewall (TECH_DEBT-010 Blueprint B): cross-domain rejection ──
+    # 跨域数据直接拦截打入 cross_domain_warnings, 绝不进入 SSOT 主账本。
+    _firewall_reason = _journal_firewall_reason(record)
+    if _firewall_reason is not None:
+        _blocked = dict(record)
+        _blocked["_cross_domain_blocked_at"] = _utc_now()
+        _blocked["_cross_domain_reason"] = _firewall_reason
+        _cross_domain_path = journal_path.parent / "cross_domain_warnings.jsonl"
+        try:
+            with _cross_domain_path.open("a", encoding="utf-8") as _warn_fh:
+                _warn_fh.write(json.dumps(_blocked, ensure_ascii=False, default=str) + "\n")
+            print(
+                json.dumps(
+                    {
+                        "event": "journal_cross_domain_blocked",
+                        "message_id": record.get("message_id", ""),
+                        "symbol": record.get("symbol"),
+                        "domain": _journal_domain,
+                        "reason": _firewall_reason,
+                        "warning_file": str(_cross_domain_path),
+                        "recorded_at": _utc_now(),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            print(
+                json.dumps(
+                    {
+                        "event": "journal_cross_domain_warning_failed",
+                        "message_id": record.get("message_id", ""),
+                        "warning_file": str(_cross_domain_path),
+                        "error": "cross-domain warning write failed",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        return  # Blocked — never enters the SSOT journal
 
     # ── JournalGate: validate close entries BEFORE lock acquisition ──
     # Reject early to avoid lock contention from doomed writes.
@@ -1281,6 +1396,37 @@ def run_worker(args: argparse.Namespace) -> int:
     journal_path = Path(args.journal_path)
     protection_flag_path = Path(args.protection_flag_path)
 
+    # ── Journal Firewall domain (TECH_DEBT-010 Blueprint B) ──
+    # 启动时从显式 --journal-domain 或 --default-symbol 前缀推导域, 设置模块级状态。
+    set_journal_domain(_resolve_journal_domain(args.journal_domain, args.default_symbol))
+    if _journal_domain:
+        print(
+            json.dumps(
+                {
+                    "event": "journal_firewall_armed",
+                    "domain": _journal_domain,
+                    "whitelist": sorted(_DOMAIN_SYMBOL_WHITELIST[_journal_domain]),
+                    "journal_path": str(journal_path),
+                    "time": _utc_now(),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+    else:
+        print(
+            json.dumps(
+                {
+                    "event": "journal_firewall_disarmed",
+                    "reason": "no domain resolved (no --journal-domain / --default-symbol)",
+                    "journal_path": str(journal_path),
+                    "time": _utc_now(),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
     # ── JournalGate initialization (FIX-20260626-143) ──
     try:
         from core.ledger.services.journal_gate import JournalGate
@@ -1700,7 +1846,9 @@ def _write_zmq_journal_entry(
 
 def run_zmq_worker(
     *,
-    order_endpoint: str = "tcp://127.0.0.1:5556",
+    # Death of Defaults (TECH_DEBT-010 Blueprint C): ZMQ order endpoint 必选。
+    # main() 已保证 --zmq 模式显式注入, 此处无默认兜底。
+    order_endpoint: str,
     ack_endpoint: str = "tcp://127.0.0.1:5557",
     receipt_dir: Path = Path("data/receipts"),
     journal_path: Path = Path("data/live_trade_journal.jsonl"),
@@ -2160,6 +2308,14 @@ def main(argv: list[str] | None = None) -> int:
         pass  # hardcoded fallback already loaded on import
 
     if args.zmq:
+        # ── Death of Defaults (TECH_DEBT-010 Blueprint C) ──
+        # ZMQ 模式下 --zmq-order-endpoint 必须显式注入 — 无默认端口兜底。
+        if not args.zmq_order_endpoint:
+            raise SystemExit(
+                "[FATAL] Death of Defaults (TECH_DEBT-010 Blueprint C): --zmq 模式必须显式传 "
+                "--zmq-order-endpoint (per-symbol PULL endpoint)。禁止默认 5556 兜底 "
+                "(5556 是 XAU 端口, 多品种架构中未显式注入即启动失败)。"
+            )
         # ── Initialize MT5 once ──
         mt5 = None
         terminal_path = args.mt5_terminal_path

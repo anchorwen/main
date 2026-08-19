@@ -20,6 +20,26 @@
 
 ---
 
+### ReB-20260819-CROSS_ASSET_JOURNAL_CONTAMINATION
+- **Pattern Signature**: `CROSS_ASSET_JOURNAL_CONTAMINATION`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-002
+- **Related**: FIX-20260819-002 (RESOLVED — Blueprint B Journal Firewall), TECH_DEBT-010, DQAF-20260804-007 (D1_WELL_CROSS_ASSET_POISONING — 同族跨资产写)
+
+**定义**: 命令/事件因 per-symbol 路由裂缝错误写入**其他品种域**的 SSOT 账本 — 多品种架构 (XAU data/ + BTC data_btc/) 下, 任一命令未携带 per-symbol 域身份 (endpoint/journal-domain) 即落入默认域 → BTC 命令混入 XAU 账本 (实证: 10 条 BTC modify_sltp rejected, magic 90460/90430 混入主 journal data/, 而 data_btc journal 全正常). 关键签名: (1) 单一默认值兜底 (默认端口/默认路径/默认账本); (2) 写盘 chokepoint 无域校验; (3) 对账时数据方向与命令方向不一致.
+- **预防** (IMPLEMENTED): ① 唯一写盘 chokepoint (`_append_journal`) 前插**域 Firewall** — XAU 账本仅收 XAUUSD(c), BTC 仅收 BTCUSDc, 跨域记录写 `cross_domain_warnings.jsonl` 绝不进 SSOT; 域由 `--journal-domain` 显式 / `--default-symbol` 前缀推导, 启动打印 firewall_armed/disarmed 状态; ② 命令链路 per-symbol endpoint 显式注入 (禁默认端口兜底, 见 ZMQ_DEFAULT_PORT_FALLBACK).
+- **检测**: 回归锁 test_append_journal_blocks_cross_domain / test_append_journal_btc_domain_blocks_xau (跨域记录 → cross_domain_warnings 存在 + 主账本零写入); 审计 `cross_domain_warnings.jsonl` 增长; 对账 journal symbol 域 vs 命令源方向.
+
+### ReB-20260819-ZMQ_DEFAULT_PORT_FALLBACK
+- **Pattern Signature**: `ZMQ_DEFAULT_PORT_FALLBACK`
+- **Date Cataloged**: 2026-08-19
+- **Source Docket**: DQAF-20260819-002
+- **Related**: FIX-20260819-002 (RESOLVED — Blueprint C Death of Defaults), TECH_DEBT-010, DQAF-20260804-007 (同族"跨资产默认值")
+
+**定义**: 多品种架构中 ZMQ Endpoint 用默认端口兜底 (service_container 默认 `tcp://127.0.0.1:5556` = XAU 桥), 导致非 XAU 域进程/命令静默落到错误品种桥 (BTC 命令落 XAU 桥 → 227 条 rejected + 10 条 journal 污染). 关键签名: (1) 构造器参数有默认端口值; (2) 调用面漏传 endpoint 不报错 (静默回退); (3) 多品种共享单默认值.
+- **预防** (IMPLEMENTED): ① `ZMQCommunicationAdapter.__init__` `order_endpoint` 改 **required 无默认** (TypeError 级拦截); ② service_container/live_launcher 无显式 endpoint → `DataIntegrityError`/`RuntimeError` **fail-fast 崩溃** (无 Endpoint 想发单 → 死, 不静默串台); ③ 全 dispatch 调用面 (open + modify + 7 close 点) 显式注入 per-symbol endpoint (XAU 5556 / BTC 5558); ④ 配置解析单收敛点断言双品种端口互异.
+- **检测**: 回归锁 test_zmq_adapter_constructor_requires_order_endpoint / test_mt5_zmq_without_endpoint_raises_data_integrity_error / test_mt5_zmq_with_endpoint_binds_correct_symbol_port; grep 构造器 ZMQ endpoint 默认值 (禁 `= "tcp://...`).
+
 ### ReB-20260816-MANIFEST_OMISSION
 - **Pattern Signature**: `MANIFEST_OMISSION`
 - **Date Cataloged**: 2026-08-16

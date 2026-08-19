@@ -17,6 +17,7 @@
 | TECH_DEBT-007 | 2026-08-06 | L3 | runtime-live | **close label 三路语义分叉 (Option C — 单源统一, DQAF-20260806-001 IC 裁决 Deferred)**. FIX-20260806-001 (Option A 外科) 已将 trail-aware 契约接入 ACTIVE producer (adapter) 并恢复 MIA fallback, 但 label 决策逻辑仍三处独立: `position_close_adapter.py:_build_event` / `reconciliation.py:reconcile_closed_positions` / `mia_close.py:enrich_mia_from_deals` — 各自硬编码 DEAL_REASON 分支 (sl_hit_first/sl_hit_trailed/watchdog/managed/broker), 三路未来再次演进时仍会漂移 (同类 DQAF-20260708-003 deal 选择分叉前科). 应提取单一 `resolve_close_label(deal_reason, deal_comment, trail_active)` 纯函数为 SSOT, 三路共同消费. | 8/19 Flow46 决战结束后架构重构期清偿 (IC 裁决: 决战前禁止大范围单源重构) |
 | TECH_DEBT-008 | 2026-08-06 | L3 | deployment-lifecycle | **红线冻结 mypy 债 (RED_LINE_FROZEN_ALLOWANCE, A2 冻结登记)**: 5 个 8/19 红线锁定文件存在统一检查类型错误 8 处 — `core/runtime/market_ingress.py`×2 (`_compute_atr_from_rates` Any\|None arg, 需 None-guard), `core/runtime/live_cycle.py`×1 (`DataHealthService()` LIGHT-mode 缺 base_dir/symbol, fail-open), `scripts/live_intent_loop.py`×3 (**真实签名漂移 bug**: LiveAlertHub 传 `log_dir`/`ding_webhook_url`, 实际签名 `base_dir`; `.fire()` 应为 `evaluate_and_dispatch()` — zombie-fuse 熔断告警被 try/except 吞掉从未送达, 8/19 后必修), `scripts/live_shadow_ensemble.py`×1 (cross_assets dict 不变性), `scripts/training/governance_scheduler.py`×1 (FIX-043 leak 转换 _jm typing). 冻结机制: `scripts/_mypy_scope.py` RED_LINE_FROZEN_ALLOWANCE (红线文件零触碰). | 8/19 Flow46 决战结束后清偿: 修根因 → 删 RED_LINE_FROZEN_ALLOWANCE 对应条目 → `python scripts/pre_commit_mypy.py --update-baseline` 重生成 (含 live_intent_loop zombie-fuse 告警 bug 修复) |
 | TECH_DEBT-009 | 2026-08-06 | L3 | testing | **unified 模式潜伏测试债 (A3 显性化登记)**: `python -m mypy core/ apps/ scripts/ tests/` 统一检查显示 **236 类型错误 / 62 测试文件** — 这些错误在 isolated per-file 模式 (follow_imports=skip 抹除导入泛型) 下不可见, 故 baseline (isolated 语义) 从未登记; tests/ 不在 verify --full 统一检查域内 → 当前无门禁阻断, 纯潜伏. 主要形态: `**dict[str,X]` spread 与关键字参数不匹配 (test_position_ownership 已修 13), 冻结 dataclass 赋值 misc, 方法 mock 注入 method-assign, dict[str,Any]\|None 可索引性, strict_equality 非重叠比较, `**kwargs: object`→构造器 arg-type (test_meta_exit_engine 等). Top 文件: test_regime_gate 16 / test_mt5_broker_adapter 12 / test_runtime_execution_pipeline 9 / test_production_scenarios 9 / test_full_integration 9 / test_communication_replay_service 9. | 8/19 Flow46 决战结束后清偿 (A3 方法论复用): 逐文件 isolated+unified 双模式清理 → 若将 tests/ 纳入 verify --full 统一检查域前必须先清偿. 触发信号: `python -m mypy --no-error-summary core/ apps/ scripts/ tests/ \| grep -c "^tests"` |
+| TECH_DEBT-010 | 2026-08-06 | ~~L3~~ **RESOLVED** | runtime-live | **影子风暴 ZMQ 隔离缺陷 + 跨域串台 (The Storm Forensics)**: v9 shadow 容器检测到 live.yaml `mt5_zmq` 时非 `--live-dispatch` 短路隔离不彻底 (FIX-20260806-006 已上, 但**根因未除**) → 批量/回测/阴影进程连真 ZMQ 桥 → rejected 风暴. **🔴 复发实锤 (8/19 解封法证)**: 8/6 裁决后仍复发 3 次 (8/6 10:28Z 47 + 8/7 03:51Z 47 + 8/7 14:30Z 46 = 140 条); 全月风暴特征 (symbol=XAUUSD 缺c + `message_` 前缀 + magic=null) 281 条. **跨域串台变种**: BTC `modify_sltp` rejected 10 条 (magic 90460/90430) 混入主 journal (data/), BTC 命令跨域写入 XAU 账本. **零成交污染** (golden_master = 0). | ✅ **已清偿 FIX-20260819-002 (8/19)**: **A** Shadow Veto — bootstrap_v9 遇生产网络适配器 (mt5_zmq 等) → DataIntegrityError 硬宕机, 杜绝批量/回测连真桥; **B** Journal Firewall — mt5_bridge_worker 唯一写盘 chokepoint 前域判定 (XAU↔XAUUSD(c)/BTC↔BTCUSDc), 跨域记录写 cross_domain_warnings.jsonl 绝不进 SSOT; **C** Death of Defaults — service_container/live_launcher 无 endpoint fail-fast (废除 5556 兜底), zmq_adapter 构造必传 endpoint, 全 dispatch 调用面 (modify+7 close 点) 补 per-symbol endpoint; **D** 风险敞口核验 — 227 条被拒 BTC Trail 请求 → 213 PAIRED (双路径重复下发) + 11 trail-covered + **3 TRUE EXPOSURE** (短命微仓 4287199887/4331501668/4335847505 ≈-0.6~-1.8 USD, MT5 SL/TP 兜底). 回归锁 20 测试. |
 | TECH_DEBT-011 | 2026-08-08 | L2 | scripts (audit) | **DCI Auditor Calendar Awareness — 审计工具休市盲区 (The Calendar Blindspot)**: `scripts/audit_data_chain_integrity.py` 停滞阈值**固定 12h, 无市场日历感知** (Iron Law #11 全链体检发现, 2026-08-08). 每周六/休市跑 `--baseline-read` → 固定误报: XAU `S1_FEATURE_STALE`+`S4_GM_STALE` (forex_24_5 周五 20:54 UTC 收盘休市, 历史 12 周实证) 报 **退化 -5 BLOCKED**, BTC `S6_PRECHECK_STALE` (预检工作日-only 设计). 已证伪为假阳性 — 数据本身零损坏, 是监控工具的日历盲区. **若接入 CI 自动阻断 → 周末寸步难行 (盲区保安)**. | 8/19 Flow46 决战结束后清偿 (IC 裁决: 决战前零触碰审计工具, 维持手工 --baseline-read): 加市场日历感知 — 参考 `core/execution/pre_trade_guards.py:46-47` (forex_24_5/crypto_24_7), 休市期阈值放宽至最近收盘时间, 或 `--now` 锚定周五收盘. |
 | TECH_DEBT-012 | 2026-08-08 | L3 | features | **Feature Writer 休市重写抑制 (The Phantom Ticks)**: BTC 域 `feature_store/records/symbol=XAUUSDc` 特征在休市期**每 ~4h 以冻结收盘值重复落盘** (值逐位一致, mt5_live source, 2026-08-08 实证 3 条重复记录). 上游 Feeder/Aggregator 边界问题 (时钟驱动周末特征计算 + last-value freeze). **已证伪数值污染** — 冗余数据无害, 无逻辑毒药. 风险仅在未来特征重算改"增量写入"时产生重复行. | 8/19 Flow46 决战结束后清偿 (纯防御): 特征写入侧加 `market_closed → 跳过落盘` 守卫 (或写入侧 last-value 指纹去重). 非必需, 低优先级. |
 | TECH_DEBT-013 | 2026-08-11 | L3 | runtime-live | **休市期 intent 阻塞被 watchdog 误杀 (The 360s vs 300s 超时悖论)**: XAU 每日 21:00-22:00 UTC 休市 (纽约 17:00 收盘) 期间, intent `bar_sync` 等待新 M5 bar 阻塞 (**timeout=360s**), watchdog 硬杀超时 **300s** → 360 > 300 结构性必被杀 → 每交易日 **11-14 次进程硬杀重启** + 全量启动序列噪音 + 休市期 `JOURNAL_PNL_NULL_RATE_HIGH` 假告警. **零交易损失** (休市本不能交易), 纯状态机盲区. 全史 905 条击杀中 57% 集中于该窗 (21:00Z n=455 / 22:00Z n=64). 早前误标 "每日 1h 交易空窗 = 死锁退化" 已被用户质询+实证推翻 (2026-08-11 官方修正). 完整证据: `references/DQAF_MEMO_20260811_WATCHDOG_MARKET_SYNC.md`. | 8/19 Flow46 决战结束后清偿 (IC 投委会裁决): intent 识别 `market_closed` → 休市期优雅 idle; 或 bar_sync 超时 < watchdog 超时; 或 watchdog 休市豁免窗. 决战前**严禁触碰 Intent Loop / watchdog** 消除假警报. |
@@ -28,6 +29,38 @@
 | TECH_DEBT-019 | 2026-08-17 | L3 | execution-orders | **TP/SL 动态追踪解耦 RR 坍缩 (The Decoupled Bracket)**: `compute_trail_tp` (FIX-20260713-008) 在 ATR 收缩 ≤0.80×entry_atr 时把 TP 向内收窄且**只缩不放**，但缩窄下限与 SL 距离/RR **零耦合** — TP Floor (`tp_min_distance_atr×bracket_atr`) 用 `max()` 语义仅防"太激进(太远)"不保"RR≥1"；Proximity Gate 仅防末程移动。8/17 实证 (DQAF-20260817-001): h1_swing RR 1.73→**0.527** / m15_swing RR 0.98→**0.385** (策略 `min_rr_ratio=0.85` 均跌破), SL 全生命周期未动而盈利曾达 R=+2.108 → 止盈空间<止损空间负期望结构. FIX-20260709-004 曾修同类 RR 1.66→0.08, 仅堵 candidate 距离未堵 RR 耦合缺口 → 复发. | ✅ **已清偿 FIX-20260819-001 (8/19, IC ①②③ 全量上线)**: ①RR 硬底线 `compute_rr_floor_price` (entry 参照系, 单收敛点) — compute_trail_tp 收紧分支 + trail_dispatch 下发前 RR Guard 双保险; ②SL_Volatility_Trail 波动率对称收紧 (atr_ratio≤0.80 同步收紧 SL, 鼠轮/max_lock/min_step 守卫); ③弹性恢复 (atr_ratio≥0.85 外向复原至 initial_tp, 0.80-0.85 迟滞带防双向振荡, Proximity 70% 共享). `tp_min_rr_ratio` 经 TrailPolicy 单点注入 (position_registration ← sl.min_rr_ratio), save_state v3 持久化跨重启. min_rr=0 → 逐分支零变化 (structural_swing_v1 兼容). 回归锁 580+111. |
 
 ---
+
+## TECH_DEBT-010 Detail — 影子风暴 ZMQ 隔离缺陷 + 跨域串台 (The Storm Forensics)
+
+> **状态**: ✅ **已清偿 FIX-20260819-002 (2026-08-19)** — 投委会雷霆裁决执行完毕 (清偿序列 010 → 008 → 017 → 009; 010 已清偿, 008/017/009 后续跟进). 以下原始裁决、8/19 解封法证、修复蓝图完整保留供审计.
+
+### 原始裁决 (2026-08-06, incident_shadow_storm_resolved)
+- **定性**: 8/6 出单风暴 4× rejected 共 187 条 = **本系统 v9 shadow 误触发** (非外部攻击), **零成交污染** (golden_master/ledger 0 命中). 投委会裁决收口.
+- **风暴签名**: `message_id` = `message_<uuid32>` (唯一由 `ids.py:32-33 new_message_id()` 生成), symbol=`XAUUSD` (缺 `c`), magic=`null`, strategy=`''`, sl/tp 空, `ack_status=rejected`.
+- **裁决时已知时刻** (4 次): 07-08 14:56Z (46) / 08-03 09:18Z (47) / 08-04 15:14Z (47) / 08-05 13:13Z (47).
+- **缓解措施**: FIX-20260806-006 `build_v9_shadow_container` 检测 live.yaml `mt5_zmq` 时非 `--live-dispatch` 短路 (禁真 ZMQ 断言). **注意: 该 FIX 仅上缓解, 根因未除.**
+
+### 8/19 解封法证 — 复发实锤证据链 (Iron Law #11, `_audit_storm_sender_20260806.py` + 本会话 3 轮脚本)
+1. **全月风暴总量超裁决**: 8 月 rejected **293 条** (8/3→8/7 五天分布: 47/57/49/47/93), 其中风暴特征 (XAUUSD 缺c + `message_` 前缀 + rejected) **281 条** — 远超 8/6 裁决时 4 次 187 条.
+2. **8/6 裁决后复发 3 次新风暴 (140 条)** — 🔴 核心证据:
+   - `2026-08-06 10:28Z` — **47 条**
+   - `2026-08-07 03:51-03:52Z` — **47 条**
+   - `2026-08-07 14:30-14:31Z` — **46 条**
+   - 6 个峰值时刻全天分布: 03 / 09 / 10 / 13 / 14 / 15 UTC — 疑似**批量/回测调度触发的周期性发射** (同簇两次 47 条精确重复).
+3. **跨域串台变种 (BTC 污染 XAU 账本)**: 主 journal (data/live_trade_journal.jsonl) 内 10 条 BTC `modify_sltp` rejected — `live_` 前缀 (非 message_), `btc_swing_h1_v2`×6 / `btc_swing_m30`×4, magic **90460/90430** (真实 BTC magic), 8/4 零星混入. 对照: data_btc/live_trade_journal.jsonl 8 月仅 22 条且全 `accepted/closed` 正常 → **BTC 命令错误写入 XAU 域主 journal**, 串台方向确认.
+4. **零成交污染 (唯一安全边际)**: golden_master 8/6-8/7 = **0 记录** → 新风暴仍未穿透到成交台账; 防护网 (ZMQ 桥 dedup/symbol guard) 持续生效.
+5. **源头暂歇未消失**: 8/8 → 8/19 **零 rejected** — 触发源头 (疑似某批量/回测/阴影命令) 未再运行, **非已消失**.
+
+### 待 DQAF Sev 2 回答的投委会双核心问题 (The Storm Forensics)
+- **Q1 谁扣动扳机?**: 对准 8/6 10:28Z / 8/7 03:51Z / 8/7 14:30Z 三时刻, 在任务计划 (Cron/Scheduler) / Windows 事件 / 回测执行历史中定位自动化源头.
+- **Q2 管道如何串联?**: 核查 ZMQ 端口硬编码 (XAU 5556 vs BTC 5558 是否被配置解析合并) 与 Logger/Journal 直写路径, 找出 BTC 污染 XAU 账本的真实代码裂缝.
+
+### 修复蓝图 (清偿时按此展开, FIX 编号待 DQAF 后分配)
+1. **Shadow 禁真 ZMQ 断言加固**: `build_v9_shadow_container` 非 `--live-dispatch` 一律短路 + **断言级物理拦截** (ZMQ 端口探测回绝), 杜绝批量/回测进程连真桥.
+2. **journal 域隔离**: 主 journal 写入侧按 `config.symbol` 域路由 (XAU→data/, BTC→data_btc/), 跨域 symbol 记录硬阻断 + 诊断日志.
+3. **端口解析合并防御**: 单收敛点解析 ZMQ 端口 (杜绝 5556/5558 被解析错误合并), 配置校验器断言双品种端口互异.
+
+- **关联**: FIX-20260806-006 (缓解已上), ReB `SHADOW_STORM_ZMQ_ISOLATION_DEFECT` (待登记), incident 记忆 `incident_shadow_storm_resolved_20260806`, TECH_DEBT-007 (journal 写侧同族), hash-lock `_audit_storm_sender_20260806.py`
 
 ## TECH_DEBT-001 Detail — MIA `symbol` 幽灵默认值
 

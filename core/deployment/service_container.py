@@ -8,6 +8,7 @@ from core.brains.services.brain_run_service import BrainRunService
 from core.contracts.domain.system_mode_state import SystemModeState
 from core.contracts.domain_keys import TIMELINE_ACTOR_HOT_RELOAD, TIMELINE_EVENT_ENGINE_CONFIG
 from core.contracts.enums import SystemMode
+from core.contracts.exceptions import DataIntegrityError
 from core.deployment.compliance_audit import ComplianceAuditService
 from core.deployment.compliance_control_matrix import ComplianceControlMatrixService
 from core.deployment.config_hot_reload import ConfigHotReload
@@ -309,7 +310,18 @@ class ServiceContainer:
             from core.protocol.services.zmq_communication_adapter import ZMQCommunicationAdapter
 
             terminal_path = extensions.get("mt5_terminal_path", "")
-            order_endpoint = extensions.get("zmq_order_endpoint", "tcp://127.0.0.1:5556")
+            # ── Death of Defaults (TECH_DEBT-010 Blueprint C) ────────────
+            # 多品种架构禁止 ZMQ 默认端口兜底: 5556 是 XAU, 未显式注入 endpoint 的
+            # mt5_zmq 派发路径会静默串台 (7/20-8/4 BTC 227 条 modify_sltp 落 XAU 桥)。
+            # 没有 per-symbol endpoint 就想发单 → Fail-Fast, 立刻崩溃, 不兜底不告警。
+            order_endpoint = extensions.get("zmq_order_endpoint")
+            if not order_endpoint:
+                raise DataIntegrityError(
+                    "Death of Defaults (TECH_DEBT-010 Blueprint C): adapter_name=mt5_zmq "
+                    "必须显式注入 zmq_order_endpoint (per-symbol ZMQ endpoint)。"
+                    "禁止依赖默认端口兜底 (5556 是 XAU)。调用方需从外层配置注入 "
+                    "(XAU: tcp://127.0.0.1:5556 / BTC: tcp://127.0.0.1:5558)。"
+                )
             # ── Phase 2: Create file adapter as transparent fallback ─────
             # When the ZMQ circuit breaker trips (3 consecutive failures),
             # dispatch automatically degrades to the file adapter without

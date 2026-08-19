@@ -49,6 +49,11 @@ def dispatch_modify_trail(
     reason: str = "",
     brain_ids: list[str] | None = None,
     strategy_name: str = "",
+    # TECH_DEBT-010 Blueprint C (Death of Defaults): per-symbol ZMQ endpoint.
+    # FIX-20260613-059c 只修了 open 路径, modify 路径缺此注入 → BTC modify_sltp
+    # 曾静默落默认 5556 (XAU 桥) 串台 227 条。mt5_zmq 下未注入会由
+    # service_container 抛 DataIntegrityError (fail-fast), 不兜底。
+    zmq_order_endpoint: str = "",
 ) -> dict | None:  # DQAF-064 §2: return dispatch result for rejection tracking
     """Issue a modify_sltp through the existing outbox pipeline.
 
@@ -144,7 +149,13 @@ def dispatch_modify_trail(
             ignore_protection_flag=ignore_protection_flag,
             protection_flag_path=protection_flag_path,
             adapter_name=adapter_name,
-            extensions={"mt5_terminal_path": mt5_terminal_path},
+            extensions={
+                "mt5_terminal_path": mt5_terminal_path,
+                # TECH_DEBT-010 Blueprint C: modify 路径必须显式注入 per-symbol
+                # ZMQ endpoint (裂缝②修复)。非空才注入 — mt5 (file) 适配器传空串,
+                # 保持零行为变化; mt5_zmq 未注入则 service_container fail-fast。
+                **({"zmq_order_endpoint": zmq_order_endpoint} if zmq_order_endpoint else {}),
+            },
         )
         return result
     except (RuntimeError, ValueError, KeyError, TypeError, OSError) as _exc:

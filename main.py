@@ -158,6 +158,14 @@ def _build_env_config(args: argparse.Namespace) -> Any:
         if feature_store_dir:
             extensions["feature_store_dir"] = feature_store_dir
 
+        # ── TECH_DEBT-010 Blueprint C (Death of Defaults) ────────────────
+        # hub 控制平面同样禁止 ZMQ 默认端口兜底。mt5_zmq 必须从 yaml 显式注入
+        # per-symbol order endpoint (live.yaml: 5556 / live_btc.yaml: 5558);
+        # 未配置时 service_container 会 DataIntegrityError fail-fast。
+        zmq_cfg = config.get("zmq", {}) if isinstance(config.get("zmq"), dict) else {}
+        if zmq_cfg.get("order_endpoint"):
+            extensions["zmq_order_endpoint"] = zmq_cfg["order_endpoint"]
+
     cli_adapter = getattr(args, "adapter", None)
     adapter_name = cli_adapter if cli_adapter else adapter_name_cfg
 

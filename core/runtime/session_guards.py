@@ -117,7 +117,11 @@ def run_session_guards(
                                         ignore_protection_flag=config.ignore_protection_flag,
                                         protection_flag_path=config.protection_flag_path,
                                         adapter_name=config.adapter_name,
-                                        extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                                        # TECH_DEBT-010 Blueprint C: force-close 显式注入 endpoint。
+                                        extensions={
+                                            "mt5_terminal_path": config.mt5_terminal_path,
+                                            "zmq_order_endpoint": config.zmq_order_endpoint,
+                                        },
                                     )
                                     _emit(
                                         "force_close_executed",

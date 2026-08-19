@@ -48,13 +48,16 @@ class ZMQCommunicationAdapter:
     """
 
     # Phase 2: Circuit breaker thresholds
-    CB_FAILURE_THRESHOLD: int = 3       # consecutive ZMQ errors → OPEN
-    CB_COOLDOWN_SECONDS: float = 30.0   # wait before HALF_OPEN probe
+    CB_FAILURE_THRESHOLD: int = 3  # consecutive ZMQ errors → OPEN
+    CB_COOLDOWN_SECONDS: float = 30.0  # wait before HALF_OPEN probe
 
     def __init__(
         self,
         *,
-        order_endpoint: str = "tcp://127.0.0.1:5556",
+        # Death of Defaults (TECH_DEBT-010 Blueprint C): ZMQ endpoint 必须显式注入。
+        # 移除默认 5556 兜底 — 5556 是 XAU, 多品种架构中未传 endpoint 即构造错误,
+        # 由调用方 (service_container) 在解析层 fail-fast, 本适配器不再静默落 XAU。
+        order_endpoint: str,
         terminal_path: str = "",
         adapter_name: str = "mt5_zmq_adapter",
         zmq_context: zmq.Context | None = None,  # type: ignore[name-defined]

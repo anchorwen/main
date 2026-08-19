@@ -438,6 +438,17 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     use_zmq = adapter_cfg.get("name") == "mt5_zmq" if isinstance(adapter_cfg, dict) else False
     zmq_cfg = cfg.get("zmq", {}) if isinstance(cfg.get("zmq"), dict) else {}
 
+    # ── Death of Defaults (TECH_DEBT-010 Blueprint C) ──
+    # ZMQ endpoint 必须由外层配置显式注入。未配置 order_endpoint 的 mt5_zmq
+    # 启动即 Fail-Fast — 禁止静默落默认 5556 (XAU) 造成跨品种串台。
+    if use_zmq and not zmq_cfg.get("order_endpoint"):
+        raise RuntimeError(
+            "Death of Defaults (TECH_DEBT-010 Blueprint C): adapter=mt5_zmq 但 "
+            f"{str(PROJECT_ROOT / cfg.get('base_dir', '?') / 'config')} 缺少 "
+            "zmq.order_endpoint 显式配置。多品种架构禁止 ZMQ 默认端口兜底, "
+            "请在 yaml 显式注入 per-symbol endpoint (XAU: 5556 / BTC: 5558)。"
+        )
+
     bridge_cmd = [
         python,
         "-u",
@@ -449,7 +460,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         bridge_cmd.extend(
             [
                 "--zmq-order-endpoint",
-                zmq_cfg.get("order_endpoint", "tcp://127.0.0.1:5556"),
+                zmq_cfg["order_endpoint"],
                 "--zmq-ack-endpoint",
                 zmq_cfg.get("ack_endpoint", "tcp://127.0.0.1:5557"),
                 # Phase 3: WAL dual-write — pass outbox/archive for 5s slow poll

@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260819-002
+- **Docket ID**: DQAF-20260819-002
+- **日期**: 2026-08-19
+- **置信度**: confirmed (全层)
+- **因果链**:
+  - [Layer 1 — 症状]: 影子风暴 — ZMQ rejected 风暴: 全月 281 条风暴特征记录 (symbol=XAUUSD 缺c, `message_` 前缀, magic=null, ack=rejected), 峰值时刻分布 03/09/10/13/14/15 UTC 周期性发射, 8/6 裁决后仍复发 3 次 140 条 (8/6 10:28Z 47 + 8/7 03:51Z 47 + 8/7 14:30Z 46). 跨域串台变种: BTC `modify_sltp` rejected 10 条 (btc_swing_h1_v2×6/m30×4, magic 90460/90430, `live_` 前缀) 混入**主 journal** (data/) — 与 data_btc journal 8 月 22 条全正常对照, BTC 命令错误写入 XAU 域账本. (证据: gate_audit/2026-08-0[6-7].jsonl, data/live_trade_journal.jsonl, data_btc/live_trade_journal.jsonl)
+  - [Layer 2 — 中间异常]: (a) 非 `--live-dispatch` 进程 (批量/回测/阴影) 检测到 live.yaml `mt5_zmq` 时仅短路隔离不彻底 (FIX-20260806-006 缓解) → 仍可连真 ZMQ 桥; (b) service_container ZMQCommunicationAdapter 构造用默认 `tcp://127.0.0.1:5556` (XAU 桥) 兜底 — 多品种架构 BTC 域进程也能落 XAU 桥; (c) dispatch_modify_trail / close 路径只传 `mt5_terminal_path` 漏传 per-symbol `zmq_order_endpoint` → BTC 命令经默认路径落 XAU 桥 (7/20-8/4 227 条). (证据: service_container.py FIX 前默认端口; modify_trail_dispatch.py FIX 前无 endpoint 参数; scripts/_audit_btc_modify_misroute_exposure_20260819.py)
+  - [Layer 3 — 根因]: (L3, RC-12 config/contract) **多品种架构无显式注入契约** — ZMQ Endpoint 用默认端口兜底而非按品种外层配置显式注入; 调用面漏传 endpoint 无 fail-fast 兜底; 阴影容器无硬断言拦截生产适配器. 同类: FIX-20260613-059c 只修了 open 路径未覆盖 modify/close 全调用面.
+- **证据引用**:
+  - Source 1: [Gate Audit] `gate_audit/2026-08-06.jsonl` + `2026-08-07.jsonl` — 140 条复发风暴 (message_ + XAUUSD 缺c + magic=null)
+  - Source 2: [Main Journal] `data/live_trade_journal.jsonl` — 10 条 BTC modify_sltp rejected 混入 (magic 90460/90430) vs `data_btc/live_trade_journal.jsonl` 8 月 22 条全正常
+  - Source 3 (跨品种/根因代码锚点): `core/deployment/service_container.py` FIX 前默认 5556 / `core/runtime/modify_trail_dispatch.py` FIX 前无 endpoint 参数 / `core/protocol/services/zmq_communication_adapter.py` FIX 前 order_endpoint 有默认 — 双裂缝锚点
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260819-CROSS_ASSET_JOURNAL_CONTAMINATION / ReB-20260819-ZMQ_DEFAULT_PORT_FALLBACK
+
 ### CCT-20260816-001
 - **Docket ID**: DQAF-20260816-001
 - **日期**: 2026-08-16

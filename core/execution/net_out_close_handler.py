@@ -126,7 +126,11 @@ def handle_net_out_close(
             ignore_protection_flag=ctx.ignore_protection_flag,
             protection_flag_path=ctx.protection_flag_path,
             adapter_name=ctx.adapter_name,
-            extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
+            # TECH_DEBT-010 Blueprint C: close 路径同样显式注入 per-symbol endpoint。
+            extensions={
+                "mt5_terminal_path": ctx.mt5_terminal_path,
+                "zmq_order_endpoint": ctx.zmq_order_endpoint,
+            },
         ),
         brain_ids=_brain_ids,
         pnl=_net_pnl,
