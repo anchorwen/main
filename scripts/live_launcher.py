@@ -174,7 +174,13 @@ def _run_daily_ops_once(
             cwd=str(project_root),
             env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
         )
-        if result.returncode == 0:
+        # FIX-20260820-003 (DQAF-20260820-003, IC 裁决 Bulletproof Predicate):
+        # daily_ops.py 退出码契约 (L3597-3602): rc=0 无动作完成 / rc=1 有动作完成
+        # (errors==0 且 actions_total>0 — 运维注意力信号, 非失败) / rc=2 真实错误。
+        # 仅认 rc==0 会把"完成且应用动作"的运行误判 FAILED → 永不 stamp → 4h age
+        # 兜底重跑循环。防弹背心: 未捕获异常也以 rc=1 退出但必向 stderr 打印
+        # "Traceback" — stderr 含 Traceback 时不论 rc 一律判失败 (崩溃 vs 控制内退出)。
+        if result.returncode <= 1 and "Traceback" not in (result.stderr or ""):
             from core.runtime.daily_ops_state import save_daily_ops_completion
 
             save_daily_ops_completion(str(project_root / base_dir), time_module.time())
