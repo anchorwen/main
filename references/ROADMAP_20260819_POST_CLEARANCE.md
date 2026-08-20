@@ -20,7 +20,7 @@
 | 序 | 项 | 模块域 | 级别 | 规模 | 用户可感知影响 | 依赖 |
 |:--|:--|:--|:--|:--|:--|:--|
 | **P1** | journal_freeze_gate Win 路径 bug | 工具 | L2 | S | 无（环境变量退役） | 无 |
-| **P2** | TECH_DEBT-013 watchdog 休市误杀 | runtime-live | L3 | XL | **每日 11-14 次硬杀重启 + 假告警** | 无 |
+| **P2** ✅ | TECH_DEBT-013 watchdog 休市误杀 | runtime-live | L3 | XL | **每日 11-14 次硬杀重启 + 假告警** | 无 |
 | **P3** | TECH_DEBT-014 背景击杀 + 漂移单杀 | runtime-live | L2 | M-L | 每日 1-3 次静默重启 | 随 P2 取证 |
 | **P4** | TECH_DEBT-011 DCI Auditor 休市盲区 | scripts/audit | L2 | M | 周末必误报退化 BLOCKED | 复用 P2 日历工具 |
 | **P5** | TECH_DEBT-012 Feature Writer 休市重写 | features | L3 | S-M | 无（纯防御） | 复用日历 |
@@ -38,14 +38,15 @@
 - **流程**：Scene A，L2 修复，回归锁 + 现有 freeze 测试。
 - **Done**：`JOURNAL_FREEZE_BYPASS` 从代码与 memory 移除；freeze-gate 在 Win 路径正常判定。
 
-### P2 — TECH_DEBT-013 watchdog 休市误杀（核心项，最大噪音）
+### P2 — TECH_DEBT-013 watchdog 休市误杀（核心项，最大噪音）✅ **CLOSED**
 - **根因**：`bar_sync` 超时 360s > watchdog 硬杀 300s → 21:00-22:00Z 休市窗每日 11-14 次硬杀（全史 905 条击杀中 57% 集中该窗）。
 - **修复方案（三选一，DQAF 时 IC 裁决）**：
   1. **intent market_closed 感知**（首选）：复用 `pre_trade_guards.py:46-47` 市场日历 → 休市期跳过 bar_sync 等待，低功耗 idle，不触发 watchdog。
   2. bar_sync 超时降至 watchdog 之下（结构对齐，intent 自行优雅超时）。
   3. watchdog 加休市豁免窗（重开后复位）。
+- **IC 裁决 (2026-08-19 雷霆裁决)**: **方案 1+2 组合 (The Resilient Pulse)** 绝对批准 — ① heartbeat_refresh 脉冲穿透 (heartbeat delegation) + ② 超时倒置 (360→240 双路对齐) + ③ degraded deadline 结构化. 否决方案 3. pre_trade_guards caution tier 零语义漂移.
 - **风险**：触碰 live_cycle / intent_loop / watchdog 核心路径 → 需 **DQAF Sev 2** + 休市期回放回归锁（21:00-21:55 窗口 + 周五收市场景）。
-- **Done**：休市窗零硬杀；`JOURNAL_PNL_NULL_RATE_HIGH` 假告警消失；回归锁 ≥5。
+- **Done (commit aff05b85, 2026-08-20)**: 休市窗零硬杀 (心跳脉冲保活, 结构性不可能再误杀); `bar_sync_timeout` 双路 240 对齐; 回归锁 8 测试 (休市阻塞期无硬杀 + **BTC 24/7 对照**). 三步归档: DQAF-20260820-001 / CCT-20260820-001 / ReB-20260820-MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK. `JOURNAL_PNL_NULL_RATE_HIGH` 假告警消失 (击杀簇根除). **注意: 生效需重启实盘进程** (现行 PID 16196 仍带 --bar-sync-timeout 360 旧参, 下次自然重启即接管).
 
 ### P3 — TECH_DEBT-014 背景零星击杀 + 漂移单杀
 - **内容**：逐条击杀时刻 × intent 阻塞点关联取证（Iron Law #11 脚本先行），确认 386/905 背景击杀同源与否；定位 12:15→13:00 逐日 +5min 漂移单杀来源（连续 12 天精确规律）。
