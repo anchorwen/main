@@ -21,7 +21,7 @@
 |:--|:--|:--|:--|:--|:--|:--|
 | **P1** | journal_freeze_gate Win 路径 bug | 工具 | L2 | S | 无（环境变量退役） | 无 |
 | **P2** ✅ | TECH_DEBT-013 watchdog 休市误杀 | runtime-live | L3 | XL | **每日 11-14 次硬杀重启 + 假告警** | 无 |
-| **P3** | TECH_DEBT-014 背景击杀 + 漂移单杀 | runtime-live | L2 | M-L | 每日 1-3 次静默重启 | 随 P2 取证 |
+| **P3** ✅ | TECH_DEBT-014 背景击杀 + 漂移单杀 | runtime-live | L3 | XL | 每日 1-3 次静默重启 + 22:00 主窗口抑制 | 随 P2 取证 |
 | **P4** | TECH_DEBT-011 DCI Auditor 休市盲区 | scripts/audit | L2 | M | 周末必误报退化 BLOCKED | 复用 P2 日历工具 |
 | **P5** | TECH_DEBT-012 Feature Writer 休市重写 | features | L3 | S-M | 无（纯防御） | 复用日历 |
 | **P6** | TECH_DEBT-007 close label 三路单源 | runtime-live | L3 | L | 出场归因/p_win 校准完整性 | 无 |
@@ -48,10 +48,11 @@
 - **风险**：触碰 live_cycle / intent_loop / watchdog 核心路径 → 需 **DQAF Sev 2** + 休市期回放回归锁（21:00-21:55 窗口 + 周五收市场景）。
 - **Done (commit aff05b85, 2026-08-20)**: 休市窗零硬杀 (心跳脉冲保活, 结构性不可能再误杀); `bar_sync_timeout` 双路 240 对齐; 回归锁 8 测试 (休市阻塞期无硬杀 + **BTC 24/7 对照**). 三步归档: DQAF-20260820-001 / CCT-20260820-001 / ReB-20260820-MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK. `JOURNAL_PNL_NULL_RATE_HIGH` 假告警消失 (击杀簇根除). **注意: 生效需重启实盘进程** (现行 PID 16196 仍带 --bar-sync-timeout 360 旧参, 下次自然重启即接管).
 
-### P3 — TECH_DEBT-014 背景零星击杀 + 漂移单杀
+### P3 — TECH_DEBT-014 背景零星击杀 + 漂移单杀 ✅ **CLOSED**
 - **内容**：逐条击杀时刻 × intent 阻塞点关联取证（Iron Law #11 脚本先行），确认 386/905 背景击杀同源与否；定位 12:15→13:00 逐日 +5min 漂移单杀来源（连续 12 天精确规律）。
 - **流程**：取证脚本 `_audit_` 前缀 → 定性后并入 P2 修复或独立 FIX。
-- **Done**：背景击杀根因定性；漂移来源定位；修复落地。
+- **根因 (L3, RC-06)**：intent 进程内嵌 daily_ops 同步执行位于心跳零脉冲区，真实耗时 BTC~5min/XAU>10min > watchdog 300s 硬阈值 → 结构性必杀 (背景击杀同源 82/515 + 漂移链 08-06→08-20 +5min/day + 22:00 主窗口永久抑制)。
+- **Done (commit 2bd560c4, 2026-08-20)**: **Single Executor/SSOT 时间轴重构** (IC 方案 A 绝对批准) — intent 降级纯信号触发器 (daily_ops_trigger.json 瞬时信标, best-effort 零异常冒泡) + launcher 子进程唯一 daily_ops 执行者 + **stamp-at-completion** 废除 stamp-at-start (state 唯一写者=launcher 成功回执) + 副作用迁移 (label prune → _step_label_prune + P12 weekend gate) + XAU 超时 600→1200s. 回归锁 21. 三步归档: DQAF-20260820-002 / CCT-20260820-002 / ReB-20260820-SYNC_HEAVY_COMPUTE_IN_HEARTBEAT_ZERO_PULSE. **注意: 生效需重启实盘进程** (已重启 11:10 UTC 验证接线; age 兜底补跑进行中).
 
 ### P4 — TECH_DEBT-011 DCI Auditor 日历感知
 - **内容**：`audit_data_chain_integrity.py` 停滞阈值 12h 无日历感知 → 按资产日历（forex_24_5 / crypto_24_7）计算最近有效收盘，休市期阈值放宽锚定收盘；或 `--now` 锚定周五收盘。
