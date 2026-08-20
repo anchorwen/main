@@ -227,7 +227,9 @@ gate:
   gate_policy_config: configs/live_gate_policy.json
 live_trading:
   bar_sync: true
-  bar_sync_timeout: 360
+  # FIX-20260820-001 (TECH_DEBT-013): 360 → 240 与 live.yaml 同步对齐.
+  # BTC crypto_24_7 无休市击杀簇, 心跳脉冲对全天候轮询安全无副作用.
+  bar_sync_timeout: 240
   base_dir: data_btc
   brains_dir: configs/brains_btc
   bridge:

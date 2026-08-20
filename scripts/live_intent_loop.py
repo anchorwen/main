@@ -29,7 +29,7 @@ from core.config.asset_registry import get_asset
 from core.features.rolling_normalizer import RollingNormalizer
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from core.risk.regime_detector import RegimeDetector
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
 from core.runtime.live_cycle import (
     LiveCycleConfig,
     LiveCycleState,
@@ -1835,6 +1835,10 @@ def main(argv: list[str] | None = None) -> int:
                 mt5_worker=mt5_worker,
                 market_type=_yaml_market_type,  # FIX-20260601-042: session-aware bar sync
                 strict_mode=True,  # Architect directive: no direct MT5 in production
+                # FIX-20260820-001 (TECH_DEBT-013): pulse the in-process watchdog
+                # during bar_sync waits so daily-close blocking (no M5 bar for up
+                # to bar_period+10s) is never misclassified as a 300s deadlock.
+                heartbeat_refresh=lambda: setattr(state, "last_heartbeat", time.time()),
             )
             print(
                 json.dumps(
@@ -2668,18 +2672,23 @@ def main(argv: list[str] | None = None) -> int:
                 TypeError,
                 OSError,
             ) as _bar_exc:  # BLE001:FOG
-                print(
-                    json.dumps(
-                        {
-                            "event": "bar_sync_crash",
-                            "time": _utc_iso(),
-                            "error": str(_bar_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                time.sleep(args.interval_seconds)
+                # FIX-20260820-001: FTC DEGRADE guard -- preserve full traceback
+                # for bar_sync degradation (Repairability, #10 hot-path BLE001
+                # governance).  Never crashes the main loop; logs and continues.
+                with fail_open_guard("live_intent_loop:bar_sync_wait"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "bar_sync_crash",
+                                "time": _utc_iso(),
+                                "error": str(_bar_exc),
+                                "traceback": traceback.format_exc(),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    time.sleep(args.interval_seconds)
     finally:
         # ── Release distributed lock ──
         if _live_lock is not None:

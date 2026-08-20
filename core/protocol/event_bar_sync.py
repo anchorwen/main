@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,6 +65,19 @@ DEFAULT_FALLBACK_INTERVAL = 60  # seconds when MT5 is unreachable
 MAX_LAG_BARS = 3  # consecutive missed bars before CRITICAL alert
 MAX_MT5_ERROR_RETRIES = 3  # re-init + retry before returning None on transient MT5 errors
 MAX_CONSECUTIVE_EMPTY_POLLS = 5  # consecutive None/empty copy_rates before re-init attempt
+
+# ── FIX-20260820-001 (TECH_DEBT-013): Watchdog-resilient waiting ──
+# live_intent_loop.py's in-process watchdog hard-kills (os._exit(1)) after
+# 300s without a heartbeat refresh.  For M5 the bar period (300s) EQUALS that
+# threshold, so a pure timeout cap cannot work -- degraded would fire before
+# the real bar forms on every normal cycle.  The heartbeat_refresh pulse is
+# the enabler: while waiting for a bar, refresh the caller's watchdog
+# heartbeat so a legitimate market-close wait is never misclassified as a
+# deadlock (ReB: MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK).
+_WATCHDOG_STALL_THRESHOLD_SECONDS = 300.0
+_DEGRADED_BUFFER_SECONDS = 10.0  # poll once after the bar boundary before degrading
+# Cap for callers WITHOUT a heartbeat pulse: degrade before the watchdog kills.
+_WATCHDOG_SAFE_WAIT_SECONDS = 270.0
 
 
 # -- Data types --
@@ -115,6 +129,11 @@ class BarSyncPoller:
         mt5_worker: MT5Worker | None = None,
         market_type: str = "forex_24_5",  # FIX-20260601-042: session-aware bar sync
         strict_mode: bool = False,  # Architect directive: refuse direct MT5 in production
+        # FIX-20260820-001 (TECH_DEBT-013): watchdog pulse -- callback invoked
+        # periodically during bar_sync waits (poll loop / market-close sleep).
+        # live_intent_loop passes a lambda that stamps state.last_heartbeat so
+        # its in-process watchdog never hard-kills a legitimate wait.
+        heartbeat_refresh: Callable[[], None] | None = None,
     ) -> None:
         self.symbol = symbol
         self.timeframe = timeframe
@@ -129,6 +148,7 @@ class BarSyncPoller:
         self.fallback_interval = fallback_interval
         self._mt5_worker = mt5_worker
         self._strict_mode = strict_mode
+        self._heartbeat_refresh = heartbeat_refresh  # FIX-20260820-001
 
         self._state_path = Path(state_dir) / "bar_sync_state.json"
         self._state = BarSyncState()
@@ -150,12 +170,14 @@ class BarSyncPoller:
         # ── Session gate: skip polling during market close (FIX-20260601-042) ──
         try:
             from core.execution.pre_trade_guards import detect_session
+
             _session = detect_session(market_type=self._market_type)
             if _session.get("risk_tier", "normal") == "off":
                 self._log_event(
                     "BAR_SESSION_OFF",
                     {"market_type": self._market_type, "fallback_sleep": self.fallback_interval},
                 )
+                self._refresh_heartbeat()  # FIX-20260820-001: pulse during market-close sleep
                 time.sleep(self.fallback_interval)
                 return None
         except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
@@ -164,9 +186,12 @@ class BarSyncPoller:
         _start = time.monotonic()
         deadline = _start + timeout
         _bar_secs = self._bar_seconds()
-        # Degrade only after bar_period + 10s buffer -- ensures at least one
-        # poll after the bar boundary before giving up.
-        _degraded_deadline = _start + _bar_secs + 10.0
+        # FIX-20260820-001: degraded deadline via _degraded_wait_seconds() --
+        # bar_period + 10s buffer when a heartbeat pulse is wired (production,
+        # watchdog sleeps on fresh heartbeats); capped below the watchdog's
+        # 300s stall threshold otherwise so a mis-wired caller degrades
+        # gracefully instead of being hard-killed.
+        _degraded_deadline = _start + self._degraded_wait_seconds()
         _degraded = False
 
         # Ensure MT5 is initialized
@@ -175,12 +200,14 @@ class BarSyncPoller:
 
         if not self._mt5_available:
             # MT5 unreachable -- fall back immediately
+            self._refresh_heartbeat()  # FIX-20260820-001: pulse during fallback sleep
             time.sleep(self.fallback_interval)
             return None
 
         _error_count = 0
         _consecutive_empty = 0  # consecutive empty poll counter for silent-failure recovery
         while time.monotonic() < deadline:
+            self._refresh_heartbeat()  # FIX-20260820-001: pulse during poll loop
             try:
                 # Fetch the most recent 2 bars to detect new bar formation
                 if self._mt5_worker is not None:
@@ -410,6 +437,7 @@ class BarSyncPoller:
                     continue
                 # Persistent error -- give up for this cycle
                 self._mt5_available = False
+                self._refresh_heartbeat()  # FIX-20260820-001: pulse during fallback sleep
                 time.sleep(self.fallback_interval)
                 return None
         # Timeout -- no new bar within the window
@@ -535,6 +563,40 @@ class BarSyncPoller:
 
     # -- Internal --
 
+    # ── FIX-20260820-001 (TECH_DEBT-013): Watchdog pulse ──
+
+    def _refresh_heartbeat(self) -> None:
+        """Refresh the caller's watchdog heartbeat during bar_sync waits.
+
+        No-op when no pulse is wired.  live_intent_loop.py passes a callback
+        that stamps ``state.last_heartbeat`` so the in-process watchdog sees
+        "alive" while bar_sync legitimately blocks for the next M5 bar
+        (market close / MT5 stall).  Never raises -- bar_sync must never
+        block the main loop on pulse failure.
+        """
+        if self._heartbeat_refresh is None:
+            return
+        try:
+            self._heartbeat_refresh()
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            pass
+
+    def _degraded_wait_seconds(self) -> float:
+        """Seconds after start at which the degraded wakeup fires.
+
+        FIX-20260820-001: degraded must never outlive the watchdog when no
+        pulse is wired.  For M5 the bar period (300s) EQUALS the watchdog
+        stall threshold (300s), so the bar-boundary deadline
+        (bar_period + 10s buffer) is only safe when a heartbeat pulse keeps
+        the watchdog asleep.  Without a pulse, cap below the threshold so a
+        mis-wired caller degrades gracefully instead of being hard-killed
+        (os._exit(1)).
+        """
+        _bar_secs = self._bar_seconds()
+        if self._heartbeat_refresh is None:
+            return min(_bar_secs + _DEGRADED_BUFFER_SECONDS, _WATCHDOG_SAFE_WAIT_SECONDS)
+        return _bar_secs + _DEGRADED_BUFFER_SECONDS
+
     def _init_mt5(self) -> None:
         """Attempt to initialize MT5 connection (standalone mode only).
 
@@ -590,6 +652,7 @@ class BarSyncPoller:
         except Exception as exc:  # BLE001:FOG
             self._log_event("MT5_INIT_EXCEPTION", {"error": str(exc)})
             self._mt5_available = False
+
     @staticmethod
     def _timeframe_map(tf: str) -> int:
         """Map string timeframe to MT5 constant (hardcoded -- no import needed)."""
@@ -650,6 +713,7 @@ class BarSyncPoller:
                 )
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
                 pass
+
     def _save_state(self) -> None:
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)

@@ -335,3 +335,23 @@
 - **Fix**: FIX-20260819-004 — Scope-Safe Pre-binding 4 处: (1) live_cycle `_positions: list[Any] | None = None` 预绑定 + `_skip_recon` 布尔守卫 (DEGRADE/MT5 超时 → 跳过 reconciliation, known_open_tickets 保留不丢持仓跟踪, 统一 L1518 注释本意); (2) live_cycle `_eq: float = 0.0` (DEGRADE 时 pnl_pct=0); (3) live_intent_loop `while True` 循环体最顶层 `_EVENT_STREAM_MODE = True` 前置绑定 (中部赋值保留幂等); (4) group_consensus `dynamic_volume = raw_volume` (无惩罚回落). 回归锁 tests/runtime/test_tech_debt_017_scope_safety.py 5 测试 (1 behavioral DEGRADE 吞 RuntimeError → dynamic_volume==raw_volume + 4 static 预绑定先于 FTC 块顺序断言防回归).
 - **ReB**: FTC_SCOPE_TRAP_UNBOUNDLOCAL
 - **Status**: **CLOSED** — FIX-20260819-004 (4 处根因清除, mypy/ruff PASS, verify --quick PASS, 针对性回归 47 + tests/runtime+parliament 399 + 新锁 5 全绿)
+
+---
+
+- **Docket ID**: DQAF-20260820-001
+- **Date**: 2026-08-20
+- **Severity**: Sev 2 (实盘运行质量下降 — 每日休市期结构性硬杀, 引擎无法存活完整休市周期)
+- **Title**: TECH_DEBT-013 清偿 — watchdog 休市误杀 (The Resilient Pulse)
+- **Evidence**:
+  - Source 1: `data_btc/watchdog_kill.log` 8/19 21:00:06→21:54:47 **十一连杀** (elapsed≈307.6s 每杀) — kill 时间戳精确对齐 XAU 每日休市窗 (21:00-22:00 UTC), 休市结束即恢复
+  - Source 2: `scripts/live_intent_loop.py:2229-2249` — 内部 daemon 线程每 10s 检查 `state.last_heartbeat`, >300s → `os._exit(1)` + watchdog_kill.log
+  - Source 3: `core/protocol/event_bar_sync.py` — degraded wakeup 310s (bar_period+10s) / bar_sync timeout 360s 均 **> watchdog 300s** → 结构性保证被杀
+  - Source 4: `core/runtime/live_cycle.py:2496` — FIX-20260725-002 `_is_daily_close_window()` 仅守卫 execute_live_cycle() Phase 0; bar_sync 等待 (live_intent_loop.py:2615-2661) 在 cycle **之外** → 767 次 kills 继续
+  - Source 5: `core/execution/pre_trade_guards.py:190-215` — daily close (21-22 UTC) 返回 risk_tier="caution"; bar_sync session gate 仅放行 "off" → gate 结构性失败
+  - Source 6: `core/execution/pre_trade_guards.py:73-79` — BTC crypto_24_7 → "normal", 无休市 (对照)
+- **DA**: 双层 L3 架构缺陷 — (1) **等待机制 vs 监控机制失配**: degraded 310s / timeout 360s > watchdog 300s, 等待期零 heartbeat 刷新 → 休市等待被误判为死锁; (2) **bar gate vs risk_tier 语义错配**: bar_sync gate 需要 "off", 休市窗返回 "caution" → gate 结构性失败. **M5 悖论**: M5 bar period (300s) == watchdog 阈值 (300s) → 纯超时压缩 (<300s) 会在真实 M5 bar 形成前提前 degraded → 破坏正常交易; 心跳穿透是唯一正确解
+- **AR**: "是 MT5 假死/死锁需重启" → 被推翻 (kill 精确对齐市场日历休市窗, 无休市期零误杀; BTC 24/7 对照零 kill); "超时压缩到 300s 以下即可" → 被推翻 (M5 悖论 — 提前 degraded 破坏正常交易周期)
+- **Root Cause**: **L3 (architecture-defect, dual)** — 下层合法等待时长 (bar 周期) 与守护阈值同量级, 且等待期不刷新心跳; 语义 gate 与运行态错配
+- **Fix**: FIX-20260820-001 — **The Resilient Pulse** (IC 雷霆裁决批准): ① heartbeat_refresh pulse 注入 BarSyncPoller 轮询 4 点 (session gate / poll loop / MT5-unavailable / persistent-error) → 合法等待期间保活; ② timeout inversion: bar_sync_timeout 360→240 + degraded deadline 结构性对齐 (有 pulse=bar_boundary 310s / 无 pulse=270s 硬帽 <300s); ③ pre_trade_guards caution tier **零语义漂移**. 双路配置 live.yaml + live_btc.yaml bar_sync_timeout 同步对齐 (IC 指令). 回归锁 tests/unit/test_event_bar_sync_heartbeat.py 8 测试 (休市阻塞期无硬杀 + **BTC 24/7 对照**)
+- **ReB**: MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK
+- **Status**: **CLOSED** — FIX-20260820-001 (34 针对性回归全绿, mypy/ruff PASS, 全量 pytest 通过)

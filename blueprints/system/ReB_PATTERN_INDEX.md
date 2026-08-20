@@ -1743,3 +1743,12 @@
 - **定义**: 外部接口 (LiveAlertHub) 构造参数签名与方法演进后, 历史调用点未迁移 — 三重错配: 构造 kwargs (log_dir/ding_webhook_url 已死, 现行 base_dir/symbol/dingtalk_url/dingtalk_secret), 方法名 (fire() 已死, 现行 send_critical), 状态字段引用 (state._alert_hub 从未存在). 若调用点被 BLE001 宽 except 包裹 → 每次调用抛异常被吞, 接口升级的信号全部丢失.
 - **预防**: (1) 接口演进必须同步 grep 全仓调用点 (构造 kwargs + 方法名 + 状态字段三向), 不能只改定义; (2) 对"吞异常"的调用块加一次性告警 (首次异常落盘/打点), 防永久静默; (3) LiveAlertHub 类增加 `__init_subclass__`/descriptor 层防御? 否 — 正确做法是调用点测试锁契约 (`tests/deployment/test_tech_debt_008_alert_hub_contract.py` 锁构造/方法/hasattr(fire)==False).
 - **检测**: `grep -rn "LiveAlertHub("` 全仓核对构造 kwargs; `grep -rn "\.fire("` 在 observability 域内应为 0; 回归锁 `test_tech_debt_008_alert_hub_contract.py` 每次 CI 断言契约不变.
+
+### ReB-20260820-MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK
+- **Pattern Signature**: `MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK`
+- **Date Cataloged**: 2026-08-20
+- **Source Docket**: DQAF-20260820-001
+- **Related**: FIX-20260820-001, TECH_DEBT-013, FIX-20260725-002, FIX-20260610-003
+- **定义**: 金融品进入市场日历休市窗后, 下层组件在等待新 bar 形成时合法阻塞 (等待时长由 bar 周期决定, 恰与监控守护阈值同量级), 而该等待期不刷新存活心跳 → 上层存活监控 (in-process watchdog) 将**合法的休市等待**误判为**死锁** → 结构性周期硬杀. 与真实死锁的区别: kill 时间戳对齐市场日历休市窗、休市结束进程自行恢复、无持久异常. 相关复合因子: 语义 gate 错配 (bar gate 需要 "off", 休市窗返回 "caution") 使 gate 结构性失败, 无法在等待前短路.
+- **预防**: (1) **下层最长等待 < 守护阈值** — 任何被 watchdog 守护的等待, 其最坏超时 (含 degraded wakeup) 必须严格小于守护阈值, 否则结构性必被杀; (2) **合法等待期 heartbeat pulse** — 等待期间周期性刷新存活心跳, 让守护线程对"有进展的等待"放行 (heartbeat delegation 穿透); (3) **语义对齐** — 等待 gate 与运行态分类必须同源 (bar gate 的放行条件与风险窗口语义一致); (4) **警惕 bar 周期 == 守护阈值 的悖论** — 纯超时压缩会提前 degraded 破坏正常交易, 心跳穿透而非缩时是正确解.
+- **检测**: `watchdog_kill.log` kill 时间戳与市场日历休市窗对齐 (XAU 21:00-22:00 UTC daily close); kill elapsed ≈ 守护阈值 (300s); 休市窗内连续 kill 且休市结束恢复; BTC (crypto 24/7) 对照组应零误杀. 回归锁 `tests/unit/test_event_bar_sync_heartbeat.py` 每次 CI 断言休市阻塞期无硬杀 + BTC 对照.

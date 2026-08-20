@@ -134,7 +134,10 @@ live_trading:
     magic: 90001
   base_dir: data
   bar_sync: true
-  bar_sync_timeout: 360
+  # FIX-20260820-001 (TECH_DEBT-013): 360 → 240 与 live_btc.yaml 同步对齐.
+  # 有效等待 = degraded wakeup (bar_period+10s), 由 bar_sync 心跳脉冲保护,
+  # watchdog 不再误杀休市等待. M5 动态下限 max(360, 1.5×bar)=450 仍兜底.
+  bar_sync_timeout: 240
   use_exit_watchdog: true
   use_limit_orders: true
 exit_management:

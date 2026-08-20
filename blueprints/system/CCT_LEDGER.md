@@ -1904,3 +1904,22 @@
   - Source 7: 回归锁 `tests/runtime/test_tech_debt_017_scope_safety.py` 5 passed
 - **是否被推翻**: 否 (AR: "休市崩溃可忽略" 被推翻 — 38 次/11 连崩 = 引擎无法存活完整休市周期; "加 UnboundLocalError 进 except" 被推翻 — 需显式降级语义)
 - **关联 ReB Pattern**: FTC_SCOPE_TRAP_UNBOUNDLOCAL
+
+---
+
+### CCT-20260820-001 — TECH_DEBT-013 watchdog 休市误杀 (MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK)
+- **日期**: 2026-08-20 | **Severity**: Sev 2 | **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `watchdog_kill.log` 8/19 21:00:06→21:54:47 **十一连杀**, 每杀 elapsed≈307.6s; kill 时间戳精确对齐 XAU 每日休市窗 (21:00-22:00 UTC); 休市结束进程恢复, 无持久故障. [confirmed]
+  - [Layer 2 — 中间异常]: bar_sync 等待 (`live_intent_loop.py:2615-2661`) 在 execute_live_cycle() **之外** — FIX-20260725-002 的 `_is_daily_close_window()` (live_cycle.py:2496) 只守卫 cycle Phase 0, 拦不住 inter-cycle bar_sync 等待; 该等待阻塞 ≥300s 且 **零 heartbeat 刷新** → 内部 daemon 线程 (live_intent_loop.py:2229-2249, 每 10s 检查 last_heartbeat) 判定 stall → `os._exit(1)`. [confirmed]
+  - [Layer 3 — 根因]: **L3 双层架构缺陷** — (a) 等待时长 vs 守护阈值同量级: degraded wakeup 310s (bar_period+10s) / bar_sync timeout 360s 均 > watchdog 300s, 且等待期不刷新心跳 → 合法休市等待结构性等价于死锁; (b) 语义 gate 错配: bar_sync session gate 仅放行 risk_tier=="off", 而休市窗 (21-22 UTC) 返回 "caution" → gate 结构性失败. **M5 悖论**: M5 bar period (300s) == watchdog 阈值 (300s), 纯超时压缩会在真实 bar 形成前提前 degraded 破坏正常交易 → 心跳穿透是唯一正确解. [confirmed]
+- **证据引用**:
+  - Source 1: `data_btc/watchdog_kill.log` — 8/19 十一连杀 (elapsed≈307.6s)
+  - Source 2: `scripts/live_intent_loop.py:2229-2249` — daemon 线程 stall 判定 → os._exit(1); `:2615-2661` bar_sync 等待点
+  - Source 3: `core/protocol/event_bar_sync.py` — degraded deadline 逻辑 (310s) + timeout (360s)
+  - Source 4: `core/runtime/live_cycle.py:2496` — FIX-20260725-002 守卫覆盖边界 (cycle 内, 不含 bar_sync)
+  - Source 5: `core/execution/pre_trade_guards.py:190-215` — 休市窗 → "caution"; `:73-79` BTC crypto_24_7 → "normal"
+  - Source 6: `core/protocol/event_bar_sync.py` — FIX-20260820-001 heartbeat_refresh 注入 4 点 + degraded deadline 结构化 (有 pulse=310s / 无 pulse=270s 硬帽)
+  - Source 7: 回归锁 `tests/unit/test_event_bar_sync_heartbeat.py` 8 passed (含 BTC 对照)
+- **是否被推翻**: 否 (AR: "MT5 假死需重启" 被推翻 — kill 精确对齐休市窗, BTC 24/7 零误杀; "超时压缩 <300s" 被推翻 — M5 悖论破坏正常交易)
+- **关联 ReB Pattern**: MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK
