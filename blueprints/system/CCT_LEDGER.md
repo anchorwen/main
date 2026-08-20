@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260820-002
+- **Docket ID**: DQAF-20260820-002
+- **日期**: 2026-08-20
+- **置信度**: confirmed (全层)
+- **因果链**:
+  - [Layer 1 — 症状]: intent 心跳周期内嵌入 daily_ops 同步执行 → watchdog 300s 结构性必杀. 证据: gate_audit 击杀序列 (背景击杀同源 82/515); live_intent_loop.py watchdog 线程 300s 硬阈值; XAU launcher 子进程 600s 超时 55/55 零完成 (08-06→08-19).
+  - [Layer 2 — 中间异常]: daily_ops 真实耗时 BTC~5min / XAU>10min > watchdog 300s 硬阈值, 且执行点位于 cycle-top→cycle-complete 零脉冲区 — 超时即死. stamp-at-start 语义使每次失败后 `_already_ran_today` 已置位 → 逐日 +5min 无界漂移 (08-06 12:44→08-20 01:04) + 22:00 主窗口永久抑制.
+  - [Layer 3 — 根因]: RC-06 contract-violation — L3 架构缺陷: daily_ops 执行通道与心跳循环强耦合 (无独立执行者), 触发与完成戳同址 (stamp-at-start 错误语义). 修复层级 = 架构修复 (Single Executor/SSOT 时间轴重构).
+- **证据引用**:
+  - Source 1: gate_audit/*.jsonl 击杀序列 + scripts/live_intent_loop.py watchdog 300s 硬阈值
+  - Source 2: scripts/live_launcher.py 子进程 600s 超时计数 (55/55) — 计时探针实测 daily_ops 耗时
+  - Source 3 (根因): core/runtime/daily_ops_scheduler.py 旧实现同步调用链 + daily_ops_state stamp 语义
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260820-SYNC_HEAVY_COMPUTE_IN_HEARTBEAT_ZERO_PULSE
+
 ### CCT-20260819-007
 - **Docket ID**: DQAF-20260819-007
 - **日期**: 2026-08-19

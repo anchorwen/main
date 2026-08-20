@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260820-SYNC_HEAVY_COMPUTE_IN_HEARTBEAT_ZERO_PULSE
+- **Pattern Signature**: `SYNC_HEAVY_COMPUTE_IN_HEARTBEAT_ZERO_PULSE`
+- **Date Cataloged**: 2026-08-20
+- **Source Docket**: DQAF-20260820-002
+- **Related**: FIX-20260820-002 (RESOLVED), TECH_DEBT-014
+
+**定义**: 心跳驱动进程 (intent loop) 在周期内零脉冲区同步执行重负载计算 (daily_ops 5-10min+), 远超 watchdog 硬阈值 → 结构性必杀. 关键签名: (1) 重负载与心跳同线程同进程; (2) 执行点位于必须保持存活的守护周期内 (cycle-top→cycle-complete); (3) 完成戳打在开始 (stamp-at-start) 而非成功回执 → 失败后逐日漂移 + 主窗口抑制, 且漂移被 age 兜底掩盖为"非故障".
+- **预防** (IMPLEMENTED): ① **Single Executor/SSOT** — 重负载计算唯一执行者 = 独立子进程 (launcher), 心跳进程降级为纯信号触发器 (瞬时信标 + best-effort 写零异常冒泡); ② **stamp-at-completion** — 完成时间戳唯一事实源 = 子进程成功回执, 废除 stamp-at-start (消除漂移与主窗口抑制); ③ **副作用归属迁移** — 所有重负载副作用 (feature compaction / label prune / governance) 集中到子进程管线; ④ **回归锁** — 心跳进程零重负载同步调用断言 + 幂等无异常触发契约.
+- **检测**: 回归锁 `tests/runtime/test_daily_ops_scheduler.py` (信号触发零重负载/不写 state/幂等无异常/写失败不冒泡) + `tests/runtime/test_daily_ops_state.py` (trigger/stamp 契约) + `tests/engine/test_daily_ops.py` (label_prune + P12 gate).
+
 ### ReB-20260819-PATH_SEPARATOR_MISMATCH_FALSE_BLOCK
 - **Pattern Signature**: `PATH_SEPARATOR_MISMATCH_FALSE_BLOCK`
 - **Date Cataloged**: 2026-08-19
