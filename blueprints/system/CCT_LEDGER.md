@@ -27,6 +27,36 @@
 
 ---
 
+### CCT-20260820-004
+- **Docket ID**: DQAF-20260820-004
+- **日期**: 2026-08-20
+- **置信度**: confirmed (全层, 决定性 solo 复现)
+- **因果链**:
+  - [Layer 1 — 症状]: FIX-20260820-003 部署后, XAU daily_ops 每条完成运行仍被 launcher 判 `FAILED (rc=1)`, `daily_ops_state.json` stamp 永不更新 (01:04 UTC 停留, 13:30 UTC 复查未变) → 每 4h age 兜底重跑 + 假 FAILED. 证据: live_launcher_20260820T122455Z.log FAILED (rc=1) + 12:25 运行产物 mtime 12:36-12:38 UTC (管线真实推进到 param_optimization) + data/state/daily_ops_state.json 未更新.
+  - [Layer 2 — 中间异常]: 谓词 `"Traceback" not in stderr` 对已完成运行求值为失败 — 因为 stderr 含 "Traceback". 决定性复现: solo `daily_ops.py --base-dir /d/future/data` (无并发/无 MT5) 完整跑通 12.2min, stdout 92,899 bytes 以完整 report JSON 结尾 (schema_version=daily_ops.v1, errors=0, actions_total=6, 31/31 steps 非 error, 按契约 rc=1), stderr 仍含 **1 个 Traceback** (EOFError). 谓词模拟: 现行→FAILED; 提案→SUCCESS.
+  - [Layer 3 — 根因]: **stderr Traceback 对 daily_ops 不具崩溃特异性** — fail_open_guard 设计 (BLE001 + `logging.exception`) 将被捕获异常 traceback 例行写入 stderr (logger 无 handler → Python last-resort handler 固定落 stderr). 确定性触发点: `_step_training_readiness` (daily_ops.py:1992) → `evaluate_training_readiness` (check_training_readiness.py:1082) → `np.load(_npz_path, allow_pickle=True)` (check_training_readiness.py:722) 对空/损坏 npz (training_pipeline_xau_metafilter_v1 stage-3) 抛 `EOFError: No data left in file` → daily_ops.py:1996 `logger.exception` → stderr. L2 逻辑缺陷: 成功信号用 stderr 启发式而非 stdout 完成契约.
+- **证据引用**:
+  - Source 1: scripts/live_launcher.py:183 (被证伪谓词) + scripts/daily_ops.py:3589-3590 (stdout 完成标记) + scripts/daily_ops.py:3491 (schema_version 无条件键)
+  - Source 2: `C:\Users\Administrator\AppData\Local\Temp\repro_daily_ops_stdout.txt` (92,899 bytes, 尾完整 report JSON) + `repro_daily_ops_stderr.txt` (10,183 bytes, 1 Traceback EOFError) + 谓词模拟
+  - Source 3 (root cause): scripts/check_training_readiness.py:722 (np.load EOFError) + scripts/daily_ops.py:1994-1998 (logger.exception 捕获路径) + last-resort handler 实证
+- **是否被推翻**: 否 (AR 三重反假设: 真实崩溃被 errors=0+完整 report 推翻; MT5 冲突被 solo 无 MT5 复现推翻; 12:25 并发混沌被 solo 确定性复现推翻)
+- **关联 ReB Pattern**: ReB-20260820-FAILURE_DETECTION_SIGNAL_AMBIGUITY
+
+### CCT-20260820-003
+- **Docket ID**: DQAF-20260820-003
+- **日期**: 2026-08-20
+- **置信度**: confirmed (全层)
+- **因果链**:
+  - [Layer 1 — 症状]: XAU daily_ops 在新架构 (FIX-20260820-002) 下每次运行后 launcher 报 `FAILED (rc=1)`, `state/daily_ops_state.json` 永不 stamp (实证 last_daily_ops_utc 停留 01:04 UTC, 19:10 UTC 复查未变) → 4h age 兜底 (max_age 6h) 每 4h 重跑全管线 + 假 FAILED 告警. 证据: live_launcher_20260820T111100Z.log:540 FAILED (rc=1); data/state/daily_ops_state.json 未更新 vs data_btc (rc=0 对照 11:18 UTC 正常 stamp).
+  - [Layer 2 — 中间异常]: 退出码契约不匹配 — daily_ops.py L3597-3602: errors>0→rc=2 / actions_total>0→rc=1 / 否则 rc=0; live_launcher `_run_daily_ops_once` L177 仅认 `rc==0` 为成功. XAU daily_ops 常态含治理/副作用动作 → 恒 rc=1 → 误判失败且不 stamp.
+  - [Layer 3 — 根因]: RC-06 contract-violation (L2 逻辑缺陷) — FIX-20260820-002 将 stamp-at-completion 唯一写者迁移 launcher 时, 成功判定沿用 watchdog 时代的 rc==0 装饰性判定 (旧版 stamp 来自 intent, rc=1 仅是日志噪音被掩盖); 迁移后 rc==0 成为 stamp 唯一门禁 → 缺陷升格为阻断.
+- **证据引用**:
+  - Source 1: scripts/daily_ops.py:3597-3602 (退出码契约) + scripts/live_launcher.py:177 (rc==0 判定)
+  - Source 2: data/logs/live_launcher_20260820T111100Z.log:540 (FAILED rc=1, stderr 前 500 字符无 Traceback) + data/state/daily_ops_state.json (stamp 缺失) + data_btc 对照 (rc=0 stamp 成功)
+  - Source 3 (root cause): AR 对抗 — "崩溃撞车"假设被推翻: 崩溃必打 Traceback 至 stderr (E3 前 500 字符全为 BrainFactory 告警) + rc=1 ⟺ errors==0 (代码语义自证)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260820-EXIT_CODE_CONTRACT_MISMATCH_IN_SSOT_STAMP
+
 ### CCT-20260820-002
 - **Docket ID**: DQAF-20260820-002
 - **日期**: 2026-08-20

@@ -27,6 +27,7 @@
 | TECH_DEBT-017 | 2026-08-13 | L3 | runtime-live | **intent_loop 降级路径 UnboundLocalError 崩溃 (The Unbound Local)**: XAU intent_loop 8/11 00:31 → 8/13 00:45 共 **38 次** `intent exited with code 1` — MT5 not initialised → `positions_get` 抛 RuntimeError → `FaultTolerantContext [DEGRADE]` 降级路径访问未绑定局部变量 → `UnboundLocalError: '_positions'` (`live_cycle.py:1520`) + `'_EVENT_STREAM_MODE'` (`live_intent_loop.py:2732`). 每日 21:00-22:00Z 休市窗 11 连崩 (8/11、8/12 连续) + 启动竞态崩溃 (8/12 18:25 / 8/13 00:45). launcher 5-30s 自动恢复兜底, **零实盘交易损失** (8/12 首单 01:20-05:10 窗口引擎正常). 副作用: intent log 重启后句柄丢失 → 8/11 后双链 intent log 断流, 诊断线索黑盒化. | 8/19 Flow46 决战结束后与 TECH_DEBT-008/013 合并清偿: DEGRADE 降级路径变量初始化补齐 (入口 try 前绑定 `_positions`/`_EVENT_STREAM_MODE` 或重构降级分支) + 红线文件 mypy 债同批. 红线冻结前 **8/19 前零触碰**. |
 | TECH_DEBT-018 | 2026-08-13 | L3 | observability | **`META_FILTER_WIRED_STALE` 假阳性 — 崩溃循环下 intent log 停写盲区 (The Silent Monad)**: `check_meta_filter_state` (health_checks.py:394-486) head-read 最新 2 个 `intent_*.log` 前 64KB 定位 `meta_pipeline_wired` 事件, wired_age > 360min → WARN. TECH_DEBT-017 崩溃循环 (8/11 00:31 → 8/13 00:45) 致 XAU intent log 8/11 08:32 后**停写** (stdout 落 launcher log `[intent]` 行, 不轮换新 intent_*.log) → health check 读到 **8/11 00:31:59Z 陈旧事件** → wired_age=2808min → 每日假 WARN (2026-08-12T23:19:59Z 钉钉实测). **MetaFilter 实际健康**: 当前进程 PID 18052 于 8/13 00:45:12.684Z `meta_pipeline_wired` 成功 (lgb_loaded=true, micro_scaler_loaded=true, dims=40) + long/short 塔加载 + meta_filter_gate_init (conformal_warm). 8/12 21:11-21:55 休市 11 连崩每次重启也均成功 wired. 非 MetaFilter 故障, 纯监控工具盲区. | 8/19 Flow46 决战结束后随 TECH_DEBT-017 清偿: health check 崩溃循环下回退读 launcher log `[intent]` 行 (wire 时间戳可跨崩溃恢复) 或引入 `meta_pipeline_wired` 独立持久化 SSOT 事件文件. 决战前**零代码**. |
 | TECH_DEBT-019 | 2026-08-17 | L3 | execution-orders | **TP/SL 动态追踪解耦 RR 坍缩 (The Decoupled Bracket)**: `compute_trail_tp` (FIX-20260713-008) 在 ATR 收缩 ≤0.80×entry_atr 时把 TP 向内收窄且**只缩不放**，但缩窄下限与 SL 距离/RR **零耦合** — TP Floor (`tp_min_distance_atr×bracket_atr`) 用 `max()` 语义仅防"太激进(太远)"不保"RR≥1"；Proximity Gate 仅防末程移动。8/17 实证 (DQAF-20260817-001): h1_swing RR 1.73→**0.527** / m15_swing RR 0.98→**0.385** (策略 `min_rr_ratio=0.85` 均跌破), SL 全生命周期未动而盈利曾达 R=+2.108 → 止盈空间<止损空间负期望结构. FIX-20260709-004 曾修同类 RR 1.66→0.08, 仅堵 candidate 距离未堵 RR 耦合缺口 → 复发. | ✅ **已清偿 FIX-20260819-001 (8/19, IC ①②③ 全量上线)**: ①RR 硬底线 `compute_rr_floor_price` (entry 参照系, 单收敛点) — compute_trail_tp 收紧分支 + trail_dispatch 下发前 RR Guard 双保险; ②SL_Volatility_Trail 波动率对称收紧 (atr_ratio≤0.80 同步收紧 SL, 鼠轮/max_lock/min_step 守卫); ③弹性恢复 (atr_ratio≥0.85 外向复原至 initial_tp, 0.80-0.85 迟滞带防双向振荡, Proximity 70% 共享). `tp_min_rr_ratio` 经 TrailPolicy 单点注入 (position_registration ← sl.min_rr_ratio), save_state v3 持久化跨重启. min_rr=0 → 逐分支零变化 (structural_swing_v1 兼容). 回归锁 580+111. |
+| TECH_DEBT-020 | 2026-08-20 | L2 | scripts (data pipeline) | **training_readiness 命中空/损坏 npz → EOFError (The Empty NPZ)**: `check_training_readiness.py:722` `np.load(_npz_path, allow_pickle=True)` 对 `training_pipeline_xau_metafilter_v1` 的 stage-3 npz (空/损坏) 抛 `EOFError: No data left in file` — **每 XAU daily_ops 运行确定性命中** (DQAF-20260820-004 取证, 与并发无关). 被 fail_open_guard 捕获 → 管线继续 (errors=0), **非阻断**; 但特征工程产物损坏 → 训练就绪评估数据缺失. 次生影响: 该 traceback 由 `logging.exception` (last-resort handler) 例行写入 stderr → 曾污染 FIX-20260820-003 launcher 成功谓词信号 (stderr Traceback 非崩溃特异性). | 🔴 **待办 (Sev 3, 数据管道)** — IC 裁决 2026-08-20: 独立建档, **绝不并案**, 不在本次 P3 战役修复. 待办: ① 定位 stage-3 数据集构建器产出空 npz 的根因 (特征写入侧失效); ② 读取侧优雅处理 (`np.load` 捕获 EOFError/ValueError → status="degraded" + 明确诊断, 消除 stderr traceback 噪音). |
 
 ---
 
@@ -195,6 +196,19 @@
 - **纪律**: ~~8/19 冻结期零代码~~ → **已解除**: FIX-20260819-001 (8/19) 清偿, `tp_min_rr_ratio` 门禁 (0=disabled) 保 structural/legacy 零变化
 - **状态**: ✅ **CLOSED (FIX-20260819-001, 2026-08-19)** — 三机制全量上线, 回归锁 580+111 passed
 - **关联**: DQAF-20260817-001 (Sev 2), FIX-20260713-008 (激活案), FIX-20260709-004 (前案), ReB `TP_TRAIL_RR_COLLAPSE_DECOUPLED_FROM_SL`, TECH_DEBT-007 (trail 遥测同族)
+
+## TECH_DEBT-020 Detail — training_readiness 命中空/损坏 npz → EOFError (The Empty NPZ)
+
+- **文件**: `scripts/check_training_readiness.py:722` (`validate_stage_3_dataset_builder` → `np.load(_npz_path, allow_pickle=True)`); 触发链 `scripts/daily_ops.py:1992` (`_step_training_readiness`) → `check_training_readiness.py:1082` (`evaluate_training_readiness`)
+- **现象**: `training_pipeline_xau_metafilter_v1` 的 stage-3 npz 为空/损坏 → `np.load` 抛 `EOFError: No data left in file` — **每 XAU daily_ops 运行确定性命中** (2026-08-20 12:50:44 solo 复现实证, 与 launcher 并发无关).
+- **当前影响**: 被 `_step_training_readiness` 的 fail_open_guard (daily_ops.py:1994-1998) 捕获 → 管线继续 (最终 report `errors=0`, actions 正常) → **非阻断**, 属数据完整性潜伏项.
+- **次生影响 (已根治)**: 该 traceback 由 `logging.exception` (logger 无 handler → last-resort handler) 例行写入 **stderr** — 曾使 FIX-20260820-003 的 launcher 成功谓词 (`"Traceback" not in stderr`) 确定性误判每条 XAU 完成运行为 FAILED → stamp 永不落盘. **FIX-20260820-004 (JSON Payload Authentication) 已根治该信号污染** (谓词转向 stdout report JSON 认证, stderr 全噪音免疫).
+- **根因 (推测, 待查)**: stage-3 数据集构建器 (特征工程产物) 在 XAU 侧某环节产出空/损坏 npz — **数据管道写入侧失效**, 非读取侧故障.
+- **修复方案** (独立立项, **不随 P3 战役**):
+  1. 定位 stage-3 npz 构建源头, 修复空/损坏产物 (根因修复).
+  2. 读取侧优雅处理: `np.load` 捕获 `EOFError`/`ValueError` → 返回 status="degraded" + 明确诊断 (而非 stderr traceback 噪音).
+- **状态**: 🔴 **待办 (Sev 3, 数据管道)** — IC 裁决 2026-08-20: 独立建档, **绝不并案**, 不在本次 P3 战役修复.
+- **关联**: DQAF-20260820-004 (取证源), FIX-20260820-004 (次生信号污染已根治), ReB `FAILURE_DETECTION_SIGNAL_AMBIGUITY`
 
 ## TECH_DEBT-015 Detail — launcher 停机无自动恢复 (运维空窗)
 

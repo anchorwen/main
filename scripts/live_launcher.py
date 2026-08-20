@@ -132,6 +132,43 @@ def _hours_since_last_run(state_path: Path) -> float | None:
         return None
 
 
+def _stdout_has_completion_report(stdout: str) -> bool:
+    """认证 daily_ops 完成铁证 — stdout 尾部含完整 report JSON (schema_version 标识)。
+
+    FIX-20260820-004 (DQAF-20260820-004, IC 裁决 JSON Payload Authentication):
+    daily_ops.py L3589-3590 `print(json.dumps(report, indent=2, ...))` 是完整流水线
+    正常返回前的最后输出 — 崩溃 (C 段错误/内存溢出/未捕获异常) 必走不到该行 → report
+    缺失 = 未完成。从末尾定位最后一个 "schema_version" 字段, 回退到其所属顶层 '{',
+    整体 json.loads — 解析成功 = 报告已完整打印。stderr 的 Traceback/Warning 与本判定
+    完全无关 (Fail-Open 吞噬职责内错误, 不参与崩溃判别)。
+    """
+    if not stdout:
+        return False
+    text = stdout.rstrip()
+    # 定位"最后一个顶层 report 对象"的开启标记。report 由 json.dumps(indent=2) 打印
+    # (daily_ops.py L3589-3590), 顶层键 = 2 空格缩进, schema_version 是首键 (L3491)。
+    # ⚠️ 不能用裸 `"schema_version"` 锚定 — step 内容可含同名字符串 (实证:
+    # daily_recap step 的 sections 列表含 "schema_version", 更深缩进) → 会定位到
+    # 内部 step 对象 → json.loads Extra data。`{\n  "schema_version":` 标记中 `{`
+    # 位于列 0 (顶层对象开启行) + 键位于列 2 (顶层唯一) — step 对象 `{` 在列 4+,
+    # 不可能伪造该标记。
+    marker = '\n{\n  "schema_version":'
+    idx = text.rfind(marker)
+    if idx < 0:
+        # 兜底: report 恰为 stdout 首块 (无前导换行)
+        if text.startswith('{\n  "schema_version":'):
+            start = 0
+        else:
+            return False
+    else:
+        start = idx + 1  # 跳过前导 '\n', 指向 report 开启 '{'
+    try:
+        payload = json.loads(text[start:])
+    except (ValueError, TypeError):
+        return False
+    return isinstance(payload, dict) and "schema_version" in payload
+
+
 def _run_daily_ops_once(
     python: str,
     project_root: Path,
@@ -174,13 +211,16 @@ def _run_daily_ops_once(
             cwd=str(project_root),
             env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
         )
-        # FIX-20260820-003 (DQAF-20260820-003, IC 裁决 Bulletproof Predicate):
-        # daily_ops.py 退出码契约 (L3597-3602): rc=0 无动作完成 / rc=1 有动作完成
-        # (errors==0 且 actions_total>0 — 运维注意力信号, 非失败) / rc=2 真实错误。
-        # 仅认 rc==0 会把"完成且应用动作"的运行误判 FAILED → 永不 stamp → 4h age
-        # 兜底重跑循环。防弹背心: 未捕获异常也以 rc=1 退出但必向 stderr 打印
-        # "Traceback" — stderr 含 Traceback 时不论 rc 一律判失败 (崩溃 vs 控制内退出)。
-        if result.returncode <= 1 and "Traceback" not in (result.stderr or ""):
+        # FIX-20260820-004 (DQAF-20260820-004, IC 裁决 JSON Payload Authentication):
+        # 废弃 FIX-20260820-003 的 stderr "Traceback" 启发式 — 防弹背心被证伪: daily_ops
+        # 的 fail_open_guard 用 logging.exception 将被捕获异常 traceback 例行写入 stderr
+        # (last-resort handler 无 handler 配置时固定落 stderr; training_readiness 命中
+        # 空/损坏 npz → EOFError 确定性命中每个 XAU 运行) → stderr Traceback 不具崩溃
+        # 特异性, 会确定性误杀每条完成运行 → stamp 结构性无法落盘 (DQAF-20260820-004)。
+        # 成功判定 = rc<=1 AND stdout 尾部认证出完整 daily_ops report JSON (schema_version
+        # 标识, daily_ops.py L3491 无条件键; L3589-3590 唯一打印点, 正常返回前最后输出)。
+        # stderr 全噪音 (BrainFactory warning / freshness alert / 被捕获 traceback) 免疫。
+        if result.returncode <= 1 and _stdout_has_completion_report(result.stdout):
             from core.runtime.daily_ops_state import save_daily_ops_completion
 
             save_daily_ops_completion(str(project_root / base_dir), time_module.time())

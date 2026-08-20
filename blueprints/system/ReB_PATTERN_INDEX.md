@@ -20,6 +20,27 @@
 
 ---
 
+### ReB-20260820-FAILURE_DETECTION_SIGNAL_AMBIGUITY
+- **Pattern Signature**: `FAILURE_DETECTION_SIGNAL_AMBIGUITY`
+- **Date Cataloged**: 2026-08-20
+- **Source Docket**: DQAF-20260820-004
+- **Related**: FIX-20260820-004 (RESOLVED), FIX-20260820-003 (前案), TECH_DEBT-020 (次生数据债)
+
+**定义**: 进程成功/失败判定若采用**对自身日志语义不具特异性的启发式信号**, 会被例行写入该通道的"噪音"确定性误导 → 正常完成被误判为失败 → 下游状态机 (stamp/重试) 结构性阻断. 关键签名: (1) 被判定进程有 fail-open/fail_open_guard 设计 — 用 `logging.exception` 将被捕获异常 traceback 例行写入 stderr (Python last-resort handler 无 handler 配置时固定落 stderr); (2) 判定方用 `"Traceback" not in stderr` 作为崩溃判别 (混淆"未捕获崩溃"与"被捕获异常日志"); (3) 确定性触发点 (空/损坏 npz → EOFError) 使误判每轮必现, 非偶发; (4) 被判定进程**有权威完成契约信号却未使用** (daily_ops 正常返回前必然打印的 report JSON).
+- **预防** (IMPLEMENTED, FIX-20260820-004): ① **认证 stdout 完成契约而非 stderr 启发式** — 成功谓词 `returncode <= 1 AND stdout 尾部认证出完整 report JSON (schema_version 标识)`, 崩溃走不到打印点 → report 缺失 = 未完成; ② **stderr 全噪音免疫** — Fail-Open 吞噬职责内错误, traceback/warning 不参与崩溃判别; ③ **完成标记单点锚定** — daily_ops.py L3589-3590 (正常返回前最后输出) + L3491 (schema_version 无条件键); ④ **回归锁** — 7 分支含 IC 指定 solo 复现桩 (stderr EOFError Traceback + stdout report → SUCCESS) + 截断 report → FAILED.
+- **检测**: 回归锁 `tests/runtime/test_live_launcher_daily_ops.py` (7 分支 JSON Payload Authentication). 通用法: 判定子进程成功时, 列出该进程"正常完成必然产生的 stdout 信号"与"崩溃必缺失的信号", 优先认证前者.
+- **关联次生债**: TECH_DEBT-020 — 空/损坏 npz 是噪音源头 (数据完整性, 独立建档).
+
+### ReB-20260820-EXIT_CODE_CONTRACT_MISMATCH_IN_SSOT_STAMP
+- **Pattern Signature**: `EXIT_CODE_CONTRACT_MISMATCH_IN_SSOT_STAMP`
+- **Date Cataloged**: 2026-08-20
+- **Source Docket**: DQAF-20260820-003
+- **Related**: FIX-20260820-003 (RESOLVED, Traceback 判别部分已被 FIX-20260820-004 替换), FIX-20260820-004
+
+**定义**: 当"完成状态"的唯一事实源从进程 A 迁移到进程 B 时, 进程 B 若沿用旧的退出码判定语义 (而非读取被调用方的新退出码契约), 则正常完成被误判为失败 → SSOT 时间戳永不写入 → age 兜底无限重跑. 关键签名: (1) 子进程有非零成功退出码 (如 rc=1=完成且应用动作); (2) 父进程用 `rc==0` 硬判定成功 (watchdog 时代装饰性判定被掩盖); (3) stamp-at-completion 迁移使该判定升格为门禁; (4) 崩溃与动作完成共用 rc=1, 需 Traceback 判别 (未捕获异常必打 Traceback 至 stderr).
+- **预防** (IMPLEMENTED, 修正): ① **成功谓词对齐被调用方契约** — 原 `returncode <= 1 and "Traceback" not in (stderr or "")` 的 **rc∈{0,1}=成功 / rc=2=失败 对齐部分保留**; ② **⚠️ 防弹背心已证伪并替换** — stderr Traceback 判别被 DQAF-20260820-004 证伪 (fail_open_guard 将捕获异常 traceback 例行写 stderr, 不具崩溃特异性), 现由 FIX-20260820-004 **JSON Payload Authentication** (stdout report JSON 认证) 取代; ③ **不破坏被调用方契约** — daily_ops.py 退出码语义保留 (CLI 监控依赖 rc=1 判断有动作); ④ **回归锁升级** — 7 分支 (rc=0/1+report→stamp, rc=2→fail, rc=1+无report→fail, **rc=1+EOFError Traceback+report→stamp (solo 复现桩)**, 截断 report→fail).
+- **检测**: 回归锁 `tests/runtime/test_live_launcher_daily_ops.py` (7 分支) + `tests/runtime/test_daily_ops_state.py` (trigger/stamp 契约) + `tests/runtime/test_daily_ops_scheduler.py` (信号触发零重负载).
+
 ### ReB-20260820-SYNC_HEAVY_COMPUTE_IN_HEARTBEAT_ZERO_PULSE
 - **Pattern Signature**: `SYNC_HEAVY_COMPUTE_IN_HEARTBEAT_ZERO_PULSE`
 - **Date Cataloged**: 2026-08-20
