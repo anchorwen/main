@@ -1396,6 +1396,26 @@ def _step_governance(
     Cross-checks tracker-based recommendations against the leaderboard's
     trade-linked win_rates to detect inconsistent governance signals.
     """
+    # ── P12: Session-aware governance gate (迁移自 daily_ops_scheduler) ──
+    # BTC (crypto_24_7) 恒评估; XAU (forex_24_5) 周末休市跳过 — 防陈旧指标
+    # 误触发 freeze/demote。FIX-20260820-002 (方案 A): intent 管线移除后 gate
+    # 在此承继 (launcher 子进程路径同样受 P12 约束)。
+    try:
+        from core.execution.pre_trade_guards import detect_session
+
+        _market_type = "crypto_24_7" if "btc" in str(base_dir).lower() else "forex_24_5"
+        if _market_type != "crypto_24_7":
+            _session = detect_session(market_type=_market_type)
+            if _session.get("risk_tier") == "off":
+                return {
+                    "step": "governance",
+                    "status": "skipped",
+                    "reason": "market_closed_weekend",
+                    "risk_tier": "off",
+                    "market_type": _market_type,
+                }
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
+        pass  # graceful fallback — run governance anyway
     try:
         from scripts.training.governance_scheduler import run_governance_cycle
 
@@ -2769,6 +2789,47 @@ def _step_feature_store_maintenance(
             return {"step": "feature_store_maintenance", "status": "error", "error": "unknown"}
 
 
+def _step_label_prune(
+    base_dir: str,
+    *,
+    dry_run: bool = False,
+    retention_days: int = 30,
+) -> dict[str, Any]:
+    """FIX-20260601-047: prune label files older than retention_days.
+
+    FIX-20260820-002 (方案 A): 自 core.runtime.daily_ops_scheduler 迁移 — 原
+    intent 侧管线副作用全部移交 launcher 子进程 (daily_ops.py) 路径。
+    """
+    try:
+        import time as _time
+
+        _labels_dir = Path(base_dir) / "labels"
+        _pruned = 0
+        _failed = 0
+        if _labels_dir.exists():
+            _cutoff = _time.time() - (retention_days * 86400)
+            for _lf in _labels_dir.glob("*.jsonl"):
+                try:
+                    if _lf.stat().st_mtime < _cutoff:
+                        if not dry_run:
+                            _lf.unlink()
+                        _pruned += 1
+                except OSError:
+                    _failed += 1
+        return {
+            "step": "label_prune",
+            "status": "ok",
+            "retention_days": retention_days,
+            "pruned": _pruned,
+            "failed": _failed,
+        }
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
+        try:  # BLE001:FOG (was: FOG/LAC)
+            return {"step": "label_prune", "status": "error", "error": str(exc)[:500]}
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            return {"step": "label_prune", "status": "error", "error": "unknown"}
+
+
 def _step_data_health(
     base_dir: str,
     *,
@@ -3403,6 +3464,9 @@ def run_daily_ops(
                 base_dir, dry_run=dry_run, mt5_terminal_path=mt5_terminal_path
             )
         )
+        # FIX-20260820-002 (方案 A): label prune 迁入 launcher 子进程管线
+        # (原 intent 侧 core.runtime.daily_ops_scheduler FIX-20260601-047)。
+        steps.append(_step_label_prune(base_dir, dry_run=dry_run))
 
     # Parameter optimization suggestions for degraded brains
     # Runs after retraining_check so we know which brains are degraded

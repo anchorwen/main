@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-20T04:55:39Z
-> **扫描模块数**: 820
+> **自动生成**: 2026-08-20T11:07:45Z
+> **扫描模块数**: 822
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -512,7 +512,8 @@
 | `circuit_breaker_reset.py` | ✅ active | — | 2 | 103 | — | |
 | `cooldown.py` | ✅ active | — | 1 | 21 | — | |
 | `cycle_replay.py` | ✅ active | RuntimeReplayReport, RuntimeCycleReplay | 4 | 124 | — | |
-| `daily_ops_scheduler.py` | ✅ active | — | 2 | 255 | — | |
+| `daily_ops_scheduler.py` | ✅ active | — | 1 | 71 | — | |
+| `daily_ops_state.py` | ✅ active | — | 8 | 81 | — | |
 | `data_health_monitor.py` | ✅ active | — | 1 | 68 | — | |
 | `deal_selection.py` | ✅ active | ExitResolution | 8 | 195 | — | |
 | `dispatch_post.py` | ✅ active | — | 2 | 92 | — | |
@@ -532,7 +533,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5174 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 5192 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 18 | 2667 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
@@ -671,6 +672,7 @@
 | `_audit_storm_sender_20260806.py` | ✅ active | — | 1 | 130 | — | |
 | `_audit_trail_mislabel_20260806.py` | ✅ active | — | 3 | 281 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
+| `_audit_watchdog_bg_kill_20260820.py` | ✅ active | — | 6 | 261 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
 | `_audit_xau_entry_quality_20260810.py` | ✅ active | — | 7 | 285 | — | |
 | `_audit_xau_entry_structure_20260807.py` | ✅ active | — | 2 | 127 | — | |
@@ -777,7 +779,7 @@
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_flow46_precheck.py` | ✅ active | — | 17 | 539 | — | |
-| `daily_ops.py` | ✅ active | — | 41 | 3549 | — | |
+| `daily_ops.py` | ✅ active | — | 42 | 3613 | — | |
 | `data_integrity_check.py` | ✅ active | — | 9 | 553 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 326 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
@@ -820,7 +822,7 @@
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
 | `live_intent_loop.py` | ✅ active | — | 6 | 2842 | — | |
-| `live_launcher.py` | ✅ active | — | 16 | 1282 | — | |
+| `live_launcher.py` | ✅ active | — | 18 | 1363 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 145 | — | |

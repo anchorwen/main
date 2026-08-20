@@ -28,6 +28,14 @@ from typing import Any, TextIO
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent
 
+# FIX-20260820-002 (方案 A): launcher 作为 daily_ops 唯一执行者需消费
+# core.runtime.daily_ops_state (stamp-at-completion / trigger 信标) — 引导 repo root。
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# XAU 实证 600s 超时 55/55 (08-06→08-19); IC 裁决 1200-1800 区间 → 取 1200。
+DAILY_OPS_TIMEOUT_S = 1200
+
 
 def _utc_iso() -> str:
     return (
@@ -124,6 +132,94 @@ def _hours_since_last_run(state_path: Path) -> float | None:
         return None
 
 
+def _run_daily_ops_once(
+    python: str,
+    project_root: Path,
+    base_dir: str,
+    log_fh: TextIO | None,
+    mt5_terminal_path: str | None,
+    reason: str,
+) -> None:
+    """Execute daily_ops as a managed subprocess + stamp-at-completion (SSOT).
+
+    FIX-20260820-002 (方案 A): launcher 子进程是 daily_ops 唯一执行者。成功
+    后立即 stamp-at-completion (core.runtime.daily_ops_state) —— 完成时间戳是
+    `_already_ran_today` / age 兜底的唯一事实源 (废 intent 侧 stamp-at-start)。
+    timeout 上调至 DAILY_OPS_TIMEOUT_S (XAU 实证 600s 超时 55/55, IC 裁决
+    1200-1800 区间 → 取 1200)。
+    """
+    msg = f"[daily_ops] Triggering: {reason}"
+    print(msg, flush=True)
+    if log_fh is not None:
+        log_fh.write(msg + "\n")
+        log_fh.flush()
+
+    _cmd = [
+        python,
+        "-u",
+        str(project_root / "scripts" / "daily_ops.py"),
+        "--base-dir",
+        str(project_root / base_dir),
+    ]
+    if mt5_terminal_path:
+        _cmd.extend(["--mt5-terminal-path", mt5_terminal_path])
+
+    try:
+        result = subprocess.run(
+            _cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=DAILY_OPS_TIMEOUT_S,
+            cwd=str(project_root),
+            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+        )
+        if result.returncode == 0:
+            from core.runtime.daily_ops_state import save_daily_ops_completion
+
+            save_daily_ops_completion(str(project_root / base_dir), time_module.time())
+            _append_daily_run_log(project_root / base_dir, result.stdout)
+            msg = "[daily_ops] Completed successfully"
+        else:
+            msg = f"[daily_ops] FAILED (rc={result.returncode})"
+            if result.stderr:
+                stderr_short = result.stderr.strip()[:500]
+                msg += f" — {stderr_short}"
+        print(msg, flush=True)
+        if log_fh is not None:
+            log_fh.write(msg + "\n")
+            log_fh.flush()
+    except subprocess.TimeoutExpired:
+        msg = f"[daily_ops] WARNING: timed out after {DAILY_OPS_TIMEOUT_S}s"
+        print(msg, flush=True)
+        if log_fh is not None:
+            log_fh.write(msg + "\n")
+            log_fh.flush()
+    except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
+        msg = f"[daily_ops] ERROR: {exc}"
+        print(msg, flush=True)
+        if log_fh is not None:
+            log_fh.write(msg + "\n")
+            log_fh.flush()
+
+
+def _append_daily_run_log(base_dir_abs: Path, stdout_text: str) -> None:
+    """归档 daily_ops 子进程 stdout 到 p1_daily_run.log (迁移自 intent 路径)。
+
+    原 intent 路径写 run_daily_ops 返回 dict 的 json; 现子进程 stdout 含各步骤
+    结构化输出 — 归档目的 (可追溯 daily_ops 结果) 等价满足。
+    """
+    if not stdout_text:
+        return
+    try:
+        report_path = base_dir_abs / "reports" / "ops_logs" / "p1_daily_run.log"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(report_path, "a", encoding="utf-8") as _f:
+            _f.write(stdout_text.rstrip("\n") + "\n")
+    except OSError:
+        pass  # 归档失败不阻断 stamp
+
+
 def _daily_ops_scheduler(
     python: str,
     project_root: Path,
@@ -134,7 +230,12 @@ def _daily_ops_scheduler(
     interval_hours: float = 4,
     max_age_hours: float = 6,
 ):
-    """Run daily_ops.py when overdue, as a managed subprocess.
+    """Run daily_ops.py on intent trigger signal or when overdue.
+
+    Single Executor (FIX-20260820-002 方案 A):
+    - 触发信号优先 (intent 主窗口/fallback 请求) — 每 60s tick 消费, 响应 ≤60s。
+    - age 兜底 (max_age_hours) — 每 interval_hours 检查 (保持原 4h 日志节奏)。
+    - 成功 stamp-at-completion (唯一写者); timeout DAILY_OPS_TIMEOUT_S (1200s)。
 
     Replaces watchdog_daily_ops.py (previously a persistent subprocess).
     Follows the same pattern as _feedback_loop_runner — temporary subprocess
@@ -146,76 +247,50 @@ def _daily_ops_scheduler(
     import time as _time
 
     state_path = project_root / base_dir / "state" / "daily_ops_state.json"
+    _base_abs = str(project_root / base_dir)
 
     # Initial delay to let the live system stabilise before first check
     if not stop_event.wait(60):
         pass
 
+    _next_age_check = _time.time()
     while not stop_event.is_set():
-        age_h = _hours_since_last_run(state_path)
+        # 1) 触发信号优先 — intent 已判定主窗口/fallback, 立即响应
+        from core.runtime.daily_ops_state import consume_daily_ops_trigger
 
-        if age_h is None or age_h > max_age_hours:
-            reason = (
-                "never run" if age_h is None else f"overdue ({age_h:.0f}h > {max_age_hours}h max)"
-            )
-            msg = f"[daily_ops] Triggering: {reason}"
-            print(msg, flush=True)
-            if log_fh is not None:
-                log_fh.write(msg + "\n")
-                log_fh.flush()
-
-            _cmd = [
+        trigger_ts = consume_daily_ops_trigger(_base_abs)
+        if trigger_ts is not None:
+            _run_daily_ops_once(
                 python,
-                "-u",
-                str(project_root / "scripts" / "daily_ops.py"),
-                "--base-dir",
-                str(project_root / base_dir),
-            ]
-            if mt5_terminal_path:
-                _cmd.extend(["--mt5-terminal-path", mt5_terminal_path])
-
-            try:
-                result = subprocess.run(
-                    _cmd,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=600,
-                    cwd=str(project_root),
-                    env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+                project_root,
+                base_dir,
+                log_fh,
+                mt5_terminal_path,
+                reason="signal (intent request)",
+            )
+            _next_age_check = _time.time() + interval_hours * 3600
+        # 2) age 兜底 — 每 interval_hours 检查 (原 4h 语义保持)
+        elif _time.time() >= _next_age_check:
+            age_h = _hours_since_last_run(state_path)
+            if age_h is None or age_h > max_age_hours:
+                reason = (
+                    "never run"
+                    if age_h is None
+                    else f"overdue ({age_h:.0f}h > {max_age_hours}h max)"
                 )
-                if result.returncode == 0:
-                    msg = "[daily_ops] Completed successfully"
-                else:
-                    msg = f"[daily_ops] FAILED (rc={result.returncode})"
-                    if result.stderr:
-                        stderr_short = result.stderr.strip()[:500]
-                        msg += f" — {stderr_short}"
+                _run_daily_ops_once(
+                    python, project_root, base_dir, log_fh, mt5_terminal_path, reason=reason
+                )
+            else:
+                msg = f"[daily_ops] OK: {age_h:.0f}h since last run"
                 print(msg, flush=True)
                 if log_fh is not None:
                     log_fh.write(msg + "\n")
                     log_fh.flush()
-            except subprocess.TimeoutExpired:
-                msg = "[daily_ops] WARNING: timed out after 600s"
-                print(msg, flush=True)
-                if log_fh is not None:
-                    log_fh.write(msg + "\n")
-                    log_fh.flush()
-            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:  # BLE001:FOG
-                msg = f"[daily_ops] ERROR: {exc}"
-                print(msg, flush=True)
-                if log_fh is not None:
-                    log_fh.write(msg + "\n")
-                    log_fh.flush()
-        else:
-            msg = f"[daily_ops] OK: {age_h:.0f}h since last run"
-            print(msg, flush=True)
-            if log_fh is not None:
-                log_fh.write(msg + "\n")
-                log_fh.flush()
+            _next_age_check = _time.time() + interval_hours * 3600
 
-        # Responsive sleep — check every interval, but respond to stop_event
-        remaining = int(interval_hours * 3600)
+        # Responsive sleep — 60s tick (触发信号响应 ≤60s; stop_event 响应)
+        remaining = 60
         while remaining > 0 and not stop_event.is_set():
             _time.sleep(min(5, remaining))
             remaining -= 5
@@ -808,11 +883,17 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
-                    timeout=300,
+                    timeout=DAILY_OPS_TIMEOUT_S,
                     cwd=str(PROJECT_ROOT),
                     env=subprocess_env,
                 )
                 if _cold_result.returncode == 0:
+                    # FIX-20260820-002: 冷启动也 stamp-at-completion (Single Executor SSOT)
+                    from core.runtime.daily_ops_state import save_daily_ops_completion
+
+                    save_daily_ops_completion(
+                        str(PROJECT_ROOT / cfg["base_dir"]), time_module.time()
+                    )
                     print("[launcher] Cold-start daily_ops completed", flush=True)
                     log_fh.write("[launcher] Cold-start daily_ops completed\n")
                 else:

@@ -512,24 +512,32 @@ DAILY_OPS_STATE_PATH = "data/state/daily_ops_state.json"  # legacy default; over
 
 
 def _load_daily_ops_state(base_dir: str) -> float:
-    """Restore last daily_ops timestamp from disk. Returns 0.0 if not found."""
+    """Restore last daily_ops timestamp from disk. Returns 0.0 if not found.
+
+    FIX-20260820-002: 收敛到 core.runtime.daily_ops_state 单点读取
+    (Single Executor SSOT — stamp-at-completion 由 launcher 子进程回写)。
+    """
     # ── DQAF-20260616-101/P1.3: BLE001 → log_and_continue ──
-    try:
-        state_path = os.path.join(base_dir, "state", "daily_ops_state.json")
-        if os.path.exists(state_path):
-            with open(state_path) as f:
-                data = json.load(f)
-            return float(data.get("last_daily_ops_utc", 0.0))
-    except (RuntimeError, ValueError, KeyError, TypeError, OSError):
-        pass
-    return 0.0
+    from core.runtime.daily_ops_state import load_last_daily_ops_utc
+
+    return load_last_daily_ops_utc(base_dir)
 
 
 def _run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> None:
-    """Execute daily_ops pipeline synchronously within the current cycle."""
+    """Request daily_ops via trigger signal (Single Executor — launcher subprocess).
+
+    FIX-20260820-002 (方案 A): intent 进程零重负载同步计算 — 只写触发信标。
+    """
     from core.runtime.daily_ops_scheduler import run_scheduled_daily_ops
 
     run_scheduled_daily_ops(config, state)
+
+
+def _load_daily_ops_trigger(base_dir: str) -> float | None:
+    """Pending daily_ops trigger request? (None = no outstanding request)."""
+    from core.runtime.daily_ops_state import load_daily_ops_trigger
+
+    return load_daily_ops_trigger(base_dir)
 
 
 def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str, Any]:
@@ -1609,14 +1617,22 @@ def execute_live_cycle(
         for _rs in state._reentry_states.values():
             _rs.consecutive_same_direction = 0
 
-    # ── Daily ops auto-scheduler (The Highlander Rule) ──
+    # ── Daily ops auto-scheduler (Single Executor — launcher subprocess) ──
     # Primary: Fixed UTC 22:00–23:00 window (= 06:00–07:00 CST).
     # FIX-20260604-078: Fallback — if >24h since last run AND not today,
     # trigger immediately regardless of time.  Prevents daily_ops from
     # never executing when the system never survives to 22:00 UTC.
+    # FIX-20260820-002 (方案 A): intent 只判定并写触发信标；管线唯一执行者 =
+    # launcher 子进程，stamp-at-completion 由其回写 (废 stamp-at-start → 无漂移)。
     if state.loop_iteration == 1 and state._last_daily_ops_utc == 0:
         state._last_daily_ops_utc = _load_daily_ops_state(config.base_dir)
     try:
+        # 跨进程完成检测: launcher stamp-at-completion → 同步 tracker reload 标志
+        # (daily_ops.py 子进程已把 enriched tracker 落盘, intent 需重载投票加权数据)
+        _state_utc = _load_daily_ops_state(config.base_dir)
+        if _state_utc > state._last_daily_ops_utc:
+            state._last_daily_ops_utc = _state_utc
+            state._tracker_reload_pending = True
         _now_utc = datetime.now(UTC)
         _today_22z = _now_utc.replace(hour=22, minute=0, second=0, microsecond=0)
         _window_end = _today_22z + timedelta(hours=1)
@@ -1633,21 +1649,23 @@ def execute_live_cycle(
             and not _already_ran_today
         )
         if (_in_primary_window or _fallback_overdue) and not _already_ran_today:
-            if _fallback_overdue and not _in_primary_window:
-                print(
-                    json.dumps(
-                        {
-                            "event": "daily_ops_fallback_triggered",
-                            "time": _utc_iso(),
-                            "hours_since_last": round(
-                                (time.time() - state._last_daily_ops_utc) / 3600, 1
-                            ),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-            _run_scheduled_daily_ops(config, state)
+            # 已存在未消费触发信标 → 不重复写 (launcher 正在/即将执行)
+            if _load_daily_ops_trigger(config.base_dir) is None:
+                if _fallback_overdue and not _in_primary_window:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "daily_ops_fallback_triggered",
+                                "time": _utc_iso(),
+                                "hours_since_last": round(
+                                    (time.time() - state._last_daily_ops_utc) / 3600, 1
+                                ),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                _run_scheduled_daily_ops(config, state)
 
         # ── Startup orphan detection: MT5 vs active_position.json ──
         try:
