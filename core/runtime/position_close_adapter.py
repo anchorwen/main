@@ -20,6 +20,11 @@ from pathlib import Path
 from typing import Any
 
 from core.contracts.position_events import PositionClosed, PositionOpened
+from core.runtime.close_label import (
+    resolve_close_label,
+    resolve_close_reason_str,
+    trail_active_from_sources,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Strangler Fig: delegation wrappers for live_cycle.py
@@ -141,22 +146,11 @@ def record_position_opened(
 UTC = UTC
 _log = logging.getLogger(__name__)
 
-# ── MT5 DEAL reasons ──
-DEAL_REASON_SL = 4
-DEAL_REASON_TP = 5
-
-# DQAF-20260621-033: unified MT5 deal reason taxonomy (aligned with
-# reconciliation.py:205-218).  Shared across all close-detection paths.
-_DEAL_REASON_MAP = {
-    0: "client_close",
-    1: "mobile_close",
-    2: "web_close",
-    3: "signal_close",
-    4: "sl_hit",
-    5: "tp_hit",
-    6: "stop_out",
-    7: "risk_out",
-}
+# ── MT5 DEAL reason taxonomy — single source: core.runtime.close_label ──
+# TECH_DEBT-007 (FIX-20260821-002): the local DEAL_REASON_SL/TP constants and
+# _DEAL_REASON_MAP copy (adapter:144-159) plus the sibling copies in
+# reconciliation/mia_close are DELETED.  resolve_close_label is the only
+# decision point for close labels.
 
 # ── XAU tick_size = 0.01, BTC = 1.0.  0.5 * tick_size is the minimum
 # detectable volume change.  We use a generous default.
@@ -397,7 +391,6 @@ class PositionCloseAdapter:
 
             _deal_id = _res.deal_id
             _close_price = float(_res.close_price)
-            _deal_reason = _res.close_reason if _res.close_reason is not None else -1
             _deal_time = _res.close_time or 0
             _position_identifier = _res.position_id
             # DQAF-064 §1: deal comment for watchdog label preservation
@@ -450,51 +443,35 @@ class PositionCloseAdapter:
             # Primary source: position_manager trail_advances (position still
             # present at _build_event time — the position is only cleared in
             # _notify_position_manager AFTER record() writes the journal).
-            trail_active = False
+            # Unified trail-active predicate (TECH_DEBT-007 / FIX-20260821-002):
+            # the SSOT ORs both telemetry sources — position_manager
+            # trail_advances AND the detection-time trail_contribution dict
+            # (ghost path, mia_close.py:89-92).  Pre-P6 reconciliation only
+            # read position_manager and settlement_queue read neither, so the
+            # same trailed SL could be labeled differently per producer.
+            _pm_trail = 0
             if state is not None:
                 _pm = getattr(state, "position_manager", None)
                 if _pm is not None:
                     _pos = _pm.get_position(ticket) if hasattr(_pm, "get_position") else None
-                    if _pos is not None and getattr(_pos, "trail_advances", 0) > 0:
-                        trail_active = True
-            # MIA fallback (Strangler Fig #12): mia_close.py:89-92 captured
-            # trail_advances at detection time into trail_contribution; the
-            # ghost position may already be gone from position_manager.
-            # Restores mia_close.py:180-185 semantics.  Inert on the normal
-            # path — known_open_tickets entries never carry trail_contribution.
-            if not trail_active:
-                _trail_ct = open_entry.get("trail_contribution")
-                if isinstance(_trail_ct, dict) and (
-                    float(_trail_ct.get("trail_advances", 0) or 0) > 0
-                ):
-                    trail_active = True
+                    if _pos is not None:
+                        _pm_trail = getattr(_pos, "trail_advances", 0)
+            trail_active = trail_active_from_sources(
+                _pm_trail,
+                open_entry.get("trail_contribution"),
+            )
 
-            # ── Label from deal reason ──
-            # DQAF-064 §1: Preserve watchdog exit reason from deal comment
-            if _deal_comment.startswith("exit_watchdog:"):
-                _watchdog_reason = (
-                    _deal_comment.split(":", 1)[1] if ":" in _deal_comment else _deal_comment
-                )
-                _parts = _watchdog_reason.split("_", 2)
-                _short = "_".join(_parts[:2]) if len(_parts) >= 2 else _watchdog_reason[:30]
-                _label = f"watchdog:{_short}"
-            elif _deal_reason == DEAL_REASON_SL:
-                _label = "sl_hit_trailed" if trail_active else "sl_hit_first"
-            elif _deal_reason == DEAL_REASON_TP:
-                _label = "tp_hit_first"
-            elif _deal_comment:
-                # DQAF-20260722-002: Managed close — preserve the exit signal
-                # from the deal comment.  dispatch_managed_close() writes the
-                # exit reason (e.g. "bleed_stop_r-0.5", "ou_revert_z2.1",
-                # "confidence_decay_shielded") as the MT5 order comment.
-                # Previously this fell through to PnL-based "win"/"loss" which
-                # discarded the causal signal and poisoned p_win calibration.
-                _label = f"managed:{_deal_comment[:80]}"
-            else:
-                # No software-side signal in comment — use broker reason taxonomy.
-                # Covers: manual client close, stop_out, risk_out, mobile/web close.
-                _broker_label = _DEAL_REASON_MAP.get(_deal_reason, f"unattributed_{_deal_reason}")
-                _label = f"broker:{_broker_label}"
+            # ── Label from deal reason — SSOT (TECH_DEBT-007 / FIX-20260821-002) ──
+            # resolve_close_label() is the single decision point for the whole
+            # taxonomy: watchdog → SL(trail-aware) → TP → managed → broker →
+            # honest unknown_close.  The pre-P6 chain above (DQAF-064 §1
+            # watchdog / DQAF-20260722-002 managed) duplicated this logic in
+            # four producers, which is exactly how it diverged.
+            _label = resolve_close_label(
+                _res.close_reason,
+                _deal_comment,
+                trail_active,
+            )
 
             # ── Close time ──
             _close_time = ""
@@ -518,7 +495,7 @@ class PositionCloseAdapter:
                 original_volume=_original_vol,
                 pnl=_deal_profit,
                 label=_label,
-                exit_reason=_DEAL_REASON_MAP.get(_deal_reason, f"unknown_{_deal_reason}"),
+                exit_reason=resolve_close_reason_str(_res.close_reason),
                 close_time=_close_time,
                 source="mt5_deal",
                 brain_ids=_brain_ids,

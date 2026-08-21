@@ -24,6 +24,7 @@ from core.protocol.live_execution_contract import (
     execution_route,
     normalize_action,
 )
+from core.runtime.close_label import watchdog_shortcode
 from core.runtime.fault_handler import (
     _MT5_TIMEOUT_SENTINEL,
     FaultLevel,
@@ -1052,11 +1053,12 @@ def _derive_label(action: str, msg_payload: dict[str, Any], detail: dict[str, An
         # genuine unknown-loss events.  The full reason stays in `comment`.
         _comment = str(msg_payload.get("comment", ""))
         if _comment.startswith("exit_watchdog:"):
-            # Extract: "exit_watchdog:hesitation_18c_no_breakeven" → "watchdog:hesitation"
-            _watchdog_reason = _comment.split(":", 1)[1] if ":" in _comment else _comment
-            _parts = _watchdog_reason.split("_", 3)
-            _short = "_".join(_parts[:3]) if len(_parts) >= 2 else _watchdog_reason[:30]
-            return f"watchdog:{_short}"
+            # SSOT (TECH_DEBT-007 / FIX-20260821-002): canonical 2-part
+            # short-code — pre-P6 the bridge extracted 3 segments
+            # (watchdog:hesitation_18c_no) while the engine produced 2
+            # (watchdog:hesitation_18c).  Converged here so the provisional
+            # bridge label can never disagree with the superseding producer.
+            return watchdog_shortcode(_comment)
 
         # Label by PnL outcome (win/loss), NOT by close reason.
         # The close reason stays in the `comment` field for audit + restart

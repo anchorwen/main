@@ -11,6 +11,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from core.runtime.close_label import (
+    resolve_close_label,
+    resolve_close_reason_str,
+    trail_active_from_sources,
+)
 from core.runtime.time_utils import _utc_iso
 
 
@@ -132,7 +137,9 @@ def enrich_mia_from_deals(
 
     mia_entry["detail"]["close_price"] = close_price
     mia_entry["_close_price_source"] = _res.close_price_source
-    close_reason_str = {4: "sl_hit", 5: "tp_hit"}.get(close_reason or 0, "unknown_close")
+    # SSOT (TECH_DEBT-007 / FIX-20260821-002): full broker taxonomy, not just
+    # {4,5} — reasons 0-3/6/7 previously collapsed to unknown_close here.
+    close_reason_str = resolve_close_reason_str(close_reason)
     mia_entry["detail"]["reason"] = close_reason_str
 
     side = mia_entry.get("side", "")
@@ -162,7 +169,21 @@ def enrich_mia_from_deals(
         if isinstance(mia_entry.get("detail"), dict):
             mia_entry["detail"]["pnl"] = mia_entry["pnl"]
 
-    if mia_entry.get("pnl") is not None:
+    # ── Deal-informed label (TECH_DEBT-007 / FIX-20260821-002) ──
+    # IC ruling (DQAF-20260821-001 decision 1, Causality Restoration): when a
+    # broker deal reason EXISTS, resolve_close_label() is the ONLY decision
+    # point.  The pre-P6 chain only special-cased reasons 4/5 and let reasons
+    # 0-3/6/7 fall through to a PnL label, silently discarding the causal
+    # signal.  When no deal reason exists (close_reason None) PnL remains the
+    # only signal → provisional PnL label (documented, outside the convergence
+    # contract — there is no deal to converge on).
+    if close_reason is not None:
+        mia_entry["label"] = resolve_close_label(
+            close_reason,
+            str(_res.comment),
+            trail_active_from_sources(0, mia_entry.get("trail_contribution")),
+        )
+    elif mia_entry.get("pnl") is not None:
         # Use PnlGuard for safe label classification
         from core.ledger.services.pnl_guard import PnlGuard
 
@@ -176,15 +197,6 @@ def enrich_mia_from_deals(
                 mia_entry["label"] = "win"
             else:
                 mia_entry["label"] = "breakeven"
-
-    if close_reason == 4:
-        _tc = mia_entry.get("trail_contribution", {})
-        if isinstance(_tc, dict) and _tc.get("trail_advances", 0) > 0:
-            mia_entry["label"] = "sl_hit_trailed"
-        else:
-            mia_entry["label"] = "sl_hit_first"
-    elif close_reason == 5:
-        mia_entry["label"] = "tp_hit_first"
 
     if close_time is not None:
         mia_entry["recorded_at"] = (

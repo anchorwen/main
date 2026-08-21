@@ -31,14 +31,15 @@ from core.parliament.contract_groups import (
     MICRO_H4_GROUP,
     MICRO_M15_GROUP,
 )
+
+# ── Strategy line imports ──
+# ── Extracted sub-modules (P2 refactor) ──
+from core.runtime.close_label import trail_advances_of
 from core.runtime.fault_handler import (
     FaultLevel,
     FaultTolerantContext,
     fail_open_guard,
 )
-
-# ── Strategy line imports ──
-# ── Extracted sub-modules (P2 refactor) ──
 from core.runtime.mia_close import build_mia_close_entry, enrich_mia_from_deals
 from core.runtime.ou_hurst import compute_tf_ou_hurst
 from core.runtime.position_ownership import resolve_position_owner
@@ -1956,6 +1957,13 @@ def execute_live_cycle(
                                 and float(getattr(_evt, "close_price", 0)) > 0
                                 else None,
                                 cycle=state.loop_iteration,
+                                # TECH_DEBT-007 / FIX-20260821-002: trail captured
+                                # at enqueue (pre-P6 settlement hardcoded
+                                # sl_hit_first).
+                                trail_advances=trail_advances_of(
+                                    getattr(_evt, "trail_contribution", None)
+                                    or _open_entry.get("trail_contribution")
+                                ),
                             )
 
                 # Sync position_manager
@@ -2754,6 +2762,10 @@ def execute_live_cycle(
                                             estimated_pnl=None,
                                             estimated_close_price=None,
                                             cycle=state.loop_iteration,
+                                            # TECH_DEBT-007 / FIX-20260821-002.
+                                            trail_advances=int(
+                                                getattr(_z_pm, "trail_advances", 0) or 0
+                                            ),
                                         )
                                     state.position_manager.clear_position(ticket=_zt)
                                 print(
@@ -3152,6 +3164,8 @@ def execute_live_cycle(
                                     estimated_pnl=None,
                                     estimated_close_price=None,
                                     cycle=state.loop_iteration,
+                                    # TECH_DEBT-007 / FIX-20260821-002.
+                                    trail_advances=int(getattr(_zk_pm, "trail_advances", 0) or 0),
                                 )
                             if state.position_manager is not None:
                                 state.position_manager.clear_position(ticket=_zt)
@@ -4576,7 +4590,16 @@ def execute_live_cycle(
                     _new_tkt = _tkt_update["new_ticket"]
                     _close_vol = _tkt_update.get("close_volume", 0.0)
                     _old_entry = state.known_open_tickets.pop(int(_old_tkt), None)
+                    # TECH_DEBT-007 / FIX-20260821-002: capture trail at enqueue
+                    # (reused below for the volume sync — one position_manager
+                    # read, definite assignment for mypy).
+                    _pm_pos = None
                     if _old_entry:
+                        _pm_pos = (
+                            state.position_manager.get_position(ticket=int(_old_tkt))
+                            if state.position_manager is not None
+                            else None
+                        )
                         # ── FIX-20260730-011 (L3): Enqueue closed portion to settlement ──
                         if state.pending_settlement_tickets is not None and _close_vol > 0:
                             state.pending_settlement_tickets.enqueue(
@@ -4592,6 +4615,7 @@ def execute_live_cycle(
                                 estimated_pnl=None,
                                 estimated_close_price=None,
                                 cycle=state.loop_iteration,
+                                trail_advances=int(getattr(_pm_pos, "trail_advances", 0) or 0),
                             )
                     if _old_entry:
                         _old_vol = float(_old_entry.get("volume", 0.0))
@@ -4603,11 +4627,10 @@ def execute_live_cycle(
                         # Sync position_manager: update volume on old ticket position
                         # if still registered, so ghost-volume audit sees correct
                         # expected_remaining_volume during the reconciliation window.
-                        if state.position_manager is not None:
-                            _pm_pos = state.position_manager.get_position(ticket=int(_old_tkt))
-                            if _pm_pos is not None:
-                                _pm_pos.volume = _remaining
-                                _pm_pos.expected_remaining_volume = _remaining
+                        # (FIX-20260821-002: reuse the _pm_pos hoisted at enqueue.)
+                        if _pm_pos is not None:
+                            _pm_pos.volume = _remaining
+                            _pm_pos.expected_remaining_volume = _remaining
                         print(
                             json.dumps(
                                 {

@@ -1793,3 +1793,12 @@
 - **定义**: 金融品进入市场日历休市窗后, 下层组件在等待新 bar 形成时合法阻塞 (等待时长由 bar 周期决定, 恰与监控守护阈值同量级), 而该等待期不刷新存活心跳 → 上层存活监控 (in-process watchdog) 将**合法的休市等待**误判为**死锁** → 结构性周期硬杀. 与真实死锁的区别: kill 时间戳对齐市场日历休市窗、休市结束进程自行恢复、无持久异常. 相关复合因子: 语义 gate 错配 (bar gate 需要 "off", 休市窗返回 "caution") 使 gate 结构性失败, 无法在等待前短路.
 - **预防**: (1) **下层最长等待 < 守护阈值** — 任何被 watchdog 守护的等待, 其最坏超时 (含 degraded wakeup) 必须严格小于守护阈值, 否则结构性必被杀; (2) **合法等待期 heartbeat pulse** — 等待期间周期性刷新存活心跳, 让守护线程对"有进展的等待"放行 (heartbeat delegation 穿透); (3) **语义对齐** — 等待 gate 与运行态分类必须同源 (bar gate 的放行条件与风险窗口语义一致); (4) **警惕 bar 周期 == 守护阈值 的悖论** — 纯超时压缩会提前 degraded 破坏正常交易, 心跳穿透而非缩时是正确解.
 - **检测**: `watchdog_kill.log` kill 时间戳与市场日历休市窗对齐 (XAU 21:00-22:00 UTC daily close); kill elapsed ≈ 守护阈值 (300s); 休市窗内连续 kill 且休市结束恢复; BTC (crypto 24/7) 对照组应零误杀. 回归锁 `tests/unit/test_event_bar_sync_heartbeat.py` 每次 CI 断言休市阻塞期无硬杀 + BTC 对照.
+
+### ReB-20260821-CLOSE_LABEL_MULTI_PRODUCER_DIVERGENCE
+- **Pattern Signature**: `CLOSE_LABEL_MULTI_PRODUCER_DIVERGENCE`
+- **Date Cataloged**: 2026-08-21
+- **Source Docket**: DQAF-20260821-001
+- **Related**: FIX-20260821-002, TECH_DEBT-007, FIX-20260806-001 (Option C Deferred), FIX-20260730-011, DQAF-20260722-002
+- **定义**: 同一逻辑事实 (deal_reason, deal_comment, trail_active) 被多个生产者在**无单一决策点**的情况下各自解析为 label/归因 → 同一 deal 在不同写入路径得到不同标签. 具象: (1) watchdog shortcode 分段数漂移 (2 段 vs 3 段); (2) None/unknown reason 被伪造为特定 broker 归因 (孤儿平仓谎标 client_close); (3) 新生产者 (settlement_queue) 接入时抄写旧逻辑 (sl_hit_first 硬编码) 复活已被修复的语义盲点 (trail 无感知); (4) 携带更高 supersede 优先级的 writer 覆写低优先级的正确标签. 衍生危害: 出场归因/策略评估/p_win 校准/训练标签链全污染 (审计取证 XAU div-A 176 + div-B 8 / BTC div-A 199 + div-B 17).
+- **预防**: (1) **单源叶子函数 (SSOT mouth)** — 标签决策收敛于一个纯 stdlib leaf (resolve_close_label), 所有 deal-informed 生产者强制消费, 新路径无第四套逻辑可写; (2) **honest unknown** — 无 deal reason 时输出 `unknown_close` (诚实缺失), 永不伪造 broker 归因; (3) **跨生产者 byte-identical 回归锁** — 参数化矩阵断言每个生产者对相同输入产出逐字节一致 label; (4) **supersede 链审查** — 新 writer 的 `_source` 优先级必须与标签正确性一致 (settlement_queue 带 mt5_reconciliation source 覆写 bridge 标签 = 高优先级 writer 用低质量标签覆写高质量).
+- **检测**: 全量 journal 扫 `label` 与 `detail.reason` 交叉 (deal-attributed 却落 PnL label = 未消费 deal_reason); `sl_hit_first` 且 trail_contribution.trail_advances>0 (trail 盲点); watchdog label 分段数漂移 (2 段 vs 3 段). 回归锁 `tests/runtime/test_close_label_convergence.py` 每次 CI 断言 4 生产者矩阵收敛 + `tests/runtime/test_close_label.py` 断言 SSOT 全优先序.

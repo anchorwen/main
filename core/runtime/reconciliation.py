@@ -14,6 +14,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.close_label import (
+    resolve_close_label,
+    resolve_close_reason_str,
+    trail_active_from_sources,
+)
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.time_utils import _utc_iso  # consolidated
 
@@ -178,59 +183,30 @@ def reconcile_closed_positions(
         else:
             _pnl_status = "pending_mt5_confirmation"
 
-        # ── MT5 deal reason taxonomy (moved up: label logic references it) ──
-        _DEAL_REASON_MAP = {
-            0: "client_close",
-            1: "mobile_close",
-            2: "web_close",
-            3: "signal_close",
-            4: "sl_hit",
-            5: "tp_hit",
-            6: "stop_out",
-            7: "risk_out",
-        }
-
-        # ── FIX-20260612-003: Trail-aware SL label ──
-        # When close_reason == 4 (SL hit), check if the position had trail
-        # activity via state.position_manager → pos.trail_advances.
-        # If trail was actively tightening the SL, label as sl_hit_trailed
-        # instead of sl_hit_first — closes the TRAIL_TELEMETRY_BLINDSPOT.
-        trail_active = False
+        # ── SSOT close label (TECH_DEBT-007 / FIX-20260821-002) ──
+        # resolve_close_label() is the ONE decision point for the taxonomy
+        # (watchdog → SL-trail → TP → managed → broker → unknown_close).  It
+        # replaces the pre-P6 chain + local _DEAL_REASON_MAP copy.  The trail
+        # predicate now ORs position_manager trail_advances with the
+        # detection-time trail_contribution fallback — pre-P6 this path read
+        # position_manager ONLY, so a trailed SL could be mislabeled here.
+        _pm_trail = 0
         if state is not None:
             _pm = getattr(state, "position_manager", None)
             if _pm is not None:
                 _pos = _pm.get_position(ticket) if hasattr(_pm, "get_position") else None
-                if _pos is not None and getattr(_pos, "trail_advances", 0) > 0:
-                    trail_active = True
-
-        # ── DQAF-064 §1: Preserve watchdog exit reason from deal comment ──
-        if close_deal_comment.startswith("exit_watchdog:"):
-            _wd_reason = (
-                close_deal_comment.split(":", 1)[1]
-                if ":" in close_deal_comment
-                else close_deal_comment
-            )
-            _wd_parts = _wd_reason.split("_", 2)
-            _wd_short = "_".join(_wd_parts[:2]) if len(_wd_parts) >= 2 else _wd_reason[:30]
-            label = f"watchdog:{_wd_short}"
-        elif close_reason in (4,):
-            label = "sl_hit_trailed" if trail_active else "sl_hit_first"
-        elif close_reason in (5,):
-            label = "tp_hit_first"
-        elif close_deal_comment:
-            # DQAF-20260722-002: Managed close — preserve the exit signal
-            # from the deal comment instead of PnL-based "win"/"loss".
-            label = f"managed:{close_deal_comment[:80]}"
-        else:
-            # No software-side signal — use broker reason as fallback
-            _broker_label = _DEAL_REASON_MAP.get(close_reason or 0, f"unattributed_{close_reason}")
-            label = f"broker:{_broker_label}"
-
-        # ── DQAF-20260614-012: Full MT5 deal reason mapping (see above) ──
-        close_reason_str = _DEAL_REASON_MAP.get(
-            close_reason or 0,
-            f"mt5_deal_reason_{close_reason}" if close_reason else "unknown_close",
+                if _pos is not None:
+                    _pm_trail = getattr(_pos, "trail_advances", 0)
+        trail_active = trail_active_from_sources(
+            _pm_trail,
+            open_entry.get("trail_contribution"),
         )
+        label = resolve_close_label(close_reason, close_deal_comment, trail_active)
+
+        # ── DQAF-20260614-012: Full MT5 deal reason mapping (SSOT) ──
+        # None ⇒ honest unknown_close — pre-P6 fabricated broker:client_close
+        # for an unknown reason (mislabeled every orphaned close).
+        close_reason_str = resolve_close_reason_str(close_reason)
 
         # ── Resolve strategy name and magic with fallback ──
         _resolved_strategy = open_entry.get("strategy", "")

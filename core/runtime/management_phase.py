@@ -1156,6 +1156,10 @@ def execute_management_phase(
                 estimated_pnl=None,
                 estimated_close_price=None,
                 cycle=state.loop_iteration,
+                # TECH_DEBT-007 / FIX-20260821-002: capture trail at enqueue so
+                # _handle_settled can emit sl_hit_trailed (pre-P6 hardcoded
+                # sl_hit_first).
+                trail_advances=int(getattr(pos, "trail_advances", 0) or 0),
             )
         pm.clear_position(ticket=pos.ticket)
         _emit(
@@ -1256,6 +1260,9 @@ def execute_management_phase(
                     and _mia_entry.get("detail", {}).get("close_price") is not None
                     else None,
                     cycle=state.loop_iteration,
+                    # TECH_DEBT-007 / FIX-20260821-002: trail captured at enqueue
+                    # (pos still in position_manager at detection time).
+                    trail_advances=int(getattr(pos, "trail_advances", 0) or 0),
                 )
             pm.clear_position(ticket=pos.ticket)
             # Save position state immediately — don't wait for periodic save

@@ -26,6 +26,12 @@ import time as _time_module
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.runtime.close_label import (
+    resolve_close_label,
+    resolve_close_reason_str,
+    trail_active_from_sources,
+)
+
 _log = logging.getLogger(__name__)
 
 # ── Timeout tiers (seconds) ──
@@ -54,6 +60,13 @@ class SettlementEntry:
     # ── Best available estimate (from bridge detail, for timeout fallback) ──
     estimated_pnl: float | None = None
     estimated_close_price: float | None = None
+    # ── Trail telemetry (TECH_DEBT-007 / FIX-20260821-002) ──
+    # Captured at enqueue time so _handle_settled can emit sl_hit_trailed.
+    # Pre-P6 this path hardcoded sl_hit_first (the DQAF-20260806-001 trail
+    # blindspot resurrected) and — worse — the resulting journal entry carries
+    # _source="mt5_reconciliation", so the dedup chain let it supersede the
+    # bridge's correct label.
+    trail_advances: int = 0
     # ── Queue metadata ──
     queued_at: float = 0.0  # time.time() when queued
     queued_cycle: int = 0  # loop_iteration when queued
@@ -99,6 +112,7 @@ class SettlementQueue:
         estimated_pnl: float | None = None,
         estimated_close_price: float | None = None,
         cycle: int = 0,
+        trail_advances: int = 0,
     ) -> SettlementEntry:
         """Move a ticket from known_open_tickets into the settlement queue.
 
@@ -117,6 +131,7 @@ class SettlementQueue:
             open_message_id=open_message_id,
             estimated_pnl=estimated_pnl,
             estimated_close_price=estimated_close_price,
+            trail_advances=trail_advances,
             queued_at=_time_module.time(),
             queued_cycle=cycle,
         )
@@ -252,6 +267,7 @@ class SettlementQueue:
                     "open_message_id": e.open_message_id,
                     "estimated_pnl": e.estimated_pnl,
                     "estimated_close_price": e.estimated_close_price,
+                    "trail_advances": e.trail_advances,
                     "queued_at": e.queued_at,
                     "queued_cycle": e.queued_cycle,
                     "last_poll_at": e.last_poll_at,
@@ -291,6 +307,7 @@ class SettlementQueue:
                     estimated_close_price=float(e_data["estimated_close_price"])
                     if e_data.get("estimated_close_price") is not None
                     else None,
+                    trail_advances=int(e_data.get("trail_advances", 0) or 0),
                     queued_at=float(e_data.get("queued_at", 0)),
                     queued_cycle=int(e_data.get("queued_cycle", 0)),
                     last_poll_at=float(e_data.get("last_poll_at", 0)),
@@ -335,19 +352,21 @@ class SettlementQueue:
                 _close_pnl = round((entry.entry_price - _close_price) * entry.volume, 2)
             _pnl_status = "estimated_from_close_price"
 
-        # ── Determine label from deal reason ──
+        # ── Label from deal reason — SSOT (TECH_DEBT-007 / FIX-20260821-002) ──
+        # resolve_close_label() is the ONLY decision point.  This path is
+        # where the DQAF-20260806-001 trail blindspot was RESURRECTED: the
+        # hardcoded "sl_hit_first" (no trail awareness) mislabeled every
+        # trailed SL that settled here, and because the entry carries
+        # _source="mt5_reconciliation", the dedup chain LET it supersede the
+        # bridge's correct trail label.  trail_advances is captured at enqueue
+        # time and threaded through SettlementEntry.
         _reason = resolution.close_reason if resolution is not None else None
         _comment = str(resolution.comment) if resolution is not None else ""
-        if _reason == 4:  # DEAL_REASON_SL
-            _label = "sl_hit_first"
-        elif _reason == 5:  # DEAL_REASON_TP
-            _label = "tp_hit_first"
-        elif _comment:
-            _label = f"managed:{_comment[:80]}"
-        else:
-            _label = (
-                "broker:client_close" if _reason in (0, 1, 2, 3) else f"broker:reason_{_reason}"
-            )
+        _label = resolve_close_label(
+            _reason,
+            _comment,
+            trail_active_from_sources(entry.trail_advances, None),
+        )
 
         # ── Close time ──
         _close_time = ""
@@ -377,7 +396,7 @@ class SettlementQueue:
                 else "no_exit_deal"
             ),
             "label": _label,
-            "exit_reason": "settlement_verified",
+            "exit_reason": resolve_close_reason_str(_reason),
             "close_time": _close_time,
             "entry_price": entry.entry_price,
             "exit_price": _close_price,
@@ -437,7 +456,7 @@ class SettlementQueue:
                     "closed_volume": entry.volume,
                     "brain_ids": entry.brain_ids,
                     "open_message_id": entry.open_message_id,
-                    "exit_reason": "settlement_verified",
+                    "exit_reason": resolve_close_reason_str(_reason),
                     "close_time": _close_time,
                     "p_win": 0.5,
                     "remaining_volume": 0.0,

@@ -1983,3 +1983,21 @@
   - Source 7: 回归锁 `tests/unit/test_event_bar_sync_heartbeat.py` 8 passed (含 BTC 对照)
 - **是否被推翻**: 否 (AR: "MT5 假死需重启" 被推翻 — kill 精确对齐休市窗, BTC 24/7 零误杀; "超时压缩 <300s" 被推翻 — M5 悖论破坏正常交易)
 - **关联 ReB Pattern**: MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK
+
+### CCT-20260821-001 — TECH_DEBT-007 close label 五生产者分叉 (CLOSE_LABEL_MULTI_PRODUCER_DIVERGENCE)
+- **Docket ID**: DQAF-20260821-001
+- **日期**: 2026-08-21 | **Severity**: Sev 2 | **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 同一 deal (reason=4/comment="exit_watchdog:hesitation_18c_no_breakeven"/trail_active=True) 在四路 get 不同 label: adapter=watchdog:hesitation_18c, bridge=watchdog:hesitation_18c_no (3 段漂移); reason=None 的孤儿平仓 reconciliation 标 broker:client_close (谎标客户手动); settlement_queue 对带 trail_advances 的 SL 出场硬编码 sl_hit_first (DQAF-20260806-001 trail 盲点复活). 审计取证: XAU div-A 176 + div-B 8; BTC div-A 199 + div-B 17 (scripts/_audit_close_label_divergence_20260821.py). [confirmed]
+  - [Layer 2 — 中间异常]: 出场归因/策略评估/p_win 校准/训练标签全污染 — SL 实为 trail 出场 (物理层 health, 逻辑层失忆) 被误标 first; managed/broker 因果信号在 mia_close 被 PnL label 丢弃 (reason 0-3/6/7 无特殊分支); 孤儿平仓被谎标客户手动. [confirmed]
+  - [Layer 3 — 根因]: L3 架构缺陷 (RC-06 contract-violation) — 无单一 close-label 决策点: 五生产者 (adapter/reconciliation/mia_close/settlement_queue/bridge) 各持独立 label 逻辑, DQAF-20260806-001 Option C (三路单源统一) 记 Deferred 未清偿 → 每次新生产者接入/迁移都再抄一份分叉逻辑. [confirmed]
+- **证据引用**:
+  - Source 1: `core/runtime/settlement_queue.py` — FIX-20260730-011 硬编码 sl_hit_first (无 trail), `_source=mt5_reconciliation` 覆写桥标签 (pre-P6)
+  - Source 2: `scripts/mt5_bridge_worker.py:1054-1059` — watchdog 3 段提取 `split("_",3)[:3]` (pre-P6)
+  - Source 3: `core/runtime/reconciliation.py` — None-reason 伪造 `broker:client_close` (pre-P6)
+  - Source 4: `scripts/_audit_close_label_divergence_20260821.py` — div-A/B 取证 (XAU 176+8 / BTC 199+17)
+  - Source 5: `core/runtime/close_label.py` — SSOT leaf (P0-P6)
+  - Source 6: `tests/runtime/test_close_label_convergence.py` — 9 行参数化矩阵 × 4 生产者 byte-identical
+  - Source 7: 回归锁 46 新测试 + runtime 456 + 全量 5225 passed
+- **是否被推翻**: 否 (AR: "label 只是遥测不影响训练" 被推翻 — training label_contract 消费 close label, 污染传播; "bridge 标签会被 dedup 覆写无需修" 被推翻 — 未覆写的孤儿桥条目保留错误格式)
+- **关联 ReB Pattern**: CLOSE_LABEL_MULTI_PRODUCER_DIVERGENCE

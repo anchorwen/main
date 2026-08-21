@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-21T04:29:22Z
-> **扫描模块数**: 822
+> **自动生成**: 2026-08-21T06:13:41Z
+> **扫描模块数**: 824
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -510,6 +510,7 @@
 | `approval_contracts.py` | ✅ active | ExecutionApproval | 4 | 76 | — | |
 | `btc_feature_persist.py` | ✅ active | — | 1 | 117 | — | |
 | `circuit_breaker_reset.py` | ✅ active | — | 2 | 103 | — | |
+| `close_label.py` | ✅ active | — | 6 | 158 | — | |
 | `cooldown.py` | ✅ active | — | 1 | 21 | — | |
 | `cycle_replay.py` | ✅ active | RuntimeReplayReport, RuntimeCycleReplay | 4 | 124 | — | |
 | `daily_ops_scheduler.py` | ✅ active | — | 1 | 71 | — | |
@@ -533,28 +534,28 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 5192 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 5215 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
-| `management_phase.py` | ✅ active | — | 18 | 2667 | — | |
+| `management_phase.py` | ✅ active | — | 18 | 2674 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
-| `mia_close.py` | ✅ active | — | 2 | 192 | — | |
+| `mia_close.py` | ✅ active | — | 2 | 204 | — | |
 | `micro_persist.py` | ✅ active | — | 1 | 73 | — | |
 | `modify_trail_dispatch.py` | ✅ active | — | 1 | 168 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 308 | — | |
 | `ou_hurst.py` | ✅ active | — | 1 | 72 | — | |
 | `pnl_recording.py` | ✅ active | — | 1 | 83 | — | |
-| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 676 | — | |
+| `position_close_adapter.py` | ✅ active | PositionCloseAdapter | 12 | 653 | — | |
 | `position_ownership.py` | ✅ active | — | 1 | 69 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 348 | — | |
 | `pre_close_check.py` | ✅ active | — | 1 | 36 | — | |
 | `pre_close_context.py` | ✅ active | PreCloseContext | 8 | 145 | — | |
-| `reconciliation.py` | ✅ active | — | 2 | 432 | — | |
+| `reconciliation.py` | ✅ active | — | 2 | 408 | — | |
 | `reentry_alert.py` | ✅ active | — | 1 | 79 | — | |
 | `reentry_recording.py` | ✅ active | — | 2 | 85 | — | |
 | `restart_state.py` | ✅ active | — | 2 | 490 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
 | `session_guards.py` | ✅ active | — | 3 | 188 | — | |
-| `settlement_queue.py` | ✅ active | SettlementEntry, SettlementQueue | 14 | 687 | — | |
+| `settlement_queue.py` | ✅ active | SettlementEntry, SettlementQueue | 14 | 706 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
 | `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 505 | — | |
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
@@ -657,6 +658,7 @@
 | `_audit_20260806_07_losses.py` | ✅ active | — | 8 | 359 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_btc_modify_misroute_exposure_20260819.py` | ✅ active | — | 3 | 222 | — | |
+| `_audit_close_label_divergence_20260821.py` | ✅ active | — | 4 | 176 | — | |
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
 | `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
 | `_audit_entry_timing_20260807.py` | ✅ active | — | 5 | 301 | — | |
@@ -834,7 +836,7 @@
 | `monitor_feature_drift.py` | ✅ active | — | 11 | 773 | — | |
 | `monitor_pwin_fix.py` | ✅ active | — | 3 | 171 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 40 | 2363 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 40 | 2365 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 99 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `normalize_journal_pnl.py` | ✅ active | — | 1 | 202 | — | |
