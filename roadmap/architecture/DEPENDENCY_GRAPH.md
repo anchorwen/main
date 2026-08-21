@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-21T06:13:41Z
+> **自动生成**: 2026-08-21T10:54:55Z
 
 ## Package-Level Dependencies
 
@@ -730,6 +730,7 @@
 - `inject_regime_to_labels.py` → (无内部依赖)
 - `inspect_ofi_history.py` → (无内部依赖)
 - `journal_freeze_gate.py` → (无内部依赖)
+- `launcher_supervisor.py` → `core.observability.alert_channels`
 - `live_audit_realtime.py` → (无内部依赖)
 - `live_auto_healthcheck.py` → `core.deployment.scheduled_task_registry`, `scripts.live_dispatch_policy`
 - `live_daily_recap.py` → `core.brains.services.brain_attribution_service`, `core.brains.services.brain_leaderboard`, `core.brains.services.dynamic_brain_weighter`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.parliament.contract_groups`, `scripts.daily_ops`, `scripts.live_data_quality_report`, `scripts.live_feature_quality_report`, `scripts.live_shadow_ensemble`, `scripts.shadow_live_compare_report`, `scripts.trade_quality_report`, `scripts.training.brain_leaderboard`, `scripts.training.dataset_builder`, `scripts.training.eval_alignment`
