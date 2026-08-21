@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260821-METRIC_DENOMINATOR_SEMANTIC_SHIFT
+- **Pattern Signature**: `METRIC_DENOMINATOR_SEMANTIC_SHIFT`
+- **Date Cataloged**: 2026-08-21
+- **Source Docket**: DQAF-20260821-002
+- **Related**: FIX-20260821-007 (RESOLVED), TECH_DEBT-021 (CLOSED), TECH_DEBT-022 (The Silent Feature Drought — 同源断供残留)
+
+**定义**: 监控/就绪度量若用与生成器/消费者**不同语义的基数** (原始事件条目 vs 去重业务实体) 做分母, 会产生确定性比例失真 — 把"达标 (82.9%)"伪报成"灾难 (22.3%)"或反之, 掩盖真实状态并触发假阻断. 关键签名: (1) 度量分母用 ledger 原始行数 (`ack_status=="closed"` 条目 4697) 而非业务实体 (position_ticket 去重 + PnL 非空 = 1262); (2) 生成器自身有权威口径 (builder 实配 1046/1262) 但只印在 stdout, 未被监控侧消费; (3) 运维性质事件 (manual_close/orphan) 混入业务计数.
+- **预防** (IMPLEMENTED, FIX-20260821-007): ① **生成器自报口径 SSOT** — builder 落 `*.report.json` 边车 (valid_trades_count / real_closed_trades_count / manual_close / orphan + asof 分类), 度量侧直接读权威分母, 禁止独立重数; ② **度量分母 = 业务实体** — 任何"交易计数"必须 position_ticket 去重 + 关键字段 (PnL) 非空, 运维事件显式排除; ③ **本地回退显式标注** — report 缺失时回退本地 distinct 计数并标注 fallback, 杜绝静默口径漂移; ④ **回归锁** — 新测试锁定 SSOT 读 / fallback / manual_close 排除三分支.
+- **检测**: 回归锁 `tests/scripts/test_training_readiness_xau_metafilter.py` (+3: test_stage2_pnl_completeness_uses_real_closed_denominator / test_stage3_asof_rate_reads_report_denominator / test_stage3_asof_rate_fallback_to_distinct_pnl). 通用法: 任何新"率类度量"必须先声明分母定义 = 业务实体 vs 原始事件; 若生产者存在, 度量分母必须由生产者自报 (report/json), 禁止消费方独立重数.
+
 ### ReB-20260821-HARDCODED_STALENESS_MULTIPLE_CLOCKS
 - **Pattern Signature**: `HARDCODED_STALENESS_MULTIPLE_CLOCKS`
 - **Date Cataloged**: 2026-08-21

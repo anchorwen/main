@@ -29,6 +29,23 @@ from pathlib import Path
 from typing import Any
 
 
+# ── TECH_DEBT-021: builder-aligned metric denominators (The Denominator Alignment) ──
+# The builder's join universe = distinct position tickets with a FINAL close + PnL.
+# Readiness previously divided by raw ack_status=="closed" journal ENTRIES, which
+# double-count duplicate/orphan closes → ~3.7x inflated denominators → the false
+# asof_join_rate 22.3% / pnl_completeness 14.4%.  FINAL_CLOSE_ACTIONS mirrors
+# build_btc_metafilter_v2_dataset.py so both measure the SAME business entity.
+FINAL_CLOSE_ACTIONS = {
+    "close",
+    "loss",
+    "win",
+    "close_accepted",
+    "sl_hit_first",
+    "tp_hit_first",
+    "breakeven",
+}
+
+
 # ── Scoring ────────────────────────────────────────────────────────────
 class StageVerdict:
     PASS = "PASS"
@@ -347,8 +364,12 @@ def validate_stage_2_journal(contract: dict[str, Any], data_dir: str) -> dict[st
             except json.JSONDecodeError:
                 continue
 
-    closed = [e for e in entries if e.get("ack_status") == "closed"]
     accepted = [e for e in entries if e.get("ack_status") == "accepted"]
+    # TECH_DEBT-021: the closed universe = distinct position tickets with a FINAL
+    # close (builder semantics) — NOT raw ack_status=="closed" entries, which
+    # double-count duplicate/orphan closes (4697 raw vs 1661 distinct tickets)
+    # and inflated every closed-based denominator ~3.7x.
+    closed = _distinct_closed_universe(entries)
 
     # ── Check 1: Closed trade count ──
     closed_spec = outputs["closed_trades"]
@@ -380,15 +401,21 @@ def validate_stage_2_journal(contract: dict[str, Any], data_dir: str) -> dict[st
         )
 
     # ── Check 2: PnL completeness ──
-    pnl_null = sum(1 for e in closed if e.get("pnl") is None)
-    pnl_null_pct = pnl_null / len(closed) if closed else 0
+    # TECH_DEBT-021: denominator = REAL strategy closed trades — distinct tickets
+    # with an open, excluding manual_close (an ops/housekeeping close with no
+    # strategy label, not trainable) and orphan closes (no open in journal).  The
+    # builder's join universe excludes these too; readiness must measure the SAME
+    # universe.  manual_close is not a data defect — it is a design fact.
+    real_closed = [c for c in closed if c["has_open"] and not c["is_manual_close"]]
+    pnl_null = sum(1 for c in real_closed if c["pnl"] is None)
+    pnl_null_pct = pnl_null / len(real_closed) if real_closed else 0
     max_null = closed_spec.get("max_pnl_null_pct", 0.05)
     if pnl_null_pct <= max_null:
         results.append(
             {
                 "check": "pnl_completeness",
                 "verdict": StageVerdict.PASS,
-                "detail": f"{pnl_null}/{len(closed)} null PnL ({pnl_null_pct:.1%})",
+                "detail": f"{pnl_null}/{len(real_closed)} real closed null PnL ({pnl_null_pct:.1%})",
                 "metric": round(pnl_null_pct, 4),
             }
         )
@@ -397,14 +424,14 @@ def validate_stage_2_journal(contract: dict[str, Any], data_dir: str) -> dict[st
             {
                 "check": "pnl_completeness",
                 "verdict": StageVerdict.FAIL,
-                "detail": f"{pnl_null}/{len(closed)} null PnL ({pnl_null_pct:.1%})",
+                "detail": f"{pnl_null}/{len(real_closed)} real closed null PnL ({pnl_null_pct:.1%})",
                 "metric": round(pnl_null_pct, 4),
             }
         )
 
     # ── Check 3: Label coverage ──
     valid_labels = set(closed_spec.get("valid_labels", ["win", "loss"]))
-    trainable = [e for e in closed if e.get("label") in valid_labels]
+    trainable = [c for c in closed if c["close"].get("label") in valid_labels]
     results.append(
         {
             "check": "label_coverage",
@@ -418,7 +445,7 @@ def validate_stage_2_journal(contract: dict[str, Any], data_dir: str) -> dict[st
 
     # ── Check 4: Open→Close linkage ──
     open_entries = [e for e in accepted if e.get("action") == "open"]
-    close_with_open_msg = sum(1 for e in closed if e.get("open_message_id"))
+    close_with_open_msg = sum(1 for c in closed if c["close"].get("open_message_id"))
     results.append(
         {
             "check": "open_close_linkage",
@@ -480,7 +507,7 @@ def validate_stage_2_journal(contract: dict[str, Any], data_dir: str) -> dict[st
     verdict = StageVerdict.FAIL if fails else (StageVerdict.WARN if warns else StageVerdict.PASS)
 
     # ── Label distribution summary ──
-    label_dist = Counter(e.get("label") for e in closed)
+    label_dist = Counter(c["close"].get("label") for c in closed)
 
     return {
         "stage": "stage_2_journal",
@@ -841,7 +868,11 @@ def validate_stage_3_dataset_builder(contract: dict[str, Any], data_dir: str) ->
                     )
 
                 # Check ASOF join rate
-                journal_closed = _count_journal_closed(data_dir)
+                # TECH_DEBT-021: denominator = builder Report JSON valid_trades_count
+                # (SSOT — the builder's own join universe).  Previously this divided by
+                # raw ack_status=="closed" entries (4697) → the false 22.3% instead of
+                # the true 82.9% (1046 matched / 1262 valid trades).
+                journal_closed = _builder_valid_trades_count(data_dir, _npz_path)
                 if journal_closed > 0:
                     asof_rate = n_samples / journal_closed
                     min_rate = stage["outputs"]["dataset"].get("min_asof_join_rate", 0.80)
@@ -1022,25 +1053,101 @@ def validate_stage_4_model(contract: dict[str, Any], data_dir: str) -> dict[str,
 def _date_span_days(closed_entries: list[dict[str, Any]]) -> int:
     dates = set()
     for e in closed_entries:
-        ts = e.get("recorded_at", "")
+        # Accepts either a raw journal record or a _distinct_closed_universe wrapper.
+        rec = e.get("close", e)
+        ts = rec.get("recorded_at", "")
         if ts:
             dates.add(ts[:10])
     return max(1, len(dates))
 
 
-def _count_journal_closed(data_dir: str) -> int:
+def _distinct_closed_universe(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Distinct-ticket closed universe — aligned with the builder's FINAL-close set.
+
+    One entry per ticket: the FINAL close record (max recorded_at).  Mirrors
+    build_btc_metafilter_v2_dataset.py load_journal_opens' FINAL-close semantics
+    (TECH_DEBT-021) so readiness and the builder count the SAME business entity
+    instead of raw ack_status=="closed" entries.
+    """
+    by_ticket: dict[int, list[dict[str, Any]]] = {}
+    for e in entries:
+        tkt = e.get("position_ticket")
+        if tkt:
+            by_ticket.setdefault(int(tkt), []).append(e)
+    universe: list[dict[str, Any]] = []
+    for tkt, recs in by_ticket.items():
+        opens = [r for r in recs if r.get("action") == "open"]
+        closes = [r for r in recs if r.get("action") in FINAL_CLOSE_ACTIONS]
+        if not closes:
+            continue
+        close_rec = max(closes, key=lambda r: r.get("recorded_at", "z"))
+        pnl = close_rec.get("pnl")
+        if pnl is None:
+            pnl = close_rec.get("detail", {}).get("pnl")
+        universe.append(
+            {
+                "ticket": tkt,
+                "has_open": bool(opens),
+                "close": close_rec,
+                "pnl": pnl,
+                "is_manual_close": close_rec.get("label") == "manual_close",
+            }
+        )
+    return universe
+
+
+def _builder_valid_trades_count(data_dir: str, npz_path: str | None = None) -> int:
+    """SSOT asof_join_rate denominator (TECH_DEBT-021).
+
+    Primary: read ``valid_trades_count`` from the builder Report JSON sidecar
+    (``<output>.report.json``) — the builder's own join universe.  Fallback: if
+    the report is absent (older builder / test harness), replicate the builder's
+    filter locally (distinct tickets with open + FINAL close + non-null PnL).
+    """
+    if npz_path:
+        report_path = os.path.splitext(npz_path)[0] + ".report.json"
+        try:
+            with open(report_path, encoding="utf-8") as f:
+                report = json.load(f)
+            vtc = report.get("journal", {}).get("valid_trades_count")
+            if vtc is not None:
+                return int(vtc)
+        except (OSError, json.JSONDecodeError, ValueError):
+            pass  # report unreadable → fall through to local fallback
+    return _count_distinct_pnl_trades(data_dir)
+
+
+def _count_distinct_pnl_trades(data_dir: str) -> int:
+    """Fallback asof_join_rate denominator — distinct tickets with PnL.
+
+    Mirrors build_btc_metafilter_v2_dataset.py load_journal_opens exactly:
+    open + FINAL close + non-null PnL (from close pnl or detail.pnl).
+    """
     journal_path = Path(data_dir) / "live_trade_journal.jsonl"
     if not journal_path.exists():
         return 0
-    count = 0
+    by_ticket: dict[int, list[dict[str, Any]]] = {}
     with open(journal_path, encoding="utf-8") as f:
         for line in f:
             try:
                 e = json.loads(line.strip())
-                if e.get("ack_status") == "closed":
-                    count += 1
             except json.JSONDecodeError:
                 continue
+            tkt = e.get("position_ticket")
+            if tkt:
+                by_ticket.setdefault(int(tkt), []).append(e)
+    count = 0
+    for recs in by_ticket.values():
+        opens = [r for r in recs if r.get("action") == "open"]
+        closes = [r for r in recs if r.get("action") in FINAL_CLOSE_ACTIONS]
+        if not opens or not closes:
+            continue
+        close_rec = max(closes, key=lambda r: r.get("recorded_at", "z"))
+        pnl = close_rec.get("pnl")
+        if pnl is None:
+            pnl = close_rec.get("detail", {}).get("pnl")
+        if pnl is not None:
+            count += 1
     return count
 
 

@@ -125,6 +125,18 @@ check_training_readiness.py:722  np.load(空文件) → EOFError: No data left i
 
 ---
 
+## 4.6 P1.5 — The Temporal Alignment (中战役, IC 令) ✅ 已清偿
+
+> **状态**: ✅ **已清偿 (FIX-20260821-007, 2026-08-21)** — IC 雷霆裁决 The Denominator Alignment (更优解 Single Source of Truth) 全量落地. 注册: TECH_DEBT_REGISTRY 021 ✅ CLOSED / 022 独立建档 / FIX_REGISTRY 007 / training_pipeline.md Fix History / ReB `METRIC_DENOMINATOR_SEMANTIC_SHIFT` / DQAF-20260821-002 三步归档.
+
+- **战役**: TECH_DEBT-021 (readiness asof_join_rate 22.3% 假象 — 度量分母缺陷, 非 join 缺陷). 取证: 复刻 + builder 自证双轨逐字节吻合, 真值 **82.9% (1046/1262) ≥ 80% 门槛**.
+- **修复** (IC 更优解): builder `*.report.json` 边车 `valid_trades_count=1262` SSOT → readiness 直接读权威分母 (report 缺失 → 本地 distinct 回退); 阶段2 去重宇宙排除 manual_close (416) + orphan (7) → pnl_completeness **0/1238 = 0.0%**.
+- **验收**: XAU 就绪评估 asof_join_rate **82.9% PASS** + pnl_completeness **0.0% PASS** + closed 1661 + sample 1046 + 标签 39.2% — 目标全绿. 残余 WARN = 既有 feature_quality_outliers (越授权范围, 非分母问题).
+- **次生**: TECH_DEBT-022 (特征流断供无强告警, Sev 3, **今夜不修留待排期**) — 211 STALE 中的真实断供窗 (05-18 131.9h) 暴露监控缺位, 独立建档绝不并案.
+- **取证资产**: `scripts/_audit_asof_join_miss_20260821.py` + `scripts/_audit_journal_universe_20260821.py` (hash-lock 豁免, 留工作树).
+
+---
+
 ## 5. P2 — MetaExit 门禁复查 + 重训 (The Calibrated Exit) 🟢 前置达标
 
 ### 5.1 前置核验 (触发器纪律)

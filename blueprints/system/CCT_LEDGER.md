@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260821-003
+- **Docket ID**: DQAF-20260821-002
+- **日期**: 2026-08-21
+- **置信度**: confirmed (全层, 复刻 + builder 自证双轨逐字节吻合 + null-PnL 全量法证)
+- **因果链**:
+  - [Layer 1 — 症状]: XAU 训练就绪评估 `asof_join_rate 22.3% (1046/4697)` FAIL + `pnl_completeness 677/4697 null (14.4%)` FAIL → 训练数据"看起来不可用", 训练闸门假阻断 (check_training_readiness.py:846/:1031).
+  - [Layer 2 — 中间异常]: readiness 分母 `_count_journal_closed` 数 `ack_status=="closed"` **原始条目 = 4697** — 混入 677 空 PnL close + 孤儿/无 ticket close + 每票重复 close; builder 的 join 宇宙是**去重含 PnL 交易 = 1262** → 分母放大 3.72× → 确定性低值假象.
+  - [Layer 3 — 根因]: **L2 逻辑缺陷 (RC-06 metric-semantics)** — readiness 两个度量 (`asof_join_rate`/`pnl_completeness`) 分母语义与 builder 实际 join 口径不一致, 度量未收敛到系统唯一的"交易"定义 (position_ticket 去重 + 含 PnL). 非数据时间错位 (时区/精度双否).
+- **证据引用**:
+  - Source 1: scripts/build_btc_metafilter_v2_dataset.py 自身输出 `Journal: 1695 tickets, 1262 with PnL` + `ASOF join: 1046 matched, 0 no prior feature, 211 stale, 5 not-yet-known` (权威口径)
+  - Source 2: scripts/_audit_asof_join_miss_20260821.py 复刻逐字节吻合 + scripts/_audit_journal_universe_20260821.py distinct 普查 (raw_closed 4697 / distinct closed 1661 / closed+pnl 1262 / manual_close 416 / orphan 7)
+  - Source 3 (root cause): 跨口径对照 — builder join 宇宙 (1262) vs readiness 原始条目 (4697); 修复后实跑 82.9% (1046/1262) 转绿 + pnl_completeness 0/1238 = 0.0%
+- **是否被推翻**: 否 (AR: "时区撕裂" 被匹配 gap p50=5s 推翻; "精度截断" 被秒级干净匹配推翻; "守卫过杀" 半真 — 211 STALE 是真实断供被正确拒签, 非 22.3% 成因)
+- **关联 ReB Pattern**: ReB-20260821-METRIC_DENOMINATOR_SEMANTIC_SHIFT
+
 ### CCT-20260821-002
 - **Docket ID**: DQAF-20260821-020
 - **日期**: 2026-08-21

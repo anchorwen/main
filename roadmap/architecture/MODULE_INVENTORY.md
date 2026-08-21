@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-21T12:52:53Z
-> **扫描模块数**: 826
+> **自动生成**: 2026-08-21T14:22:44Z
+> **扫描模块数**: 828
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -657,6 +657,7 @@
 | `_analyze_h4_swing_now.py` | ✅ active | — | 3 | 379 | — | |
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_20260806_07_losses.py` | ✅ active | — | 8 | 359 | — | |
+| `_audit_asof_join_miss_20260821.py` | ✅ active | — | 8 | 425 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_btc_modify_misroute_exposure_20260819.py` | ✅ active | — | 3 | 222 | — | |
 | `_audit_close_label_divergence_20260821.py` | ✅ active | — | 4 | 176 | — | |
@@ -665,6 +666,7 @@
 | `_audit_entry_timing_20260807.py` | ✅ active | — | 5 | 301 | — | |
 | `_audit_export_m5_20260817.py` | ✅ active | — | 3 | 153 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
+| `_audit_journal_universe_20260821.py` | ✅ active | — | 2 | 197 | — | |
 | `_audit_live_health_20260814.py` | ✅ active | — | 16 | 475 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
@@ -758,7 +760,7 @@
 | `ble001_phase3e_deferred_fog_wrap.py` | ✅ active | — | 4 | 231 | — | |
 | `brain.py` | ✅ active | — | 13 | 861 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 121 | — | |
-| `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 9 | 610 | — | |
+| `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 11 | 710 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
@@ -769,7 +771,7 @@
 | `check_omega_pre_push.py` | ✅ active | — | 2 | 86 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `check_symbol_liveness.py` | ✅ active | LivenessVerdict | 8 | 364 | — | |
-| `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1216 | — | |
+| `check_training_readiness.py` | ✅ active | StageVerdict | 17 | 1323 | — | |
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 188 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |

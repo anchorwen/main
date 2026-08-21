@@ -39,6 +39,19 @@ from typing import Any, NoReturn
 
 import numpy as np
 
+# Final close actions — a trade is "closed" when one of these records its last
+# entry.  Module-level so load_journal_opens and journal_universe_stats agree
+# on the SAME closed universe (TECH_DEBT-021).
+FINAL_CLOSE_ACTIONS = {
+    "close",
+    "loss",
+    "win",
+    "close_accepted",
+    "sl_hit_first",
+    "tp_hit_first",
+    "breakeven",
+}
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build BTC MetaFilter V2 PIT-aligned dataset")
@@ -72,6 +85,81 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _load_journal_by_ticket(data_dir: str) -> dict[int, list[dict]]:
+    """Load journal grouped by position_ticket.
+
+    Shared by load_journal_opens (trade extraction) and journal_universe_stats
+    (TECH_DEBT-021 readiness denominators) so both count the SAME universe.
+    """
+    jl_path = os.path.join(data_dir, "live_trade_journal.jsonl")
+    by_ticket: dict[int, list[dict]] = {}
+    if os.path.exists(jl_path):
+        with open(jl_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                tkt = rec.get("position_ticket")
+                if tkt:
+                    by_ticket.setdefault(int(tkt), []).append(rec)
+    return by_ticket
+
+
+def journal_universe_stats(data_dir: str) -> dict[str, Any]:
+    """Distinct-ticket journal universe — SSOT for readiness metric denominators.
+
+    TECH_DEBT-021 (The Denominator Alignment): readiness previously divided the
+    asof_join_rate by raw ``ack_status=="closed"`` journal ENTRIES, which
+    double-count duplicate/orphan closes and inflated the denominator ~3.7x
+    (4697 entries vs 1262 distinct PnL-bearing trades → the false 22.3%).  These
+    counts are written to the builder Report JSON sidecar and read back by
+    check_training_readiness.py as the authoritative denominators.
+
+    Returns:
+        dict with journal_tickets / distinct_closed_trades / orphan_close_trades /
+        manual_close_trades / valid_trades_count / real_closed_trades_count.
+    """
+    by_ticket = _load_journal_by_ticket(data_dir)
+    n_tickets = len(by_ticket)
+    distinct_closed = 0
+    orphan_close = 0
+    manual_close = 0
+    valid_trades = 0
+    real_closed = 0
+    for recs in by_ticket.values():
+        opens = [r for r in recs if r.get("action") == "open"]
+        closes = [r for r in recs if r.get("action") in FINAL_CLOSE_ACTIONS]
+        if not closes:
+            continue
+        distinct_closed += 1
+        close_rec = max(closes, key=lambda r: r.get("recorded_at", "z"))
+        has_open = bool(opens)
+        is_manual = close_rec.get("label") == "manual_close"
+        if not has_open:
+            orphan_close += 1
+        if is_manual:
+            manual_close += 1
+        if has_open and not is_manual:
+            real_closed += 1
+        pnl = close_rec.get("pnl")
+        if pnl is None:
+            pnl = close_rec.get("detail", {}).get("pnl")
+        if pnl is not None:
+            valid_trades += 1
+    return {
+        "journal_tickets": n_tickets,
+        "distinct_closed_trades": distinct_closed,
+        "orphan_close_trades": orphan_close,
+        "manual_close_trades": manual_close,
+        "valid_trades_count": valid_trades,
+        "real_closed_trades_count": real_closed,
+    }
+
+
 def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
     """Extract open entries with close PnL from live_trade_journal.
 
@@ -84,19 +172,7 @@ def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
         return []
 
     # First pass: collect all entries grouped by position_ticket
-    by_ticket: dict[int, list[dict]] = {}
-    with open(jl_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            tkt = rec.get("position_ticket")
-            if tkt:
-                by_ticket.setdefault(int(tkt), []).append(rec)
+    by_ticket = _load_journal_by_ticket(data_dir)
 
     # Build open→p_win lookup from accepted entries
     open_pwin: dict[str, float] = {}  # message_id → p_win
@@ -130,17 +206,8 @@ def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
         volume = open_rec.get("volume", 0)
         open_mid = open_rec.get("message_id", "")
 
-        # Find final close
-        FINAL = {
-            "close",
-            "loss",
-            "win",
-            "close_accepted",
-            "sl_hit_first",
-            "tp_hit_first",
-            "breakeven",
-        }
-        closes = [r for r in recs if r.get("action") in FINAL]
+        # Find final close (module-level FINAL_CLOSE_ACTIONS = SSOT closed set)
+        closes = [r for r in recs if r.get("action") in FINAL_CLOSE_ACTIONS]
         if not closes:
             continue
         # Use last close (in case of duplicates)
@@ -323,7 +390,7 @@ def asof_join(
     features: list[dict[str, Any]],
     contract_feature_names: list[str],
     max_lookback_seconds: int = 900,
-) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
+) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]], dict[str, Any]]:
     """PIT ASOF join with tolerance + knowledge-time filtering.
 
     MLOps Iron Law #1: backward-looking join only.  Never use future data.
@@ -373,6 +440,8 @@ def asof_join(
     skipped_missing = 0
     skipped_not_known = 0
     skipped_stale = 0
+
+    join_stats: dict[str, Any] = {}
 
     for trade in trades:
         open_ts = trade["open_time"]
@@ -468,10 +537,18 @@ def asof_join(
         f"{skipped_not_known} not-yet-known, "
         f"{skipped_missing} missing data"
     )
+    join_stats = {
+        "matched_samples": matched,
+        "skipped_future": skipped_future,
+        "skipped_stale": skipped_stale,
+        "skipped_not_known": skipped_not_known,
+        "skipped_missing": skipped_missing,
+        "max_lookback_seconds": max_lookback_seconds,
+    }
     if matched == 0:
-        return np.array([]), np.array([]), []
+        return np.array([]), np.array([]), [], join_stats
 
-    return np.array(X_rows), np.array(y_rows), meta_rows
+    return np.array(X_rows), np.array(y_rows), meta_rows, join_stats
 
 
 def apply_labels(
@@ -540,7 +617,7 @@ def main() -> None:
         _fail("no feature names available — cannot build dataset")
     print(f"Target features: {len(contract_names)} dim")
 
-    X, y_pnl, meta = asof_join(
+    X, y_pnl, meta, join_stats = asof_join(
         trades,
         features,
         contract_names,
@@ -578,6 +655,29 @@ def main() -> None:
     print(f"\nDataset saved: {output}")
     print(f"  X shape: {X.shape}")
     print(f"  y distribution: {dict(zip(*np.unique(y, return_counts=True), strict=False))}")
+
+    # ── TECH_DEBT-021: Report JSON sidecar (readiness denominator SSOT) ──
+    # The builder's distinct-ticket universe is the authoritative denominator for
+    # readiness's asof_join_rate / pnl_completeness.  Writing it to a sidecar next
+    # to the NPZ (and reading it back in check_training_readiness.py) replaces the
+    # old raw ack_status=="closed" entry count that inflated the denominator 3.7x
+    # and fabricated the 22.3% asof_join_rate.
+    report = {
+        "symbol": symbol,
+        "feature_contract": feature_contract,
+        "built_at": datetime.now(UTC).isoformat(),
+        "max_lookback_seconds": max_lookback_seconds,
+        "journal": journal_universe_stats(data_dir),
+        "asof": join_stats,
+    }
+    report_path = os.path.splitext(output)[0] + ".report.json"
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    print(f"Report saved: {report_path}")
+    print(
+        f"  valid_trades_count={report['journal']['valid_trades_count']} "
+        f"(readiness asof_join_rate denominator, SSOT)"
+    )
 
     # ── Dimension contract verification ──
     expected_dim = 40 if feature_contract == "v9_institutional_40" else 47
