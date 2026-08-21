@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260821-002
+- **Docket ID**: DQAF-20260821-020
+- **日期**: 2026-08-21
+- **置信度**: confirmed (全层, 实证复现推翻写入侧假设)
+- **因果链**:
+  - [Layer 1 — 症状]: XAU 每日训练就绪评估 `_step_training_readiness` 阶段 3 `np.load` 抛 `EOFError` (check_training_readiness.py:722) → daily_ops 全管线 traceback 污染 + XAU stamp 永久阻断 (与 DQAF-20260820-004 证伪链同源). 证据: 契约 stage_3 校验崩现场 + ReB_PATTERN_INDEX EMPTY_NPZ_EOF_READINESS_HARNESS.
+  - [Layer 2 — 中间异常]: builder `build_btc_metafilter_v2_dataset.py` 因 symbol 错配 (默认 BTCUSDc, data/ 仅 XAUUSDc) 走到 `if not features: return` 静默早退 rc=0, 无 npz 落盘; validator 已 `NamedTemporaryFile` 预创建空 .npz → `np.load` 空文件 EOFError.
+  - [Layer 3 — 根因]: L2 逻辑缺陷 (RC-06 contract-violation) — `xau_metafilter_v1` 契约缺 `builder_args` 字段, validator 回退 `["--data-dir", data_dir]` 默认参数 → builder 在错误的 symbol 上空转. 非 L3 架构缺陷 (写入侧健康, 契约配置缺漏).
+- **证据引用**:
+  - Source 1: configs/contracts/training_pipeline_xau_metafilter_v1.json (缺 builder_args) + scripts/build_btc_metafilter_v2_dataset.py:458 默认 symbol=BTCUSDc + `if not features: return` 静默早退
+  - Source 2: scripts/check_training_readiness.py:659-661 validator 回退 + :722 np.load EOFError; 修复后实跑: builder_execution PASS + sample_count 1046 (min 500)
+  - Source 3 (root cause): 实证 feature store 健康 — `data/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl` 43,580 条 → 推翻"写入侧损坏"推测; BTC v3 (data_btc 有 BTCUSDc) 对照正常 + swing_v3 契约含完整 builder_args 对照
+- **是否被推翻**: 否 (AR: "调大 np.load 容错即可" 被三位一体 IC 裁决推翻 — 仅容错会把数据断供伪装成已就绪; "写入侧损坏" 被 feature store 健康计数推翻)
+- **关联 ReB Pattern**: ReB-20260821-EMPTY_NPZ_EOF_READINESS_HARNESS
+
 ### CCT-20260821-001
 - **Docket ID**: DQAF-20260820-005
 - **日期**: 2026-08-21
