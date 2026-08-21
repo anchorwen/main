@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260821-HARDCODED_STALENESS_MULTIPLE_CLOCKS
+- **Pattern Signature**: `HARDCODED_STALENESS_MULTIPLE_CLOCKS`
+- **Date Cataloged**: 2026-08-21
+- **Source Docket**: DQAF-20260820-005
+- **Related**: FIX-20260821-001 (RESOLVED), TECH_DEBT-011/012 (CLOSED), FIX-20260820-001 (MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK — 同族休市盲区)
+
+**定义**: 系统"数据何时算停滞/何时该判新"的时间语义若在多个模块各自硬编码 (年龄阈值 + 独立停机启发式), 则休市/闭市静默期被结构性误分类为停滞 → 审计/监控工具周末假阳性 (监控失信), 且未来修改时间语义需改 8+ 站点 (Iterability 债). 关键签名: (1) 同一 staleness 概念在 N 处硬编码 N 种阈值; (2) 无市场日历感知 (forex_24_5 休市 vs crypto_24_7 全天); (3) 造钟逻辑与消费方解耦 (健康检查独立 POST_OUTAGE 启发式); (4) 上游时钟驱动 last-value freeze 在写入侧产生逐位重复行 (次生 `LAST_VALUE_FREEZE_DUPLICATE_WRITE`).
+- **预防** (IMPLEMENTED, FIX-20260821-001): ① **单一日历时钟** — `core/market/calendar.py` 纯 stdlib leaf 网格 API, `staleness_anchor(now_utc, market_type, base)` 为全局唯一停滞基准 (open→now−base / closed→last_close−base); ② **离线/观测反向依赖安全** — leaf 包零反向依赖 (core/__init__/core/market/__init__ docstring-only), audit 脚本与 health checks 直接 import; ③ **market_type 派生收敛** — data_dir/symbol → forex_24_5/crypto_24_7 单函数; ④ **写入侧幂等** — 尾行指纹去重 (排除写时元数据 ingested_at), compact 失效尾缓存防数据丢失; ⑤ **回归锁** — 58 测试 (周末冻结不误报/周一重开仍抓/BTC 不放松/闭市冻结 PASS).
+- **检测**: 回归锁 `tests/market/test_calendar.py` (TestCalendarGrid 16) + `tests/runtime/test_dci_calendar.py` + `tests/observability/test_health_checks_feature_store.py` + `tests/engine/test_feature_store.py` (TestWriteDedupTailFingerprint 7). 通用法: 新增停滞/年龄判断前先 grep `staleness_anchor`; 任何新时间语义必须收敛到 calendar.py 单点, 严禁再造第二个"钟表".
+
 ### ReB-20260820-FAILURE_DETECTION_SIGNAL_AMBIGUITY
 - **Pattern Signature**: `FAILURE_DETECTION_SIGNAL_AMBIGUITY`
 - **Date Cataloged**: 2026-08-20

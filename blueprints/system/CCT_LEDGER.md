@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260821-001
+- **Docket ID**: DQAF-20260820-005
+- **日期**: 2026-08-21
+- **置信度**: confirmed (全层, 实盘数据实证)
+- **因果链**:
+  - [Layer 1 — 症状]: 周六跑 DCI `--baseline-read` → XAU 指数 92→87 假阳性 **-5 退化 BLOCKED** (`S1_FEATURE_STALE` + `S4_GM_STALE`), 数据零损坏 (2026-08-08 实证); 休市期 `data_btc/feature_store/records/symbol=XAUUSDc` 特征以冻结收盘值重复落盘 (08-08 01:14/05:20/09:26 三条逐位一致, M5_Ret_1=0.027181/M5_Price_ZScore=-0.167581).
+  - [Layer 2 — 中间异常]: 7 处停滞站点各自硬编码年龄阈值 (12h×3/24h×2/6h/30h) 无市场日历感知 → 休市静默被等价于停滞; `health_checks` POST_OUTAGE 1440min ad-hoc 独立"造钟"; 上游时钟驱动 last-value freeze 每周期重发同一根 bar → 重复行.
+  - [Layer 3 — 根因]: L3 架构缺陷 (RC-12 missing-feature) — 系统无单一日历时钟, 时间语义在多个模块多点硬编码各自为政, 无收敛单点.
+- **证据引用**:
+  - Source 1: scripts/audit_data_chain_integrity.py 7 站点硬编码阈值 (S1 feature L279/S1 bar_sync L304/S2 L396/S4 ledger L703/S4 gm L745/S5 L847/S6 L925) + core/execution/pre_trade_guards.py:46-47 市场日历
+  - Source 2: core/features/local_feature_store.py:66-73 write_records 无去重 + 08-08 实证重复行 + core/observability/health_checks.py:149-183 POST_OUTAGE 1440min
+  - Source 3 (root cause): core/market/calendar.py (新网格 API, 修复后唯一时钟) — 实证: `data --now 2026-08-15T10:00:00Z` grade 🟢92 stale_faults=[]; `data_btc` grade 84 仅 S3 (dormant 保留) 零回归
+- **是否被推翻**: 否 (AR: "仅调阈值"被 7 站点×多市场类型收敛需求推翻; "严格逐位含 ingested_at"被 utcnow stamp 语义推翻 — 该字段每次写 stamp, 严格对比永不触发)
+- **关联 ReB Pattern**: ReB-20260821-HARDCODED_STALENESS_MULTIPLE_CLOCKS
+
 ### CCT-20260820-004
 - **Docket ID**: DQAF-20260820-004
 - **日期**: 2026-08-20
