@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-21T11:23:14Z
+> **自动生成**: 2026-08-21T12:52:53Z
 > **扫描模块数**: 826
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -758,7 +758,7 @@
 | `ble001_phase3e_deferred_fog_wrap.py` | ✅ active | — | 4 | 231 | — | |
 | `brain.py` | ✅ active | — | 13 | 861 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 121 | — | |
-| `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 8 | 529 | — | |
+| `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 9 | 610 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
@@ -769,7 +769,7 @@
 | `check_omega_pre_push.py` | ✅ active | — | 2 | 86 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `check_symbol_liveness.py` | ✅ active | LivenessVerdict | 8 | 364 | — | |
-| `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1179 | — | |
+| `check_training_readiness.py` | ✅ active | StageVerdict | 15 | 1216 | — | |
 | `check_training_triggers.py` | ✅ active | — | 9 | 313 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 188 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |

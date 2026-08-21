@@ -30,6 +30,16 @@
 - **预防** (IMPLEMENTED, FIX-20260821-001): ① **单一日历时钟** — `core/market/calendar.py` 纯 stdlib leaf 网格 API, `staleness_anchor(now_utc, market_type, base)` 为全局唯一停滞基准 (open→now−base / closed→last_close−base); ② **离线/观测反向依赖安全** — leaf 包零反向依赖 (core/__init__/core/market/__init__ docstring-only), audit 脚本与 health checks 直接 import; ③ **market_type 派生收敛** — data_dir/symbol → forex_24_5/crypto_24_7 单函数; ④ **写入侧幂等** — 尾行指纹去重 (排除写时元数据 ingested_at), compact 失效尾缓存防数据丢失; ⑤ **回归锁** — 58 测试 (周末冻结不误报/周一重开仍抓/BTC 不放松/闭市冻结 PASS).
 - **检测**: 回归锁 `tests/market/test_calendar.py` (TestCalendarGrid 16) + `tests/runtime/test_dci_calendar.py` + `tests/observability/test_health_checks_feature_store.py` + `tests/engine/test_feature_store.py` (TestWriteDedupTailFingerprint 7). 通用法: 新增停滞/年龄判断前先 grep `staleness_anchor`; 任何新时间语义必须收敛到 calendar.py 单点, 严禁再造第二个"钟表".
 
+### ReB-20260821-EMPTY_NPZ_EOF_READINESS_HARNESS
+- **Pattern Signature**: `EMPTY_NPZ_EOF_READINESS_HARNESS`
+- **Date Cataloged**: 2026-08-21
+- **Source Docket**: DQAF-20260821-020
+- **Related**: FIX-20260821-006 (RESOLVED), TECH_DEBT-020 (CLOSED), FIX-20260820-004 (FAILURE_DETECTION_SIGNAL_AMBIGUITY — 次生信号污染已根治)
+
+**定义**: 训练就绪/契约评估链路若 (1) 用**默认值 (契约结构化字段缺失 → builder 默认 symbol 空转)** 实例化通用生成器, 且 (2) 生成器对"数据不足"**静默早退 rc=0 不写产出**, 且 (3) 校验器**预建空临时文件**并对其 `np.load` **零容错**, 则确定性触发 `EOFError` — 评估工具报崩溃而非诚实的数据缺口, 使训练就绪评估结构性失效 (XAU 此前从未被真实验证). 关键签名: (1) 契约结构化字段缺失但 description 文本记载正确调用 (结构化/叙事分叉); (2) `if not <data>: return` 静默 rc=0 (成功/失败信号无歧义性); (3) 消费方预建空文件 + `np.load` 无异常捕获; (4) 控制组掩盖 — 恰命中默认值的品种 (BTC v3 / data_btc BTCUSDc) 不炸, 缺陷被对照组"正常"遮蔽.
+- **预防** (IMPLEMENTED, FIX-20260821-006): ① **契约字段补全** — `builder_script`/`builder_output_arg`/`builder_args` 结构化声明, 禁止依赖默认值空转 (全契约族检漏: 凡 builder_script 默认命中但缺 builder_args 一律显式声明); ② **Fail-Fast Generator** — 生成器无数据路径 stderr ERROR + 非零退出码, 静默失败→硬失败 (下游可区分"未运行"与"正常产出"); ③ **Resilient Reader** — `np.load` 前空文件守卫 (`os.path.getsize==0` → FAIL verdict), load 捕获 `(EOFError, ValueError, OSError, pickle.UnpicklingError, zipfile.BadZipFile)` → FAIL + 明确诊断, 绝不让整条管线因单个 npz 抛 traceback; ④ **回归锁** — 契约字段断言 + valid/empty/corrupt/builder_fail/legacy 矩阵.
+- **检测**: 回归锁 `tests/scripts/test_training_readiness_xau_metafilter.py` (7 测试). 通用法: 新增 stage-3 类评估前 grep `builder_args` + `np.load`; 任何"数据不足则 return"路径必须非零退出; 任何 `np.load` 必须包损坏异常捕获.
+
 ### ReB-20260820-FAILURE_DETECTION_SIGNAL_AMBIGUITY
 - **Pattern Signature**: `FAILURE_DETECTION_SIGNAL_AMBIGUITY`
 - **Date Cataloged**: 2026-08-20

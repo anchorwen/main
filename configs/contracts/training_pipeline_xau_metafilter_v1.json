@@ -66,7 +66,7 @@
     },
 
     "stage_3_dataset_builder": {
-      "description": "PIT ASOF join pairs each XAUUSDc trade with the last V9 feature record before entry time. Label: PnL > 0. Builder: scripts/build_btc_metafilter_v2_dataset.py --data-dir data --symbol XAUUSDc --spread-cost-usd 0.0.",
+      "description": "PIT ASOF join pairs each XAUUSDc trade with the last V9 feature record before entry time. Label: PnL > 0. Builder: scripts/build_btc_metafilter_v2_dataset.py --data-dir data --symbol XAUUSDc --spread-cost-usd 0.0. FIX-20260821-006 (TECH_DEBT-020): builder_args 结构化补齐 — 此前缺字段导致 builder 默认 symbol=BTCUSDc 在 data/ 空转, 静默早退 rc=0, validator np.load 空文件抛 EOFError.",
       "inputs": {
         "from_stage_1": ["v9_institutional_40"],
         "from_stage_2": ["closed_trades", "open_entries"]
@@ -80,6 +80,9 @@
           "min_asof_join_rate": 0.80
         }
       },
+      "builder_script": "scripts/build_btc_metafilter_v2_dataset.py",
+      "builder_output_arg": "--output",
+      "builder_args": ["--data-dir", "data", "--symbol", "XAUUSDc", "--spread-cost-usd", "0.0"],
       "validation": {
         "check_dimension_exact": true,
         "check_asof_join_rate": true,

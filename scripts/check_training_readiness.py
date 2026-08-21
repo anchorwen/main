@@ -20,7 +20,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pickle
 import sys
+import zipfile
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -710,6 +712,13 @@ def validate_stage_3_dataset_builder(contract: dict[str, Any], data_dir: str) ->
                     _npz_path = str(_candidates[0])
                 else:
                     _npz_path = None
+            # ── TECH_DEBT-020: NPZ load hardening (Defense in Depth, reader leg) ──
+            # An empty/truncated/corrupt NPZ must NEVER crash the daily_ops
+            # pipeline with a bare traceback. Degrade to an explicit verdict
+            # so the report is honest about dataset un-readability.
+            X: Any | None = None
+            y: Any | None = None
+            feature_names: list[str] = []
             if _npz_path is None:
                 results.append(
                     {
@@ -718,11 +727,39 @@ def validate_stage_3_dataset_builder(contract: dict[str, Any], data_dir: str) ->
                         "detail": "No NPZ file found in builder output — cannot validate dimensions",
                     }
                 )
+            elif os.path.getsize(_npz_path) == 0:
+                # Builder exited 0 but wrote nothing — the old silent-empty-NPZ
+                # failure mode. An empty file is structurally un-loadable.
+                results.append(
+                    {
+                        "check": "dataset_npz_load",
+                        "verdict": StageVerdict.FAIL,
+                        "detail": "Builder exited 0 but produced an EMPTY NPZ file — no dataset was written",
+                    }
+                )
             else:
-                data = np.load(_npz_path, allow_pickle=True)
-                X = data.get("X", data.get("features"))
-                y = data.get("y", data.get("labels"))
-                feature_names = list(data.get("feature_names", []))
+                try:
+                    data = np.load(_npz_path, allow_pickle=True)
+                    X = data.get("X", data.get("features"))
+                    y = data.get("y", data.get("labels"))
+                    feature_names = list(data.get("feature_names", []))
+                except (
+                    EOFError,
+                    ValueError,
+                    OSError,
+                    pickle.UnpicklingError,
+                    zipfile.BadZipFile,
+                ) as exc:
+                    results.append(
+                        {
+                            "check": "dataset_npz_load",
+                            "verdict": StageVerdict.FAIL,
+                            "detail": (
+                                f"NPZ unreadable ({type(exc).__name__}: {exc}) — "
+                                "file empty, truncated, or corrupt; dataset cannot be validated"
+                            ),
+                        }
+                    )
 
             if _npz_path is not None and X is not None:
                 actual_dim = X.shape[1] if len(X.shape) > 1 else len(X)

@@ -33,8 +33,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 
 import numpy as np
 
@@ -44,15 +45,30 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--data-dir", default="data_btc", help="Data directory")
     p.add_argument("--symbol", default="BTCUSDc", help="Trading symbol")
     p.add_argument("--output", default=None, help="Output NPZ path")
-    p.add_argument("--spread-cost-usd", type=float, default=2.50,
-                   help="Estimated round-trip spread+slippage cost in USD")
-    p.add_argument("--pnl-threshold-mult", type=float, default=1.5,
-                   help="Damping multiplier on spread cost for y=1")
-    p.add_argument("--feature-contract", default="v9_institutional_40",
-                   help="Feature contract name (default: v9_institutional_40 for 40-dim V9)")
-    p.add_argument("--max-lookback-minutes", type=int, default=15,
-                   help="Max minutes between trade open and matched feature (default: 15). "
-                        "Trades with older features are dropped to avoid stale-data contamination.")
+    p.add_argument(
+        "--spread-cost-usd",
+        type=float,
+        default=2.50,
+        help="Estimated round-trip spread+slippage cost in USD",
+    )
+    p.add_argument(
+        "--pnl-threshold-mult",
+        type=float,
+        default=1.5,
+        help="Damping multiplier on spread cost for y=1",
+    )
+    p.add_argument(
+        "--feature-contract",
+        default="v9_institutional_40",
+        help="Feature contract name (default: v9_institutional_40 for 40-dim V9)",
+    )
+    p.add_argument(
+        "--max-lookback-minutes",
+        type=int,
+        default=15,
+        help="Max minutes between trade open and matched feature (default: 15). "
+        "Trades with older features are dropped to avoid stale-data contamination.",
+    )
     return p.parse_args()
 
 
@@ -83,8 +99,8 @@ def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
                 by_ticket.setdefault(int(tkt), []).append(rec)
 
     # Build open→p_win lookup from accepted entries
-    open_pwin: dict[str, float] = {}       # message_id → p_win
-    open_ou_z: dict[str, float] = {}       # message_id → ou_z_entry
+    open_pwin: dict[str, float] = {}  # message_id → p_win
+    open_ou_z: dict[str, float] = {}  # message_id → ou_z_entry
     for recs in by_ticket.values():
         for r in recs:
             if r.get("action") == "open" and r.get("ack_status") == "accepted":
@@ -107,13 +123,23 @@ def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
             continue
         open_rec = opens[0]
         open_ts = open_rec.get("recorded_at", "")
-        entry_price = open_rec.get("detail", {}).get("entry_price") or open_rec.get("entry_price", 0)
+        entry_price = open_rec.get("detail", {}).get("entry_price") or open_rec.get(
+            "entry_price", 0
+        )
         side = open_rec.get("side", "")
         volume = open_rec.get("volume", 0)
         open_mid = open_rec.get("message_id", "")
 
         # Find final close
-        FINAL = {"close", "loss", "win", "close_accepted", "sl_hit_first", "tp_hit_first", "breakeven"}
+        FINAL = {
+            "close",
+            "loss",
+            "win",
+            "close_accepted",
+            "sl_hit_first",
+            "tp_hit_first",
+            "breakeven",
+        }
         closes = [r for r in recs if r.get("action") in FINAL]
         if not closes:
             continue
@@ -129,21 +155,25 @@ def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
         p_win = open_pwin.get(open_mid, 0.5)  # default neutral
         ou_z_entry = open_ou_z.get(open_mid, 0.0)
 
-        trades.append({
-            "ticket": tkt,
-            "open_time": open_ts,
-            "entry_price": float(entry_price) if entry_price else 0,
-            "side": side,
-            "volume": float(volume) if volume else 0,
-            "pnl": float(pnl),
-            "close_label": close_rec.get("label", ""),
-            "p_win": p_win,
-            "ou_z_entry": ou_z_entry,
-        })
+        trades.append(
+            {
+                "ticket": tkt,
+                "open_time": open_ts,
+                "entry_price": float(entry_price) if entry_price else 0,
+                "side": side,
+                "volume": float(volume) if volume else 0,
+                "pnl": float(pnl),
+                "close_label": close_rec.get("label", ""),
+                "p_win": p_win,
+                "ou_z_entry": ou_z_entry,
+            }
+        )
 
     pwin_ok = sum(1 for t in trades if t["p_win"] != 0.5)
-    print(f"Journal: {len(by_ticket)} tickets, {len(trades)} with PnL "
-          f"({pwin_ok} with signal p_win)")
+    print(
+        f"Journal: {len(by_ticket)} tickets, {len(trades)} with PnL "
+        f"({pwin_ok} with signal p_win)"
+    )
     return trades
 
 
@@ -163,8 +193,12 @@ def load_feature_store(
     timestamps (legacy behavior, retained for backwards compatibility).
     """
     fs_path = os.path.join(
-        data_dir, "feature_store", "records",
-        f"symbol={symbol}", "timeframe=M5", "features.jsonl",
+        data_dir,
+        "feature_store",
+        "records",
+        f"symbol={symbol}",
+        "timeframe=M5",
+        "features.jsonl",
     )
     if not os.path.exists(fs_path):
         print(f"ERROR: {fs_path} not found")
@@ -198,13 +232,17 @@ def load_feature_store(
             if not isinstance(v9_vals, dict) or len(v9_vals) < 40:
                 continue
             _ingested = v9_rec.get("ingested_at", "")
-            merged.append({
-                "event_time": et,
-                "ingested_at": _ingested,
-                "values": dict(v9_vals),
-            })
-        print(f"Feature store: {raw_count} raw records → {len(v9_records)} v9 "
-              f"(40-dim contract, micro skipped)")
+            merged.append(
+                {
+                    "event_time": et,
+                    "ingested_at": _ingested,
+                    "values": dict(v9_vals),
+                }
+            )
+        print(
+            f"Feature store: {raw_count} raw records → {len(v9_records)} v9 "
+            f"(40-dim contract, micro skipped)"
+        )
         return merged
 
     # ── 47-dim contract: merge v9 + micro at matching timestamps ──
@@ -227,19 +265,25 @@ def load_feature_store(
             if mf not in merged_vals:
                 merged_vals[mf] = 0.0
         _ingested = v9_rec.get("ingested_at", "")
-        merged.append({
-            "event_time": et,
-            "ingested_at": _ingested,
-            "values": merged_vals,
-        })
+        merged.append(
+            {
+                "event_time": et,
+                "ingested_at": _ingested,
+                "values": merged_vals,
+            }
+        )
 
-    print(f"Feature store: {raw_count} raw records → {len(v9_records)} v9 + "
-          f"{len(micro_records)} micro → {len(merged)} merged "
-          f"({merged_count} with micro, {len(merged) - merged_count} without)")
+    print(
+        f"Feature store: {raw_count} raw records → {len(v9_records)} v9 + "
+        f"{len(micro_records)} micro → {len(merged)} merged "
+        f"({merged_count} with micro, {len(merged) - merged_count} without)"
+    )
     return merged
 
 
-def load_contract_feature_names(data_dir: str, feature_contract: str = "v9_institutional_40") -> list[str]:
+def load_contract_feature_names(
+    data_dir: str, feature_contract: str = "v9_institutional_40"
+) -> list[str]:
     """Load feature names for the given contract.
 
     FIX-20260621-028: For v9_institutional_40, load directly from schema
@@ -256,13 +300,16 @@ def load_contract_feature_names(data_dir: str, feature_contract: str = "v9_insti
     with open(contract_path, encoding="utf-8") as f:
         contract = json.load(f)
     feature_names = contract.get("model_target", {}).get("feature_names_ssot", [])
-    print(f"Contract features: {len(feature_names)} dim (from training_pipeline_btc_metafilter_v3.json)")
+    print(
+        f"Contract features: {len(feature_names)} dim (from training_pipeline_btc_metafilter_v3.json)"
+    )
     return list(feature_names)
 
 
 def _load_v9_feature_names_from_registry() -> list[str]:
     """Load canonical v9_institutional_40 feature names from schema SSOT."""
     from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
     names = list(V9_INSTITUTIONAL_40_FEATURES)[:40]
     if len(names) == 40:
         print(f"Schema SSOT: {len(names)} features (v9_institutional_40)")
@@ -398,25 +445,29 @@ def asof_join(
 
         X_rows.append(feat_vec)
         y_rows.append(trade["pnl"])
-        meta_rows.append({
-            "ticket": trade["ticket"],
-            "open_time": open_ts,
-            "feature_time": feat.get("event_time", ""),
-            "gap_seconds": round(_gap_seconds, 1),
-            "pnl": trade["pnl"],
-            "side": trade["side"],
-            "entry_price": trade["entry_price"],
-            "volume": trade["volume"],
-            "close_label": trade["close_label"],
-            "p_win": trade.get("p_win", 0.5),
-            "ou_z_entry": trade.get("ou_z_entry", 0.0),
-        })
+        meta_rows.append(
+            {
+                "ticket": trade["ticket"],
+                "open_time": open_ts,
+                "feature_time": feat.get("event_time", ""),
+                "gap_seconds": round(_gap_seconds, 1),
+                "pnl": trade["pnl"],
+                "side": trade["side"],
+                "entry_price": trade["entry_price"],
+                "volume": trade["volume"],
+                "close_label": trade["close_label"],
+                "p_win": trade.get("p_win", 0.5),
+                "ou_z_entry": trade.get("ou_z_entry", 0.0),
+            }
+        )
         matched += 1
 
-    print(f"ASOF join: {matched} matched, {skipped_future} no prior feature, "
-          f"{skipped_stale} stale (gap > {max_lookback_seconds//60}min), "
-          f"{skipped_not_known} not-yet-known, "
-          f"{skipped_missing} missing data")
+    print(
+        f"ASOF join: {matched} matched, {skipped_future} no prior feature, "
+        f"{skipped_stale} stale (gap > {max_lookback_seconds//60}min), "
+        f"{skipped_not_known} not-yet-known, "
+        f"{skipped_missing} missing data"
+    )
     if matched == 0:
         return np.array([]), np.array([]), []
 
@@ -438,9 +489,23 @@ def apply_labels(
 
     n_win = int(y_binary.sum())
     n_loss = len(y_binary) - n_win
-    print(f"Labels: {n_win} wins (PnL > ${threshold:.2f}), {n_loss} non-wins "
-          f"(WR={n_win/max(len(y_binary),1)*100:.1f}%)")
+    print(
+        f"Labels: {n_win} wins (PnL > ${threshold:.2f}), {n_loss} non-wins "
+        f"(WR={n_win/max(len(y_binary),1)*100:.1f}%)"
+    )
     return y_binary
+
+
+def _fail(msg: str) -> NoReturn:
+    """Fail-fast generator (TECH_DEBT-020, The Fail-Fast Generator).
+
+    The builder must NEVER exit 0 when it produced no usable dataset. A silent
+    rc=0 leaves the output file empty (or missing), which downstream consumers
+    (check_training_readiness.py) cannot distinguish from a real dataset —
+    historically np.load on the empty NPZ raised EOFError.
+    """
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(1)
 
 
 def main() -> None:
@@ -458,25 +523,31 @@ def main() -> None:
     symbol = args.symbol
     trades = load_journal_opens(data_dir)
     if not trades:
-        return
+        _fail(
+            f"no open journal entries found in {data_dir}/live_trade_journal.jsonl — "
+            "cannot build dataset"
+        )
 
     features = load_feature_store(data_dir, symbol, feature_contract=feature_contract)
     if not features:
-        return
+        _fail(
+            f"no feature records found for symbol={symbol} in {data_dir}/feature_store — "
+            "cannot build dataset (silent rc=0 was the TECH_DEBT-020 EOFError root cause)"
+        )
 
     contract_names = load_contract_feature_names(data_dir, feature_contract=feature_contract)
     if not contract_names:
-        print("ERROR: no feature names available — cannot build dataset")
-        return
+        _fail("no feature names available — cannot build dataset")
     print(f"Target features: {len(contract_names)} dim")
 
     X, y_pnl, meta = asof_join(
-        trades, features, contract_names,
+        trades,
+        features,
+        contract_names,
         max_lookback_seconds=max_lookback_seconds,
     )
     if len(X) == 0:
-        print("ERROR: no samples after ASOF join — cannot build dataset")
-        return
+        _fail("no samples after ASOF join — cannot build dataset")
 
     y = apply_labels(y_pnl, args.spread_cost_usd, args.pnl_threshold_mult)
 
@@ -484,8 +555,10 @@ def main() -> None:
     n_long = sum(1 for m in meta if m["side"] == "long")
     n_short = sum(1 for m in meta if m["side"] == "short")
     if len(meta) > 0:
-        print(f"Direction balance: LONG={n_long} ({n_long/len(meta)*100:.0f}%), "
-              f"SHORT={n_short} ({n_short/len(meta)*100:.0f}%)")
+        print(
+            f"Direction balance: LONG={n_long} ({n_long/len(meta)*100:.0f}%), "
+            f"SHORT={n_short} ({n_short/len(meta)*100:.0f}%)"
+        )
 
     # ── Save ──
     sym_tag = symbol.lower().replace("usdc", "").replace("usd", "")
@@ -509,17 +582,25 @@ def main() -> None:
     # ── Dimension contract verification ──
     expected_dim = 40 if feature_contract == "v9_institutional_40" else 47
     if X.shape[1] != expected_dim:
-        print(f"  [CONTRACT VIOLATION] Dataset has {X.shape[1]} dim, contract requires {expected_dim}!")
+        print(
+            f"  [CONTRACT VIOLATION] Dataset has {X.shape[1]} dim, contract requires {expected_dim}!"
+        )
     else:
         print(f"  [CONTRACT OK] Dataset dimension matches contract ({expected_dim} dim)")
 
     # Print PnL distribution for diagnostics
     pnl_sorted = sorted(y_pnl)
-    print(f"\nPnL distribution: min={pnl_sorted[0]:+.2f}, "
-          f"median={pnl_sorted[len(pnl_sorted)//2]:+.2f}, max={pnl_sorted[-1]:+.2f}")
-    print(f"  Wins above threshold: {int((y_pnl > args.spread_cost_usd * args.pnl_threshold_mult).sum())}")
-    print(f"  Breakeven zone (0 to threshold): "
-          f"{int(((y_pnl > 0) & (y_pnl <= args.spread_cost_usd * args.pnl_threshold_mult)).sum())}")
+    print(
+        f"\nPnL distribution: min={pnl_sorted[0]:+.2f}, "
+        f"median={pnl_sorted[len(pnl_sorted)//2]:+.2f}, max={pnl_sorted[-1]:+.2f}"
+    )
+    print(
+        f"  Wins above threshold: {int((y_pnl > args.spread_cost_usd * args.pnl_threshold_mult).sum())}"
+    )
+    print(
+        f"  Breakeven zone (0 to threshold): "
+        f"{int(((y_pnl > 0) & (y_pnl <= args.spread_cost_usd * args.pnl_threshold_mult)).sum())}"
+    )
     print(f"  Losses: {int((y_pnl <= 0).sum())}")
 
     print("\n[DONE] All statistics above are the sole source of truth.")
