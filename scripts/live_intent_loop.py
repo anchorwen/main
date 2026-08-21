@@ -1150,8 +1150,24 @@ def main(argv: list[str] | None = None) -> int:
             from core.execution.meta_exit_engine import create_exit_engine
 
             meta_model = args.meta_exit_model if hasattr(args, "meta_exit_model") else None
+            if not meta_model:
+                # FIX-20260821-008 (The Shadow Deployment — CROSS_ASSET_CONTAMINATION_AUDIT H2):
+                # The pre-fix hardcode always loaded XAU's exit model, even in the BTC
+                # process ("BTC exits evaluated with XAU exit model"). Load the per-asset
+                # 19-dim v3 retrain instead — same convention as the --symbol fallback
+                # below (base_dir contains "btc" ⇒ BTC asset).
+                from core.deployment.path_defaults import (
+                    META_EXIT_MODEL_BTC_PATH,
+                    META_EXIT_MODEL_XAU_PATH,
+                )
+
+                meta_model = (
+                    META_EXIT_MODEL_BTC_PATH
+                    if "btc" in str(args.base_dir).lower()
+                    else META_EXIT_MODEL_XAU_PATH
+                )
             meta_exit_engine = create_exit_engine(
-                model_path=meta_model or "data/models/meta_exit_model.txt",
+                model_path=meta_model,
                 urgency_threshold=getattr(args, "meta_exit_threshold", 0.65),
             )
         except (

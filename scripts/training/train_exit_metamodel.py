@@ -14,13 +14,16 @@ Architecture Committee Directive (2026-06-28):
   contamination triggers ``sys.exit(1)`` — no silent degradation.
 
 Usage:
-  python scripts/training/train_exit_metamodel.py
-  python scripts/training/train_exit_metamodel.py --data-source journal
-  python scripts/training/train_exit_metamodel.py --output data/models/meta_exit_model_v2.txt
+  python scripts/training/train_exit_metamodel.py --symbol xau
+  python scripts/training/train_exit_metamodel.py --symbol btc
+  python scripts/training/train_exit_metamodel.py --data-source journal --journal <path>
+  python scripts/training/train_exit_metamodel.py --snapshots <path> --journal <path> --output <path>
 
-Output:
-  data/models/meta_exit_model_v2.txt       (LightGBM booster)
-  data/models/meta_exit_model_v2.meta.json (feature names + training stats)
+Output (derived from --symbol, or explicit --output):
+  data/models/meta_exit_model_v3_xau.txt        (XAU LightGBM booster)
+  data/models/meta_exit_model_v3_xau.meta.json  (feature names + training stats)
+  data_btc/models/meta_exit_model_v3_btc.txt    (BTC LightGBM booster)
+  data_btc/models/meta_exit_model_v3_btc.meta.json
 """
 
 from __future__ import annotations
@@ -81,6 +84,27 @@ _JOURNAL_FEATURE_NAMES: list[str] = [
 ]
 _JOURNAL_FEATURE_DIM = len(_JOURNAL_FEATURE_NAMES)  # 8
 
+# ── FIX-20260821-008 (The Consistency Guard): per-asset path SSOT ──
+# MetaExit snapshot telemetry, the live trade journal, and the model output are
+# per-asset. The pre-fix defaults (XAU snapshots + BTC journal) silently mispaired
+# assets: 311 clean XAU tickets (86.6% of the universe) had no BTC close, so only
+# 31 BTC fragments survived and the retrain was rejected as "insufficient samples"
+# — a plausible business excuse masking a physical routing defect (ReB
+# CROSS_ASSET_DEFAULT_SILENT_MISPAIR). Paths are now derived from --symbol at
+# argparse time; explicit --snapshots/--journal/--output always win.
+_SYMBOL_PATHS: dict[str, dict[str, str]] = {
+    "xau": {
+        "snapshots": "data/meta_exit_snapshots.jsonl",
+        "journal": "data/live_trade_journal.jsonl",
+        "output": "data/models/meta_exit_model_v3_xau.txt",
+    },
+    "btc": {
+        "snapshots": "data_btc/meta_exit_snapshots.jsonl",
+        "journal": "data_btc/live_trade_journal.jsonl",
+        "output": "data_btc/models/meta_exit_model_v3_btc.txt",
+    },
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Architecture Committee Hard Assertion: feature dimension gate
@@ -130,28 +154,39 @@ def _assert_feature_dimension(feature_names: list[str], source_label: str) -> No
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Train meta-model for exit management (20-dim ExitFeatureSnapshot)"
+        description="Train meta-model for exit management (19-dim ExitFeatureSnapshot)"
     )
     p.add_argument(
         "--data-source",
         choices=["snapshots", "journal"],
         default="snapshots",
-        help="Data source: snapshots (20-dim, recommended) or journal (8-dim, legacy)",
+        help="Data source: snapshots (19-dim, recommended) or journal (8-dim, legacy)",
+    )
+    # ── FIX-20260821-008 (The Consistency Guard): NO hardcoded cross-asset defaults ──
+    # The pre-fix defaults (XAU snapshots + BTC journal) silently mispaired assets.
+    # Paths now derive from --symbol via the _SYMBOL_PATHS SSOT (or explicit flags).
+    p.add_argument(
+        "--symbol",
+        choices=sorted(_SYMBOL_PATHS),
+        default=None,
+        help="Asset symbol (xau|btc). Derives --snapshots/--journal/--output defaults "
+        "from the per-asset SSOT. Explicit path flags override.",
     )
     p.add_argument(
         "--snapshots",
-        default="data/meta_exit_snapshots.jsonl",
-        help="Path to ExitFeatureSnapshot telemetry JSONL (for --data-source snapshots)",
+        default=None,
+        help="Path to ExitFeatureSnapshot telemetry JSONL (for --data-source snapshots). "
+        "Default derived from --symbol.",
     )
     p.add_argument(
         "--journal",
-        default="data_btc/live_trade_journal.jsonl",
-        help="Path to live trade journal JSONL",
+        default=None,
+        help="Path to live trade journal JSONL. Default derived from --symbol.",
     )
     p.add_argument(
         "--output",
-        default="data/models/meta_exit_model_v2.txt",
-        help="Output model path",
+        default=None,
+        help="Output model path. Default derived from --symbol.",
     )
     p.add_argument(
         "--min-trades",
@@ -159,8 +194,49 @@ def parse_args() -> argparse.Namespace:
         default=15,
         help="Minimum trades required to train (>=15 per quality gate)",
     )
+    p.add_argument(
+        "--retention-threshold",
+        type=float,
+        default=0.50,
+        help="Minimum snapshot→journal join retention (paired/distinct snapshot tickets) "
+        "required to train. Below this the two universes are assumed CROSS-ASSET and "
+        "training is REFUSED with a hard exit (IC FIX-20260821-008). Default 0.50.",
+    )
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
+
+
+def resolve_args(args: argparse.Namespace) -> argparse.Namespace:
+    """Derive --snapshots/--journal/--output from --symbol when not explicit.
+
+    FIX-20260821-008 (The Consistency Guard): explicit path flags always win; the
+    per-asset table only fills in whatever is still unset. Without --symbol AND
+    without explicit paths, argparse errors out rather than guessing an asset.
+    """
+    if args.symbol:
+        _s = _SYMBOL_PATHS[args.symbol]
+        if not args.snapshots:
+            args.snapshots = _s["snapshots"]
+        if not args.journal:
+            args.journal = _s["journal"]
+        if not args.output:
+            args.output = _s["output"]
+    elif not args.snapshots or not args.journal:
+        # Only the legacy --data-source journal path may run without snapshots.
+        # Any snapshots-mode run without both paths refuses to guess an asset.
+        _err = argparse.ArgumentParser(description="train_exit_metamodel", add_help=False)
+        if args.data_source == "snapshots":
+            _err.error(
+                "--symbol (xau|btc) is required for --data-source snapshots, or pass "
+                "--snapshots AND --journal explicitly. Refusing to guess an asset "
+                "(prevents silent cross-asset training)."
+            )
+        if not args.journal:
+            _err.error("--journal is required for --data-source journal.")
+    if not args.output:
+        # Legacy default preserved only for explicit-path / journal mode.
+        args.output = "data/models/meta_exit_model_v2.txt"
+    return args
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -186,11 +262,14 @@ def _load_snapshots(path: str) -> list[dict[str, Any]]:
 def _pair_snapshots_with_labels(
     snapshots: list[dict[str, Any]],
     journal_path: str,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], int]:
     """Match snapshot tickets to journal close outcomes for labeling.
 
     For each unique ticket, uses the LAST snapshot (closest to close)
     and the journal's PnL outcome as the label.
+
+    Returns (paired, n_distinct_snapshot_tickets) — the second value feeds the
+    FIX-20260821-008 consistency guard (join-retention rate).
     """
     # Build journal outcome lookup: ticket → PnL
     outcomes: dict[int, float] = {}
@@ -237,7 +316,61 @@ def _pair_snapshots_with_labels(
     if skipped_no_label:
         print(f"[INFO] {skipped_no_label} tickets in snapshots have no journal close — skipping.")
 
-    return paired
+    return paired, len(ticket_snapshots)
+
+
+def _assert_join_retention(
+    n_paired: int,
+    n_snapshot_tickets: int,
+    retention_threshold: float,
+    snapshots_path: str,
+    journal_path: str,
+) -> None:
+    """Hard guard: refuse training when the snapshot→journal join is too thin.
+
+    FIX-20260821-008 (The Consistency Guard, IC 雷霆裁决): if fewer than
+    ``retention_threshold`` (default 50%) of distinct snapshot tickets pair with a
+    journal close, the two universes are almost certainly CROSS-ASSET — e.g. XAU
+    snapshots joined against the BTC journal. The pre-fix defaults did exactly
+    this silently: 311 XAU tickets (86.6% of the universe) had no BTC close, so
+    only 31 BTC fragments survived and the retrain was rejected as "insufficient
+    samples" — a plausible business excuse masking a physical routing defect.
+    A hard exit beats a silently degraded model (Iron Law: fail loudly).
+    """
+    if n_snapshot_tickets == 0:
+        print(
+            f"\n{'='*70}\n"
+            f"  CONSISTENCY GUARD HALT: empty snapshot universe\n"
+            f"  snapshots: {snapshots_path}\n"
+            f"  distinct tickets: 0 — nothing to train.\n"
+            f"{'='*70}\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    retention = n_paired / n_snapshot_tickets
+    if retention < retention_threshold:
+        print(
+            f"\n{'='*70}\n"
+            f"  CONSISTENCY GUARD HALT: cross-asset pairing suspected\n"
+            f"  snapshots: {snapshots_path}\n"
+            f"  journal   : {journal_path}\n"
+            f"  snapshot tickets : {n_snapshot_tickets}\n"
+            f"  paired with close: {n_paired}\n"
+            f"  join retention   : {retention:.1%}  <  threshold {retention_threshold:.0%}\n"
+            f"\n"
+            f"  The snapshot and journal universes barely overlap — they are almost\n"
+            f"  certainly DIFFERENT ASSETS. Training on this mispair silently produces\n"
+            f"  a degraded model with a plausible 'insufficient samples' rejection.\n"
+            f"  Refusing to train. Re-run with --symbol xau|btc (or explicit paths)\n"
+            f"  that belong to the SAME asset.\n"
+            f"{'='*70}\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(
+        f"[OK] Join retention {retention:.1%} >= {retention_threshold:.0%} — "
+        f"snapshots/journal same-asset confirmed."
+    )
 
 
 def _extract_snapshot_features(pair: dict[str, Any]) -> dict[str, Any]:
@@ -450,7 +583,9 @@ def train_model(
         "feature_importance_gain": importance_dict,
         "scale_pos_weight": scale_pos_weight,
         "params": {k: v for k, v in params.items() if k != "seed"},
-        "data_source": "ExitFeatureSnapshot" if len(feature_names) == 20 else "journal",
+        "data_source": "ExitFeatureSnapshot"
+        if len(feature_names) == EXIT_SNAPSHOT_FEATURE_DIM
+        else "journal",
         "architecture_committee_assertion": "19-dim hard assertion PASSED (matches _runtime_feature_map)",
     }
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -465,10 +600,19 @@ def train_model(
 
 
 def main() -> None:
+    # FIX-20260821-008: GBK console crashes on the ✅ emoji below AFTER artifacts
+    # are saved — producing a misleading exit code 1 on an otherwise-successful
+    # retrain. Reconfigure stdout AND stderr to UTF-8 so the quality-gate verdict
+    # and the CONSISTENCY GUARD HALT message print cleanly (no mojibake on GBK).
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
+
     args = parse_args()
+    args = resolve_args(args)
 
     if args.data_source == "snapshots":
-        # ── 20-dim ExitFeatureSnapshot path (RECOMMENDED) ──
+        # ── 19-dim ExitFeatureSnapshot path (RECOMMENDED) ──
         if not os.path.exists(args.snapshots):
             print(f"Snapshots file not found: {args.snapshots}")
             sys.exit(1)
@@ -479,8 +623,18 @@ def main() -> None:
         snapshots = _load_snapshots(args.snapshots)
         print(f"Loaded {len(snapshots)} ExitFeatureSnapshot records from {args.snapshots}")
 
-        pairs = _pair_snapshots_with_labels(snapshots, args.journal)
+        pairs, n_snapshot_tickets = _pair_snapshots_with_labels(snapshots, args.journal)
         print(f"Paired {len(pairs)} tickets with journal outcomes")
+
+        # FIX-20260821-008 (The Consistency Guard): hard-fail on cross-asset mispair
+        # BEFORE the "insufficient samples" soft exit can mask a routing defect.
+        _assert_join_retention(
+            len(pairs),
+            n_snapshot_tickets,
+            args.retention_threshold,
+            args.snapshots,
+            args.journal,
+        )
 
         if len(pairs) < args.min_trades:
             print(

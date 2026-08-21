@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-21T14:22:44Z
+> **自动生成**: 2026-08-21T15:28:10Z
 
 ## Package-Level Dependencies
 
@@ -584,6 +584,7 @@
 - `_audit_live_health_20260814.py` → (无内部依赖)
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
+- `_audit_metaexit_gate_20260821.py` → (无内部依赖)
 - `_audit_shadow_pnl_august_20260812.py` → (无内部依赖)
 - `_audit_shadow_pnl_replay_20260812.py` → (无内部依赖)
 - `_audit_storm_domain_wal_20260819.py` → (无内部依赖)

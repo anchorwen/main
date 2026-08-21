@@ -31,7 +31,13 @@ ONLINE_BRAIN_PATH: str | None = None
 ONLINE_WEIGHTS_PATH = "data/models/online_learner_weights.json"
 
 # ── Meta exit model (trained on historical exits — optional) ──
+# FIX-20260821-008 (The Shadow Deployment): per-asset 19-dim ExitFeatureSnapshot
+# retrain (v3).  The legacy single META_EXIT_MODEL_PATH always loaded XAU's model
+# even in the BTC process (CROSS_ASSET_CONTAMINATION_AUDIT H2).  Runtime consumers
+# (scripts/live_intent_loop.py) select by asset via base_dir.
 META_EXIT_MODEL_PATH = "data/models/meta_exit_model.txt"
+META_EXIT_MODEL_XAU_PATH = "data/models/meta_exit_model_v3_xau.txt"
+META_EXIT_MODEL_BTC_PATH = "data_btc/models/meta_exit_model_v3_btc.txt"
 
 # ── Live config ──
 LIVE_YAML_PATH = "configs/live.yaml"

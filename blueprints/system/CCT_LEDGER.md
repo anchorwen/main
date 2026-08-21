@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260821-004
+- **Docket ID**: DQAF-20260821-003
+- **日期**: 2026-08-21
+- **置信度**: confirmed (全层, gate survey 双期刊配对口径对照 + 负对照实证)
+- **因果链**:
+  - [Layer 1 — 症状]: v2 MetaExit retrain 被质量门禁拒签 — "insufficient samples" (7 wins < 15 下限), v3 引擎无法上线, MetaExit 滞留 shadow telemetry 旧模型.
+  - [Layer 2 — 中间异常]: 训练脚本默认 `--journal data_btc/live_trade_journal.jsonl` (BTC) 与默认 snapshots `data/meta_exit_snapshots.jsonl` (XAU) 跨品种错配 → 311 干净 XAU ticket 无 BTC close → 配对仅 31 碎片 (保留率 8.6%) → 训练集结构性退化 → 门禁诚实拒签 (数据不足假象).
+  - [Layer 3 — 根因]: **L2 逻辑缺陷 (RC-06 contract-violation)** — 训练脚本默认输入路径无品种感知: snapshots 默认 XAU 而 journal 默认 BTC, 且加载后无 join 保留率一致性断言; 运行时同构: live_intent_loop MetaExit 模型路径硬编码 XAU (CROSS_ASSET_CONTAMINATION_AUDIT H2), BTC 进程加载 XAU 退出模型. 非数据不足 (XAU 期刊下 86.6% 保留), 非门禁过严.
+- **证据引用**:
+  - Source 1: scripts/_audit_metaexit_gate_20260821.py gate survey stdout — raw @ XAU journal: paired=311 wins=134 / raw @ BTC journal: paired=31 wins=7 / clean @ XAU journal (exclude manual_close): 更佳; membership: in_xau_only / in_btc_only / in_both / in_neither 普查
+  - Source 2: scripts/training/train_exit_metamodel.py FIX 前默认 argparse (snapshots=XAU, journal=BTC) + FIX 后 `_SYMBOL_PATHS`/`_assert_join_retention` 负对照 (XAU snapshots × BTC journal → 8.6% < 50% → CONSISTENCY GUARD HALT EXIT=1) 与正对照 (XAU 311/359 EXIT=0, BTC EXIT=0)
+  - Source 3 (root cause): core/deployment/path_defaults.py META_EXIT_MODEL_XAU_PATH/BTC_PATH + scripts/live_intent_loop.py base_dir 品种分派 (H2); v3 双模型 load_model 19-dim LOADED + v1 legacy 8-dim LOADED (向后兼容)
+- **是否被推翻**: 否 (AR: "门禁阈值不合理" 被 XAU 期刊 86.6% 配对/134 wins ≥15 推翻 — 数据本就足够; "数据确实不足" 被同一快照双期刊对照 (86.6% vs 8.6%) 推翻)
+- **关联 ReB Pattern**: ReB-20260821-CROSS_ASSET_DEFAULT_SILENT_MISPAIR
+
 ### CCT-20260821-003
 - **Docket ID**: DQAF-20260821-002
 - **日期**: 2026-08-21

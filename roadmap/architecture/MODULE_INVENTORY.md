@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-21T14:22:44Z
-> **扫描模块数**: 828
+> **自动生成**: 2026-08-21T15:28:10Z
+> **扫描模块数**: 829
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -198,7 +198,7 @@
 | `operational_support.py` | ✅ active | RetryPolicy, ConfigValidator | 7 | 129 | — | |
 | `operations_timeline.py` | ✅ active | OperationsTimelineService | 16 | 263 | — | |
 | `ops_maturity.py` | ✅ active | OpsMaturityService | 4 | 164 | — | |
-| `path_defaults.py` | ✅ active | — | 2 | 85 | — | |
+| `path_defaults.py` | ✅ active | — | 2 | 91 | — | |
 | `permission_audit.py` | ✅ active | AuditEntry, PermissionMatrix, AuditTrail | 20 | 335 | — | |
 | `postmortem_report.py` | ✅ active | PostmortemReportService | 11 | 468 | — | |
 | `release_certification.py` | ✅ active | ReleaseCertificationService | 12 | 294 | — | |
@@ -670,6 +670,7 @@
 | `_audit_live_health_20260814.py` | ✅ active | — | 16 | 475 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
+| `_audit_metaexit_gate_20260821.py` | ✅ active | — | 7 | 295 | — | |
 | `_audit_shadow_pnl_august_20260812.py` | ✅ active | — | 3 | 139 | — | |
 | `_audit_shadow_pnl_replay_20260812.py` | ✅ active | — | 5 | 248 | — | |
 | `_audit_storm_domain_wal_20260819.py` | ✅ active | — | 1 | 97 | — | |
@@ -827,7 +828,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 368 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2843 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2859 | — | |
 | `live_launcher.py` | ✅ active | — | 19 | 1409 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 482 | — | |
@@ -1061,7 +1062,7 @@
 | `train_btc_flow_46_transfer.py` | ✅ active | — | 6 | 527 | — | |
 | `train_btc_swing_v9.py` | ✅ active | — | 16 | 1898 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 641 | — | |
-| `train_exit_metamodel.py` | ✅ active | — | 10 | 567 | — | |
+| `train_exit_metamodel.py` | ✅ active | — | 12 | 721 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |
 | `train_meta_filter.py` | ✅ active | — | 5 | 332 | — | |
 | `train_meta_model.py` | ✅ active | — | 6 | 384 | — | |

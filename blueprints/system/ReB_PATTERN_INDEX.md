@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260821-CROSS_ASSET_DEFAULT_SILENT_MISPAIR
+- **Pattern Signature**: `CROSS_ASSET_DEFAULT_SILENT_MISPAIR`
+- **Date Cataloged**: 2026-08-21
+- **Source Docket**: DQAF-20260821-003
+- **Related**: FIX-20260821-008 (RESOLVED), CROSS_ASSET_CONTAMINATION_AUDIT H2, FIX-20260821-006 (EMPTY_NPZ_EOF_READINESS_HARNESS — 同族"默认值空转"跨品种坑)
+
+**定义**: 多品种训练/服务脚本若把跨品种默认输入路径硬编码进 argparse (snapshots 默认 XAU 而 journal 默认 BTC), 且加载后无品种一致性断言, 则数据不足/质量门禁拒签被确定性伪造 — "insufficient samples" 成为掩盖物理路由缺陷的可信业务借口, 训练/部署在静默中假性受阻. 关键签名: (1) 默认值跨品种错配 (两个默认路径属于不同资产); (2) 数据不足假象 (同源快照在正确期刊 86.6% 保留 vs 错误期刊 8.6%); (3) 门禁诚实拒签但根因被错误归因于数据量 (7-wins < 15 → "insufficient samples"); (4) 运行时消费方同构硬编码单品种模型路径 (BTC 进程加载 XAU 退出模型).
+- **预防** (IMPLEMENTED, FIX-20260821-008): ① **per-asset path SSOT** — `_SYMBOL_PATHS` 单点定义 (snapshots/journal/output), `--symbol` 动态派生, 取消跨品种硬编码默认 (无 symbol/无显式路径 → 硬错); ② **Join-Retention 硬断言** — 加载后 snapshot/journal ticket 交集保留率 < 阈值 (默认 50%) → `sys.exit(1)` 拒绝训练 (负对照实证: 8.6% → CONSISTENCY GUARD HALT); ③ **运行时品种感知** — `core/deployment/path_defaults.py` per-asset 模型常量 + `live_intent_loop.py` 按 `args.base_dir` 分派; ④ **回归锁** — tests/scripts/test_train_exit_metamodel_guard.py 9 测试 (路径派生 xau/btc / 显式覆盖 / 无 symbol 硬错 / 保留率通过 / 跨品种 HALT / 空宇宙 HALT / 精确阈值).
+- **检测**: 回归锁 `tests/scripts/test_train_exit_metamodel_guard.py`. 通用法: 任何新增多品种训练/服务脚本先 grep 默认路径是否跨品种; 任何"数据不足"拒签先跑双期刊配对对照 (同一快照归属普查); 任何 per-asset 模型加载先确认品种感知分派 (base_dir 而非硬编码路径).
+
 ### ReB-20260821-METRIC_DENOMINATOR_SEMANTIC_SHIFT
 - **Pattern Signature**: `METRIC_DENOMINATOR_SEMANTIC_SHIFT`
 - **Date Cataloged**: 2026-08-21
