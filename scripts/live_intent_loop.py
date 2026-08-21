@@ -28,6 +28,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from core.config.asset_registry import get_asset
 from core.features.rolling_normalizer import RollingNormalizer
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+from core.observability.meta_wire_events import record_wired_event
 from core.risk.regime_detector import RegimeDetector
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
 from core.runtime.live_cycle import (
@@ -1691,27 +1692,27 @@ def main(argv: list[str] | None = None) -> int:
                         # Restore rolling buffers from previous run (crash recovery)
                         _mf_state_path = Path(args.base_dir) / "meta_filter_state.json"
                         meta_signal_filter.load_state(str(_mf_state_path))
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "meta_pipeline_wired",
-                                    "time": _utc_iso(),
-                                    "stage2_filter": _resolved_lgb,
-                                    "threshold": _fc.get("threshold", 0.65),
-                                    "features": len(meta_signal_filter._feature_names),
-                                    "mlp_loaded": meta_signal_filter._mlp_model is not None,
-                                    "lgb_loaded": meta_signal_filter._model is not None,
-                                    "calibrator_loaded": meta_signal_filter._calibrator is not None,
-                                    "conformal_enabled": meta_signal_filter._conformal_mode,
-                                    "conformal_max_age_days": meta_signal_filter._conformal_max_age_days,
-                                    "ensemble_weights": list(meta_signal_filter._ensemble_weights),
-                                    "micro_scaler_loaded": meta_signal_filter._micro_scaler
-                                    is not None,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+                        _wired_event = {
+                            "event": "meta_pipeline_wired",
+                            "time": _utc_iso(),
+                            "stage2_filter": _resolved_lgb,
+                            "threshold": _fc.get("threshold", 0.65),
+                            "features": len(meta_signal_filter._feature_names),
+                            "mlp_loaded": meta_signal_filter._mlp_model is not None,
+                            "lgb_loaded": meta_signal_filter._model is not None,
+                            "calibrator_loaded": meta_signal_filter._calibrator is not None,
+                            "conformal_enabled": meta_signal_filter._conformal_mode,
+                            "conformal_max_age_days": meta_signal_filter._conformal_max_age_days,
+                            "ensemble_weights": list(meta_signal_filter._ensemble_weights),
+                            "micro_scaler_loaded": meta_signal_filter._micro_scaler is not None,
+                        }
+                        print(json.dumps(_wired_event, ensure_ascii=False), flush=True)
+                        # P7 (TECH_DEBT-018): durable SSOT copy decoupled from the
+                        # intent log file lifecycle (crash-loop stdout re-routing).
+                        # Non-fatal: leaf catches known types; guard catches the
+                        # unexpected so a bad append can never kill the live loop.
+                        with fail_open_guard("live_intent_loop:meta_wired_append"):  # BLE001:FOG
+                            record_wired_event(args.base_dir, _wired_event)
                 else:
                     print(
                         json.dumps(

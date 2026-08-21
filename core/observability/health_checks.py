@@ -32,6 +32,7 @@ from core.observability.data_health_schema import (
     Tier,
     health_check,
 )
+from core.observability.meta_wire_events import parse_intent_boot_ts, read_last_wired_event
 
 
 def _parse_event_ts(iso_ts: str) -> datetime | None:
@@ -46,6 +47,45 @@ def _parse_event_ts(iso_ts: str) -> datetime | None:
         return dt.astimezone(UTC)
     except (ValueError, TypeError):
         return None
+
+
+# P7 (TECH_DEBT-018): staleness window for the "last confirmed wire" fallback.
+# The primary signal is boot-anchored (did the CURRENT boot wire?); this
+# threshold only guards the transient mid-boot window where the current boot
+# has not yet produced a wired event but a wire landed recently.
+_META_STALE_MINUTES = 360.0
+
+_HEAD_READ_BYTES = 65536
+
+
+def _head_read_wired_event(
+    intent_logs: list[str],
+    head_bytes: int = _HEAD_READ_BYTES,
+) -> tuple[dict[str, Any] | None, str]:
+    """Scan the head of the newest intent logs for a ``meta_pipeline_wired``.
+
+    The wired event is written synchronously at boot, so it always sits in the
+    log head — 64KB covers it even for verbose boots. Returns
+    ``(event, log_basename)``; ``(None, "")`` when absent. Scanning newest →
+    older mirrors the pre-P7 behaviour (current + previous boot).
+    """
+    for log_path in intent_logs[:2]:
+        try:
+            fsize = os.path.getsize(log_path)
+            if fsize == 0:
+                continue
+            with open(log_path, encoding="utf-8") as f:
+                chunk = f.read(min(fsize, head_bytes))
+                for line in chunk.strip().split("\n"):
+                    line = line.strip()
+                    if '"event": "meta_pipeline_wired"' in line:
+                        try:
+                            return json.loads(line), os.path.basename(log_path)
+                        except json.JSONDecodeError:
+                            continue
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
+            continue
+    return None, ""
 
 
 class HealthCheckMethods:
@@ -407,17 +447,22 @@ class HealthCheckMethods:
         description="MetaFilter + MicroScaler runtime status via event-interception (tail-read intent log). DQAF-058: micro_scaler_loaded now tracked.",
     )
     def check_meta_filter_state(self) -> SourceCheckResult:
-        """Check MetaFilter health via event-interception, not state file polling.
+        """Check MetaFilter health via the wired-event SSOT, not state polling.
 
         FIX-20260610-007: The old check read meta_filter_state.json which uses
         lazy serialization (async, low-frequency writes).  Buffers are often
         empty even when the filter IS running — producing META_FILTER_NEVER_LOADED
         false positives that destroy alert credibility (wolf-crying effect).
 
-        Now uses _safe_jsonl_last() tail-read on the latest intent log to find
-        the ``meta_pipeline_wired`` event, which is written synchronously at
-        startup when the filter loads successfully.  This provides millisecond-
-        accurate status without adding I/O burden (8KB tail read).
+        The ``meta_pipeline_wired`` event is written synchronously at startup
+        when the filter loads successfully. P7 (FIX-20260821-005, TECH_DEBT-018)
+        made the event producer-authoritative: the producer ALSO appends it to a
+        persistent per-asset SSOT file (core/observability/meta_wire_events.py),
+        decoupled from the intent log file lifecycle. The check asserts the
+        CURRENT boot (newest intent log) wired — not that any wire happened
+        within 6h — which removes the daily META_FILTER_WIRED_STALE false WARN
+        on healthy long-running processes while preserving the genuine
+        "restarted without reload" signal.
 
         DQAF-20260622-058: Also extracts ``micro_scaler_loaded`` from the same
         event.  If the scaler is not loaded, emits ``MICRO_SCALER_NOT_LOADED``
@@ -427,72 +472,123 @@ class HealthCheckMethods:
 
         metrics: dict[str, Any] = {}
 
-        # ── Primary: event-interception via head-read of intent log ──
-        # meta_pipeline_wired is written once at boot (start of log).
-        # Head-read ~64KB from the first 1-2 intent logs to find it.
+        # ── Locate the current intent boot (newest log) ─────────────────
         log_dir = os.path.join(self._base_dir, "logs")
+        intent_logs: list[str] = []
         if os.path.isdir(log_dir):
             intent_logs = sorted(_glob.glob(os.path.join(log_dir, "intent_*.log")), reverse=True)
-            wired_entry = None
-            wired_log = ""
-            for log_path in intent_logs[:2]:  # current + previous log
-                try:
-                    fsize = os.path.getsize(log_path)
-                    if fsize == 0:
-                        continue
-                    with open(log_path, encoding="utf-8") as f:
-                        # Read first 64KB to scan for the wired event
-                        chunk = f.read(min(fsize, 65536))
-                        for line in chunk.strip().split("\n"):
-                            line = line.strip()
-                            if '"event": "meta_pipeline_wired"' in line:
-                                try:
-                                    wired_entry = json.loads(line)
-                                    wired_log = os.path.basename(log_path)
-                                    break
-                                except json.JSONDecodeError:
-                                    continue
-                        if wired_entry:
-                            break
-                except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                    continue
-            if wired_entry is not None:
-                lgb_loaded = wired_entry.get("lgb_loaded", False)
-                calibrator = wired_entry.get("calibrator_loaded", False)
-                micro_scaler = wired_entry.get("micro_scaler_loaded", False)
-                features = wired_entry.get("features", 0)
-                wired_at = wired_entry.get("time", "")
-                age_min = _age_minutes(wired_at)
-                metrics["lgb_loaded"] = lgb_loaded
-                metrics["calibrator_loaded"] = calibrator
-                metrics["micro_scaler_loaded"] = micro_scaler
-                metrics["feature_count"] = features
-                metrics["wired_age_minutes"] = round(age_min, 1)
-                metrics["log_source"] = wired_log
 
-                if age_min > 360:
-                    # Last wired >6h ago — may have restarted without reload
-                    status = SourceStatus.WARN
-                    code = "META_FILTER_WIRED_STALE"
-                    message = f"MetaFilter wired {age_min:.0f}min ago (LGB={lgb_loaded}, cal={calibrator}, micro_scaler={micro_scaler}, dims={features})"
-                elif not micro_scaler:
-                    # DQAF-058: micro scaler not loaded — raw features in use → PSI drift
-                    status = SourceStatus.WARN
-                    code = "MICRO_SCALER_NOT_LOADED"
-                    message = f"MetaFilter active but micro_scaler NOT loaded (LGB={lgb_loaded}, cal={calibrator}, micro_scaler=False, dims={features}, wired {age_min:.0f}min ago)"
-                else:
-                    status = SourceStatus.PASS
-                    code = "META_FILTER_OK"
-                    message = f"MetaFilter active (LGB={lgb_loaded}, cal={calibrator}, micro_scaler={micro_scaler}, dims={features}, wired {age_min:.0f}min ago)"
+        boot_ts: datetime | None = None
+        newest_log_name = ""
+        if intent_logs:
+            newest_log_name = os.path.basename(intent_logs[0])
+            boot_ts = parse_intent_boot_ts(newest_log_name)
+            if boot_ts is not None:
+                metrics["boot_ts_utc"] = boot_ts.isoformat()
+
+        # ── Primary: SSOT wired-event file + current-boot anchor ────────
+        # P7 (TECH_DEBT-018): the wired event is also appended to a persistent
+        # per-asset SSOT file (core/observability/meta_wire_events.py),
+        # decoupled from the intent log file lifecycle (crash-loops re-routed
+        # intent stdout into live_launcher logs, so intent logs stopped being
+        # rotated → the old head-read only ever saw stale events). Anchoring
+        # on the CURRENT boot (newest intent log) instead of raw event age
+        # kills the daily META_FILTER_WIRED_STALE false WARN on healthy
+        # long-running processes — a boot event does not age.
+        last_wired = read_last_wired_event(self._base_dir)
+        current_boot_wired = False
+        current_event: dict[str, Any] | None = None
+        if boot_ts is not None and last_wired is not None:
+            wired_ts = _parse_event_ts(str(last_wired.get("time", "")))
+            if wired_ts is not None and wired_ts >= boot_ts:
+                current_boot_wired = True
+                current_event = last_wired
+                metrics["log_source"] = "meta_wired.jsonl"
+
+        # ── Fallback: head-read newest intent log(s) for the wired event ─
+        # Wired is written synchronously at boot, so it sits in the log head
+        # (64KB covers even verbose boots). This is the only evidence path
+        # during the SSOT rollout gap and recovers historical crash-loop
+        # records from the last real intent logs.
+        if not current_boot_wired and intent_logs:
+            wired_entry, wired_log = _head_read_wired_event(intent_logs)
+            if wired_entry is not None:
+                metrics["log_source"] = wired_log
+                if wired_log == newest_log_name:
+                    current_boot_wired = True
+                    current_event = wired_entry
+                elif last_wired is None:
+                    last_wired = wired_entry
+        if not current_boot_wired and last_wired is not None:
+            # SSOT anchor failed (last wire predates the current boot): the
+            # SSOT record is still the last-known wire for the STALE decision.
+            metrics.setdefault("log_source", "meta_wired.jsonl")
+
+        if current_boot_wired and current_event is not None:
+            # MetaFilter confirmed wired for the CURRENT boot → PASS.
+            lgb_loaded = current_event.get("lgb_loaded", False)
+            calibrator = current_event.get("calibrator_loaded", False)
+            micro_scaler = current_event.get("micro_scaler_loaded", False)
+            features = current_event.get("features", 0)
+            wired_at = str(current_event.get("time", ""))
+            age_min = _age_minutes(wired_at)
+            metrics["lgb_loaded"] = lgb_loaded
+            metrics["calibrator_loaded"] = calibrator
+            metrics["micro_scaler_loaded"] = micro_scaler
+            metrics["feature_count"] = features
+            metrics["wired_age_minutes"] = round(age_min, 1)
+            metrics["current_boot_wired"] = True
+
+            if not micro_scaler:
+                # DQAF-058: micro scaler not loaded — raw features in use → PSI drift
+                status = SourceStatus.WARN
+                code = "MICRO_SCALER_NOT_LOADED"
+                message = f"MetaFilter active but micro_scaler NOT loaded (LGB={lgb_loaded}, cal={calibrator}, micro_scaler=False, dims={features})"
+            else:
+                status = SourceStatus.PASS
+                code = "META_FILTER_OK"
+                message = f"MetaFilter active (LGB={lgb_loaded}, cal={calibrator}, micro_scaler={micro_scaler}, dims={features}, wired {age_min:.0f}min ago)"
+            return SourceCheckResult(
+                source="meta_filter_state",
+                tier=Tier.CRITICAL,
+                status=status,
+                primary_code=code,
+                metrics=metrics,
+                message=message,
+                checked_at=_utc_iso(),
+            )
+
+        # ── Current boot NOT confirmed wired ─────────────────────────────
+        if last_wired is not None:
+            last_age = _age_minutes(str(last_wired.get("time", "")))
+            if 0.0 <= last_age <= _META_STALE_MINUTES:
+                # A wire landed within the staleness window but not for this
+                # boot: the process is likely still mid-boot. Do not wolf-cry
+                # on a transient restart window (FIX-20260610-007 philosophy).
+                metrics["current_boot_wired"] = False
+                metrics["wired_age_minutes"] = round(last_age, 1)
                 return SourceCheckResult(
                     source="meta_filter_state",
                     tier=Tier.CRITICAL,
-                    status=status,
-                    primary_code=code,
+                    status=SourceStatus.PASS,
+                    primary_code="META_FILTER_OK",
                     metrics=metrics,
-                    message=message,
+                    message=f"MetaFilter wired {last_age:.0f}min ago; current boot not yet confirmed (log_source={metrics.get('log_source', '?')})",
                     checked_at=_utc_iso(),
                 )
+            # Genuine: the running process has no wired event for its boot and
+            # the last confirmed wire is old (FIX-20260610-007 signal restored).
+            metrics["current_boot_wired"] = False
+            metrics["wired_age_minutes"] = round(last_age, 1)
+            return SourceCheckResult(
+                source="meta_filter_state",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.WARN,
+                primary_code="META_FILTER_WIRED_STALE",
+                metrics=metrics,
+                message=f"Current boot unconfirmed wired; last wire {last_age:.0f}min ago (log_source={metrics.get('log_source', '?')})",
+                checked_at=_utc_iso(),
+            )
 
         # ── Secondary: fall back to state file if no log found ──
         mf_path = os.path.join(self._base_dir, "meta_filter_state.json")

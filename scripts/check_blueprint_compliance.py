@@ -345,6 +345,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/observability/data_health_schema.py",
         "core/observability/data_health_service.py",
         "core/observability/health_checks.py",
+        "core/observability/meta_wire_events.py",
         "core/metrics/factor_attribution.py",
         "scripts/live_dashboard.py",
         "scripts/dqaf_collect.py",
