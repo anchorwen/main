@@ -172,3 +172,92 @@ class TestStoredFeatureSnapshot:
         assert snapshot.symbol == "XAUUSD"
         assert snapshot.get("ema_bias") == 1.2
         assert snapshot.get("missing", 9) == 9
+
+
+class TestWriteDedupTailFingerprint:
+    """FIX-20260821-001 (TECH_DEBT-012): market-close last-value freeze dedup.
+
+    During market close the pipeline re-emits the last bar every cycle with
+    bit-identical content except ingested_at (stamped utcnow per write).
+    write_records must skip the duplicate append; distinct event_time/values
+    must still write.  'Bit-compare' = full-row identity EXCLUDING ingested_at.
+    """
+
+    def test_identical_row_skipped(self, tmp_path):
+        store = LocalFeatureStore(str(tmp_path))
+        store.register_schema(_schema())
+        t0 = datetime.now(UTC).replace(tzinfo=None)
+        assert store.write_records([_record(t0, 1.0, 0.1)]) == 1
+        assert store.write_records([_record(t0, 1.0, 0.1)]) == 0  # fresh ingested_at → dedup
+        assert len(store.query(FeatureQuery(symbol="XAUUSD", timeframe="M1"))) == 1
+
+    def test_different_event_time_written(self, tmp_path):
+        store = LocalFeatureStore(str(tmp_path))
+        store.register_schema(_schema())
+        base = datetime.now(UTC).replace(tzinfo=None)
+        assert store.write_records([_record(base, 1.0, 0.1)]) == 1
+        assert store.write_records([_record(base + timedelta(minutes=1), 1.0, 0.1)]) == 1
+        assert len(store.query(FeatureQuery(symbol="XAUUSD", timeframe="M1"))) == 2
+
+    def test_different_values_written(self, tmp_path):
+        store = LocalFeatureStore(str(tmp_path))
+        store.register_schema(_schema())
+        base = datetime.now(UTC).replace(tzinfo=None)
+        assert store.write_records([_record(base, 1.0, 0.1)]) == 1
+        assert store.write_records([_record(base, 1.5, 0.3)]) == 1
+        assert len(store.query(FeatureQuery(symbol="XAUUSD", timeframe="M1"))) == 2
+
+    def test_identical_rows_in_single_batch(self, tmp_path):
+        store = LocalFeatureStore(str(tmp_path))
+        store.register_schema(_schema())
+        t0 = datetime.now(UTC).replace(tzinfo=None)
+        assert store.write_records([_record(t0, 1.0, 0.1), _record(t0, 1.0, 0.1)]) == 1
+        assert len(store.query(FeatureQuery(symbol="XAUUSD", timeframe="M1"))) == 1
+
+    def test_dedup_survives_restart(self, tmp_path):
+        store = LocalFeatureStore(str(tmp_path))
+        store.register_schema(_schema())
+        t0 = datetime.now(UTC).replace(tzinfo=None)
+        assert store.write_records([_record(t0, 1.0, 0.1)]) == 1
+        store2 = LocalFeatureStore(str(tmp_path))  # fresh cache → rebuilds from file tail
+        assert store2.write_records([_record(t0, 1.0, 0.1)]) == 0
+        assert len(store2.query(FeatureQuery(symbol="XAUUSD", timeframe="M1"))) == 1
+
+    def test_compact_invalidates_tail_cache(self, tmp_path):
+        """compact() trimming all rows → file emptied → an identical row must be
+        written again, not swallowed by a stale cached fingerprint (data-loss guard)."""
+        store = LocalFeatureStore(str(tmp_path))
+        store.register_schema(_schema())
+        base = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=5)
+        assert store.write_records([_record(base, 1.0, 0.1)]) == 1
+        assert store.write_records([_record(base, 1.0, 0.1)]) == 0  # deduped, cache set
+        res = store.compact(retention_days=0)  # trims the old row → file emptied
+        assert any(v["after"] == 0 for v in res.values())
+        assert store.write_records([_record(base, 1.0, 0.1)]) == 1  # must be written again
+        assert len(store.query(FeatureQuery(symbol="XAUUSD", timeframe="M1"))) == 1
+
+    def test_different_partitions_not_deduped(self, tmp_path):
+        store = LocalFeatureStore(str(tmp_path))
+        store.register_schema(_schema())
+        store.register_schema(
+            FeatureSchema(
+                name="technical_v1",
+                version="1.0",
+                fields=("ema_bias", "adx_slope"),
+                symbol="BTCUSD",
+                timeframe="M1",
+            )
+        )
+        t0 = datetime.now(UTC).replace(tzinfo=None)
+        r1 = _record(t0, 1.0, 0.1)  # XAUUSD
+        r2 = FeatureRecord(
+            schema_name="technical_v1",
+            schema_version="1.0",
+            symbol="BTCUSD",
+            timeframe="M1",
+            event_time=t0,
+            values={"ema_bias": 1.0, "adx_slope": 0.1},
+            source="test",
+        )
+        # identical content but different partition → both written (per-path tail compare)
+        assert store.write_records([r1, r2]) == 2

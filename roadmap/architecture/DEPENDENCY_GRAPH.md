@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-20T14:09:09Z
+> **自动生成**: 2026-08-21T04:29:22Z
 
 ## Package-Level Dependencies
 
@@ -382,7 +382,7 @@
 - `entry_context_guard.py` → `core.observability.data_health_service`, `core.observability.data_loss`
 - `event_bus.py` → (无内部依赖)
 - `event_schema.py` → (无内部依赖)
-- `health_checks.py` → `core.observability._health_helpers`, `core.observability.data_health_schema`
+- `health_checks.py` → `core.market.calendar`, `core.observability._health_helpers`, `core.observability.data_health_schema`
 - `invariant_engine.py` → `core.data.write_ahead_log`
 - `live_alert_hub.py` → `core.observability.alert_channels`, `core.observability.alert_runbook_bridge`, `core.observability.alert_service`, `core.protocol.services.resilience`
 - `localization.py` → (无内部依赖)
@@ -634,7 +634,7 @@
 - `audit_btc_live_direction.py` → (无内部依赖)
 - `audit_btc_v11_ledger.py` → (无内部依赖)
 - `audit_cross_symbol_consistency.py` → `scripts.alert_dispatcher`
-- `audit_data_chain_integrity.py` → (无内部依赖)
+- `audit_data_chain_integrity.py` → `core.market.calendar`
 - `audit_data_exhaustive.py` → `core.data.ticket_resolver`
 - `audit_data_final.py` → (无内部依赖)
 - `audit_data_health_journal.py` → (无内部依赖)

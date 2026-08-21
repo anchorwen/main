@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-20T14:09:09Z
+> **自动生成**: 2026-08-21T04:29:22Z
 > **扫描模块数**: 822
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -297,7 +297,7 @@
 | `feature_router.py` | ✅ active | FeatureMissingError, SchemaNotFoundError, FeatureRouter | 4 | 299 | — | |
 | `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 14 | 479 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
-| `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 19 | 365 | — | |
+| `local_feature_store.py` | ✅ active | FeatureValidationError, LocalFeatureStore | 24 | 434 | — | |
 | `meta_feature_builder.py` | ✅ active | — | 1 | 135 | — | |
 | `ofi_collector.py` | ✅ active | OFICollector | 5 | 250 | — | |
 | `rolling_normalizer.py` | ✅ active | RollingNormalizer | 15 | 234 | — | |
@@ -409,7 +409,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `calendar.py` | ✅ active | — | 4 | 182 | — | |
+| `calendar.py` | ✅ active | — | 9 | 322 | — | |
 | `mtf_price_service.py` | ✅ active | MTFPriceService | 11 | 166 | — | |
 | `position_tracker.py` | ✅ active | PositionTracker, MarketContextProvider | 12 | 125 | — | |
 | `signal_processor.py` | ✅ active | SignalFilter, MarketSignalProcessor | 8 | 121 | — | |
@@ -440,7 +440,7 @@
 | `entry_context_guard.py` | ✅ active | EntryContextGuard | 7 | 207 | — | |
 | `event_bus.py` | ✅ active | EventBus | 7 | 65 | — | |
 | `event_schema.py` | ✅ active | EventSeverity, BaseTelemetryEvent, FailedSource, DataHealthPayload | 1 | 147 | — | |
-| `health_checks.py` | 🧪 stub | HealthCheckMethods | 46 | 3423 | — | |
+| `health_checks.py` | 🧪 stub | HealthCheckMethods | 47 | 3433 | — | |
 | `invariant_engine.py` | ✅ active | InvariantDef, InvariantViolation, InvariantEngine | 23 | 552 | — | |
 | `live_alert_hub.py` | ✅ active | StormState, AlertStormDetector, BackgroundDeliveryWorker, LiveAlertHub, _QueueChannel, _AlertAuditLog | 36 | 927 | — | |
 | `localization.py` | ✅ active | RuleRegistry | 6 | 190 | — | |
@@ -720,7 +720,7 @@
 | `audit_btc_live_direction.py` | ✅ active | — | 7 | 304 | — | |
 | `audit_btc_v11_ledger.py` | 📄 config | — | 0 | 107 | — | |
 | `audit_cross_symbol_consistency.py` | ✅ active | — | 5 | 241 | — | |
-| `audit_data_chain_integrity.py` | ✅ active | — | 19 | 1098 | — | |
+| `audit_data_chain_integrity.py` | ✅ active | — | 22 | 1134 | — | |
 | `audit_data_exhaustive.py` | ✅ active | — | 8 | 899 | — | |
 | `audit_data_final.py` | ✅ active | — | 5 | 246 | — | |
 | `audit_data_health_journal.py` | ✅ active | — | 2 | 174 | — | |

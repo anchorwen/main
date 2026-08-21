@@ -41,6 +41,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.market.calendar import staleness_anchor
+
 # Windows GBK 控制台无法编码 emoji → 强制 UTF-8 输出
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
@@ -106,6 +108,39 @@ def _safe_age_minutes(ts: datetime | None, now: datetime) -> float | None:
     if ts is None:
         return None
     return (now - ts).total_seconds() / 60.0
+
+
+# ---------------------------------------------------------------------------
+# Calendar-aware staleness (The Calendar Grid — FIX-20260821-001)
+# ---------------------------------------------------------------------------
+# All hardcoded age thresholds below converge on the single calendar clock
+# (core/market/calendar.staleness_anchor).  During a market close a frozen data
+# chain is EXPECTED → the anchor shifts to the last market close, killing the
+# weekend false positives (TECH_DEBT-011).  BTC 24/7 → never relaxes.
+
+
+def _market_type_for_data_dir(dd: Path) -> str:
+    """data_btc → crypto_24_7 (BTC 24/7, never relaxes); else forex_24_5 (XAU)."""
+    return "crypto_24_7" if "btc" in str(dd).lower() else "forex_24_5"
+
+
+def _market_type_for_symbol(symbol: str) -> str:
+    """Per-symbol market type — XAUUSDc features may live under any data dir."""
+    return "forex_24_5" if symbol and "XAU" in str(symbol).upper() else "crypto_24_7"
+
+
+def _is_stale(
+    ts: datetime | None, now: datetime, market_type: str, *, base_threshold_min: float
+) -> bool:
+    """Calendar-aware staleness: data older than the staleness anchor → stale.
+
+    None timestamp → not stale (missing-file handling is a separate fault)."""
+    if ts is None:
+        return False
+    anchor = staleness_anchor(
+        now_utc=now, market_type=market_type, base_threshold_min=base_threshold_min
+    )
+    return ts < anchor
 
 
 def _iter_jsonl(path: Path, max_lines: int | None = None):
@@ -277,7 +312,8 @@ def s1_event_ingress(dd: Path, now: datetime) -> list[dict]:
                         )
                     )
                 age = _safe_age_minutes(last, now)
-                if age is not None and age > 12 * 60:  # >12h 视为入口停滞
+                _mt = _market_type_for_symbol(sym_dir.name)
+                if _is_stale(last, now, _mt, base_threshold_min=12 * 60):  # >12h 视为入口停滞
                     faults.append(
                         _fault(
                             "s1",
@@ -301,7 +337,7 @@ def s1_event_ingress(dd: Path, now: datetime) -> list[dict]:
             if isinstance(obj, dict) and key in obj:
                 t = _parse_dt(obj[key])
                 age = _safe_age_minutes(t, now)
-                if age is not None and age > 12 * 60:
+                if _is_stale(t, now, _market_type_for_data_dir(dd), base_threshold_min=12 * 60):
                     faults.append(
                         _fault(
                             "s1",
@@ -393,7 +429,7 @@ def s2_decision_chain(dd: Path, now: datetime) -> list[dict]:
                 if t:
                     last_reg = t
         age = _safe_age_minutes(last_reg, now)
-        if age is not None and age > 12 * 60:
+        if _is_stale(last_reg, now, _market_type_for_data_dir(dd), base_threshold_min=12 * 60):
             faults.append(
                 _fault(
                     "s2",
@@ -700,7 +736,7 @@ def s4_ledger_ssot(dd: Path, now: datetime) -> list[dict]:
         if pnl_nan:
             faults.append(_fault("s4", "S4_PNL_NAN", 2, "ledger pnl_r NaN", f"count={pnl_nan}"))
         age = _safe_age_minutes(last_ledger, now)
-        if age is not None and age > 24 * 60:
+        if _is_stale(last_ledger, now, _market_type_for_data_dir(dd), base_threshold_min=24 * 60):
             faults.append(
                 _fault(
                     "s4",
@@ -742,7 +778,7 @@ def s4_ledger_ssot(dd: Path, now: datetime) -> list[dict]:
             if t and (last_gm is None or t > last_gm):
                 last_gm = t
         age = _safe_age_minutes(last_gm, now)
-        if age is not None and age > 6 * 60:
+        if _is_stale(last_gm, now, _market_type_for_data_dir(dd), base_threshold_min=6 * 60):
             faults.append(
                 _fault(
                     "s4", "S4_GM_STALE", 2, "golden_master 停滞", f"last={last_gm} age={age:.0f}min"
@@ -844,7 +880,7 @@ def s5_views_projection(dd: Path, now: datetime) -> list[dict]:
                 if key in obj:
                     t = _parse_dt(obj[key])
                     age = _safe_age_minutes(t, now)
-                    if age is not None and age > 24 * 60:
+                    if _is_stale(t, now, _market_type_for_data_dir(dd), base_threshold_min=24 * 60):
                         faults.append(
                             _fault(
                                 "s5",
@@ -922,7 +958,7 @@ def s6_reconciliation(dd: Path, now: datetime) -> list[dict]:
             try:
                 d = datetime.strptime(latest.stem, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                 age = _safe_age_minutes(d, now)
-                if age is not None and age > 30 * 60:
+                if _is_stale(d, now, _market_type_for_data_dir(dd), base_threshold_min=30 * 60):
                     faults.append(
                         _fault(
                             "s6",

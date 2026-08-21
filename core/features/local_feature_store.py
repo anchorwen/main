@@ -36,6 +36,7 @@ class LocalFeatureStore:
         self._base_dir = Path(base_dir)
         self._schema_path = self._base_dir / "schemas.json"
         self._records_dir = self._base_dir / "records"
+        self._tail_cache: dict[Path, str | None] = {}  # FIX-20260821-001: last-row fingerprint
 
     def register_schema(self, schema: FeatureSchema) -> None:
         schemas = self._load_schemas()
@@ -68,11 +69,77 @@ class LocalFeatureStore:
         for record in records:
             self._validate_record(record)
             path = self._record_path(record.symbol, record.timeframe)
+            if self._is_duplicate_tail(path, record):
+                continue  # FIX-20260821-001: last-value freeze → skip (TECH_DEBT-012)
             path.parent.mkdir(parents=True, exist_ok=True)
+            line = json.dumps(record.to_dict(), default=str)
             with path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(record.to_dict(), default=str) + "\n")
+                f.write(line + "\n")
+            self._tail_cache[path] = self._fingerprint(record)
             count += 1
         return count
+
+    # ── FIX-20260821-001: tail-line dedup (TECH_DEBT-012, market-close freeze) ──
+    # During market close the pipeline re-emits the last bar every cycle with
+    # bit-identical content (only ingested_at differs).  Full-row comparison
+    # EXCLUDING ingested_at fires and skips the duplicate append.
+
+    def _fingerprint(self, record: FeatureRecord) -> str:
+        """Canonical serialization excluding ingested_at (write-time metadata)."""
+        return self._canonicalize_row(json.dumps(record.to_dict(), default=str)) or ""
+
+    @staticmethod
+    def _canonicalize_row(line: str | None) -> str | None:
+        """Re-serialize a stored row EXCLUDING ingested_at (write-time metadata).
+
+        None on unreadable/partial row → dedup skipped (never drops data)."""
+        if not line:
+            return None
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(data, dict):
+            data.pop("ingested_at", None)
+            return json.dumps(data, default=str, sort_keys=True)
+        return None
+
+    def _read_tail_line(self, path: Path) -> str | None:
+        """Last non-empty line of a JSONL file (tail scan, no full read)."""
+        try:
+            with path.open("rb") as f:
+                f.seek(0, 2)  # SEEK_END
+                size = f.tell()
+                if size == 0:
+                    return None
+                back = min(size, 4096)
+                f.seek(-back, 2)
+                chunk = f.read(back).decode("utf-8", errors="replace")
+            lines = [ln for ln in chunk.splitlines() if ln.strip()]
+            return lines[-1].rstrip("\n") if lines else None
+        except OSError:
+            return None
+
+    def _tail_fingerprint(self, path: Path) -> str | None:
+        """Canonical fingerprint of the file's last row (cached; None = unreadable)."""
+        if path in self._tail_cache:
+            return self._tail_cache[path]
+        fp = self._canonicalize_row(self._read_tail_line(path))
+        self._tail_cache[path] = fp
+        return fp
+
+    def _is_duplicate_tail(self, path: Path, record: FeatureRecord) -> bool:
+        """True when the record's content equals the current tail row.
+
+        Market-close last-value freeze emits bit-identical feature rows every
+        cycle (TECH_DEBT-012) — writing them pollutes the time series with
+        duplicate bars.  'Bit-compare' means full-row identity EXCLUDING
+        ingested_at: that field is stamped utcnow per write, so a strict
+        compare would never fire."""
+        if not path.exists():
+            return False
+        tail_fp = self._tail_fingerprint(path)
+        return tail_fp is not None and tail_fp == self._fingerprint(record)
 
     def query(self, query: FeatureQuery) -> list[FeatureRecord]:
         path = self._record_path(query.symbol, query.timeframe)
@@ -169,6 +236,7 @@ class LocalFeatureStore:
                 none_fields.append(name)
             elif isinstance(value, float):
                 import math
+
                 if math.isnan(value):
                     nan_fields.append(name)
                 elif math.isinf(value):
@@ -321,6 +389,7 @@ class LocalFeatureStore:
                     for rec in kept.values():
                         f.write(json.dumps(rec, default=str) + "\n")
                 tmp_path.replace(rec_path)
+                self._tail_cache.pop(rec_path, None)  # FIX-20260821-001: rewrite → tail stale
             results[key] = {
                 "before": before_count,
                 "after": after_count,

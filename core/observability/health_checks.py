@@ -12,9 +12,10 @@ import json
 import os
 import time
 from collections import Counter, defaultdict
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Any
 
+from core.market.calendar import staleness_anchor
 from core.observability._health_helpers import (
     _age_minutes,
     _safe_json_load,
@@ -31,6 +32,20 @@ from core.observability.data_health_schema import (
     Tier,
     health_check,
 )
+
+
+def _parse_event_ts(iso_ts: str) -> datetime | None:
+    """Parse a feature record event_time → UTC datetime; None when unreadable."""
+    if not iso_ts:
+        return None
+    try:
+        s = iso_ts.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
+    except (ValueError, TypeError):
+        return None
 
 
 class HealthCheckMethods:
@@ -144,30 +159,37 @@ class HealthCheckMethods:
         event_ts = last.get("event_time", "")
         age_min = _age_minutes(event_ts)
         max_age = self._t("feature_store_max_age_minutes")
+        last_ts = _parse_event_ts(event_ts)
 
-        # ── FIX-20260629-172: Market-heartbeat topology awareness ──
-        # The feature pipeline is driven by incoming ticks.  When the market
-        # is closed (weekends, holidays) or the system has just restarted,
-        # a stale feature store is EXPECTED — not a pipeline failure.
-        # Two grace layers prevent false FAIL alerts:
-        #
-        #   1. COLD_START:  System uptime < grace window.  The feature
-        #      pipeline needs warm-up cycles after bootstrap.
-        #   2. POST_OUTAGE: Feature store age > 24 h.  The system was
-        #      almost certainly shut down over a weekend or maintenance
-        #      window.  A truly broken pipeline during active trading
-        #      would never reach 24 h without other alarms firing first.
-        #
-        # Outside these windows, the standard staleness thresholds apply:
-        #   > 2× max_age  → FAIL  (genuine pipeline stall)
-        #   > max_age     → WARN  (sluggish pipeline)
+        # ── FIX-20260821-001: Calendar-aware staleness — the single clock ──
+        # The feature pipeline is driven by incoming ticks.  When the market is
+        # closed (weekends, holidays) a stale feature store is EXPECTED — not a
+        # pipeline failure.  The ad-hoc POST_OUTAGE 1440-min heuristic
+        # (FIX-20260629-172) is replaced by the calendar leaf
+        # (core/market/calendar.staleness_anchor): during a close the anchor
+        # shifts to the last market close instead of now, so a freeze at close
+        # trips nothing.  crypto_24_7 (BTC) never closes → always the open
+        # branch → zero behavior change.  COLD_START (uptime-based bootstrap
+        # grace) is orthogonal to the calendar and retained.
+        market_type = "forex_24_5" if "XAU" in (self._symbol or "").upper() else "crypto_24_7"
+        _now = datetime.now(UTC)
+        warn_anchor = staleness_anchor(
+            now_utc=_now, market_type=market_type, base_threshold_min=max_age
+        )
+        fail_anchor = staleness_anchor(
+            now_utc=_now, market_type=market_type, base_threshold_min=max_age * 2
+        )
+        hard_stale = last_ts is not None and last_ts < fail_anchor
 
         uptime_sec = time.perf_counter() - self._start_time
         uptime_min = uptime_sec / 60.0
         cold_grace = self._t("feature_store_cold_start_grace_minutes")
-        post_outage_threshold = self._t("feature_store_post_outage_threshold_minutes")
 
-        if uptime_min < cold_grace and age_min < post_outage_threshold:
+        if last_ts is None or age_min < 0:
+            status = SourceStatus.WARN
+            code = "FEATURE_STORE_TIMESTAMP_UNREADABLE"
+            message = "Cannot parse event_time from last record"
+        elif uptime_min < cold_grace and not hard_stale:
             status = SourceStatus.WARN
             code = "FEATURE_STORE_COLD_START"
             message = (
@@ -175,23 +197,11 @@ class HealthCheckMethods:
                 f"Feature store age {age_min:.1f} min is expected during warm-up — "
                 f"downgraded from FAIL to WARN."
             )
-        elif age_min > post_outage_threshold:
-            status = SourceStatus.WARN
-            code = "FEATURE_STORE_POST_OUTAGE"
-            message = (
-                f"Feature store age {age_min:.1f} min > outage threshold "
-                f"{post_outage_threshold:.0f} min.  Market likely closed or system "
-                f"was shut down — downgraded from FAIL to WARN."
-            )
-        elif age_min < 0:
-            status = SourceStatus.WARN
-            code = "FEATURE_STORE_TIMESTAMP_UNREADABLE"
-            message = "Cannot parse event_time from last record"
-        elif age_min > max_age * 2:
+        elif hard_stale:
             status = SourceStatus.FAIL
             code = "FEATURE_STORE_STALE"
             message = f"Last feature record age {age_min:.1f} min (threshold: {max_age} min)"
-        elif age_min > max_age:
+        elif last_ts < warn_anchor:
             status = SourceStatus.WARN
             code = "FEATURE_STORE_STALE"
             message = f"Last feature record age {age_min:.1f} min (threshold: {max_age} min)"

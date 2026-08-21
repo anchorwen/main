@@ -46,6 +46,12 @@ def evaluate_utc_blackout(
         if wd in (5, 6):
             reasons.append("utc_weekend_blackout")
 
+    wcw = wb.get("utc_close_window")
+    if wcw:
+        start, end = _weekly_close_window_bounds(now_utc, wcw)
+        if start <= now_utc < end:
+            reasons.append("weekly_close_window")
+
     for window in config.get("fixed_blackouts") or []:
         try:
             start = _parse_iso_z(str(window["start"]))
@@ -180,3 +186,137 @@ def evaluate_pre_close(
         base["close_label"] = "weekly_close"
 
     return base
+
+
+# ---------------------------------------------------------------------------
+# The Calendar Grid — market-type presets & the single staleness clock
+# (FIX-20260821-001, DQAF-20260820-005: TECH_DEBT-011 / TECH_DEBT-012 batch)
+# ---------------------------------------------------------------------------
+# Single source of truth for "is the market open / when did it last close".
+# Live core (health_checks) and offline audit (scripts/audit_data_chain_integrity)
+# both consume these presets via staleness_anchor — exactly ONE clock (IC ruling).
+# crypto_24_7 never closes → staleness never relaxes.
+
+MARKET_TYPE_PRESETS: dict[str, dict[str, Any]] = {
+    # XAUUSD spot: weekday trading, closed Fri 22:00 UTC → Sun 22:00 UTC.
+    "forex_24_5": {
+        "weekly_blackout": {
+            "utc_close_window": {
+                "start_weekday": 4,
+                "start_hour": 22,
+                "start_minute": 0,
+                "end_weekday": 6,
+                "end_hour": 22,
+                "end_minute": 0,
+            },
+        },
+        "weekly_close": {
+            "enabled": True,
+            "close_weekday_utc": 4,
+            "close_hour_utc": 22,
+            "close_minute_utc": 0,
+        },
+        "fixed_blackouts": [],
+        "session_buffers": {"enabled": False},
+    },
+    # BTCUSDC: 24/7 — never blocked, staleness never relaxes.
+    "crypto_24_7": {
+        "weekly_blackout": {},
+        "weekly_close": {"enabled": False},
+        "fixed_blackouts": [],
+        "session_buffers": {"enabled": False},
+    },
+}
+
+
+def resolve_calendar(
+    market_type: str | None, user_config: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Resolve a market calendar from the preset grid + optional user overrides.
+
+    user_config (holiday blackouts, per-symbol overrides) wins per-field over
+    the preset.  Unknown market_type → empty config (never blocked)."""
+    merged: dict[str, Any] = dict(MARKET_TYPE_PRESETS.get(market_type or "", {}))
+    if user_config:
+        for key, val in user_config.items():
+            if isinstance(val, dict) and isinstance(merged.get(key), dict):
+                merged[key] = {**merged[key], **val}
+            else:
+                merged[key] = val
+    return merged
+
+
+def _weekly_close_window_bounds(
+    now_utc: datetime, wcw: dict[str, Any]
+) -> tuple[datetime, datetime]:
+    """Weekly recurring close window containing now_utc → (start, end)."""
+    start_wd = int(wcw.get("start_weekday", 4))
+    start_h = int(wcw.get("start_hour", 22))
+    start_m = int(wcw.get("start_minute", 0))
+    end_wd = int(wcw.get("end_weekday", 6))
+    end_h = int(wcw.get("end_hour", 22))
+    end_m = int(wcw.get("end_minute", 0))
+    days_back = (now_utc.weekday() - start_wd) % 7
+    start = datetime.combine(
+        now_utc.date() - timedelta(days=days_back), time(start_h, start_m), tzinfo=UTC
+    )
+    span_days = (end_wd - start_wd) % 7
+    end = start + timedelta(days=span_days, hours=end_h - start_h, minutes=end_m - start_m)
+    return start, end
+
+
+def is_market_open(
+    *,
+    now_utc: datetime,
+    market_type: str | None,
+    user_config: dict[str, Any] | None = None,
+) -> bool:
+    """True when the market type is currently trading (not blacked out)."""
+    cfg = resolve_calendar(market_type, user_config)
+    blocked, _ = evaluate_utc_blackout(now_utc=now_utc, symbol=None, config=cfg)
+    return not blocked
+
+
+def last_market_close(
+    *,
+    now_utc: datetime,
+    market_type: str | None,
+    user_config: dict[str, Any] | None = None,
+) -> datetime:
+    """Most recent point at which the market stopped trading.
+
+    crypto_24_7 (never closes) → returns now_utc: a closed-market anchor would
+    otherwise freeze BTC staleness checks forever."""
+    cfg = resolve_calendar(market_type, user_config)
+    wcw = (cfg.get("weekly_blackout") or {}).get("utc_close_window")
+    if wcw:
+        start, end = _weekly_close_window_bounds(now_utc, wcw)
+        if start <= now_utc < end:
+            return start  # currently closed → this week's close
+        return start if now_utc >= end else start - timedelta(days=7)
+    return now_utc
+
+
+def staleness_anchor(
+    *,
+    now_utc: datetime,
+    market_type: str | None,
+    base_threshold_min: float = 720.0,
+    user_config: dict[str, Any] | None = None,
+) -> datetime:
+    """Data must have advanced to at least this point for a staleness PASS.
+
+    - Market open     → now − base_threshold  (identical to a plain age check)
+    - Market closed   → last close − base_threshold  (freeze at close is
+      EXPECTED; the threshold also absorbs close-boundary skew)
+    - crypto_24_7     → always the open branch → zero behavior change.
+    """
+    now = now_utc
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    else:
+        now = now.astimezone(UTC)
+    if is_market_open(now_utc=now, market_type=market_type, user_config=user_config):
+        return now - timedelta(minutes=base_threshold_min)
+    close = last_market_close(now_utc=now, market_type=market_type, user_config=user_config)
+    return close - timedelta(minutes=base_threshold_min)
