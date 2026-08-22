@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-22T16:05:08Z
-> **扫描模块数**: 830
+> **自动生成**: 2026-08-22T17:36:50Z
+> **扫描模块数**: 832
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -686,6 +686,7 @@
 | `_audit_xau_first_open_20260812.py` | ✅ active | — | 4 | 158 | — | |
 | `_audit_xau_journal_pnl_null_20260806.py` | ✅ active | — | 1 | 92 | — | |
 | `_audit_xau_longs_20260807.py` | ✅ active | — | 2 | 106 | — | |
+| `_audit_xau_micro_scaler_20260823.py` | ✅ active | — | 11 | 489 | — | |
 | `_audit_xau_mt5_reconciliation_20260813.py` | ✅ active | — | 5 | 228 | — | |
 | `_audit_xau_period_exit_match_20260813.py` | ✅ active | — | 7 | 361 | — | |
 | `_audit_xau_pnl_after_volume_increase_20260813.py` | ✅ active | — | 5 | 224 | — | |
@@ -1067,6 +1068,7 @@
 | `train_from_csv.py` | ✅ active | MLP | 10 | 714 | — | |
 | `train_meta_filter.py` | ✅ active | — | 5 | 332 | — | |
 | `train_meta_model.py` | ✅ active | — | 6 | 384 | — | |
+| `train_micro_scaler_v1.py` | ✅ active | — | 11 | 485 | — | |
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-22T16:05:08Z
+> **自动生成**: 2026-08-22T17:36:50Z
 
 ## Package-Level Dependencies
 
@@ -600,6 +600,7 @@
 - `_audit_xau_first_open_20260812.py` → (无内部依赖)
 - `_audit_xau_journal_pnl_null_20260806.py` → (无内部依赖)
 - `_audit_xau_longs_20260807.py` → (无内部依赖)
+- `_audit_xau_micro_scaler_20260823.py` → (无内部依赖)
 - `_audit_xau_mt5_reconciliation_20260813.py` → (无内部依赖)
 - `_audit_xau_period_exit_match_20260813.py` → (无内部依赖)
 - `_audit_xau_pnl_after_volume_increase_20260813.py` → (无内部依赖)
@@ -963,6 +964,7 @@
 - `train_from_csv.py` → `core.contracts.training.label_contract`, `core.contracts.training.training_recipe`, `core.features.schemas.registry`
 - `train_meta_filter.py` → (无内部依赖)
 - `train_meta_model.py` → (无内部依赖)
+- `train_micro_scaler_v1.py` → `core.training.utils`, `scripts.build_btc_metafilter_v2_dataset`
 - `train_online_init.py` → (无内部依赖)
 - `train_stage2_lgb_pit.py` → (无内部依赖)
 - `train_stage2_mlp_pit.py` → `core.brains.online_mlp_model`
