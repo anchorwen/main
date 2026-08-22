@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260822-001
+- **Docket ID**: DQAF-20260822-001
+- **日期**: 2026-08-22
+- **置信度**: confirmed (全层 — 公式复算 8145/8145 + 会话内单调性 + 跨会话偏置双品种)
+- **因果链**:
+  - [Layer 1 — 症状]: BTC gods_eye_cycle.health_score 恒 0.06-0.17 << 0.55 硬否决线 → Gate 1 永不通过 → 8/4 起 18 天零开单 (部分"死亡螺旋"疑云, 投委会战略调查令). 取证: scripts/_audit_btc_godseye_health_20260822.py stdout — 公式 8145/8145 复算吻合 (计算零损坏), f_chop 56.1% dominant, 32.4% chop≥0.9 达地板.
+  - [Layer 2 — 中间异常]: chop_score 会话内单调非降 → 饱和 1.0 → 因子 max(0.1, 1-chop)=0.1 永久锁死 → health ≡ alignment×0.1 (最热会话 0/866 单调回落, 饱和 idx 123, 744/867=86% 锁死; 8/21 会话 cycle#158 饱和, 634/792=80% 锁死). 跨会话 Pearson(cycles/day, health)=−0.521 (BTC 53 天) → health 反比进程存活时长 (uptime 代理).
+  - [Layer 3 — 根因]: **L2 逻辑缺陷 (RC-06 contract-violation)** — `_check_chop` (core/execution/gods_eye.py) 用无界会话累积计数器 `_regime_change_counter` 除以固定窗口 24 计算 chop_score, 而非从滚动 deque `_regime_history` (maxlen=24) 统计窗口内相邻 label 切换数. 会话存活越久 chop_score 越趋 1.0 且永不回落 → 指标度量进程 uptime 而非市场 chop. XAU 共享组件同污染 (f_chop 68.0% / 30.2% 地板 / Pearson −0.369).
+- **证据引用**:
+  - Source 1: scripts/_audit_btc_godseye_health_20260822.py stdout (BTC data_btc) — 公式 8145/8145 复算; f_chop 56.1%; 最热会话 0/866 单调回落 + 饱和 idx 123 + 744/867 锁死; post-sat health≡alignment×0.1 744/744; Pearson(cycles/day,health)=−0.521 (全 53 天) / −0.622 (8/4 前交易活跃 41 天).
+  - Source 2: 同脚本 XAU 运行 (data/logs/intent_*.log + data/live_trade_journal.jsonl) — 2599 events, f_chop 68.0%; 30.2% 地板; 最热会话 0/866 单调; 饱和 idx 198; 661/669 post-sat ≡alignment×0.1; Pearson=−0.369 → 共享组件同污染.
+  - Source 3 (root cause): core/execution/gods_eye.py `_check_chop` (FIX 前 `switches = self._regime_change_counter[self._primary]` 单调累积) + `_track_regime_history` (counter 只增) + `_regime_history` deque(maxlen=24) 仅用于 switches_per_hour — 真实滚动窗口存在却未用于得分.
+- **是否被推翻**: 否 (AR: "真实市场严冬" 被当前市场最后 24 cycle 仅 4 次 regime 翻转 < chop_threshold=6 按设计自身语义推翻; "零交易导致降级" 被公式零交易项 + 8/4 前活跃期同偏置 Pearson −0.622 推翻)
+- **关联 ReB Pattern**: ReB-20260822-METRIC_SATURATION_SESSION_BIAS
+
 ### CCT-20260821-004
 - **Docket ID**: DQAF-20260821-003
 - **日期**: 2026-08-21

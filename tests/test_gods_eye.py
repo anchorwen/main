@@ -312,6 +312,47 @@ class TestChopDetection:
             v_choppy.health_score < v_stable.health_score
         ), f"Choppy health ({v_choppy.health_score}) should be < stable ({v_stable.health_score})"
 
+    def test_rolling_window_recovers_after_prolonged_stability(self):
+        """Regression lock (DQAF-20260822-001 / FIX-20260822-001).
+
+        chop must be a ROLLING-WINDOW measure, NOT a session-cumulative counter.
+        After >24 monotonic stable regime labels, the window holds only identical
+        labels → chop_score must fall back to 0, not keep climbing to 1.0.
+
+        Old behavior (rusty sensor): the cumulative counter saturated after a
+        few hours of any session and permanently locked health at the 0.1 floor.
+        """
+        eye = GodsEye(chop_window_bars=24, chop_threshold_switches=6)
+
+        # Phase 1: genuine chop — alternating regimes fill the window with switches
+        for i in range(26):
+            r = "trending" if i % 2 == 0 else "ranging"
+            eye.update_instrument(
+                "XAUUSDc",
+                _snapshot({"M5": (r, "up", 0.5)}),
+            )
+        v_choppy = eye.verdict()
+        assert v_choppy.chop_detected, f"Expected chop, got score={v_choppy.chop_score}"
+        assert v_choppy.chop_score > 0.5, f"Expected high chop, got {v_choppy.chop_score}"
+
+        # Phase 2: >24 monotonic stable labels — the rolling window drains
+        # all switches.  Old code kept chop_score at ~1.0 forever.
+        for _ in range(30):
+            eye.update_instrument(
+                "XAUUSDc",
+                _snapshot({"M5": ("trending", "up", 0.7)}),
+            )
+        v_recovered = eye.verdict()
+        assert not v_recovered.chop_detected, (
+            f"Rolling-window chop must recover after stable bars, got "
+            f"chop_detected={v_recovered.chop_detected}, "
+            f"chop_score={v_recovered.chop_score}"
+        )
+        assert v_recovered.chop_score == 0.0, (
+            f"chop_score must fall back to 0 after >24 stable bars, got "
+            f"{v_recovered.chop_score}"
+        )
+
 
 # ── Anomaly Detection ─────────────────────────────────────────────────────────
 
@@ -512,7 +553,6 @@ class TestSerialization:
             k: __import__("collections").deque(v, maxlen=eye2._chop_window)
             for k, v in state["regime_history"].items()
         }
-        eye2._regime_change_counter = state["regime_change_counter"]
         eye2._combo_counts = state["combo_counts"]
         eye2._total_updates = state["total_updates"]
 

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-21T15:28:10Z
+> **自动生成**: 2026-08-22T16:05:08Z
 
 ## Package-Level Dependencies
 
@@ -572,6 +572,7 @@
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_audit_20260806_07_losses.py` → (无内部依赖)
 - `_audit_asof_join_miss_20260821.py` → (无内部依赖)
+- `_audit_btc_godseye_health_20260822.py` → (无内部依赖)
 - `_audit_btc_legacy_lineage_pnl_20260805.py` → (无内部依赖)
 - `_audit_btc_modify_misroute_exposure_20260819.py` → (无内部依赖)
 - `_audit_close_label_divergence_20260821.py` → (无内部依赖)

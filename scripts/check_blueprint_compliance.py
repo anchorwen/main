@@ -149,9 +149,11 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/risk/regime_detector.py",
         "core/execution/regime_gate.py",
         "core/execution/trend_detector.py",
-        "core/execution/gods_eye.py",
         "scripts/task_b_regime_baseline.py",
     ],
+    # FIX-20260822-001 (DQAF-20260822-001): GodsEye engine promoted to its own
+    # owning blueprint (core execution component with hard-veto read path).
+    "gods_eye": ["core/execution/gods_eye.py"],
     "risk_portfolio": ["core/execution/portfolio_risk.py", "core/execution/capital_allocator.py"],
     "feedback_performance": [
         "core/feedback/brain_performance_tracker.py",

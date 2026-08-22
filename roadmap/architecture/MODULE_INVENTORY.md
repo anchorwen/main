@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-21T15:28:10Z
-> **扫描模块数**: 829
+> **自动生成**: 2026-08-22T16:05:08Z
+> **扫描模块数**: 830
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -241,7 +241,7 @@
 | `fix_message_builder.py` | ✅ active | FixMessageBuilder | 5 | 57 | — | |
 | `gate_reachability.py` | ✅ active | GateReachabilityReport | 4 | 461 | — | |
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
-| `gods_eye.py` | ✅ active | GodsEyeVerdict, GodsEye | 15 | 496 | — | |
+| `gods_eye.py` | ✅ active | GodsEyeVerdict, GodsEye | 15 | 511 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
 | `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 398 | — | |
@@ -658,6 +658,7 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_20260806_07_losses.py` | ✅ active | — | 8 | 359 | — | |
 | `_audit_asof_join_miss_20260821.py` | ✅ active | — | 8 | 425 | — | |
+| `_audit_btc_godseye_health_20260822.py` | ✅ active | — | 8 | 440 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_btc_modify_misroute_exposure_20260819.py` | ✅ active | — | 3 | 222 | — | |
 | `_audit_close_label_divergence_20260821.py` | ✅ active | — | 4 | 176 | — | |
@@ -765,7 +766,7 @@
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 763 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 765 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -889,7 +890,7 @@
 | `train_xau_metafilter.py` | ✅ active | — | 10 | 531 | — | |
 | `training_strategy_report.py` | ⬜ empty | — | 0 | 172 | — | |
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
-| `validate_blueprints.py` | ✅ active | — | 8 | 361 | — | |
+| `validate_blueprints.py` | ✅ active | — | 8 | 362 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 409 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |

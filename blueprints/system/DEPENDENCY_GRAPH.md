@@ -40,6 +40,7 @@
 | **execution/orders** | brains, contracts, deployment, metrics, observability, parliament, protocol, runtime |
 | **execution/netting** | — (self-contained — operates on queued decision objects) |
 | **execution/ood** | — (self-contained — operates on numpy arrays) |
+| **execution/gods_eye** | (stdlib + numpy only) — imported by runtime/live via gods_eye_bridge; read by execution/orders (strategy_evaluator Cut 7 hard veto) |
 | **execution/guards** | contracts |
 | **execution/reentry** | — (self-contained) |
 | **brains/adapters** | contracts, features (via factory) |

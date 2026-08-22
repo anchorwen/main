@@ -9,7 +9,7 @@ Online volatility regime classification using ATR-based rolling percentile with 
 | `core/risk/regime_detector.py` | `RegimeDetector` — ATR volatility regime with EWMA + rolling percentile |
 | `core/execution/regime_gate.py` | `compute_continuous_regime_modulation()` — 4D regime modulation |
 | `core/execution/trend_detector.py` | `KalmanTrendFilter`, `Hurst`, `TrendDetector` |
-| `core/execution/gods_eye.py` | `GodsEye` — cross-instrument, multi-TF regime consensus engine |
+| `core/execution/gods_eye.py` | `GodsEye` — cross-instrument, multi-TF regime consensus engine — **owning blueprint: `blueprints/modules/gods_eye.md`** (FIX-20260822-001) |
 | `core/runtime/gods_eye_bridge.py` | `feed_gods_eye()` — RegimeGate→GodsEye translation bridge (Strangler Fig) |
 | `core/constants.py` | `REGIME_LOOKBACK_BARS`, `REGIME_CONFIRM_BARS`, `REGIME_EXIT_BARS`, `REGIME_RATE_LIMIT_CYCLES` |
 

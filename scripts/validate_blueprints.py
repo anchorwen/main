@@ -70,6 +70,7 @@ EXPECTED_MODULES = [
     "contracts_resilience",
     "data_infrastructure",
     "governance_rules",
+    "gods_eye",
     "deployment_config",
     "deployment_lifecycle",
     "features_rolling",

@@ -114,9 +114,12 @@ class GodsEye:
         # Per-instrument regime state
         self._instruments: dict[str, dict[str, dict[str, Any]]] = {}
 
-        # Chop detection: sliding window of regime labels per instrument
+        # Chop detection: sliding window of regime labels per instrument.
+        # ``_regime_history`` (rolling deque) is the ONLY source of truth for
+        # chop — the session-cumulative ``_regime_change_counter`` was stripped
+        # in FIX-20260822-001 (DQAF-20260822-001: it saturated to 1.0 and locked
+        # health at the 0.1 chop floor after a few hours of any session).
         self._regime_history: dict[str, deque[str]] = {}
-        self._regime_change_counter: dict[str, int] = {}
 
         # Anomaly: track regime combination frequencies
         self._combo_counts: dict[str, int] = {}
@@ -146,19 +149,18 @@ class GodsEye:
         self._track_combo(symbol, regime_map)
 
     def _track_regime_history(self, symbol: str, regime_map: dict[str, dict[str, Any]]) -> None:
-        """Track M5 regime label history for chop detection."""
+        """Track M5 regime label history for chop detection (rolling window).
+
+        The deque (maxlen=``_chop_window``) IS the chop window — switches are
+        counted from it on demand in ``_check_chop``, so no cross-cycle
+        accumulation state exists (DQAF-20260822-001).
+        """
         if symbol not in self._regime_history:
             self._regime_history[symbol] = deque(maxlen=self._chop_window)
-            self._regime_change_counter[symbol] = 0
 
         m5 = regime_map.get("M5", {})
         current_label = m5.get("regime", "unknown")
-        history = self._regime_history[symbol]
-
-        if len(history) > 0 and history[-1] != current_label:
-            self._regime_change_counter[symbol] += 1
-
-        history.append(current_label)
+        self._regime_history[symbol].append(current_label)
 
     def _track_combo(self, symbol: str, regime_map: dict[str, dict[str, Any]]) -> None:
         """Track regime combination for anomaly detection."""
@@ -324,15 +326,30 @@ class GodsEye:
         """Detect excessive regime switching (chop/whipsaw).
 
         Returns (chop_detected, chop_score, switches_per_hour).
+
+        FIX-20260822-001 (DQAF-20260822-001): chop_score is computed from the
+        ROLLING ``_regime_history`` deque — the adjacent-label switch count
+        within the last ``_chop_window`` bars.  The previous implementation
+        read the session-cumulative ``_regime_change_counter``, which saturated
+        to 1.0 after a few hours of any session and permanently locked the
+        0.1 health floor regardless of current market truth ("rusty sensor").
         """
-        if self._primary not in self._regime_change_counter:
+        history = self._regime_history.get(self._primary)
+        if history is None:
             return False, 0.0, 0.0
 
-        switches = self._regime_change_counter[self._primary]
-        history_len = len(self._regime_history.get(self._primary, []))
-
+        history_len = len(history)
         if history_len < 6:  # Need minimum history
             return False, 0.0, 0.0
+
+        # Rolling-window switch count: adjacent labels that differ within the
+        # current deque.  Bounded by the window size — never grows with uptime.
+        switches = 0
+        prev: str | None = None
+        for label in history:
+            if prev is not None and label != prev:
+                switches += 1
+            prev = label
 
         # Switches per hour assuming ~12 M5 bars per hour per update
         bars_per_update = 1  # Each update is one bar
@@ -340,7 +357,6 @@ class GodsEye:
         switches_per_hour = switches / hours if hours > 0 else 0
 
         # Chop score: 0 (stable) to 1 (extreme chop)
-        max_expected = self._chop_threshold
         chop_score = min(1.0, switches / max(self._chop_window, 1) * (24 / self._chop_window))
         chop_score = round(chop_score, 3)
 
@@ -490,7 +506,6 @@ class GodsEye:
             "primary_instrument": self._primary,
             "instruments": self._instruments,
             "regime_history": {k: list(v) for k, v in self._regime_history.items()},
-            "regime_change_counter": dict(self._regime_change_counter),
             "combo_counts": dict(self._combo_counts),
             "total_updates": self._total_updates,
         }

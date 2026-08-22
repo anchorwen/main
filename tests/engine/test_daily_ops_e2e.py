@@ -187,7 +187,11 @@ def test_daily_ops_full_pipeline_with_tracker(populated_tracker_path: Path, tmp_
     # Copy populated tracker to a data subdir so daily_ops finds it
     import shutil
 
-    data_dir = tmp_path / "data"
+    # Use data_btc so daily_ops P12 session gate maps to crypto_24_7 (always
+    # open) — generic "data" maps to forex_24_5, whose weekend session gate
+    # skips governance (market_closed_weekend), making this test flaky on
+    # Saturdays/Sundays. FIX-20260822-001 (DQAF-20260822-001) — determinism.
+    data_dir = tmp_path / "data_btc"
     data_dir.mkdir()
     dest = data_dir / "brain_performance.json"
     shutil.copy(populated_tracker_path, dest)
@@ -251,8 +255,12 @@ def test_daily_recap_with_governance_flag(tmp_path: Path):
     """live_daily_recap with --run-governance should include governance section."""
     from scripts.live_daily_recap import build_report
 
+    # data_btc subdir → daily_ops P12 session gate maps to crypto_24_7 (always
+    # open), making governance run deterministically. tmp_path maps to
+    # forex_24_5 whose weekend gate skips governance → flaky on Sat/Sun.
+    # FIX-20260822-001 (DQAF-20260822-001) — determinism.
     report = build_report(
-        base_dir=tmp_path,
+        base_dir=tmp_path / "data_btc",
         symbol="XAUUSDc",
         run_governance=True,
     )

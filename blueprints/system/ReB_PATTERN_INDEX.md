@@ -20,6 +20,16 @@
 
 ---
 
+### ReB-20260822-METRIC_SATURATION_SESSION_BIAS
+- **Pattern Signature**: `METRIC_SATURATION_SESSION_BIAS`
+- **Date Cataloged**: 2026-08-22
+- **Source Docket**: DQAF-20260822-001
+- **Related**: FIX-20260822-001 (RESOLVED); 同族: FIX-20260821-007 (METRIC_DENOMINATOR_SEMANTIC_SHIFT — "传感器读数≠市场真相"度量族), FIX-20260731-004 (MISSING_TF_AS_FLAT_DEGRADATION)
+
+**定义**: 监控/评分指标若用会话累积计数器 (单调递增、永不衰减/复位) 计算"当前状态"而非滚动窗口速率, 则指标随进程存活时长单调饱和 → 永久锁死惩罚因子 → 健康/质量分成为 uptime 代理而非市场真相. 长会话 (如零交易期) 使缺陷显性化, 短会话 (频繁重启) 掩盖之; 跨品种共享组件同步污染. 关键签名: (1) 得分分子 = 累积计数/固定窗口, 分子无界; (2) 指标会话内单调非降, 0 回落; (3) 饱和后恒等 floor×其他因子 (health≡alignment×0.1); (4) 跨会话 Pearson(周期数/会话时长, 指标)<0 (指标反比 uptime); (5) 同组件双品种同偏置 (BTC f_chop 56.1% / XAU 68.0%).
+- **预防** (IMPLEMENTED, FIX-20260822-001): ① **滚动窗口 SSOT** — 得分分子必须来自 `deque(maxlen=N)` 内相邻 label 差异计数 (有界), 任何会话累积状态禁止参与"当前状态"计算 (accumulator 语义只可服务于"累积事件"型输出, 不得用于"当前速率/状态"); ② **单调性回归锁** — 长稳定期后指标必须回落: `test_rolling_window_recovers_after_prolonged_stability` (26 交替 → chop_detected; 再 30 单调稳定 → chop_score==0.0 非 1.0, 旧累加器饱和场景被物理锁); ③ **uptime 相关性哨兵** — 审计脚本输出 Pearson(cycles/day, health) 与单调回落计数, 双品种 (data_btc + data) 同法跑, 指标↔uptime 强负相关即红旗; ④ **魔法数字冻结** — 阈值 (0.55 硬否决线/_chop_window=24/_chop_threshold=6) 视为红线, 修复只改来源不改标尺.
+- **检测**: 回归锁 `tests/test_gods_eye.py::TestChopDetection::test_rolling_window_recovers_after_prolonged_stability`. 通用法: 任何监控指标先检查是否会话累积计数参与分子; grep `min(1.0, <counter> / <window>)` 形态得分; 跨会话 Pearson(uptime↔score) < 0 即红旗.
+
 ### ReB-20260821-CROSS_ASSET_DEFAULT_SILENT_MISPAIR
 - **Pattern Signature**: `CROSS_ASSET_DEFAULT_SILENT_MISPAIR`
 - **Date Cataloged**: 2026-08-21
