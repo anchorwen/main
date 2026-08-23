@@ -171,4 +171,75 @@ Iterability: ↑ (审计口径集中于单一脚本; 火力规划统一锚定 cu
 
 ---
 
-[AWAITING_IC_APPROVAL]
+[AWAITING_IC_APPROVAL] — (2026-08-23 后置: 该审批仅针对原 Option A 主轨道, 已被 §6 战略重定向取代)
+
+---
+
+# 六、IC 战略重定向 (2026-08-23) — The Architectural Epiphany: Option B 升格为正规军轨道
+
+## 6.1 IC 裁决 (逐字要点)
+
+- **绝对批准**: 将 Option B (前向收益预测) 全面升格为 Micro Scaler 的正规军轨道。
+- **废弃 Option A**: 彻底放弃用 Swing 交易的实盘 Label 训练 Micro Scaler。**视野错位**: 用持仓数小时的"重型巡洋舰"战果, 训练持仓仅几个 M5 bar 的"微观冲锋舟", 预测周期 (Horizon) 根本错位。
+- **升格 Option B**: current-gen 8,572 行干净特征 + Forward Return 为目标变量, 重新规划训练管线 (可回归预测收益率, 或多分类预测涨跌阈值)。
+- **真理重构**: 微高频领域, 前向 3-bar 收益本身即最纯粹的 Ground Truth — 剥离 SL/TP 噪音, 直接度量特征与微观动量间的信息熵 (ρ=0.466 已证明)。
+- **部署红线**: Shadow Mode 强制。后续核心战役 = **如何将这种信号安全转化为实盘的 Trigger** (连续序列预测更易产生极端校准偏置, 如 slope 1.749)。
+- **今日不执行**: 战术规划记录在案, 不启动训练进程。
+
+## 6.2 架构顿悟的实证锚定 (新探针 `_audit_xau_hold_time_horizon_20260823.py`, Iron Law #11 唯一证据源)
+
+> IC 顿悟是战略判断; 本探针用 1,259/1,261 笔可标注 XAU 交易的真实持仓时长把它钉成数据事实。
+
+**全体 1,259 笔持仓时长 (分钟)**: median **21** / p90 146 / max 3306 (55h) / **≤15min 仅 41.2%**
+
+**按策略 (n≥7)**:
+
+| 策略 | n | median | p90 | ≤15min | ≤60min |
+|---|---|---|---|---|---|
+| statarb_dynamic | 299 | 10 | 39 | 64.9% | 95.0% |
+| m30_swing | 264 | 36 | 179 | 21.2% | 61.4% |
+| h1_swing | 174 | 66 | 454 | 17.8% | 46.0% |
+| barrier_12bar | 161 | 10 | 55 | 63.4% | 91.3% |
+| m15_swing | 161 | 25 | 170 | 39.1% | 67.1% |
+| h4_swing | 58 | 55 | 681 | 15.5% | 55.2% |
+| **micro_3bar** | **56** | **5** | 72 | **76.8%** | 89.3% |
+| structural_swing_v1 | 7 | 20 | 30 | 28.6% | 100.0% |
+
+**⚠️ 关键 — current-gen 窗口 (open ≥ 2026-05-24, n=582)**: median **55** / p90 **292** (≈4.9h) / **≤15min 仅 13.7%** / ≤60min 52.9%
+
+**判读 (数据事实, 非推断)**:
+1. **Option A 的 576 个标签, 中位持仓 55 分钟 ≈ 11 个 M5 bar, p90 近 5 小时 ≈ 58 bars** — 这些是 Swing 策略 (m30/h1/m15/h4_swing) 的收盘战果, 与 Micro Scaler 3-bar (15min) 周期**根本错位**。IC 顿悟被数据确认。
+2. **真微周期标签近乎不存在**: 历史 `micro_3bar` (median 5min, n=56, 76.8% ≤15min) 是唯一接近目标周期的标签, 但 n=56 远不够训练, 且是否落 current-gen 世代未核。→ **Forward Return 是唯一可扩展的正确 Ground Truth** (8,572 行全覆盖, 零 SL/TP 噪音)。
+3. statarb/barrier 等短持仓策略全在早期 (current-gen 窗口外), 进一步压缩了可用真微标签。
+
+## 6.3 校准偏置的根因假设 (slope 1.749, 待 v2 验证)
+
+v1 pseudo-diag 实为**方向二分类** (base_rate 0.5156, PR-AUC 0.7573, ρ=0.4661, calib_slope 1.7491, pred_mean_pos 0.573 vs neg 0.452)。**注意: 该 OOS 为 70/30 划分 (OOS n=2351), 切分纪律未在 v1 严格复验 — v2 须在 60/20/20 ts_purged_split 下重跑, 数字才能横向可比。**
+
+slope>1 (概率过度外展) 三个待证假设:
+- (a) 树集成拟合幅度噪音 → 叶子分裂过深产生极端预测。缓解: leaves 下调, min_child 上调, L2 加码, feature_fraction 收紧。
+- (b) XAU M5 肥尾 → 极值收益主导斜率。缓解: 目标 Winsorize/clip ±3σ, 或 Huber loss。
+- (c) 分类校准天生过度 → **Isotonic Regression** (val fold 拟合映射 → OOS fold 验证, 防自偏), post-isotonic 目标斜率 ∈ [0.9, 1.1]。
+
+## 6.4 Micro Scaler v2 训练蓝图 (Forward Return Track, 待 IC 开火令)
+
+| 维度 | 设计 | 备注 |
+|---|---|---|
+| **标签** | 主: 回归 forward-3bar return (连续性, ρ 直接可测, isotonic 可校准); 诊断臂: 方向二分类 (涨跌阈值) | IC 允许回归/多分类, 推荐回归为主 |
+| **数据** | current-gen 8,572 行 (filter_current_gen, TECH_DEBT-023 守卫), 40 列, 真缺失=0 | v1 已验证 |
+| **切分** | 60/20/20 ts_purged_split (purge+embargo ±60 bars, 禁 shuffle), 复用 v1 代码 | 与 Option A 同构 |
+| **模型** | LightGBM regression (huber/asymmetric, depth≤3, min_child≥20, 强 L2) | expected-r 同哲学 |
+| **指标** | OOS ρ / 分位 IC / post-isotonic 校准斜率 / **net-of-cost top-decile 期望收益 > 盈亏平衡** / trigger rate ∈ [1%, 50%] | cost 门禁为新增 |
+| **数据缺口 (记档)** | **v9 current-gen 无 spread 列** (已探针确认) → cost model 需 ASOF 接 `v4.3_microstructure_9` avg_spread (14,689 行) 或 MT5 探针 | trigger 战役前置, 待规划 |
+| **部署** | Shadow Mode 强制, 零 live 风险; 信号写入 golden_master, 不触任何实盘执行代码 | MetaExit 红线维持 |
+
+## 6.5 状态
+
+[RECORDED — 2026-08-23] 战术规划已落案。**今日不执行训练进程**。待 IC 开火令启动 v2。核心战役优先级: ① 严格切分复验信号 → ② Isotonic 校准 → ③ cost model + Trigger 转化。
+
+---
+
+[Ω-Routing: Scene D → #11]
+=== IRON LAW #11: SCRIPT OUTPUT (唯一合法证据源) ===
+§6.2 全部持仓时长统计出自 `scripts/_audit_xau_hold_time_horizon_20260823.py` stdout (2026-08-23 运行); §6.3 出自 `data/training/micro_scaler_v1/micro_scaler_v1_pseudo_diag.json` (v1 输出). 零补算.
+[DONE]
