@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-24T05:56:28Z
-> **扫描模块数**: 839
+> **自动生成**: 2026-08-24T10:40:39Z
+> **扫描模块数**: 846
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -244,7 +244,7 @@
 | `gods_eye.py` | ✅ active | GodsEyeVerdict, GodsEye | 15 | 511 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 127 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 398 | — | |
+| `live_order_sender.py` | ✅ active | FatalRiskViolation | 6 | 417 | — | |
 | `managed_close.py` | ✅ active | — | 2 | 416 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
@@ -535,7 +535,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 5215 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 5269 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 18 | 2674 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
@@ -572,6 +572,16 @@
 | `trade_notify.py` | ✅ active | — | 2 | 86 | — | |
 | `trail_dispatch.py` | ✅ active | — | 1 | 510 | — | |
 | `typed_clock.py` | ✅ active | MonotonicInstant, WallInstant, Duration, Clock | 19 | 205 | — | |
+
+## core/runtime/shadow_ops
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `dispatch_filter.py` | ✅ active | — | 2 | 79 | — | |
+| `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 217 | — | |
+| `runtime.py` | ✅ active | ShadowOpsRuntime | 10 | 286 | — | |
+| `telemetry.py` | ✅ active | ShadowTelemetryLedger | 6 | 50 | — | |
+| `trigger_contract.py` | ✅ active | TriggerContractState, TriggerContract | 7 | 114 | — | |
 
 ## core/schemas
 
@@ -672,6 +682,7 @@
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_audit_metaexit_gate_20260821.py` | ✅ active | — | 7 | 295 | — | |
+| `_audit_shadow_ops_liveness_probe.py` | ✅ active | — | 4 | 205 | — | |
 | `_audit_shadow_pnl_august_20260812.py` | ✅ active | — | 3 | 139 | — | |
 | `_audit_shadow_pnl_replay_20260812.py` | ✅ active | — | 5 | 248 | — | |
 | `_audit_storm_domain_wal_20260819.py` | ✅ active | — | 1 | 97 | — | |
@@ -704,6 +715,7 @@
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_mypy_scope.py` | ✅ active | — | 2 | 51 | — | |
 | `_reconcile_zombie_4454299643_20260807.py` | ✅ active | — | 3 | 200 | — | |
+| `_shadow_ops_watchdog.py` | ✅ active | — | 6 | 204 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
@@ -772,7 +784,7 @@
 | `build_micro_cost_model.py` | ✅ active | FeatureRow | 12 | 717 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 766 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 768 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |
@@ -896,7 +908,7 @@
 | `train_xau_metafilter.py` | ✅ active | — | 10 | 531 | — | |
 | `training_strategy_report.py` | ⬜ empty | — | 0 | 172 | — | |
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
-| `validate_blueprints.py` | ✅ active | — | 8 | 362 | — | |
+| `validate_blueprints.py` | ✅ active | — | 8 | 363 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 393 | — | |
 | `validate_commit_msg.py` | ✅ active | CheckResult, ValidationReport | 6 | 409 | — | |
 | `validate_journal_health_fix.py` | ✅ active | — | 1 | 93 | — | |

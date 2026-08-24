@@ -69,6 +69,7 @@
 | **training/pipeline** | brains, contracts, features, metrics, training |
 | **state** | contracts |
 | **runtime/state** | contracts |
+| **runtime/shadow_ops** | contracts (DataIntegrityError), features (V9_40 schema), configs/live.yaml — pure observer; **zero dispatch deps** (import denylist: zmq/mt5_bridge_worker/live_order_sender/communication_dispatcher/execution_queue/live_execution_contract/dispatch_context) |
 | **monitor/dashboard** | feedback, governance, observability |
 | **deployment/config** | contracts |
 | **deployment/lifecycle** | contracts, state |

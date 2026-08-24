@@ -416,6 +416,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/backfill_journal_pnl.py",
         "scripts/analyze_shadow_exit.py",  # FIX-20260703-002: T24 V6 shadow analysis
         "scripts/ci_prepare_v9_shadow_fixtures.py",  # FIX-20260819-006: CI shadow fixture prep (stub-declared)
+        "scripts/_shadow_ops_watchdog.py",  # FIX-20260824-003: Phase 4 Shadow Ops Layer-3 每日巡检
+        "scripts/_audit_shadow_ops_liveness_probe.py",  # FIX-20260824-003: Phase 4 Shadow Ops 实证锁探针
     ],
     "runtime_state": [
         "core/state/",

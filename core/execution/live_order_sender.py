@@ -183,6 +183,25 @@ def dispatch_live_order(
     hard-coding MT5.  When you swap MT5 for FIX / IB / cloud, you only
     need to provide a different ``broker`` — this function stays unchanged.
     """
+    # ── Phase 4 Shadow Ops: Layer-2 dispatch fuse (DEFCON 1, blueprint §2.3/#8) ──
+    # First gate — any payload carrying a shadow marker (venue="shadow_ops" /
+    # action="OBSERVE" / strategy prefix "shadow_ops_") is physically intercepted
+    # and bypassed to the shadow_ops telemetry ledger.  NEVER reaches MT5.
+    # Normal live payloads pass through with zero I/O.
+    from core.runtime.shadow_ops.dispatch_filter import (
+        record_dispatch_block,
+        shadow_ops_dispatch_filter,
+    )
+
+    _filtered = shadow_ops_dispatch_filter(execution_payload)
+    if _filtered is not None:
+        _filtered["intent_id"] = intent_id or f"shadow_ops_{uuid.uuid4().hex}"
+        try:
+            record_dispatch_block(base_dir=base_dir, payload=execution_payload, result=_filtered)
+        except Exception:  # noqa: BLE001  # BLE001:FOG fail-open — 拦截已生效, 仅丢审计行
+            pass
+        return _filtered
+
     if not ignore_protection_flag:
         protection_flag = resolve_protection_flag_path(base_dir, protection_flag_path)
         if protection_flag.exists():

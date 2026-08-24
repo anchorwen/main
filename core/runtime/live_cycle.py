@@ -362,6 +362,9 @@ class LiveCycleState:
     _gate_stats_cycles: int = 0
     position_manager: Any = None  # ActivePositionManager (set by caller)
     correlation_tracker: Any = None  # GroupCorrelationTracker (set by caller)
+    # ── Phase 4 Shadow Ops (DEFCON 1): 暗影评分运行时 (lazily built, telemetry only) ──
+    _shadow_ops_runtime: Any = None  # ShadowOpsRuntime — never dispatches (set by Phase 4)
+    _shadow_ops_init_done: bool = False
     shadow_verification_pending: dict[str, Any] | None = (
         None  # prev-cycle shadow decision for counterfactual settlement
     )
@@ -3332,6 +3335,57 @@ def execute_live_cycle(
         "bid": _bid,
         "ask": _ask,
     }
+
+    # ── Phase 4 Shadow Ops: Micro Scaler v2 Quantile Trigger (DEFCON 1, telemetry only) ──
+    # Single-point injection (IC 部署纪律: 最小手术切口, blueprint §5 #7).
+    # 评分器复用 feature_vector (V9_40), 输出死焊 shadow_ops 遥测 ledger —
+    # 绝不构造派发 payload, 绝不触达派发链. fail-open: 遥测故障不打断实盘 cycle.
+    if not getattr(state, "_shadow_ops_init_done", False):
+        state._shadow_ops_init_done = True
+        try:
+            from core.runtime.shadow_ops.runtime import ShadowOpsRuntime
+
+            state._shadow_ops_runtime = ShadowOpsRuntime(
+                symbol=config.symbol,
+                base_dir=config.base_dir,
+            )
+            _so_diag = state._shadow_ops_runtime.describe()
+            print(
+                json.dumps(
+                    {
+                        "event": "shadow_ops_runtime_init",
+                        "time": _utc_iso(),
+                        "iteration": state.loop_iteration,
+                        **_so_diag,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception as _so_init_exc:  # noqa: BLE001  # BLE001:FOG fail-open
+            state._shadow_ops_runtime = None
+            print(
+                json.dumps(
+                    {
+                        "event": "shadow_ops_runtime_init_error",
+                        "time": _utc_iso(),
+                        "iteration": state.loop_iteration,
+                        "error": repr(_so_init_exc),
+                        "action": "fail_open — shadow telemetry disabled, live path untouched",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+    if getattr(state, "_shadow_ops_runtime", None) is not None:
+        # fail_open_guard 包裹 (blueprint §5 #7 指定; run() 内部已自带结构化 fail-open
+        # BLE001:FOG 事件, 外层 guard 为纯防御纵深 — 任何意外异常绝不打断实盘 cycle)
+        with fail_open_guard("ShadowOpsRuntimeRun"):
+            state._shadow_ops_runtime.run(
+                feature_vector=np.asarray(feature_vector, dtype=np.float64),
+                cycle_count=state.loop_iteration,
+                now_utc=_utc_iso(),
+            )
 
     # ── Meta-filter gate + Conformal OU Gate (lazy init on first live cycle) ──
     # Both gates share one ConformalCalibrator so the empirical P(win)

@@ -16,6 +16,22 @@ mt5:
 features:
   store_dir: data/feature_store
   update_interval_seconds: 60
+# ── Phase 4 Shadow Ops 暗影接线 (IC 部署令 2026-08-24, DEFCON 1) ──
+# Micro Scaler v2 评分器 (Quantile Trigger ONLY) + MetaExit v3 shadow-only 防回退.
+# 输出死焊 shadow_ops 遥测 ledger, 绝不向 mt5_bridge_worker 发送真实订单.
+# Micro Scaler v2 不注册 brain/strategy/contract_group — 无晋升机制.
+shadow_ops:
+  enabled: true
+  micro_scaler_v2:
+    model_path: data/training/micro_scaler_v2/micro_scaler_v2_reg.txt
+    trigger_path: data/training/micro_scaler_v2/micro_scaler_v2_trigger.json
+    feature_schema: v9_institutional_40
+    telemetry_dir: data/shadow_ops
+    trigger_refresh_ttl_seconds: 60
+    import_denylist_enforced: true
+    model_version: v2_20260824
+  meta_exit_v3:
+    enforce_shadow_only: true
 brains:
   registry_entries:
   - path: configs/brains/OU_Params_V6_Sniper.json

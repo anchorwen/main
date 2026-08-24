@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-24T05:56:28Z
+> **自动生成**: 2026-08-24T10:40:39Z
 
 ## Package-Level Dependencies
 
@@ -212,7 +212,7 @@
 - `gods_eye.py` → (无内部依赖)
 - `kelly_sizer.py` → `core.execution.pwin_chain`
 - `limit_order_monitor.py` → (无内部依赖)
-- `live_order_sender.py` → `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.contracts.strategy_magic`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.execution.broker_adapter`, `core.execution.mt5_broker_adapter`, `core.execution.mt5_worker`, `core.protocol.live_execution_contract`, `core.protocol.schema_versions`, `core.protocol.services.zmq_receipt_listener`
+- `live_order_sender.py` → `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.contracts.strategy_magic`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.execution.broker_adapter`, `core.execution.mt5_broker_adapter`, `core.execution.mt5_worker`, `core.protocol.live_execution_contract`, `core.protocol.schema_versions`, `core.protocol.services.zmq_receipt_listener`, `core.runtime.shadow_ops.dispatch_filter`
 - `managed_close.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`, `core.execution.reentry_guard`, `core.runtime.fault_handler`
 - `market_efficiency.py` → (无内部依赖)
 - `market_impact.py` → (无内部依赖)
@@ -467,7 +467,7 @@
 - `integration_contracts.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
 - `legacy_dispatch_reference.py` → (无内部依赖)
 - `live_bootstrap.py` → `core.contracts.exceptions`, `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.live_daily_provider`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.local_feature_store`, `core.features.schemas.microstructure_schema`, `core.runtime.time_utils`
-- `live_cycle.py` → `core.config.asset_registry`, `core.contracts.domain.dispatch_context`, `core.contracts.strategy_magic`, `core.deployment.brain_alert`, `core.deployment.feature_update_producer`, `core.execution.conformal_calibrator`, `core.execution.conformal_ou_gate`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.managed_close`, `core.execution.market_efficiency`, `core.execution.meta_filter_gate`, `core.execution.microstructure_gate`, `core.execution.mt5_worker`, `core.execution.net_out_close_handler`, `core.execution.portfolio_netting`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.features.computers.btc_feature_augmenter`, `core.features.meta_feature_builder`, `core.features.schemas.registry`, `core.features.stale_feature_guard`, `core.infrastructure.distributed_lock`, `core.market.mtf_price_service`, `core.observability.data_health_service`, `core.observability.degradation`, `core.parliament.contract_groups`, `core.parliament.group_consensus`, `core.runtime.btc_feature_persist`, `core.runtime.circuit_breaker_reset`, `core.runtime.close_label`, `core.runtime.cooldown`, `core.runtime.daily_ops_scheduler`, `core.runtime.daily_ops_state`, `core.runtime.dispatch_post`, `core.runtime.execution_state`, `core.runtime.fault_handler`, `core.runtime.feature_freshness`, `core.runtime.gods_eye_bridge`, `core.runtime.golden_master`, `core.runtime.management_phase`, `core.runtime.market_ingress`, `core.runtime.mia_close`, `core.runtime.micro_persist`, `core.runtime.modify_trail_dispatch`, `core.runtime.order_dispatch`, `core.runtime.ou_hurst`, `core.runtime.pnl_recording`, `core.runtime.position_close_adapter`, `core.runtime.position_ownership`, `core.runtime.position_registration`, `core.runtime.pre_close_check`, `core.runtime.pre_close_context`, `core.runtime.reconciliation`, `core.runtime.reentry_alert`, `core.runtime.reentry_recording`, `core.runtime.restart_state`, `core.runtime.session_guards`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`, `core.runtime.signal_settlement`, `core.runtime.strategy_builder`, `core.runtime.strategy_evaluator`, `core.runtime.time_utils`, `core.runtime.trade_notify`
+- `live_cycle.py` → `core.config.asset_registry`, `core.contracts.domain.dispatch_context`, `core.contracts.strategy_magic`, `core.deployment.brain_alert`, `core.deployment.feature_update_producer`, `core.execution.conformal_calibrator`, `core.execution.conformal_ou_gate`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.managed_close`, `core.execution.market_efficiency`, `core.execution.meta_filter_gate`, `core.execution.microstructure_gate`, `core.execution.mt5_worker`, `core.execution.net_out_close_handler`, `core.execution.portfolio_netting`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.features.computers.btc_feature_augmenter`, `core.features.meta_feature_builder`, `core.features.schemas.registry`, `core.features.stale_feature_guard`, `core.infrastructure.distributed_lock`, `core.market.mtf_price_service`, `core.observability.data_health_service`, `core.observability.degradation`, `core.parliament.contract_groups`, `core.parliament.group_consensus`, `core.runtime.btc_feature_persist`, `core.runtime.circuit_breaker_reset`, `core.runtime.close_label`, `core.runtime.cooldown`, `core.runtime.daily_ops_scheduler`, `core.runtime.daily_ops_state`, `core.runtime.dispatch_post`, `core.runtime.execution_state`, `core.runtime.fault_handler`, `core.runtime.feature_freshness`, `core.runtime.gods_eye_bridge`, `core.runtime.golden_master`, `core.runtime.management_phase`, `core.runtime.market_ingress`, `core.runtime.mia_close`, `core.runtime.micro_persist`, `core.runtime.modify_trail_dispatch`, `core.runtime.order_dispatch`, `core.runtime.ou_hurst`, `core.runtime.pnl_recording`, `core.runtime.position_close_adapter`, `core.runtime.position_ownership`, `core.runtime.position_registration`, `core.runtime.pre_close_check`, `core.runtime.pre_close_context`, `core.runtime.reconciliation`, `core.runtime.reentry_alert`, `core.runtime.reentry_recording`, `core.runtime.restart_state`, `core.runtime.session_guards`, `core.runtime.shadow_ops.runtime`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`, `core.runtime.signal_settlement`, `core.runtime.strategy_builder`, `core.runtime.strategy_evaluator`, `core.runtime.time_utils`, `core.runtime.trade_notify`
 - `live_startup.py` → `core.governance.governance_service`, `core.risk.risk_evaluation_service`, `core.risk.risk_policies`, `core.runtime.fault_handler`
 - `management_phase.py` → `core.contracts.domain.dispatch_context`, `core.contracts.strategy_magic`, `core.execution.capital_allocator`, `core.execution.live_order_sender`, `core.execution.managed_close`, `core.features.schemas.registry`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.live_cycle`, `core.runtime.market_ingress`, `core.runtime.mia_close`, `core.runtime.modify_trail_dispatch`, `core.runtime.ou_hurst`, `core.runtime.signal_health`, `core.runtime.time_utils`, `core.runtime.trail_dispatch`, `core.trading.position_lifecycle`, `core.trading.ratchet_risk`
 - `market_ingress.py` → `core.config.asset_registry`, `core.execution.mt5_worker`, `core.runtime.fault_handler`
@@ -504,6 +504,14 @@
 - `trade_notify.py` → `core.runtime.time_utils`
 - `trail_dispatch.py` → `core.execution.trail_stop_engine`
 - `typed_clock.py` → (无内部依赖)
+
+### `core/runtime/shadow_ops/`
+
+- `dispatch_filter.py` → (无内部依赖)
+- `micro_scaler_scorer.py` → `core.contracts.exceptions`, `core.features.schemas.v9_institutional_schema`, `core.runtime.shadow_ops.trigger_contract`
+- `runtime.py` → `core.contracts.exceptions`, `core.runtime.shadow_ops.micro_scaler_scorer`, `core.runtime.shadow_ops.telemetry`, `core.runtime.shadow_ops.trigger_contract`
+- `telemetry.py` → (无内部依赖)
+- `trigger_contract.py` → `core.contracts.exceptions`
 
 ### `core/schemas/`
 
@@ -586,6 +594,7 @@
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
 - `_audit_metaexit_gate_20260821.py` → (无内部依赖)
+- `_audit_shadow_ops_liveness_probe.py` → `core.runtime.shadow_ops.micro_scaler_scorer`, `core.runtime.shadow_ops.runtime`, `scripts._shadow_ops_watchdog`
 - `_audit_shadow_pnl_august_20260812.py` → (无内部依赖)
 - `_audit_shadow_pnl_replay_20260812.py` → (无内部依赖)
 - `_audit_storm_domain_wal_20260819.py` → (无内部依赖)
@@ -618,6 +627,7 @@
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`
 - `_mypy_scope.py` → (无内部依赖)
 - `_reconcile_zombie_4454299643_20260807.py` → `core.ledger.services.journal_cleanup`, `core.ledger.services.journal_gate`
+- `_shadow_ops_watchdog.py` → (无内部依赖)
 - `_train_h1_binary_final.py` → (无内部依赖)
 - `_train_h4_binary_final.py` → (无内部依赖)
 - `_train_m15_binary_final.py` → (无内部依赖)

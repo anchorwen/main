@@ -77,6 +77,7 @@ EXPECTED_MODULES = [
     "features_service",
     "runtime_live",
     "runtime_state",
+    "shadow_ops",
     "training",
     "training_pipeline",
     "market_mtf",
