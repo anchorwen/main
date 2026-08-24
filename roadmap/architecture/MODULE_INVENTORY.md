@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-22T17:36:50Z
-> **扫描模块数**: 832
+> **自动生成**: 2026-08-24T04:23:00Z
+> **扫描模块数**: 837
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -684,7 +684,11 @@
 | `_audit_xau_entry_quality_20260810.py` | ✅ active | — | 7 | 285 | — | |
 | `_audit_xau_entry_structure_20260807.py` | ✅ active | — | 2 | 127 | — | |
 | `_audit_xau_first_open_20260812.py` | ✅ active | — | 4 | 158 | — | |
+| `_audit_xau_hold_time_horizon_20260823.py` | ✅ active | — | 5 | 187 | — | |
 | `_audit_xau_journal_pnl_null_20260806.py` | ✅ active | — | 1 | 92 | — | |
+| `_audit_xau_label_production_rate_20260823.py` | ✅ active | — | 2 | 106 | — | |
+| `_audit_xau_label_provenance2_20260823.py` | ✅ active | — | 2 | 113 | — | |
+| `_audit_xau_label_provenance_20260823.py` | ✅ active | — | 4 | 172 | — | |
 | `_audit_xau_longs_20260807.py` | ✅ active | — | 2 | 106 | — | |
 | `_audit_xau_micro_scaler_20260823.py` | ✅ active | — | 11 | 489 | — | |
 | `_audit_xau_mt5_reconciliation_20260813.py` | ✅ active | — | 5 | 228 | — | |
@@ -765,9 +769,10 @@
 | `bridge_supervisor.py` | ✅ active | — | 4 | 121 | — | |
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 11 | 710 | — | |
 | `build_metafilter_dataset.py` | ✅ active | — | 2 | 222 | — | |
+| `build_micro_cost_model.py` | ✅ active | FeatureRow | 12 | 717 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 765 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 766 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |

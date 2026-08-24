@@ -435,6 +435,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/backtest/backtest_meta_filter.py",
         "scripts/backtest/backtest_dynamic_exit.py",
         "scripts/backtest_structural_swing.py",
+        "scripts/build_micro_cost_model.py",  # P3 (FIX-20260824-001): Net-of-Cost Alpha toll-gate cost model
         "scripts/build_btc_metafilter_v2_dataset.py",
         "scripts/train_btc_metafilter_v2.py",
         "scripts/train_xau_metafilter.py",

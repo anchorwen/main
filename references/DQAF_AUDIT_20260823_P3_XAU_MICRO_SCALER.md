@@ -230,12 +230,23 @@ slope>1 (概率过度外展) 三个待证假设:
 | **切分** | 60/20/20 ts_purged_split (purge+embargo ±60 bars, 禁 shuffle), 复用 v1 代码 | 与 Option A 同构 |
 | **模型** | LightGBM regression (huber/asymmetric, depth≤3, min_child≥20, 强 L2) | expected-r 同哲学 |
 | **指标** | OOS ρ / 分位 IC / post-isotonic 校准斜率 / **net-of-cost top-decile 期望收益 > 盈亏平衡** / trigger rate ∈ [1%, 50%] | cost 门禁为新增 |
-| **数据缺口 (记档)** | **v9 current-gen 无 spread 列** (已探针确认) → cost model 需 ASOF 接 `v4.3_microstructure_9` avg_spread (14,689 行) 或 MT5 探针 | trigger 战役前置, 待规划 |
+| **数据缺口 (已清偿, 2026-08-24)** | v9 current-gen 无 spread 列 → cost model `scripts/build_micro_cost_model.py` ASOF 接 `v4.3_microstructure_9` avg_spread (14,839 行, 部署自 2026-06-14) + MT5 探针锚点 | ✅ 周一开火序列 Step2 完成 |
+| **成本模型工具** | `scripts/build_micro_cost_model.py` — pd.merge_asof `direction='backward'` (防 1ms 前视) + 逐 M5 bar 盈亏平衡线 (动态 \|avg_spread\| + 佣金) | 门禁凭证唯一来源 (Iron Law #11) |
 | **部署** | Shadow Mode 强制, 零 live 风险; 信号写入 golden_master, 不触任何实盘执行代码 | MetaExit 红线维持 |
 
 ## 6.5 状态
 
 [RECORDED — 2026-08-23] 战术规划已落案。**今日不执行训练进程**。待 IC 开火令启动 v2。核心战役优先级: ① 严格切分复验信号 → ② Isotonic 校准 → ③ cost model + Trigger 转化。
+
+[UPDATE — 2026-08-24 周一开火序列 Step2/3 门禁凭证] `scripts/build_micro_cost_model.py` stdout (唯一证据源):
+- **样本**: current-gen 8,280 记录 → 4,567 unique bar → **4,010 具 3-bar 前向上下文** (Option B 训练池)。
+- **v4.3 avg_spread 符号翻转 bug (材料发现 #1)**: 全世代 14,839 行 100% 负号 (逐周实证 W24-W34 零正值) — `microstructure_computer._compute_tick_features` 将 MT5 `t[1]=bid/t[2]=ask` 错位写入 `bids=t[2]/asks=t[1]` → `asks-bids=-(真实spread)`。**消费端取 |avg_spread| 还原** (median 0.2402 / MT5 探针 p50=0.26 交叉验证一致)。生产侧修复列 TECH_DEBT 登记, 勿动核心代码。
+- **ASOF 覆盖瓶颈**: v4.3 部署 2026-06-14 起 → 命中 587/4,010 (14.6%), 其余回退实测锚点 0.26 (fallback_rate 85.5%)。
+- **Net-of-Cost Alpha (基准 = 实测动态 spread)**: be_mean 0.00595%; coverage P(|fwd3|>be)=**95.99%**; top-decile mean_net=**+0.381%**; net-of-cost alpha mean +0.107% / median +0.073%; 方向平衡 (up_share 47.9%, fwd_mean −0.005%)。
+- **压力情景**: 0.60 USD spread → coverage 90.85%, top-decile net +0.373%。
+- **Toll-gate verdict: PASS** — 扣除真实动态 spread 后 4,010 切片仍有 96% 净胜率空间。**fit() 授权待 IC 裁决**。
+
+[RECORDED — 2026-08-24] 附带材料发现 #2: **M5_Ret_1 不可靠** (median |M5_Ret_1−真实1bar|=0.0447%, ρ=0.11) → forward return 必须来自 MT5 真实价格 (本模型已采用), v1 Option B ρ=0.466 证据存疑。材料发现 #3: current-gen 8,572 记录说法修正为 4,567 unique bar。**未接 fit() 授权令, 严禁任何训练。**
 
 ---
 

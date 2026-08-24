@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-22T17:36:50Z
+> **自动生成**: 2026-08-24T04:23:00Z
 
 ## Package-Level Dependencies
 
@@ -598,7 +598,11 @@
 - `_audit_xau_entry_quality_20260810.py` → (无内部依赖)
 - `_audit_xau_entry_structure_20260807.py` → (无内部依赖)
 - `_audit_xau_first_open_20260812.py` → (无内部依赖)
+- `_audit_xau_hold_time_horizon_20260823.py` → (无内部依赖)
 - `_audit_xau_journal_pnl_null_20260806.py` → (无内部依赖)
+- `_audit_xau_label_production_rate_20260823.py` → (无内部依赖)
+- `_audit_xau_label_provenance2_20260823.py` → (无内部依赖)
+- `_audit_xau_label_provenance_20260823.py` → (无内部依赖)
 - `_audit_xau_longs_20260807.py` → (无内部依赖)
 - `_audit_xau_micro_scaler_20260823.py` → (无内部依赖)
 - `_audit_xau_mt5_reconciliation_20260813.py` → (无内部依赖)
@@ -679,6 +683,7 @@
 - `bridge_supervisor.py` → `scripts.mt5_bridge_worker`
 - `build_btc_metafilter_v2_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_metafilter_dataset.py` → `core.features.feature_router`
+- `build_micro_cost_model.py` → (无内部依赖)
 - `build_regime_snapshots.py` → (无内部依赖)
 - `calibrate_binary_threshold.py` → (无内部依赖)
 - `check_blueprint_compliance.py` → (无内部依赖)
