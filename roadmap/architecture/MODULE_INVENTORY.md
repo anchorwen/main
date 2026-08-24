@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-24T14:06:04Z
-> **扫描模块数**: 847
+> **自动生成**: 2026-08-24T15:24:58Z
+> **扫描模块数**: 849
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -579,10 +579,10 @@
 |------|------|----|------|------|------|------|
 | `dispatch_filter.py` | ✅ active | — | 2 | 79 | — | |
 | `live_fire_breaker.py` | ✅ active | — | 4 | 149 | — | |
-| `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 217 | — | |
-| `runtime.py` | ✅ active | ShadowOpsRuntime | 12 | 339 | — | |
+| `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 226 | — | |
+| `runtime.py` | ✅ active | ShadowOpsRuntime | 12 | 341 | — | |
 | `telemetry.py` | ✅ active | ShadowTelemetryLedger | 6 | 50 | — | |
-| `trigger_contract.py` | ✅ active | TriggerContractState, TriggerContract | 7 | 114 | — | |
+| `trigger_contract.py` | ✅ active | TriggerContractState, TriggerContract | 7 | 120 | — | |
 
 ## core/schemas
 
@@ -701,6 +701,7 @@
 | `_audit_xau_label_production_rate_20260823.py` | ✅ active | — | 2 | 106 | — | |
 | `_audit_xau_label_provenance2_20260823.py` | ✅ active | — | 2 | 113 | — | |
 | `_audit_xau_label_provenance_20260823.py` | ✅ active | — | 4 | 172 | — | |
+| `_audit_xau_live_fire_20260824.py` | ✅ active | — | 7 | 275 | — | |
 | `_audit_xau_longs_20260807.py` | ✅ active | — | 2 | 106 | — | |
 | `_audit_xau_micro_scaler_20260823.py` | ✅ active | — | 11 | 489 | — | |
 | `_audit_xau_mt5_reconciliation_20260813.py` | ✅ active | — | 5 | 228 | — | |
@@ -716,7 +717,7 @@
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
 | `_mypy_scope.py` | ✅ active | — | 2 | 51 | — | |
 | `_reconcile_zombie_4454299643_20260807.py` | ✅ active | — | 3 | 200 | — | |
-| `_shadow_ops_watchdog.py` | ✅ active | — | 6 | 204 | — | |
+| `_shadow_ops_watchdog.py` | ✅ active | — | 6 | 206 | — | |
 | `_train_h1_binary_final.py` | ✅ active | — | 4 | 301 | — | |
 | `_train_h4_binary_final.py` | ✅ active | — | 4 | 303 | — | |
 | `_train_m15_binary_final.py` | ✅ active | — | 4 | 284 | — | |
@@ -1050,6 +1051,7 @@
 | `dataset_builder_d1.py` | ✅ active | — | 6 | 452 | — | |
 | `download_mt5_ohlc.py` | ✅ active | — | 2 | 116 | — | |
 | `e2e_pipeline_validation.py` | ✅ active | — | 9 | 538 | — | |
+| `emit_micro_scaler_v2_raw_trigger.py` | ✅ active | _RawP90Stats | 3 | 152 | — | |
 | `emit_micro_scaler_v2_trigger.py` | ✅ active | — | 1 | 84 | — | |
 | `eval_alignment.py` | ✅ active | — | 9 | 318 | — | |
 | `eval_ensemble_baselines.py` | ✅ active | — | 2 | 147 | — | |
@@ -1088,7 +1090,7 @@
 | `train_meta_filter.py` | ✅ active | — | 5 | 332 | — | |
 | `train_meta_model.py` | ✅ active | — | 6 | 384 | — | |
 | `train_micro_scaler_v1.py` | ✅ active | — | 11 | 485 | — | |
-| `train_micro_scaler_v2.py` | ✅ active | — | 10 | 711 | — | |
+| `train_micro_scaler_v2.py` | ✅ active | — | 10 | 733 | — | |
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |

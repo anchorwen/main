@@ -128,8 +128,10 @@ class ShadowOpsRuntime:
                         "volume": float(lf.get("volume", 0.01)),
                         "cooldown_seconds": float(lf.get("cooldown_seconds", 1500.0)),
                         "max_drawdown_usd": float(lf.get("max_drawdown_usd", 50.0)),
-                        "sl_atr_mult": float(lf.get("sl_atr_mult", 2.0)),
-                        "tp_pred_mult": float(lf.get("tp_pred_mult", 1.0)),
+                        # FIX-20260824-005 (IC 裁决): 对称 1×ATR 括号, 触发源 cal→raw.
+                        # sl_atr_mult/tp_atr_mult 默认 1.0 (对称); tp_pred_mult 键退役.
+                        "sl_atr_mult": float(lf.get("sl_atr_mult", 1.0)),
+                        "tp_atr_mult": float(lf.get("tp_atr_mult", 1.0)),
                         "min_sl_pct": float(lf.get("min_sl_pct", 0.05)),
                         "min_tp_pct": float(lf.get("min_tp_pct", 0.03)),
                         "block_when_positions": bool(lf.get("block_when_positions", True)),

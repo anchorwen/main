@@ -34,7 +34,7 @@ Phase 4 Shadow Ops 暗影接线 (The Wiring Blueprint) — 将 **Micro Scaler v2
 ```
 FeatureService (V9_40, real ticks/bars) → ShadowOpsRuntime.run()  [live_cycle Phase 4 复用同一向量]
   → MicroScalerScorer.predict() → raw_pred_pct → isotonic clip (np.interp) → cal_pred_pct
-  → |cal_pred| ≥ D10 (0.06007%, 动态读 trigger json) → triggered
+  → |raw_pred| ≥ D10 (0.01867%, 动态读 trigger json; FIX-20260824-005 触发源 cal→raw) → triggered
   → ShadowTelemetryLedger (micro_scaler_predictions.jsonl + micro_scaler_shadow_orders.jsonl)
   → venue=shadow_ops / action=OBSERVE (双字段标记 — 任何下游见之必旁路遥测)
   → dispatch chain: shadow_ops_dispatch_filter() 物理拦截 → dispatch_blocks.jsonl → 永不 MT5
@@ -46,7 +46,7 @@ FeatureService (V9_40, real ticks/bars) → ShadowOpsRuntime.run()  [live_cycle 
 |------|------|
 | V9_40 特征向量 (40-dim canonical) | FeatureService (live_cycle Phase 4 复用同一份, 零额外 MT5 调用) |
 | Micro Scaler v2 模型 | `data/training/micro_scaler_v2/micro_scaler_v2_reg.txt` (LightGBM Booster) |
-| Trigger 规格 | `micro_scaler_v2_trigger.json` — Quantile Trigger, \|pred\|≥D10=0.06007%, mandate `FIXED_THRESHOLD_FORBIDDEN` |
+| Trigger 规格 | `micro_scaler_v2_trigger.json` — Quantile Trigger, \|raw pred\|≥D10=0.01867% (FIX-20260824-005), mandate `FIXED_THRESHOLD_FORBIDDEN` |
 | 校准曲线 | `micro_scaler_v2_reg_report.json` (isotonic calibration_curve) |
 | 配置 | `configs/live.yaml` `shadow_ops:` 段 |
 | 契约异常 | `core.contracts.exceptions.DataIntegrityError` (fail-closed) |
@@ -71,6 +71,7 @@ FeatureService (V9_40, real ticks/bars) → ShadowOpsRuntime.run()  [live_cycle 
 ## Fix History
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260824-005 | 2026-08-24 | cursor-agent | (pending) | **FIX-20260824-005 (IC 裁决, 点火前校准): 敢死队执行结构 + 触发语义双修正**. (1) 对称 1×ATR 括号 (SL=TP=1×ATR, RR=1.0): 原 TP=pred 1.0×(~\$1.41) vs SL=2×ATR(~\$13.19) → RR=0.107, 盈亏平衡 WR 90.3% >> OOS 59.46% → EV=-\$4.51/单 (被证伪). dispatcher `tp_pred_mult`→`tp_atr_mult`, config/runtime 键同步默认 1.0. (2) 触发源 cal→raw \|pred\|: Isotonic 平坦区实测触发率 75.6% vs 设计 9.89% → 触发判定改 \|raw\|>=D10, 阈值重导 raw p90=0.01867% (emit 脚本, 池内 10.40%). 规范 mode 固化 `quantile_top_decile_abs_raw_pred` (validator/scorer/watchdog/测试/蓝图同步; 旧 cal 系 trigger.json 构造即 VIOLATION fail-closed). `build_trigger_spec` 强制 raw_p90, train 不再自落 trigger (emit 唯一生产者). G8 对称括号 + G9 raw 触发不变量回归锁. | IC 裁决 — 结构 RR=0.107 负期望 + 校准平坦区触发率 8 倍膨胀 (被脚本证据证伪) |
 | FIX-20260824-004 | 2026-08-24 | cursor-agent | (pending) | **Phase 4.1 Live Fire 敢死队 (投委会方向 B 裁决 2026-08-24 — 真实闭环破局)**: Micro Scaler v2 从纯观察者晋升**单点真实执行** — D10 触发 + Trigger 契约 OK 时, `live_cycle` 模块级函数 `_dispatch_live_fire_micro_scaler` 直接 `dispatch_live_order` (旁路 strategy_line / GodsEye health veto / MetaExit veto / Shadow Veto, 仅敢死队 magic 专属). 物理拆除保护伞, **保留止血带**: 熔断器 `core/runtime/shadow_ops/live_fire_breaker.py` (生死状 max_drawdown_usd=$50, journal 事件溯源 magic=90601 聚合, flag OPEN 即 fail-closed 永久停火) + 单笔 SL/TP (实时 ATR ×2.0 / 预测幅度, 双下限取 max) + 同向冷却 1500s + 有持仓不叠加 + dispatch 链 protection flag / MAX_ALLOWED_LOT_SIZE (下游). 新 magic 90601 `micro_scaler_v2_live_fire` (strategy_magic, 不注册 strategy_line). `configs/live.yaml` shadow_ops.micro_scaler_v2.live_fire 段 (默认 enabled:false — 部署安全, 投委会点火才翻). runtime 暴露 `live_fire_enabled`/`live_fire_config` 只读投影. 每 cycle fail-open (派发故障留痕不打断实盘). tests G5-G8 回归锁 13 (熔断器/开关语义/止血带/真实派发). **§8 红线 3 单点豁免声明**: 仅 `micro_scaler_v2_live_fire` (magic 90601) 例外, 其余 shadow 信号仍零派发. | IC 裁决 — 收盘几乎不能触发, 影子收集不解决根本问题, 方向 B 真实闭环是唯一生路 |
 | FIX-20260824-003 | 2026-08-24 | cursor-agent | c304ac3a | **Phase 4 Shadow Ops 暗影接线 (DEFCON 1, IC 批准 blueprint shadow_ops.md)**: 新 `core/runtime/shadow_ops/` 六模块 (Quantile Trigger 契约 D10=0.06007% 动态读 + LightGBM v2 评分 isotonic clip + 遥测死焊 data/shadow_ops/*.jsonl + Layer-2 派发链熔断) + `live_cycle` Phase 4 单点注入 `ShadowOpsRuntime` (每 cycle 复用同一 V9_40 真实特征向量, 零额外 MT5 调用, fail-open) + `live_order_sender` 入口 Layer-2 物理拦截 + `configs/live.yaml` shadow_ops 段 + `scripts/_shadow_ops_watchdog.py` Layer-3 每日巡检 + 实证锁探针. 实证: 真实 mt5_live V9_40 特征 0.005307 raw → 0.003197 cal → 遥测 ledger; 零穿透 25789 行实盘 journal 扫描 PASS; mandate 0.06007 OK; 构造性隔离 PASS. | RC-06 — contract-violation: 暗影策略无派发链物理熔断 |
 
@@ -107,7 +108,7 @@ dispatch_error / dispatched) 结构化 JSON → stdout + `data/shadow_ops/live_f
 
 ## Cross-Module Contracts
 
-- **Quantile Trigger 契约**: `trigger_mode == "quantile_top_decile_abs_pred"` + `mandate` 含 `FIXED_THRESHOLD_FORBIDDEN`; VIOLATION → 拒出 shadow order (fail-closed), 预测遥测保留。**绝无 fixed threshold fallback** (IC 绝对红线)。
+- **Quantile Trigger 契约**: `trigger_mode == "quantile_top_decile_abs_raw_pred"` (FIX-20260824-005: 触发源 cal→raw |pred|) + `mandate` 含 `FIXED_THRESHOLD_FORBIDDEN`; VIOLATION → 拒出 shadow order (fail-closed), 预测遥测保留。**绝无 fixed threshold fallback** (IC 绝对红线)。旧 cal 系 mode/阈值 trigger.json 构造即 VIOLATION (阈值语义与 raw 判定不兼容)。
 - **Air-Gap 三要素契约**: 生命周期计算点 (live_cycle Phase 4) / Intent Shadow 标记 (venue=shadow_ops + action=OBSERVE) / Dispatcher 物理拦截 (Layer-2 fuse at `dispatch_live_order` 入口)。
 - **三层防御契约** (互为独立): Layer 1 构造性隔离 (import denylist 静态断言) / Layer 2 派发链熔断 / Layer 3 ShadowOpsWatchdog 每日审计。
 - **DEFCON 1 红线**: 任何将 shadow 信号引向派发链的路径 = Sev 1 安全漏洞。Micro Scaler v2 不注册 brain/strategy line/contract group — 无 live 转换路径。
@@ -144,7 +145,7 @@ dispatch_error / dispatched) 结构化 JSON → stdout + `data/shadow_ops/live_f
 | 资产 | 状态 | 证据 |
 |---|---|---|
 | Micro Scaler v2 模型 | `data/training/micro_scaler_v2/micro_scaler_v2_reg.txt` (LightGBM Booster) | `train_micro_scaler_v2.py:511` |
-| Micro Scaler v2 Trigger 规格 | `micro_scaler_v2_trigger.json` — Quantile Trigger, \|pred\|≥D10=0.06007% | `build_trigger_spec` (train L353-385) + 磁盘 |
+| Micro Scaler v2 Trigger 规格 | `micro_scaler_v2_trigger.json` — Quantile Trigger, \|raw pred\|≥D10=0.01867% (FIX-20260824-005) | `emit_micro_scaler_v2_raw_trigger.py` (raw_p90 重导, 唯一生产者) + 磁盘 |
 | Micro Scaler v2 特征契约 | `V9_INSTITUTIONAL_40_FEATURES` (40 维 canonical, 严格全键断言) | `train_micro_scaler_v2.py:170-192` |
 | Micro Scaler v2 运行时消费方 | **零** — 全库仅 emit 脚本与训练脚本引用 | §5.3 grep |
 | MetaExit v3 模型 | `data/models/meta_exit_model_v3_xau.txt` / `data_btc/..._v3_btc.txt` (19-dim) | `path_defaults.py:38-40` |
@@ -225,8 +226,8 @@ ShadowOpsSignal(
    (a) liveness: shadow ledger 在模型应触发时段有信号流, 无静默断流;
    (b) 零真实订单证明: live_trade_journal.jsonl + golden_master 中 ZERO 条带
        shadow_ops 策略归属的真实持仓/订单;
-   (c) trigger json mandate 完整性: trigger_mode=="quantile_top_decile_abs_pred"
-       且 mandate 含 "FIXED_THRESHOLD_FORBIDDEN", 被篡改 → 告警 + 评分器 fail-closed。
+   (c) trigger json mandate 完整性: trigger_mode=="quantile_top_decile_abs_raw_pred"
+       (FIX-20260824-005) 且 mandate 含 "FIXED_THRESHOLD_FORBIDDEN", 被篡改 → 告警 + 评分器 fail-closed。
  违规 → DingTalk 告警 (复用 monitor_dashboard 告警通道)。
  ─────────────────────────────────────────────
 ```
@@ -241,10 +242,10 @@ ShadowOpsSignal(
 当前值 (emit 脚本 stdout 证据, Iron Law #11):
 
 ```
-trigger_mode          : quantile_top_decile_abs_pred
-threshold_abs_pred_pct: 0.06007   (OOS 历史样本 |pred| p90 = D10)
-trigger_rate_pct_oos  : 9.89
-direction_semantics   : sign(pred): LONG if pred>0 else SHORT (幅度排序器)
+trigger_mode          : quantile_top_decile_abs_raw_pred   (FIX-20260824-005)
+threshold_abs_pred_pct: 0.01867   (训练池 raw |pred| p90 = D10, emit 脚本重导)
+trigger_rate_pct_oos  : 9.89     (D10 人口不变, Isotonic 单调; 池内 raw 触发率 ~10%)
+direction_semantics   : sign(cal): LONG if cal>0 else SHORT; 触发基于 raw |pred|
 mandate               : FIXED_THRESHOLD_FORBIDDEN — Quantile Trigger ONLY
 ```
 
@@ -253,20 +254,21 @@ mandate               : FIXED_THRESHOLD_FORBIDDEN — Quantile Trigger ONLY
 1. **启动加载**: 引擎启动时读 trigger json, 加载 threshold / trigger_mode / mandate。
 2. **TTL 刷新**: 每 `trigger_refresh_ttl_seconds` (设计默认 60s) 重读文件 mtime;
    未来重训重发射的 trigger (更高/更低阈值) **无需重启即生效** — 这是"动态"的落点。
-3. **fail-closed 校验**: 若重读发现 `trigger_mode != "quantile_top_decile_abs_pred"`
-   或 `mandate` 字段不含 "FIXED_THRESHOLD_FORBIDDEN" → 评分器**拒绝产生 shadow order**
+3. **fail-closed 校验**: 若重读发现 `trigger_mode != "quantile_top_decile_abs_raw_pred"`
+   (FIX-20260824-005) 或 `mandate` 字段不含 "FIXED_THRESHOLD_FORBIDDEN" → 评分器**拒绝产生 shadow order**
    (保留预测遥测), 输出 `shadow_ops_trigger_contract_violation` 事件 + 告警。
    **绝不允许 fallback 到任何固定阈值** — 这是 IC 绝对红线。
 
 ### 3.3 每 cycle 触发逻辑 (纯函数, 可单测)
 
 ```
-pred      = model.predict(X_v9_40)                    # %
-triggered = abs(pred) >= threshold_abs_pred_pct       # D10 判定
-direction = "long"  if triggered and pred > 0
-          = "short" if triggered and pred < 0
+raw       = model.predict(X_v9_40)                    # % 原始 3-bar 前向收益
+cal       = isotonic_interp(raw)                      # 校准 (仅方向/量纲, 不判触发)
+triggered = abs(raw) >= threshold_abs_pred_pct        # D10 判定 (raw 基底, FIX-20260824-005)
+direction = "long"  if triggered and cal > 0
+          = "short" if triggered and cal < 0
           = "neutral" otherwise                        # 未触发 → 无 shadow order
-decile_est = 10 if triggered else (1..9 by |pred| 桶)  # 仅诊断
+decile_est = 10 if triggered else (1..9 by |raw| 桶)   # 仅诊断
 ```
 
 ### 3.4 触发率预算监控
@@ -293,7 +295,7 @@ data/shadow_ops/
   "time_utc": "...", "symbol": "XAUUSDc",
   "model_id": "micro_scaler_v2", "model_version": "v2_20260824",
   "pred_pct": 0.0088, "abs_pred_pct": 0.0088,
-  "trigger_threshold_pct": 0.06007, "trigger_mode": "quantile_top_decile_abs_pred",
+  "trigger_threshold_pct": 0.01867, "trigger_mode": "quantile_top_decile_abs_raw_pred",
   "triggered": false, "direction": "neutral",
   "feature_schema": "v9_institutional_40", "feature_ts_utc": "...",
   "cycle_count": 12345, "venue": "shadow_ops", "action": "OBSERVE"
@@ -307,7 +309,7 @@ Shadow order schema (triggered=true 时追加):
   "time_utc": "...", "symbol": "XAUUSDc",
   "model_id": "micro_scaler_v2", "model_version": "v2_20260824",
   "pred_pct": 0.07537, "abs_pred_pct": 0.07537,
-  "trigger_threshold_pct": 0.06007, "triggered": true,
+  "trigger_threshold_pct": 0.01867, "triggered": true,
   "direction": "long", "decile_estimate": 10,
   "feature_schema": "v9_institutional_40", "feature_ts_utc": "...",
   "cycle_count": 12345, "venue": "shadow_ops", "action": "OBSERVE"

@@ -64,6 +64,7 @@ from scripts.build_micro_cost_model import (  # noqa: E402
 
 # 切分 SSOT 复用 (V1 同款 ts_purged_split — 同一逻辑单一来源, 不散布)
 from scripts.training.train_micro_scaler_v1 import ts_purged_split  # noqa: E402
+from core.contracts.exceptions import DataIntegrityError  # noqa: E402
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES  # noqa: E402
 from core.training.utils import spearman_rho  # noqa: E402
 
@@ -350,23 +351,39 @@ _TRIGGER_MANDATE = (
 )
 
 
-def build_trigger_spec(report: dict[str, Any]) -> dict[str, Any]:
+def build_trigger_spec(report: dict[str, Any], *, raw_p90: float) -> dict[str, Any]:
     """从 reg_report 派生 Quantile Trigger 规格 (单一来源, emit 脚本复用).
 
-    阈值 = OOS 历史样本 |pred| p90 (与 net_of_cost 门禁同源), direction 由
-    sign(pred) 派生 (幅度排序器). 斜率门禁 FAIL_SLOPE 已被 IC 豁免
-    (2026-08-24 终局裁决) — 状态在此固化, 供未来实盘引擎读取.
+    FIX-20260824-005 (IC 裁决): 触发源必须为 raw |pred|. ``raw_p90`` 必传 =
+    训练池 raw |pred| p90 (由 emit 脚本用已落档 booster 重推, 零 MT5 触碰).
+    Isotonic 单调 → raw/cal 排序同人口, D10 经济原样有效; 仅值域 cal→raw,
+    摆脱校准平坦区台阶吸附 (实测触发率 75.6% → 设计 ~10%).
+
+    direction 由 sign(cal) 派生 (幅度排序器; 单调 → 与 sign(raw) 一致).
+    斜率门禁 FAIL_SLOPE 已被 IC 豁免 (2026-08-24 终局裁决) — 状态在此固化.
+
+    旧 cal 系默认分支 (noc["|pred| p90_pct"] = 0.06007) 已删除 — 该阈值与 raw
+    判定语义不兼容 (raw p90≈0.01867), 是陷阱: 强制 raw_p90 消灭静默错配.
     """
+    if raw_p90 is None:
+        raise DataIntegrityError(
+            "build_trigger_spec: raw_p90 必传 (FIX-20260824-005). "
+            "触发源已固化 raw |pred| — 请用 emit_micro_scaler_v2_raw_trigger.py 派生, "
+            "禁止 cal 系阈值 (原 0.06007 与 raw 判定不兼容)."
+        )
     noc = report["net_of_cost"]
     cal = report["isotonic_calibrated_eval"]["oos"]
     slope_gate = report["calibration_slope_gate"]
+    threshold = round(float(raw_p90), 5)
     return {
         "model_id": "micro_scaler_v2",
         "mode": report.get("mode"),
-        "trigger_mode": "quantile_top_decile_abs_pred",
-        "threshold_abs_pred_pct": noc["|pred| p90_pct"],
+        "trigger_mode": "quantile_top_decile_abs_raw_pred",
+        "threshold_abs_pred_pct": threshold,
         "trigger_rate_pct_oos": noc["top_decile_trigger_rate_pct"],
-        "direction_semantics": "sign(pred): LONG if pred>0 else SHORT (幅度排序器)",
+        "direction_semantics": (
+            "sign(cal): LONG if cal>0 else SHORT; 触发基于 raw |pred| (FIX-20260824-005)"
+        ),
         "economics": {
             "d10_mean_net_pct": noc["top_decile_mean_net_pct"],
             "d10_net_positive_share_pct": noc["top_decile_net_positive_share_pct"],
@@ -381,7 +398,11 @@ def build_trigger_spec(report: dict[str, Any]) -> dict[str, Any]:
         },
         "oos_decile_table": report["oos_decile_table"],
         "mandate": _TRIGGER_MANDATE,
-        "derivation": "derived from micro_scaler_v2_reg_report.json net_of_cost |pred| p90 (OOS 历史样本)",
+        "derivation": (
+            "FIX-20260824-005 IC 裁决: 触发源 cal→raw |pred|. 阈值 = 训练池 raw |pred| "
+            f"p90 ({threshold}%) 重导; Isotonic 单调同人口, D10 经济不变. 原 cal 阈值 "
+            f"{noc['|pred| p90_pct']}% 弃用 (校准平坦区台阶吸附)."
+        ),
     }
 
 
@@ -539,15 +560,16 @@ def run_regression(ds: dict[str, Any], args: argparse.Namespace) -> dict[str, An
     (out_dir / "micro_scaler_v2_reg_report.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
     )
-    # ── IC 部署令 (2026-08-24): Quantile Trigger 规格随报告落档 (禁 Fixed Threshold) ──
-    trigger = build_trigger_spec(report)
-    trigger_path = out_dir / "micro_scaler_v2_trigger.json"
-    trigger_path.write_text(json.dumps(trigger, indent=2) + "\n", encoding="utf-8")
+    # ── Quantile Trigger 落档已迁移至 emit 脚本 (FIX-20260824-005, IC 裁决) ──
+    # 触发源固化 raw |pred|, 阈值 = 训练池 raw |pred| p90. raw_p90 需用已落档
+    # booster 对切分池重推 (emit_micro_scaler_v2_raw_trigger.py, 零 MT5 触碰);
+    # train 不再自落 trigger.json — 单一生产者, 防 cal 系阈值静默错配陷阱.
     print("\n  Artifacts (Shadow Mandate, 零实盘触碰):")
     print(f"    model  : {model_path}")
     print(f"    report : {out_dir / 'micro_scaler_v2_reg_report.json'}")
     print(
-        f"    trigger: {trigger_path}  (Quantile Trigger, |pred|>=D10={trigger['threshold_abs_pred_pct']}%)"
+        "    trigger: 运行 emit_micro_scaler_v2_raw_trigger.py --data-dir <dir> 派生 "
+        "(raw |pred| p90, FIX-20260824-005)"
     )
     return {"raw_oos": oos_raw, "cal_oos": cal_oos, "net": ng, "verdict": verdict}
 

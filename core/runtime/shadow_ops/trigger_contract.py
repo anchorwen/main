@@ -2,6 +2,11 @@
 
 IC 终局裁决 (2026-08-24): Micro Scaler v2 必须且只能采用 Quantile Trigger —
 |pred| 落入历史样本 Top-decile (D10) 才允许 Shadow Order; 绝不允许固定阈值触发.
+FIX-20260824-005 (IC 裁决): 触发源 cal → raw |pred|. Isotonic 校准平坦区将宽范围
+raw 吸附到阈值台阶 (实测触发率 75.6% vs 设计 9.89%, 57% 触发行吸附) → 触发判定
+改比较 raw |pred|. 规范 mode 字符串随之固化 ``quantile_top_decile_abs_raw_pred``;
+旧 cal 系 trigger.json (mode 旧值 + cal 阈值) 构造即 VIOLATION (fail-closed:
+阈值语义与 raw 判定不兼容, 必须由 emit 脚本重导).
 
 契约单一来源 = trigger json (随训练报告落档, emit 脚本派生自已记录 OOS 分布).
 本模块提供:
@@ -21,7 +26,8 @@ from typing import Any
 
 from core.contracts.exceptions import DataIntegrityError
 
-TRIGGER_MODE_QUANTILE = "quantile_top_decile_abs_pred"
+# FIX-20260824-005: 触发源 cal→raw |pred|, mode 字符串随语义固化 (raw 基底).
+TRIGGER_MODE_QUANTILE = "quantile_top_decile_abs_raw_pred"
 MANDATE_SENTINEL = "FIXED_THRESHOLD_FORBIDDEN"
 
 _REQUIRED_FIELDS = (

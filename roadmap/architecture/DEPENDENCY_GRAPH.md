@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-24T14:06:04Z
+> **自动生成**: 2026-08-24T15:24:58Z
 
 ## Package-Level Dependencies
 
@@ -613,6 +613,7 @@
 - `_audit_xau_label_production_rate_20260823.py` → (无内部依赖)
 - `_audit_xau_label_provenance2_20260823.py` → (无内部依赖)
 - `_audit_xau_label_provenance_20260823.py` → (无内部依赖)
+- `_audit_xau_live_fire_20260824.py` → (无内部依赖)
 - `_audit_xau_longs_20260807.py` → (无内部依赖)
 - `_audit_xau_micro_scaler_20260823.py` → (无内部依赖)
 - `_audit_xau_mt5_reconciliation_20260813.py` → (无内部依赖)
@@ -944,6 +945,7 @@
 - `dataset_builder_d1.py` → `core.features.computers.daily_computer`, `core.features.schemas.daily_swing_schema`
 - `download_mt5_ohlc.py` → (无内部依赖)
 - `e2e_pipeline_validation.py` → `core.contracts.training.label_contract`, `core.features.local_feature_store`, `core.features.schemas.v9_institutional_schema`, `core.features.store_contracts`, `scripts.training.quality_gate`, `scripts.training.recipe_search`, `scripts.training.trainers.xgb_trainer`
+- `emit_micro_scaler_v2_raw_trigger.py` → `core.features.schemas.v9_institutional_schema`, `scripts.build_micro_cost_model`, `scripts.training.train_micro_scaler_v2`
 - `emit_micro_scaler_v2_trigger.py` → `scripts.training.train_micro_scaler_v2`
 - `eval_alignment.py` → (无内部依赖)
 - `eval_ensemble_baselines.py` → (无内部依赖)
@@ -982,7 +984,7 @@
 - `train_meta_filter.py` → (无内部依赖)
 - `train_meta_model.py` → (无内部依赖)
 - `train_micro_scaler_v1.py` → `core.training.utils`, `scripts.build_btc_metafilter_v2_dataset`
-- `train_micro_scaler_v2.py` → `core.features.schemas.v9_institutional_schema`, `core.training.utils`, `scripts.build_micro_cost_model`, `scripts.training.train_micro_scaler_v1`
+- `train_micro_scaler_v2.py` → `core.contracts.exceptions`, `core.features.schemas.v9_institutional_schema`, `core.training.utils`, `scripts.build_micro_cost_model`, `scripts.training.train_micro_scaler_v1`
 - `train_online_init.py` → (无内部依赖)
 - `train_stage2_lgb_pit.py` → (无内部依赖)
 - `train_stage2_mlp_pit.py` → `core.brains.online_mlp_model`

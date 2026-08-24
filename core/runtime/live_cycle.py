@@ -1101,7 +1101,7 @@ def _dispatch_live_fire_micro_scaler(
     MetaExit veto / Shadow Veto — 直接由本分支真实派发.
     保留止血带 (绝不可拆):
       * 熔断器 (生死状 max_drawdown_usd) — OPEN 即 fail-closed, 永不派发
-      * 单笔 SL + TP (基于实时 ATR + 模型预测幅度)
+      * 单笔 SL + TP (基于实时 ATR, 对称 1×ATR 括号 FIX-20260824-005)
       * 同方向冷却节流 (cooldown_seconds)
       * 有持仓不叠加 (block_when_positions)
       * dispatch 链 protection flag + MAX_ALLOWED_LOT_SIZE 硬上限 (下游)
@@ -1117,8 +1117,8 @@ def _dispatch_live_fire_micro_scaler(
         _lf_volume = float(lf.get("volume", 0.01))
         _lf_cooldown = float(lf.get("cooldown_seconds", 1500.0))
         _lf_max_dd = float(lf.get("max_drawdown_usd", 50.0))
-        _lf_sl_atr = float(lf.get("sl_atr_mult", 2.0))
-        _lf_tp_pred = float(lf.get("tp_pred_mult", 1.0))
+        _lf_sl_atr = float(lf.get("sl_atr_mult", 1.0))
+        _lf_tp_atr = float(lf.get("tp_atr_mult", 1.0))
         _lf_min_sl_pct = float(lf.get("min_sl_pct", 0.05))
         _lf_min_tp_pct = float(lf.get("min_tp_pct", 0.03))
         _lf_block_pos = bool(lf.get("block_when_positions", True))
@@ -1203,7 +1203,7 @@ def _dispatch_live_fire_micro_scaler(
         return
     _price = _ask if _direction == "long" else _bid
     _sl_dist = max(_lf_sl_atr * _atr, _lf_min_sl_pct / 100.0 * _price)
-    _tp_dist = max(_lf_tp_pred * _pred / 100.0 * _price, _lf_min_tp_pct / 100.0 * _price)
+    _tp_dist = max(_lf_tp_atr * _atr, _lf_min_tp_pct / 100.0 * _price)
     if _direction == "long":
         _sl, _tp = _price - _sl_dist, _price + _tp_dist
     else:

@@ -39,7 +39,8 @@ def _write_trigger_spec(path: Path, **overrides: Any) -> dict[str, Any]:
     spec: dict[str, Any] = {
         "model_id": "micro_scaler_v2",
         "mode": "regression_forward3bar",
-        "trigger_mode": "quantile_top_decile_abs_pred",
+        # FIX-20260824-005: 触发源 cal→raw |pred| (规范 mode 固化)
+        "trigger_mode": "quantile_top_decile_abs_raw_pred",
         "threshold_abs_pred_pct": 0.06007,
         "trigger_rate_pct_oos": 9.89,
         "direction_semantics": "sign(pred): LONG if pred>0 else SHORT",
@@ -154,7 +155,7 @@ def test_g1_signal_markers_welded_to_telemetry():
     )
     assert rec["venue"] == "shadow_ops"
     assert rec["action"] == "OBSERVE"
-    assert rec["trigger_mode"] == "quantile_top_decile_abs_pred"
+    assert rec["trigger_mode"] == "quantile_top_decile_abs_raw_pred"
     order = sig.to_shadow_order_record(
         time_utc="2026-08-24T10:00:00Z",
         symbol="XAUUSDc",
@@ -287,7 +288,9 @@ def test_g4_runtime_end_to_end(tmp_path):
     assert rt.enabled is True
     diag = rt.describe()
     assert diag["model_version"] == "v2_20260824"
-    assert diag["threshold_abs_pred_pct"] == pytest.approx(0.06007)
+    # FIX-20260824-005: 阈值从 trigger.json 实读 (raw |pred| p90, 抗未来重训)
+    expected_thr = json.loads(trigger_path.read_text(encoding="utf-8"))["threshold_abs_pred_pct"]
+    assert diag["threshold_abs_pred_pct"] == pytest.approx(float(expected_thr))
 
     # 真实 V9_40 向量 → run()
     vec = np.zeros(40, dtype=np.float64)
@@ -310,7 +313,7 @@ def test_g4_runtime_end_to_end(tmp_path):
     assert r["symbol"] == "XAUUSDc"
     assert r["cycle_count"] == 7
     assert r["feature_schema"] == "v9_institutional_40"
-    assert r["trigger_mode"] == "quantile_top_decile_abs_pred"
+    assert r["trigger_mode"] == "quantile_top_decile_abs_raw_pred"
     assert isinstance(r["pred_pct"], float) and math.isfinite(r["pred_pct"])
     assert isinstance(r["abs_pred_pct"], float) and math.isfinite(r["abs_pred_pct"])
 

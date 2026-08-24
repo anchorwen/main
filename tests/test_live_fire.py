@@ -9,10 +9,12 @@ core/runtime/shadow_ops/runtime.py live_fire 开关 (默认 False).
   G6 开关语义 — ShadowOpsRuntime 默认 disabled → live_fire_enabled False, config {}
   G7 止血带   — breaker OPEN / cooldown / 有持仓 / 无价格 → skip, 零派发
   G8 真实派发 — 正常 D10 信号 → dispatch_live_order 调用 + 事件落盘 + 节流时间戳
+  G9 触发语义 — FIX-20260824-005: 触发判定基于 raw |pred| (非校准 cal). 真实
+                模型 + 真实 trigger + 真实特征行, 断言 triggered == (abs(raw)>=thr).
 
 红线: 熔断器 OPEN 即 fail-closed (永久停火); 敢死队 payload 无 shadow 标记
 (strategy="micro_scaler_v2_live_fire" 无 "shadow_ops_" 前缀) → Layer-2 fuse 放行;
-单笔 SL/TP 永远在场 (ATR 或 % 双下限取 max).
+单笔 SL/TP 永远在场 (ATR 或 % 双下限取 max, FIX-20260824-005 对称 1×ATR).
 """
 
 from __future__ import annotations
@@ -33,8 +35,10 @@ _LF_CONFIG: dict[str, Any] = {
     "volume": 0.01,
     "cooldown_seconds": 1500.0,
     "max_drawdown_usd": 50.0,
-    "sl_atr_mult": 2.0,
-    "tp_pred_mult": 1.0,
+    # FIX-20260824-005 (IC 裁决): 对称 1×ATR 括号 (SL=TP=1×ATR).
+    # 原 tp_pred_mult (pred 0.08%×2000.5=$1.6) vs sl 2×ATR ($5.0) → RR=0.32 被证伪.
+    "sl_atr_mult": 1.0,
+    "tp_atr_mult": 1.0,
     "min_sl_pct": 0.05,
     "min_tp_pct": 0.03,
     "block_when_positions": True,
@@ -243,9 +247,10 @@ def test_g8_dispatches_real_order_with_sl_tp(tmp_path):
     assert pl["magic"] == 90601
     assert pl["volume"] == 0.01
     assert pl["strategy"] == "micro_scaler_v2_live_fire"  # 无 shadow_ops_ 前缀 → fuse 放行
-    # XAU: price=2000.5(ask), atr=2.5 → sl_dist=max(5.0, 1.0)=5.0; tp_dist=max(1.6, 0.6)=1.6
-    assert pl["sl"] == pytest.approx(1995.5)
-    assert pl["tp"] == pytest.approx(2002.1)
+    # XAU: price=2000.5(ask), atr=2.5 → sl_dist=max(2.5, 1.0)=2.5; tp_dist=max(2.5, 0.6)=2.5
+    # (FIX-20260824-005 对称 1×ATR 括号, RR=1.0)
+    assert pl["sl"] == pytest.approx(1998.0)
+    assert pl["tp"] == pytest.approx(2003.0)
 
     ev = [e for e in _events(tmp_path) if e["reason"] == "dispatched"]
     assert len(ev) == 1
@@ -268,6 +273,102 @@ def test_g8_short_direction_uses_bid_price(tmp_path):
         m_dispatch.assert_called_once()
     pl: dict[str, Any] = m_dispatch.call_args.kwargs["execution_payload"]
     assert pl["side"] == "short"
-    # short: price=bid=1999.5 → sl=+5.0 → 2004.5, tp=-1.6 → 1997.9
-    assert pl["sl"] == pytest.approx(2004.5)
-    assert pl["tp"] == pytest.approx(1997.9)
+    # short: price=bid=1999.5 → sl=+2.5 → 2002.0, tp=-2.5 → 1997.0
+    # (FIX-20260824-005 对称 1×ATR 括号)
+    assert pl["sl"] == pytest.approx(2002.0)
+    assert pl["tp"] == pytest.approx(1997.0)
+
+
+# ────────────────────────────────────────────────────────────────────
+# G9 — 触发语义回归锁 (FIX-20260824-005: raw |pred| 触发, 非校准 cal)
+# ────────────────────────────────────────────────────────────────────
+def _load_real_feature_vectors(max_rows: int = 600) -> list[list[float]]:
+    """从真实 XAU M5 特征库加载 current-gen v9_40 向量 (G9 回归用).
+
+    与 emit 脚本同源过滤: schema_name == v9_institutional_40 + 40 全字段 + 无 NaN.
+    """
+    from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+    fs = (
+        REPO_ROOT
+        / "data"
+        / "feature_store"
+        / "records"
+        / "symbol=XAUUSDc"
+        / "timeframe=M5"
+        / "features.jsonl"
+    )
+    if not fs.exists():
+        return []
+    names = list(V9_INSTITUTIONAL_40_FEATURES)
+    canon = set(names)
+    vecs: list[list[float]] = []
+    for line in fs.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if rec.get("schema_name") != "v9_institutional_40":
+            continue
+        vals = rec.get("values", {})
+        if not canon.issubset(vals.keys()):
+            continue
+        vec = [float(vals[nm]) for nm in names]
+        if any(v != v for v in vec):  # NaN 行剔除
+            continue
+        vecs.append(vec)
+        if len(vecs) >= max_rows:
+            break
+    return vecs
+
+
+def test_g9_scorer_trigger_is_raw_pred_based(tmp_path):
+    """触发判定 = raw |pred| >= 阈值 (FIX-20260824-005, IC 裁决).
+
+    回归锁: 若未来有人把 scorer 触发改回 abs(cal) >= threshold, 在 Isotonic
+    平坦区 (raw∈[0.0015,0.0478] → cal=0.06007 台阶吸附) 存在真实行 abs(cal)>=阈值
+    而 abs(raw)<阈值 → 不变量破裂 → 本测试 FAIL. 真实模型 + 真实 trigger + 真实特征.
+    """
+    from core.runtime.shadow_ops.micro_scaler_scorer import MicroScalerScorer
+    from core.runtime.shadow_ops.trigger_contract import TriggerContract
+
+    model_path = REPO_ROOT / "data" / "training" / "micro_scaler_v2" / "micro_scaler_v2_reg.txt"
+    trigger_path = (
+        REPO_ROOT / "data" / "training" / "micro_scaler_v2" / "micro_scaler_v2_trigger.json"
+    )
+    report_path = (
+        REPO_ROOT / "data" / "training" / "micro_scaler_v2" / "micro_scaler_v2_reg_report.json"
+    )
+    if not (model_path.exists() and trigger_path.exists() and report_path.exists()):
+        pytest.skip("model/trigger/report artifacts missing (无数据基线)")
+    vecs = _load_real_feature_vectors()
+    if not vecs:
+        pytest.skip("no current-gen v9_40 feature rows")
+
+    scorer = MicroScalerScorer(
+        model_path=model_path,
+        trigger=TriggerContract(trigger_path, ttl_seconds=60),
+        calibration_report_path=report_path,
+        feature_schema="v9_institutional_40",
+    )
+    threshold = float(
+        json.loads(trigger_path.read_text(encoding="utf-8"))["threshold_abs_pred_pct"]
+    )
+    assert threshold > 0.0
+
+    n_above = n_below = 0
+    for vec in vecs:
+        sig = scorer.predict(vec)
+        expected = abs(sig.raw_pred_pct) >= threshold
+        assert sig.triggered == expected, (
+            f"trigger 语义破裂: raw={sig.raw_pred_pct:.6f} cal={sig.pred_pct:.6f} "
+            f"thr={threshold} triggered={sig.triggered} expected={expected}"
+        )
+        if abs(sig.raw_pred_pct) >= threshold:
+            n_above += 1
+        else:
+            n_below += 1
+    assert n_above > 0 and n_below > 0, "特征池未覆盖阈值两侧 (触发率异常)"

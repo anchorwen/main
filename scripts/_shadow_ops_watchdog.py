@@ -5,7 +5,8 @@
   (a) liveness: shadow 遥测 ledger 有信号流, 无静默断流;
   (b) 零真实订单证明: live_trade_journal / golden_master 中 ZERO 条带
       shadow_ops 策略归属的真实持仓/订单;
-  (c) trigger json mandate 完整性: trigger_mode==quantile_top_decile_abs_pred
+  (c) trigger json mandate 完整性: trigger_mode==quantile_top_decile_abs_raw_pred
+      (FIX-20260824-005: 触发源 cal→raw |pred|, mode 随语义固化)
       且 mandate 含 "FIXED_THRESHOLD_FORBIDDEN" — 被篡改 → CRITICAL.
 
 用法:
@@ -113,8 +114,9 @@ def _check_mandate_integrity(trigger_path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as exc:
         return {"status": "CRITICAL", "detail": f"trigger json 解析失败: {exc!r}"}
     problems: list[str] = []
-    if spec.get("trigger_mode") != "quantile_top_decile_abs_pred":
-        problems.append("trigger_mode != quantile_top_decile_abs_pred")
+    # FIX-20260824-005: 规范 mode = raw 基底; 旧 cal 系 mode → 判 CRITICAL (阈值语义错配)
+    if spec.get("trigger_mode") != "quantile_top_decile_abs_raw_pred":
+        problems.append("trigger_mode != quantile_top_decile_abs_raw_pred")
     if "FIXED_THRESHOLD_FORBIDDEN" not in str(spec.get("mandate", "")):
         problems.append("mandate 缺 FIXED_THRESHOLD_FORBIDDEN")
     thr = spec.get("threshold_abs_pred_pct")

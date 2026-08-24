@@ -3,7 +3,8 @@
 推理链路 (与训练语义严格对齐, 防 train/serve skew):
   raw = booster.predict(X_40)        # 原始 3-bar 前向收益 (%)
   cal = isotonic_interp(raw)         # reg_report calibration_curve (np.interp, clip)
-  triggered = |cal| >= D10 threshold # 阈值派生自已校准 OOS 预测分布
+  triggered = |raw| >= D10 threshold # FIX-20260824-005: 触发源 cal→raw (IC 裁决,
+                                     #   校准平坦区台阶吸附 → 实测触发率 75.6%)
   direction = sign(cal): LONG if >0 else SHORT (幅度排序器); 未触发 → neutral
 
 输出 ``ShadowOpsSignal`` (venue="shadow_ops" + action="OBSERVE") — 双字段标记,
@@ -21,7 +22,11 @@ import numpy as np
 
 from core.contracts.exceptions import DataIntegrityError
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
-from core.runtime.shadow_ops.trigger_contract import TriggerContract, TriggerContractState
+from core.runtime.shadow_ops.trigger_contract import (
+    TRIGGER_MODE_QUANTILE,
+    TriggerContract,
+    TriggerContractState,
+)
 
 FEATURE_SCHEMA_V9_40 = "v9_institutional_40"
 _EXPECTED_DIM = 40
@@ -65,7 +70,7 @@ class ShadowOpsSignal:
             "raw_pred_pct": round(self.raw_pred_pct, 6),
             "abs_pred_pct": round(self.abs_pred_pct, 6),
             "trigger_threshold_pct": self.threshold_abs_pred_pct,
-            "trigger_mode": "quantile_top_decile_abs_pred",
+            "trigger_mode": TRIGGER_MODE_QUANTILE,  # FIX-20260824-005 raw 基底
             "triggered": self.triggered,
             "direction": self.direction,
             "feature_schema": self.feature_schema,
@@ -182,7 +187,11 @@ class MicroScalerScorer:
         state = contract_state if contract_state is not None else self._trigger.state
         contract_ok = state == TriggerContractState.OK
         threshold = self._trigger.threshold_abs_pred_pct() if contract_ok else None
-        triggered = threshold is not None and abs(cal) >= threshold
+        # FIX-20260824-005 (IC 裁决 2026-08-24): 触发源 cal → raw |pred|.
+        # Isotonic 校准在窄训练池上产生大台阶 (raw∈[0.0015,0.0478] 全映射 0.06007),
+        # 导致实测触发率 75.6% vs 设计 9.89%, 57% 触发行吸附在阈值台阶. raw 为连续量,
+        # |raw|>=D10 阈值恢复 top-decile 语义. Isotonic 单调 → 触发人口不变, D10 经济有效.
+        triggered = threshold is not None and abs(raw) >= threshold
 
         if triggered and cal > 0:
             direction = "long"
@@ -191,11 +200,11 @@ class MicroScalerScorer:
         else:
             direction = "neutral"
 
-        # decile_estimate (仅诊断): 触发 → 10; 未触发 → 按 |cal|/threshold 粗估 1..9
+        # decile_estimate (仅诊断): 触发 → 10; 未触发 → 按 |raw|/threshold 粗估 1..9
         if triggered:
             decile_est = 10
         elif threshold is not None and threshold > 0.0:
-            decile_est = max(1, min(9, int(abs(cal) / threshold * 10.0)))
+            decile_est = max(1, min(9, int(abs(raw) / threshold * 10.0)))
         else:
             decile_est = 0
 
