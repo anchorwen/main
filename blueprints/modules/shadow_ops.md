@@ -71,7 +71,7 @@ FeatureService (V9_40, real ticks/bars) → ShadowOpsRuntime.run()  [live_cycle 
 ## Fix History
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260824-003 | 2026-08-24 | cursor-agent | — | **Phase 4 Shadow Ops 暗影接线 (DEFCON 1, IC 批准 blueprint shadow_ops.md)**: 新 `core/runtime/shadow_ops/` 六模块 (Quantile Trigger 契约 D10=0.06007% 动态读 + LightGBM v2 评分 isotonic clip + 遥测死焊 data/shadow_ops/*.jsonl + Layer-2 派发链熔断) + `live_cycle` Phase 4 单点注入 `ShadowOpsRuntime` (每 cycle 复用同一 V9_40 真实特征向量, 零额外 MT5 调用, fail-open) + `live_order_sender` 入口 Layer-2 物理拦截 + `configs/live.yaml` shadow_ops 段 + `scripts/_shadow_ops_watchdog.py` Layer-3 每日巡检 + 实证锁探针. 实证: 真实 mt5_live V9_40 特征 0.005307 raw → 0.003197 cal → 遥测 ledger; 零穿透 25789 行实盘 journal 扫描 PASS; mandate 0.06007 OK; 构造性隔离 PASS. | RC-06 — contract-violation: 暗影策略无派发链物理熔断 |
+| FIX-20260824-003 | 2026-08-24 | cursor-agent | c304ac3a | **Phase 4 Shadow Ops 暗影接线 (DEFCON 1, IC 批准 blueprint shadow_ops.md)**: 新 `core/runtime/shadow_ops/` 六模块 (Quantile Trigger 契约 D10=0.06007% 动态读 + LightGBM v2 评分 isotonic clip + 遥测死焊 data/shadow_ops/*.jsonl + Layer-2 派发链熔断) + `live_cycle` Phase 4 单点注入 `ShadowOpsRuntime` (每 cycle 复用同一 V9_40 真实特征向量, 零额外 MT5 调用, fail-open) + `live_order_sender` 入口 Layer-2 物理拦截 + `configs/live.yaml` shadow_ops 段 + `scripts/_shadow_ops_watchdog.py` Layer-3 每日巡检 + 实证锁探针. 实证: 真实 mt5_live V9_40 特征 0.005307 raw → 0.003197 cal → 遥测 ledger; 零穿透 25789 行实盘 journal 扫描 PASS; mandate 0.06007 OK; 构造性隔离 PASS. | RC-06 — contract-violation: 暗影策略无派发链物理熔断 |
 
 ## Cross-Module Contracts
 
