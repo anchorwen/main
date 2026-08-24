@@ -71,7 +71,39 @@ FeatureService (V9_40, real ticks/bars) → ShadowOpsRuntime.run()  [live_cycle 
 ## Fix History
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260824-004 | 2026-08-24 | cursor-agent | (pending) | **Phase 4.1 Live Fire 敢死队 (投委会方向 B 裁决 2026-08-24 — 真实闭环破局)**: Micro Scaler v2 从纯观察者晋升**单点真实执行** — D10 触发 + Trigger 契约 OK 时, `live_cycle` 模块级函数 `_dispatch_live_fire_micro_scaler` 直接 `dispatch_live_order` (旁路 strategy_line / GodsEye health veto / MetaExit veto / Shadow Veto, 仅敢死队 magic 专属). 物理拆除保护伞, **保留止血带**: 熔断器 `core/runtime/shadow_ops/live_fire_breaker.py` (生死状 max_drawdown_usd=$50, journal 事件溯源 magic=90601 聚合, flag OPEN 即 fail-closed 永久停火) + 单笔 SL/TP (实时 ATR ×2.0 / 预测幅度, 双下限取 max) + 同向冷却 1500s + 有持仓不叠加 + dispatch 链 protection flag / MAX_ALLOWED_LOT_SIZE (下游). 新 magic 90601 `micro_scaler_v2_live_fire` (strategy_magic, 不注册 strategy_line). `configs/live.yaml` shadow_ops.micro_scaler_v2.live_fire 段 (默认 enabled:false — 部署安全, 投委会点火才翻). runtime 暴露 `live_fire_enabled`/`live_fire_config` 只读投影. 每 cycle fail-open (派发故障留痕不打断实盘). tests G5-G8 回归锁 13 (熔断器/开关语义/止血带/真实派发). **§8 红线 3 单点豁免声明**: 仅 `micro_scaler_v2_live_fire` (magic 90601) 例外, 其余 shadow 信号仍零派发. | IC 裁决 — 收盘几乎不能触发, 影子收集不解决根本问题, 方向 B 真实闭环是唯一生路 |
 | FIX-20260824-003 | 2026-08-24 | cursor-agent | c304ac3a | **Phase 4 Shadow Ops 暗影接线 (DEFCON 1, IC 批准 blueprint shadow_ops.md)**: 新 `core/runtime/shadow_ops/` 六模块 (Quantile Trigger 契约 D10=0.06007% 动态读 + LightGBM v2 评分 isotonic clip + 遥测死焊 data/shadow_ops/*.jsonl + Layer-2 派发链熔断) + `live_cycle` Phase 4 单点注入 `ShadowOpsRuntime` (每 cycle 复用同一 V9_40 真实特征向量, 零额外 MT5 调用, fail-open) + `live_order_sender` 入口 Layer-2 物理拦截 + `configs/live.yaml` shadow_ops 段 + `scripts/_shadow_ops_watchdog.py` Layer-3 每日巡检 + 实证锁探针. 实证: 真实 mt5_live V9_40 特征 0.005307 raw → 0.003197 cal → 遥测 ledger; 零穿透 25789 行实盘 journal 扫描 PASS; mandate 0.06007 OK; 构造性隔离 PASS. | RC-06 — contract-violation: 暗影策略无派发链物理熔断 |
+
+## Phase 4.1 Live Fire 敢死队 (投委会方向 B 裁决 2026-08-24)
+
+**背景**: 系统 30+ 天几乎零真实开单 → 无真实标签 → 无法验证/改进 → 更不信任 → 门禁更严的死循环。
+投委会裁决: **全面启动方向 B (真实闭环)** — 选 XAU Micro Scaler v2 为敢死队, 物理拆除全局保护伞,
+签生死状 (max drawdown = 5000 美分 = $50, 3 个月不拔插头)。
+
+**执行语义** (与 DEFCON 1 的共存):
+- D10 触发 + Trigger 契约 OK → 敢死队真实派发 (不再是 shadow order)。这是 §8 红线 3 的**唯一 IC 豁免**。
+- 旁路: strategy_line / GodsEye 0.55 health veto / MetaExit intervention / Shadow Veto — 物理拆除。
+- 保留止血带 (绝不可拆, 见下表): 熔断器 / SL+TP / 同向冷却 / 有持仓不叠加 / 下游 protection flag。
+
+| 止血带 | 实现 | 语义 |
+|---|---|---|
+| 🩸 生死状熔断器 | `live_fire_breaker.py` `evaluate_drawdown()` — journal 事件溯源 (magic=90601 + action=close + pnl 非空) 累计已实现 PnL ≤ −$50 → `live_fire_breaker.flag` (幂等, 保留首熔断时间) | flag 存在 = **fail-closed 永久停火**, 人工裁决删 flag |
+| 🩸 单笔 SL/TP | `sl_dist=max(ATR×2.0, 0.05%×price)`, `tp_dist=max(pred×1.0, 0.03%×price)`, 实时 ATR/price | 单笔敞口物理封顶, 无实时价格/ATR 不开单 |
+| 🩸 同向冷却 | `state._live_fire_last_open[side]` + `cooldown_seconds=1500` | 防同向连击 |
+| 🩸 有持仓不叠加 | `broker.count_positions()>0 → skip` (查询失败保守跳过) | 防叠加 |
+| 🩸 下游防线 | dispatch 链 protection flag + `MAX_ALLOWED_LOT_SIZE` blast limit + `SENTINEL_UNATTRIBUTED_MAGIC` (90601≠90401) | defense-in-depth |
+
+**事件审计**: 每个决策点 (skip_breaker_open / skip_cooldown / skip_position_open / skip_no_price /
+dispatch_error / dispatched) 结构化 JSON → stdout + `data/shadow_ops/live_fire_events.jsonl`
+(Repairability: watchdog 可直接审计敢死队行为)。
+
+**Layer 约束**:
+- 敢死队派发逻辑在 `live_cycle.py` **模块级函数** (非 shadow_ops 包内) — Layer-1 import denylist 静态断言仍成立。
+- 熔断器 `live_fire_breaker.py` 在 shadow_ops 包内但**仅 stdlib import** (与 denylist 兼容, 无派发能力)。
+- runtime 只暴露 `live_fire_enabled`/`live_fire_config` 只读开关 — 配置解析, 不派发。
+
+**点火流程**: `configs/live.yaml` → `shadow_ops.micro_scaler_v2.live_fire.enabled: true` → 重启 → 敢死队开火。
+默认 **false** — 部署全程零真实派发风险。
 
 ## Cross-Module Contracts
 
@@ -79,6 +111,7 @@ FeatureService (V9_40, real ticks/bars) → ShadowOpsRuntime.run()  [live_cycle 
 - **Air-Gap 三要素契约**: 生命周期计算点 (live_cycle Phase 4) / Intent Shadow 标记 (venue=shadow_ops + action=OBSERVE) / Dispatcher 物理拦截 (Layer-2 fuse at `dispatch_live_order` 入口)。
 - **三层防御契约** (互为独立): Layer 1 构造性隔离 (import denylist 静态断言) / Layer 2 派发链熔断 / Layer 3 ShadowOpsWatchdog 每日审计。
 - **DEFCON 1 红线**: 任何将 shadow 信号引向派发链的路径 = Sev 1 安全漏洞。Micro Scaler v2 不注册 brain/strategy line/contract group — 无 live 转换路径。
+- **Live Fire 敢死队契约 (FIX-20260824-004, IC 豁免)**: `live_cycle` 每 cycle 经 `live_fire_enabled` + D10 信号决定派发; 熔断器 flag 存在 = fail-closed 永久停火; 单笔 SL/TP 永远在场; 同向冷却 + 有持仓不叠加; 派发失败留痕不打断 cycle。默认 disabled (config live_fire.enabled=false)。
 - **MetaExit v3 防回退断言**: `management_phase.py` 必须保留 `meta_exit_shadow_telemetry` + `close NOT dispatched` 块, 误删 → 引擎启动即拒 (fail-closed)。
 
 ## Verification
@@ -95,6 +128,11 @@ FeatureService (V9_40, real ticks/bars) → ShadowOpsRuntime.run()  [live_cycle 
 投委会终局裁决 (2026-08-24) 已豁免 Micro Scaler v2 的 [0.9,1.1] 校准斜率门禁并晋升 SHADOW
 (FIX-20260824-002)。Phase 4 将其与 MetaExit v3 接入实盘执行引擎——**不是让它们交易, 而是让它们
 在真实时间流里消费真实的 Tick/Bar, 计算实时预测与 Trigger, 输出端焊死暗影遥测**。
+
+**方向 B 裁决 (FIX-20260824-004)**: 同日投委会加码 — 影子收集不解决"收盘几乎不能触发"的死循环,
+全面启动**真实闭环**。Micro Scaler v2 晋升敢死队 (`micro_scaler_v2_live_fire`, magic 90601),
+经 live_cycle 旁路分支真实派发, 以生死状熔断器 ($50) + SL/TP 兜底, 用真金白银换真实标签。
+详见 §Phase 4.1。
 
 风控 DEFCON 1 的语义: 任何一处把 shadow 信号引向派发链的路径, 都视为 Sev 1 安全漏洞。
 蓝图以**双重独立气隙 + 可证伪的零真实订单断言**保证绝对隔离。
@@ -347,11 +385,17 @@ shadow_ops:
 ## 8. 明确禁区 (DEFCON 1 红线)
 
 1. ⛔ 评分器 import 黑名单 (zmq / mt5_bridge_worker / live_order_sender / CommunicationDispatcher /
-   execution_queue / live_execution_contract / dispatch_context) — 静态强制。
+   execution_queue / live_execution_contract / dispatch_context) — 静态强制。**豁免**: 派发逻辑在
+   live_cycle 模块级函数 (包外), 包内仅新增 stdlib-only 熔断器 `live_fire_breaker.py`。
 2. ⛔ Micro Scaler v2 绝无 fixed threshold 触发路径 — `mandate` 校验 fail-closed。
 3. ⛔ 不注册 brain / strategy line / contract group — 无晋升机制, 无 live 转换路径。
+   **FIX-20260824-004 单点豁免 (IC 裁决 2026-08-24 方向 B)**: 仅 `micro_scaler_v2_live_fire`
+   (magic 90601) 经 live_cycle 敢死队分支真实派发 — 物理拆除全局保护伞 (旁路 strategy_line/
+   GodsEye/MetaExit/veto), **保留生死状熔断器 + SL/TP + 同向冷却 + 有持仓不叠加**。
+   其余 shadow 信号仍零派发 (DEFCON 1 语义不变)。
 4. ⛔ MetaExit v3 绝无 dispatch close — 防回退断言。
 5. ⛔ shadow_ops 遥测绝不写入 live_trade_journal / golden_master (独立 ledger, 防污染实盘分析)。
+   **豁免**: 敢死队真实派发单 (magic 90601) 经正规 journal 通道入账 — 熔断器事件溯源聚合依赖此账。
 
 ---
 

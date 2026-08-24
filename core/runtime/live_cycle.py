@@ -364,6 +364,8 @@ class LiveCycleState:
     correlation_tracker: Any = None  # GroupCorrelationTracker (set by caller)
     # ── Phase 4 Shadow Ops (DEFCON 1): 暗影评分运行时 (lazily built, telemetry only) ──
     _shadow_ops_runtime: Any = None  # ShadowOpsRuntime — never dispatches (set by Phase 4)
+    # ── FIX-20260824-004: 敢死队 (Micro Scaler v2 live-fire) 同方向节流时间戳 ──
+    _live_fire_last_open: dict[str, float] = field(default_factory=dict)  # {direction: unix_ts}
     _shadow_ops_init_done: bool = False
     shadow_verification_pending: dict[str, Any] | None = (
         None  # prev-cycle shadow decision for counterfactual settlement
@@ -1045,6 +1047,225 @@ def _evaluate_strategy_lines(
         blocked_entry_hours=blocked_entry_hours,
         # ── DQAF-20260709-002 (entry-phase) ──
         cross_strategy_coordinator=cross_strategy_coordinator,
+    )
+
+
+# ── Live Fire 敢死队 (FIX-20260824-004, 投委会方向 B 裁决) ────────────────
+
+
+def _emit_live_fire_event(
+    base_dir: str,
+    *,
+    reason: str,
+    direction: str,
+    pred_pct: float,
+    magic: int,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """敢死队决策/派发事件 — 结构化 print + 落 data/shadow_ops/live_fire_events.jsonl.
+
+    审计面 (Repairability): 每次 skip 原因与派发结果全留痕, watchdog 可读.
+    I/O 故障绝不打断实盘 cycle (BLE001:FOG).
+    """
+    rec = {
+        "event": "live_fire",
+        "time_utc": _utc_iso(),
+        "reason": reason,
+        "direction": direction,
+        "pred_pct": round(float(pred_pct), 6),
+        "magic": int(magic),
+    }
+    if extra:
+        rec.update(extra)
+    print(json.dumps(rec, ensure_ascii=False), flush=True)
+    try:
+        _lf_dir = Path(base_dir) / "shadow_ops"
+        _lf_dir.mkdir(parents=True, exist_ok=True)
+        with open(_lf_dir / "live_fire_events.jsonl", "a", encoding="utf-8") as _fh:
+            _fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001  # BLE001:FOG — 审计 I/O 失败不打断 cycle
+        pass
+
+
+def _dispatch_live_fire_micro_scaler(
+    config: LiveCycleConfig,
+    state: LiveCycleState,
+    *,
+    broker: Any,
+    signal: Any,
+    so_runtime: Any,
+) -> None:
+    """敢死队 live-fire: Micro Scaler v2 D10 触发信号 → XAU 真实订单 (投委会方向 B).
+
+    物理拆除保护伞 (仅敢死队 magic 专属): 旁路 strategy_line / GodsEye health /
+    MetaExit veto / Shadow Veto — 直接由本分支真实派发.
+    保留止血带 (绝不可拆):
+      * 熔断器 (生死状 max_drawdown_usd) — OPEN 即 fail-closed, 永不派发
+      * 单笔 SL + TP (基于实时 ATR + 模型预测幅度)
+      * 同方向冷却节流 (cooldown_seconds)
+      * 有持仓不叠加 (block_when_positions)
+      * dispatch 链 protection flag + MAX_ALLOWED_LOT_SIZE 硬上限 (下游)
+
+    fail-open 红线: 敢死队派发故障记录后返回, 绝不打断实盘 cycle;
+    但熔断器一旦 OPEN, 敢死队永久停火 (fail-closed).
+    """
+    lf = so_runtime.live_fire_config if hasattr(so_runtime, "live_fire_config") else {}
+    if not isinstance(lf, dict) or not lf:
+        return
+    try:
+        _lf_magic = int(lf.get("magic", 90601))
+        _lf_volume = float(lf.get("volume", 0.01))
+        _lf_cooldown = float(lf.get("cooldown_seconds", 1500.0))
+        _lf_max_dd = float(lf.get("max_drawdown_usd", 50.0))
+        _lf_sl_atr = float(lf.get("sl_atr_mult", 2.0))
+        _lf_tp_pred = float(lf.get("tp_pred_mult", 1.0))
+        _lf_min_sl_pct = float(lf.get("min_sl_pct", 0.05))
+        _lf_min_tp_pct = float(lf.get("min_tp_pct", 0.03))
+        _lf_block_pos = bool(lf.get("block_when_positions", True))
+    except (TypeError, ValueError):
+        return
+
+    _direction = str(getattr(signal, "direction", "neutral"))
+    if _direction not in ("long", "short"):
+        return
+    _pred = abs(float(getattr(signal, "pred_pct", 0.0) or 0.0))
+    _ts = time.time()
+
+    # ── 止血带 1: 熔断器 (生死状) — fail-closed, 永久停火 ──
+    from core.runtime.shadow_ops.live_fire_breaker import is_breaker_open
+
+    if is_breaker_open(config.base_dir):
+        _emit_live_fire_event(
+            config.base_dir,
+            reason="skip_breaker_open",
+            direction=_direction,
+            pred_pct=_pred,
+            magic=_lf_magic,
+            extra={"max_drawdown_usd": _lf_max_dd},
+        )
+        return
+
+    # ── 止血带 2: 节流 (同方向冷却) ──
+    _last = getattr(state, "_live_fire_last_open", None)
+    if not isinstance(_last, dict):
+        _last = {}
+        state._live_fire_last_open = _last
+    _prev = _last.get(_direction)
+    if _prev is not None and (_ts - float(_prev)) < _lf_cooldown:
+        _emit_live_fire_event(
+            config.base_dir,
+            reason="skip_cooldown",
+            direction=_direction,
+            pred_pct=_pred,
+            magic=_lf_magic,
+            extra={"cooldown_seconds": _lf_cooldown},
+        )
+        return
+
+    # ── 止血带 3: 有持仓不叠加 (查询失败 → 保守不开) ──
+    if _lf_block_pos and broker is not None:
+        try:
+            if int(broker.count_positions(config.symbol) or 0) > 0:
+                _emit_live_fire_event(
+                    config.base_dir,
+                    reason="skip_position_open",
+                    direction=_direction,
+                    pred_pct=_pred,
+                    magic=_lf_magic,
+                )
+                return
+        except Exception:  # noqa: BLE001  # BLE001:FOG — 持仓查询失败保守跳过
+            _emit_live_fire_event(
+                config.base_dir,
+                reason="skip_position_query_failed",
+                direction=_direction,
+                pred_pct=_pred,
+                magic=_lf_magic,
+            )
+            return
+
+    # ── 价格 + ATR + SL/TP (无价格/ATR 不开单) ──
+    if broker is None:
+        return
+    try:
+        _mid, _bid, _ask = broker.fetch_prices(config.symbol)
+        _atr = float(broker.fetch_current_atr(config.symbol))
+    except Exception:  # noqa: BLE001  # BLE001:FOG — 无实时价格/ATR 不盲开
+        _emit_live_fire_event(
+            config.base_dir,
+            reason="skip_no_price",
+            direction=_direction,
+            pred_pct=_pred,
+            magic=_lf_magic,
+        )
+        return
+    if not _bid or not _ask or _ask <= _bid:
+        return
+    _price = _ask if _direction == "long" else _bid
+    _sl_dist = max(_lf_sl_atr * _atr, _lf_min_sl_pct / 100.0 * _price)
+    _tp_dist = max(_lf_tp_pred * _pred / 100.0 * _price, _lf_min_tp_pct / 100.0 * _price)
+    if _direction == "long":
+        _sl, _tp = _price - _sl_dist, _price + _tp_dist
+    else:
+        _sl, _tp = _price + _sl_dist, _price - _tp_dist
+    if _sl <= 0 or _tp <= 0:
+        return
+
+    # ── 真实派发 (旁路, 仅敢死队 magic; payload 无 shadow 标记 → 下游熔断放行) ──
+    try:
+        from core.execution.live_order_sender import dispatch_live_order
+
+        _payload: dict[str, Any] = {
+            "action": "open",
+            "side": _direction,
+            "sl": _sl,
+            "tp": _tp,
+            "volume": _lf_volume,
+            "magic": _lf_magic,
+            "strategy": "micro_scaler_v2_live_fire",
+            "comment": f"micro_scaler_v2_live_fire pred={_pred:.4f}%",
+        }
+        _res = dispatch_live_order(
+            base_dir=config.base_dir,
+            broker=None,
+            symbol=config.symbol,
+            execution_payload=_payload,
+            skip_price_guard=True,
+            ignore_protection_flag=config.ignore_protection_flag,
+            protection_flag_path=config.protection_flag_path,
+            adapter_name=config.adapter_name,
+            extensions={
+                "mt5_terminal_path": config.mt5_terminal_path,
+                "zmq_order_endpoint": config.zmq_order_endpoint,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001  # BLE001:FOG — 派发故障留痕, 不打断 cycle
+        _emit_live_fire_event(
+            config.base_dir,
+            reason="dispatch_error",
+            direction=_direction,
+            pred_pct=_pred,
+            magic=_lf_magic,
+            extra={"error": repr(exc)},
+        )
+        return
+
+    _last[_direction] = _ts
+    _emit_live_fire_event(
+        config.base_dir,
+        reason="dispatched",
+        direction=_direction,
+        pred_pct=_pred,
+        magic=_lf_magic,
+        extra={
+            "result_status": str(
+                _res.get("status", _res.get("dispatched", "?") if isinstance(_res, dict) else "?")
+            ),
+            "price": round(float(_price), 3),
+            "sl": round(float(_sl), 3),
+            "tp": round(float(_tp), 3),
+            "volume": _lf_volume,
+        },
     )
 
 
@@ -3380,11 +3601,24 @@ def execute_live_cycle(
     if getattr(state, "_shadow_ops_runtime", None) is not None:
         # fail_open_guard 包裹 (blueprint §5 #7 指定; run() 内部已自带结构化 fail-open
         # BLE001:FOG 事件, 外层 guard 为纯防御纵深 — 任何意外异常绝不打断实盘 cycle)
+        _so_signal = None
         with fail_open_guard("ShadowOpsRuntimeRun"):
-            state._shadow_ops_runtime.run(
+            _so_signal = state._shadow_ops_runtime.run(
                 feature_vector=np.asarray(feature_vector, dtype=np.float64),
                 cycle_count=state.loop_iteration,
                 now_utc=_utc_iso(),
+            )
+        # ── Phase 4.1 Live Fire 敢死队 (投委会方向 B 裁决, FIX-20260824-004) ──
+        # D10 触发信号 → XAU 真实订单 (旁路派发, 拆除全局保护伞, 保留生死状熔断).
+        if _so_signal is not None and getattr(
+            state._shadow_ops_runtime, "live_fire_enabled", False
+        ):
+            _dispatch_live_fire_micro_scaler(
+                config=config,
+                state=state,
+                broker=broker,
+                signal=_so_signal,
+                so_runtime=state._shadow_ops_runtime,
             )
 
     # ── Meta-filter gate + Conformal OU Gate (lazy init on first live cycle) ──

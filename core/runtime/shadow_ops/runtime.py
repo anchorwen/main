@@ -21,7 +21,7 @@ from typing import Any
 import yaml
 
 from core.contracts.exceptions import DataIntegrityError
-from core.runtime.shadow_ops.micro_scaler_scorer import MicroScalerScorer
+from core.runtime.shadow_ops.micro_scaler_scorer import MicroScalerScorer, ShadowOpsSignal
 from core.runtime.shadow_ops.telemetry import ShadowTelemetryLedger
 from core.runtime.shadow_ops.trigger_contract import TriggerContract, TriggerContractState
 
@@ -63,6 +63,9 @@ class ShadowOpsRuntime:
         self._trigger: TriggerContract | None = None
         self._scorer: MicroScalerScorer | None = None
         self._ledger: ShadowTelemetryLedger | None = None
+        # FIX-20260824-004: 敢死队开关/参数 — 默认 disabled (任何 early-return 前已定型)
+        self._live_fire_enabled = False
+        self._live_fire_config: dict[str, Any] = {}
 
         cfg = self._load_shadow_ops_config(config_path)
         if not cfg.get("enabled", False):
@@ -111,10 +114,46 @@ class ShadowOpsRuntime:
         self._ledger = ShadowTelemetryLedger(telemetry_dir_p)
         self._enabled = True
 
+        # ── Live Fire 敢死队 (FIX-20260824-004, 投委会方向 B 裁决) ──
+        # live_fire 为 micro_scaler_v2 子段: 默认 disabled (部署安全),
+        # 投委会点火时 config 置 enabled: true → live_cycle 依据 D10 信号真实派发.
+        # 本模块仅暴露配置与开关 (只读), 派发逻辑在 live_cycle 模块级函数
+        # (Layer-1 import denylist 语义: 本包不 import 派发能力).
+        if isinstance(ms, dict):
+            lf = ms.get("live_fire")
+            if isinstance(lf, dict) and lf.get("enabled", False):
+                try:
+                    self._live_fire_config = {
+                        "magic": int(lf.get("magic", 90601)),
+                        "volume": float(lf.get("volume", 0.01)),
+                        "cooldown_seconds": float(lf.get("cooldown_seconds", 1500.0)),
+                        "max_drawdown_usd": float(lf.get("max_drawdown_usd", 50.0)),
+                        "sl_atr_mult": float(lf.get("sl_atr_mult", 2.0)),
+                        "tp_pred_mult": float(lf.get("tp_pred_mult", 1.0)),
+                        "min_sl_pct": float(lf.get("min_sl_pct", 0.05)),
+                        "min_tp_pct": float(lf.get("min_tp_pct", 0.03)),
+                        "block_when_positions": bool(lf.get("block_when_positions", True)),
+                    }
+                    self._live_fire_enabled = True
+                except (TypeError, ValueError):
+                    # 配置畸形 → 保持 disabled (fail-closed: 不点火畸形敢死队)
+                    self._live_fire_enabled = False
+                    self._live_fire_config = {}
+
     # ── 对外契约 ────────────────────────────────────────────────
     @property
     def enabled(self) -> bool:
         return self._enabled
+
+    @property
+    def live_fire_enabled(self) -> bool:
+        """敢死队点火开关 (live_cycle 每 cycle 读取; 默认 False = 纯影子)."""
+        return self._live_fire_enabled
+
+    @property
+    def live_fire_config(self) -> dict[str, Any]:
+        """敢死队执行参数 (magic/volume/cooldown/生死状/SL·TP). 只读投影."""
+        return dict(self._live_fire_config)
 
     def describe(self) -> dict[str, Any]:
         """诊断快照 (startup/实证锁)."""
@@ -127,6 +166,13 @@ class ShadowOpsRuntime:
                 self._trigger.threshold_abs_pred_pct() if self._trigger is not None else None
             ),
             "telemetry_dir": (str(self._ledger.directory) if self._ledger is not None else None),
+            "live_fire_enabled": self._live_fire_enabled,
+            "live_fire_magic": (
+                self._live_fire_config.get("magic") if self._live_fire_config else None
+            ),
+            "live_fire_max_drawdown_usd": (
+                self._live_fire_config.get("max_drawdown_usd") if self._live_fire_config else None
+            ),
         }
 
     def run(
@@ -136,10 +182,14 @@ class ShadowOpsRuntime:
         cycle_count: int,
         now_utc: str | None = None,
         feature_ts_utc: str | None = None,
-    ) -> None:
+    ) -> ShadowOpsSignal | None:
         """每 cycle 一次: TTL 刷新 → 评分 → Quantile Trigger → 遥测.
 
-        fail-open: 任何遥测/评分故障打印 JSON 事件后返回, 绝不打断实盘 cycle.
+        Returns:
+            D10 触发且契约 OK 的 ``ShadowOpsSignal`` (供 live_cycle 敢死队
+            live-fire 真实派发), 否则 None.
+
+        fail-open: 任何遥测/评分故障打印 JSON 事件后返回 None, 绝不打断实盘 cycle.
         """
         if (
             not self._enabled
@@ -147,7 +197,7 @@ class ShadowOpsRuntime:
             or self._trigger is None
             or self._ledger is None
         ):
-            return
+            return None
         ts = now_utc or _iso_utc_now()
         fts = feature_ts_utc or ts
         try:
@@ -166,7 +216,7 @@ class ShadowOpsRuntime:
                 cycle_count=cycle_count,
             )
             self._ledger.append_prediction(pred_rec)
-            # D10 触发 + 契约 OK → 记 shadow order intent (永不派发)
+            # D10 触发 + 契约 OK → 记 shadow order intent + 返回信号 (供 live-fire)
             if signal.triggered and contract_state == TriggerContractState.OK:
                 order_rec = signal.to_shadow_order_record(
                     time_utc=ts,
@@ -176,6 +226,8 @@ class ShadowOpsRuntime:
                     cycle_count=cycle_count,
                 )
                 self._ledger.append_shadow_order(order_rec)
+                return signal
+            return None
         except Exception as exc:  # noqa: BLE001  # BLE001:FOG fail-open — 遥测故障不得打断实盘
             print(
                 json.dumps(
@@ -190,6 +242,7 @@ class ShadowOpsRuntime:
                 ),
                 flush=True,
             )
+            return None
 
     # ── 内部 ────────────────────────────────────────────────────
     def _emit_violation(self, cycle_count: int, ts: str) -> None:

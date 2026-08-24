@@ -30,6 +30,22 @@ shadow_ops:
     trigger_refresh_ttl_seconds: 60
     import_denylist_enforced: true
     model_version: v2_20260824
+    # ── FIX-20260824-004: Live Fire 敢死队 (投委会方向 B 裁决 2026-08-24) ──
+    # 默认 disabled — 纯影子 (DEFCON 1). 投委会点火 → enabled: true → live_cycle
+    # 依据 D10 信号真实派发 (旁路 strategy_line/GodsEye/MetaExit/veto).
+    # 止血带 (绝不可拆): 熔断器 max_drawdown_usd (生死状 $50) / SL+TP / 同向冷却 /
+    # 有持仓不叠加. magic 90601 专属 journal 归属, 熔断器按此 magic 聚合.
+    live_fire:
+      enabled: false
+      magic: 90601
+      volume: 0.01
+      cooldown_seconds: 1500
+      max_drawdown_usd: 50.0
+      sl_atr_mult: 2.0
+      tp_pred_mult: 1.0
+      min_sl_pct: 0.05
+      min_tp_pct: 0.03
+      block_when_positions: true
   meta_exit_v3:
     enforce_shadow_only: true
 brains:

@@ -85,6 +85,9 @@ _HARDCODED_FALLBACK: dict[int, str] = {
     # Additional strategies (synced from live.yaml via validate_magic_sync.py CI gate)
     90303: "h1_directional",
     90501: "structural_swing_v1",
+    # ── FIX-20260824-004: Live Fire 敢死队 — Micro Scaler v2 真实执行 (投委会方向 B) ──
+    # 不注册 strategy_line (旁路派发), 独立 magic 专属 → journal 归属可追溯, 熔断器按 magic 聚合.
+    90601: "micro_scaler_v2_live_fire",
     # ── Sentinel — MUST NOT be attributed to any real strategy ──
     90401: "__UNATTRIBUTED_BRIDGE_DEFAULT__",
 }

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-24T10:40:39Z
-> **扫描模块数**: 846
+> **自动生成**: 2026-08-24T14:06:04Z
+> **扫描模块数**: 847
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -122,7 +122,7 @@
 | `phantom_contract.py` | ✅ active | PhantomStub, PhantomSerializer, PredicateRegistry, StateProjectionError, StateProjector, ContractViolation | 46 | 938 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 167 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 4 | — | |
-| `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 215 | — | |
+| `strategy_magic.py` | ✅ active | UnattributedOrderRejected | 3 | 218 | — | |
 | `validators.py` | ✅ active | ContractViolation, ContractValidator | 7 | 123 | — | |
 
 ## core/contracts/domain
@@ -535,7 +535,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 5269 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 5503 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 18 | 2674 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
@@ -578,8 +578,9 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `dispatch_filter.py` | ✅ active | — | 2 | 79 | — | |
+| `live_fire_breaker.py` | ✅ active | — | 4 | 149 | — | |
 | `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 217 | — | |
-| `runtime.py` | ✅ active | ShadowOpsRuntime | 10 | 286 | — | |
+| `runtime.py` | ✅ active | ShadowOpsRuntime | 12 | 339 | — | |
 | `telemetry.py` | ✅ active | ShadowTelemetryLedger | 6 | 50 | — | |
 | `trigger_contract.py` | ✅ active | TriggerContractState, TriggerContract | 7 | 114 | — | |
 
