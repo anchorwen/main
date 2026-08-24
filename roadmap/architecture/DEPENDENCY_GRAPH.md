@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-24T05:30:35Z
+> **自动生成**: 2026-08-24T05:56:28Z
 
 ## Package-Level Dependencies
 
@@ -933,6 +933,7 @@
 - `dataset_builder_d1.py` → `core.features.computers.daily_computer`, `core.features.schemas.daily_swing_schema`
 - `download_mt5_ohlc.py` → (无内部依赖)
 - `e2e_pipeline_validation.py` → `core.contracts.training.label_contract`, `core.features.local_feature_store`, `core.features.schemas.v9_institutional_schema`, `core.features.store_contracts`, `scripts.training.quality_gate`, `scripts.training.recipe_search`, `scripts.training.trainers.xgb_trainer`
+- `emit_micro_scaler_v2_trigger.py` → `scripts.training.train_micro_scaler_v2`
 - `eval_alignment.py` → (无内部依赖)
 - `eval_ensemble_baselines.py` → (无内部依赖)
 - `eval_regime.py` → (无内部依赖)

@@ -18,6 +18,9 @@ IC 训练协议 (逐字执行):
   3. net-of-cost: 动态 |avg_spread| ASOF 还原 (符号翻转 bug 已消费端兼容), 回退锚点 0.26.
   4. 零实盘触碰 (Shadow Mandate): 只产模型工件 + 报告, 不写 brain config, 不碰 live_*.yaml.
   5. SSOT 复用: ts_purged_split 直接复用 V1 同款 (scripts/training/train_micro_scaler_v1), 不散布.
+  6. IC 部署令 (2026-08-24 终局裁决): 豁免 [0.9,1.1] slope 门禁 (幅度排序器定性) →
+     v2 晋升 SHADOW, 触发机制强制 Quantile Trigger (|pred| 落入 D10 才允许 Shadow
+     Order, 禁 Fixed Threshold) — 规格 build_trigger_spec() 随 report 落档.
 
 用法:
   python scripts/training/train_micro_scaler_v2.py --data-dir data --symbol XAUUSDc
@@ -337,6 +340,51 @@ def net_of_cost_gate(
     return res
 
 
+# IC 部署令 (2026-08-24 终局裁决): 豁免 [0.9,1.1] 校准斜率门禁 (幅度排序器定性,
+# qIC 主闸门 + 净成本 D10 PASS), v2 晋升 SHADOW. 后续实盘执行引擎对本模型
+# 必须且只能采用 Quantile Trigger (|pred| 落入历史样本 Top-decile D10 才允许
+# Shadow Order) — 绝不允许固定阈值 (Fixed Threshold) 触发.
+_TRIGGER_MANDATE = (
+    "FIXED_THRESHOLD_FORBIDDEN: Quantile Trigger ONLY — |pred| 落入历史样本 "
+    "Top-decile (D10) 才允许 Shadow Order; 绝不允许固定阈值触发 (IC 终局裁决 2026-08-24)."
+)
+
+
+def build_trigger_spec(report: dict[str, Any]) -> dict[str, Any]:
+    """从 reg_report 派生 Quantile Trigger 规格 (单一来源, emit 脚本复用).
+
+    阈值 = OOS 历史样本 |pred| p90 (与 net_of_cost 门禁同源), direction 由
+    sign(pred) 派生 (幅度排序器). 斜率门禁 FAIL_SLOPE 已被 IC 豁免
+    (2026-08-24 终局裁决) — 状态在此固化, 供未来实盘引擎读取.
+    """
+    noc = report["net_of_cost"]
+    cal = report["isotonic_calibrated_eval"]["oos"]
+    slope_gate = report["calibration_slope_gate"]
+    return {
+        "model_id": "micro_scaler_v2",
+        "mode": report.get("mode"),
+        "trigger_mode": "quantile_top_decile_abs_pred",
+        "threshold_abs_pred_pct": noc["|pred| p90_pct"],
+        "trigger_rate_pct_oos": noc["top_decile_trigger_rate_pct"],
+        "direction_semantics": "sign(pred): LONG if pred>0 else SHORT (幅度排序器)",
+        "economics": {
+            "d10_mean_net_pct": noc["top_decile_mean_net_pct"],
+            "d10_net_positive_share_pct": noc["top_decile_net_positive_share_pct"],
+            "full_oos_mean_net_pct": noc["full_oos_mean_net_pct"],
+        },
+        "quality": {
+            "oos_rho_calibrated": cal["spearman_rho"],
+            "oos_quantile_ic": cal["quantile_ic"],
+            "calib_slope": slope_gate["slope"],
+            "calib_slope_gate": slope_gate["gate"],
+            "slope_gate_status": "EXEMPTED_BY_IC_2026-08-24",
+        },
+        "oos_decile_table": report["oos_decile_table"],
+        "mandate": _TRIGGER_MANDATE,
+        "derivation": "derived from micro_scaler_v2_reg_report.json net_of_cost |pred| p90 (OOS 历史样本)",
+    }
+
+
 def run_regression(ds: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     """主轨道: LightGBM huber 回归 + Isotonic 校准 + 门禁."""
     print("\n" + "=" * 78)
@@ -491,9 +539,16 @@ def run_regression(ds: dict[str, Any], args: argparse.Namespace) -> dict[str, An
     (out_dir / "micro_scaler_v2_reg_report.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
     )
+    # ── IC 部署令 (2026-08-24): Quantile Trigger 规格随报告落档 (禁 Fixed Threshold) ──
+    trigger = build_trigger_spec(report)
+    trigger_path = out_dir / "micro_scaler_v2_trigger.json"
+    trigger_path.write_text(json.dumps(trigger, indent=2) + "\n", encoding="utf-8")
     print("\n  Artifacts (Shadow Mandate, 零实盘触碰):")
-    print(f"    model : {model_path}")
-    print(f"    report: {out_dir / 'micro_scaler_v2_reg_report.json'}")
+    print(f"    model  : {model_path}")
+    print(f"    report : {out_dir / 'micro_scaler_v2_reg_report.json'}")
+    print(
+        f"    trigger: {trigger_path}  (Quantile Trigger, |pred|>=D10={trigger['threshold_abs_pred_pct']}%)"
+    )
     return {"raw_oos": oos_raw, "cal_oos": cal_oos, "net": ng, "verdict": verdict}
 
 

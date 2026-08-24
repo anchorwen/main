@@ -258,6 +258,13 @@ slope>1 (概率过度外展) 三个待证假设:
 - **方向诊断臂** (Blueprint §6.4): OOS ρ=0.035 / PR-AUC 0.502≈base 0.483 → 方向信号弱, 幅度排序 > 方向。
 - **V2 门禁判词: FAIL_SLOPE — 模型未获 Shadow 部署资格, 诚实 FAIL 不粉饰。** 工件 data/training/micro_scaler_v2/。**零实盘代码触碰 (Shadow Mandate)。**
 
+[RECORDED — 2026-08-24 IC 终局裁决 — 豁免令 + 部署令 + P3 收口] 投委会对 V2 战报出具终局裁决 (FIX-20260824-002 续):
+- **核心战绩研判**: ① OOS ρ=0.1101 (纯正 OOS 微观动量, 特征工程 Option B 方向绝对正确, 微观市场真实结构已被模型捕获); ② slope 0.5048 = **Isotonic Trap** — 保序回归在噪声 val (n=728, ρ=0.079) 上必然过度压缩方差 → 预测值向均值收敛; **slope<1 = 安全失败 (Safe Fail)** — 过度自信 (slope>1) 引发爆仓, 过度保守仅错失机会, 风控语义完全可控; ③ **net-of-cost top-decile +0.0176% 为决定性数字** — 只截取预测最强 10% (D10) 即便扣除真实动态点差仍 EV>0。
+- **豁免令**: 架构定性 — Micro Scaler 是**幅度排序器 (Magnitude Sorter)**, 非依赖绝对概率下注的 Kelly 系统 → qIC=0.5515 (极优秀) + 净成本 D10 PASS 为主闸门, 绝对校准斜率偏差为次要矛盾 → **正式豁免 [0.9,1.1] 校准斜率硬门禁**。
+- **部署令**: **Micro Scaler v2 晋升 SHADOW (暗影) 部署状态**。
+- **战术指令 (The Trigger Translation)**: 后续实盘执行引擎针对本模型**必须且只能采用分位数触发 (Quantile Trigger)** — 仅当 \|pred\| 落入历史样本 Top-decile (D10, 阈值 **0.06007%**) 才允许 Shadow Order; **绝不允许固定阈值 (Fixed Threshold) 触发**。规格已落档 `data/training/micro_scaler_v2/micro_scaler_v2_trigger.json` (由 `scripts/training/emit_micro_scaler_v2_trigger.py` 从 reg_report 派生, **免重训防池漂移** — feature store 持续追加会改变 60/20/20 切分池)。
+- **P3 战役正式收口**: 净成本门禁 + 排序门禁双幸存 → Phase 3 (Data & ML Pipeline) 核心主力战役全部战略胜利。
+
 ---
 
 [Ω-Routing: Scene D → #11]
