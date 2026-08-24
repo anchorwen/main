@@ -248,6 +248,16 @@ slope>1 (概率过度外展) 三个待证假设:
 
 [RECORDED — 2026-08-24] 附带材料发现 #2: **M5_Ret_1 不可靠** (median |M5_Ret_1−真实1bar|=0.0447%, ρ=0.11) → forward return 必须来自 MT5 真实价格 (本模型已采用), v1 Option B ρ=0.466 证据存疑。材料发现 #3: current-gen 8,572 记录说法修正为 4,567 unique bar。**未接 fit() 授权令, 严禁任何训练。**
 
+[RECORDED — 2026-08-24 fit() 执行 — V2 Forward Return Track 训练战役] **IC 解除 fit() 禁令 (门禁 PASS 后) → `scripts/training/train_micro_scaler_v2.py` stdout (Iron Law #11 唯一证据源, FIX-20260824-002)**:
+- **数据矩阵**: 4,010 个去重 current-gen bar × 40 列 (零缺失零 NaN), 标签 = MT5 真实 forward-3bar return (材料发现 #2 强制)。
+- **切分**: 60/20/20 ts_purged_split → train 2347 / val 728 / test 748 / purged 187 (purge±300min, 禁 shuffle, V1 同款 SSOT 复用)。
+- **模型**: LightGBM **huber** (depth 3/min_child 20/leaves 8/L2 2.0/lr 0.03), early_stop best_iteration=25。
+- **OOS ρ**: raw **0.0984** → post-isotonic **0.1101** (qIC 0.176→0.552) — **真实排序信号, > Flow46 0.05 门禁**。
+- **net-of-cost top-decile (OOS)**: **+0.0176% PASS** (trigger 9.89% ∈ [1%,50%], net_pos_share 59.5%), full-OOS mean_net +0.0057%。
+- **⚠️ 校准斜率门禁 FAIL**: post-isotonic OOS slope=**0.5048** ∉ [0.9,1.1] — raw 过度外展 (2.40) → isotonic 在噪声 val (n=728, ρ=0.079) 上过冲过度压缩。M5 3-bar σ=0.14% 信噪比下 [0.9,1.1] 精度不可达 (Flow46 纪律: 勿调参追 OOS)。
+- **方向诊断臂** (Blueprint §6.4): OOS ρ=0.035 / PR-AUC 0.502≈base 0.483 → 方向信号弱, 幅度排序 > 方向。
+- **V2 门禁判词: FAIL_SLOPE — 模型未获 Shadow 部署资格, 诚实 FAIL 不粉饰。** 工件 data/training/micro_scaler_v2/。**零实盘代码触碰 (Shadow Mandate)。**
+
 ---
 
 [Ω-Routing: Scene D → #11]

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-24T04:23:00Z
-> **扫描模块数**: 837
+> **自动生成**: 2026-08-24T05:30:35Z
+> **扫描模块数**: 838
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -1074,6 +1074,7 @@
 | `train_meta_filter.py` | ✅ active | — | 5 | 332 | — | |
 | `train_meta_model.py` | ✅ active | — | 6 | 384 | — | |
 | `train_micro_scaler_v1.py` | ✅ active | — | 11 | 485 | — | |
+| `train_micro_scaler_v2.py` | ✅ active | — | 9 | 656 | — | |
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |
