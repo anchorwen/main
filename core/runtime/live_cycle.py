@@ -1132,9 +1132,17 @@ def _dispatch_live_fire_micro_scaler(
     _ts = time.time()
 
     # ── 止血带 1: 熔断器 (生死状) — fail-closed, 永久停火 ──
-    from core.runtime.shadow_ops.live_fire_breaker import is_breaker_open
+    # FIX-20260826-001 (IC Sev-1 裁决): 生死状全局共享 — 跨 XAU(data)+BTC(data_btc)
+    # 动态汇总 90601 累计已实现 PnL; 全局击穿 → 双树双写 flag → fail-closed 拦截派发.
+    from core.runtime.shadow_ops.live_fire_breaker import (
+        aggregate_live_fire_drawdown,
+        is_breaker_open,
+        live_fire_pool_for,
+        write_breaker_flag,
+    )
 
-    if is_breaker_open(config.base_dir):
+    _lf_pool = live_fire_pool_for(config.base_dir)
+    if any(is_breaker_open(_d) for _d in _lf_pool):
         _emit_live_fire_event(
             config.base_dir,
             reason="skip_breaker_open",
@@ -1142,6 +1150,36 @@ def _dispatch_live_fire_micro_scaler(
             pred_pct=_pred,
             magic=_lf_magic,
             extra={"max_drawdown_usd": _lf_max_dd},
+        )
+        return
+
+    # 全局生死状实时汇总 (append-only ledger 重算, 跨进程天然一致).
+    # config.base_dir 属全局树集 → _lf_pool 即完整跨树池 (XAU+BTC 单 $50);
+    # 隔离/测试 → 单树池, 同时杜绝测试误读全局生产账本.
+    _agg = aggregate_live_fire_drawdown(
+        magic=_lf_magic, max_drawdown_usd=_lf_max_dd, base_dirs=_lf_pool
+    )
+    if _agg["breached"]:
+        # 击穿 → 在全局生死状池双写 flag (幂等, 保留首次熔断时间).
+        for _d in _lf_pool:
+            write_breaker_flag(
+                base_dir=_d,
+                net_pnl_usd=_agg["realized_pnl_usd"],
+                n_closed=_agg["n_closed"],
+                max_drawdown_usd=_lf_max_dd,
+                detail="live_fire global drawdown breached (XAU+BTC 共享生死状) — 敢死队派发停止 (fail-closed)",
+            )
+        _emit_live_fire_event(
+            config.base_dir,
+            reason="skip_breaker_open",
+            direction=_direction,
+            pred_pct=_pred,
+            magic=_lf_magic,
+            extra={
+                "max_drawdown_usd": _lf_max_dd,
+                "realized_pnl_usd": _agg["realized_pnl_usd"],
+                "global_breached": True,
+            },
         )
         return
 

@@ -136,16 +136,29 @@ def test_g6_runtime_live_fire_disabled_by_default(tmp_path):
     assert rt.live_fire_config == {}
 
 
-def test_g6_real_config_live_fire_still_disabled():
-    """真实 configs/live.yaml 上, live_fire 必须保持 disabled (部署安全基线)."""
+def test_g6_real_config_live_fire_enabled_guarded():
+    """真实 configs/live.yaml 上, live_fire 点火 (FIX-20260824-005) → enabled True.
+
+    原断言 "must stay disabled" 是 FIX-005 点火前的部署安全基线; IC 裁决方向 B
+    点火后, 敢死队安全护栏从"默认禁用"转为"$50 生死状 fail-closed 熔断"
+    (FIX-20260826-001 Sev-1). 本测试锁存点火状态下安全关键参数被正确读取:
+      - 点火开关 = True (FIX-005)
+      - 生死状 max_drawdown_usd = 50.0 (全局共享)
+      - 对称 1×ATR 括号 (sl_atr_mult/tp_atr_mult = 1.0, FIX-005)
+    若 config 致 live_fire 畸形 → fail-closed 返回 disabled (由
+    test_g6_runtime_live_fire_disabled_by_default 覆盖).
+    """
     import tempfile
 
     from core.runtime.shadow_ops.runtime import ShadowOpsRuntime
 
     with tempfile.TemporaryDirectory() as td:
         rt = ShadowOpsRuntime(symbol="XAUUSDc", base_dir=td, config_path="configs/live.yaml")
-    assert rt.live_fire_enabled is False  # 未点火 → 绝不真实派发
-    assert rt.live_fire_config == {}
+    assert rt.live_fire_enabled is True  # FIX-005 点火: 敢死队已接火
+    cfg = rt.live_fire_config
+    assert cfg.get("magic") == 90601  # 敢死队专属 magic
+    assert cfg.get("max_drawdown_usd") == 50.0  # 生死状 guard (全局共享)
+    assert cfg.get("sl_atr_mult") == 1.0 and cfg.get("tp_atr_mult") == 1.0  # 对称 1×ATR
 
 
 # ────────────────────────────────────────────────────────────────────

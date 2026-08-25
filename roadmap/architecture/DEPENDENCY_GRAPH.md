@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-24T15:52:19Z
+> **自动生成**: 2026-08-25T18:16:50Z
 
 ## Package-Level Dependencies
 
@@ -581,9 +581,12 @@
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_audit_20260806_07_losses.py` → (无内部依赖)
 - `_audit_asof_join_miss_20260821.py` → (无内部依赖)
+- `_audit_breaker_fix_verify_20260826.py` → `core.runtime.shadow_ops.live_fire_breaker`
+- `_audit_btc_account_report_20260826.py` → (无内部依赖)
 - `_audit_btc_godseye_health_20260822.py` → (无内部依赖)
 - `_audit_btc_legacy_lineage_pnl_20260805.py` → (无内部依赖)
 - `_audit_btc_modify_misroute_exposure_20260819.py` → (无内部依赖)
+- `_audit_circuit_breaker_scope_20260826.py` → `core.runtime.shadow_ops.live_fire_breaker`
 - `_audit_close_label_divergence_20260821.py` → (无内部依赖)
 - `_audit_dupe_category_20260805.py` → (无内部依赖)
 - `_audit_entry_regime_20260807.py` → (无内部依赖)
@@ -591,6 +594,7 @@
 - `_audit_export_m5_20260817.py` → (无内部依赖)
 - `_audit_idempotent_key_20260805.py` → (无内部依赖)
 - `_audit_journal_universe_20260821.py` → (无内部依赖)
+- `_audit_live_fire_status_20260825.py` → (无内部依赖)
 - `_audit_live_health_20260814.py` → (无内部依赖)
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
@@ -603,6 +607,8 @@
 - `_audit_storm_sender_20260806.py` → (无内部依赖)
 - `_audit_trail_mislabel_20260806.py` → (无内部依赖)
 - `_audit_two_longs_20260805.py` → (无内部依赖)
+- `_audit_two_symbol_live_progress_20260826.py` → (无内部依赖)
+- `_audit_two_symbol_real_system_20260826.py` → (无内部依赖)
 - `_audit_watchdog_bg_kill_20260820.py` → (无内部依赖)
 - `_audit_xau_band_extremes_20260805.py` → (无内部依赖)
 - `_audit_xau_entry_quality_20260810.py` → (无内部依赖)

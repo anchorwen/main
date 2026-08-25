@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-24T15:52:19Z
-> **扫描模块数**: 849
+> **自动生成**: 2026-08-25T18:16:50Z
+> **扫描模块数**: 855
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -535,7 +535,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 5503 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 5541 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 18 | 2674 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
@@ -578,7 +578,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `dispatch_filter.py` | ✅ active | — | 2 | 79 | — | |
-| `live_fire_breaker.py` | ✅ active | — | 4 | 149 | — | |
+| `live_fire_breaker.py` | ✅ active | — | 7 | 257 | — | |
 | `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 226 | — | |
 | `runtime.py` | ✅ active | ShadowOpsRuntime | 12 | 341 | — | |
 | `telemetry.py` | ✅ active | ShadowTelemetryLedger | 6 | 50 | — | |
@@ -669,9 +669,12 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_20260806_07_losses.py` | ✅ active | — | 8 | 359 | — | |
 | `_audit_asof_join_miss_20260821.py` | ✅ active | — | 8 | 425 | — | |
+| `_audit_breaker_fix_verify_20260826.py` | ✅ active | — | 3 | 172 | — | |
+| `_audit_btc_account_report_20260826.py` | ✅ active | — | 1 | 70 | — | |
 | `_audit_btc_godseye_health_20260822.py` | ✅ active | — | 8 | 440 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_btc_modify_misroute_exposure_20260819.py` | ✅ active | — | 3 | 222 | — | |
+| `_audit_circuit_breaker_scope_20260826.py` | ✅ active | — | 2 | 102 | — | |
 | `_audit_close_label_divergence_20260821.py` | ✅ active | — | 4 | 176 | — | |
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
 | `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
@@ -679,6 +682,7 @@
 | `_audit_export_m5_20260817.py` | ✅ active | — | 3 | 153 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_journal_universe_20260821.py` | ✅ active | — | 2 | 197 | — | |
+| `_audit_live_fire_status_20260825.py` | ✅ active | — | 2 | 134 | — | |
 | `_audit_live_health_20260814.py` | ✅ active | — | 16 | 475 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
@@ -691,6 +695,8 @@
 | `_audit_storm_sender_20260806.py` | ✅ active | — | 1 | 130 | — | |
 | `_audit_trail_mislabel_20260806.py` | ✅ active | — | 3 | 281 | — | |
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
+| `_audit_two_symbol_live_progress_20260826.py` | ✅ active | — | 2 | 131 | — | |
+| `_audit_two_symbol_real_system_20260826.py` | ✅ active | — | 4 | 89 | — | |
 | `_audit_watchdog_bg_kill_20260820.py` | ✅ active | — | 6 | 261 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
 | `_audit_xau_entry_quality_20260810.py` | ✅ active | — | 7 | 285 | — | |
