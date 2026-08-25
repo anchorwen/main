@@ -20,6 +20,14 @@
 
 ---
 
+### ReB-20260826-MAGIC_IN_CLOSE_READ
+- **Pattern Signature**: `MAGIC_IN_CLOSE_READ`
+- **描述**: 熔断器/对账接口按 close (平仓) 记录的顶层 magic (MT5 Deal IN/OUT 中关闭成交该字段恒为 0/None, 真实 magic 仅挂对应的 open 加仓记录) 过滤归属 → 关闭成交永远匹配不到目标 magic, 聚合 PnL 恒为 +0.00, 熔断判定永判未击穿. 常与"门死"伴生 (flag 无生产写入链路 → is_breaker_open 恒 False) 构成双重失效.
+- **关联 FIX IDs**: FIX-20260826-001
+- **关联 Docket IDs**: DQAF-20260826-001
+- **预防策略**: 对账/熔断聚合必须以 append-only journal 的 position_ticket (open 恒早于 close) 反查 open.magic 继承真实 magic 作为归属键; 禁止直接读 close.magic 作归属 (MT5 Deal 关闭记录该字段不可靠). 跨树聚合集中单点扩展 (LIVE_FIRE_BASE_DIRS), 隔离测试走单树池避免读到生产 state.
+- **检测方法**: 专项回归 `scripts/_audit_breaker_fix_verify_20260826.py` — 构造 close(magic=0)+open(magic=X) 同名 position_ticket 断言聚合正确 (若读 close.magic 则算 0 → fail); 另断言全局聚合 = 双树 ground-truth 求和未击穿.
+
 ### ReB-20260822-METRIC_SATURATION_SESSION_BIAS
 - **Pattern Signature**: `METRIC_SATURATION_SESSION_BIAS`
 - **Date Cataloged**: 2026-08-22

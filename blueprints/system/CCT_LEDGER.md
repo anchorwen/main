@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260826-001
+- **Docket ID**: DQAF-20260826-001
+- **日期**: 2026-08-26
+- **置信度**: confirmed (全层 — 双树 journal 配对复算 + MT5 magic=0 陷阱用例 + 生产日志 0 skip_breaker_open 事件)
+- **因果链**:
+  - [Layer 1 — 症状]: 敢死队 90601 已实亏 -47.06 (62 单: XAU -31.10 / BTC -15.96), 但生产日志无任何 skip_breaker_open 事件; 手工按 close.magic==90601 过滤单树 realized=+0.00 → 熔断器从未触发. 取证: scripts/_audit_breaker_fix_verify_20260826.py stdout + grep skip_breaker_open data/ data_btc/.
+  - [Layer 2 — 中间异常]: is_breaker_open 检查的 live_fire_breaker.flag 从未被生产代码写入 → 恒 False; evaluate_drawdown 按 close.magic==90601 过滤 → 匹配 0 条 → realized=+0.00 → 永判未击穿.
+  - [Layer 3 — 根因]: **L3 架构缺陷 (熔断 flag 无生产写入链路 + close.magic 字段错配读 0)** — MT5 Deal IN/OUT 的 close 记录顶层 magic=0/None (真实 magic 仅挂 open 记录), 熔断器接口按 close.magic 解析 → 结构上永判未击穿. 双重失效 (gate-dead + magic-in-close).
+- **证据引用**:
+  - Source 1: data/live_trade_journal.jsonl (XAU) — close 顶层 magic=None/0 + position_ticket 90250x; 按 position_ticket 配对 open magic=90601 得 -31.10 (19 单).
+  - Source 2: data_btc/live_trade_journal.jsonl (BTC) — 配对得 -15.96 (43 单); 两树全局 = -47.06 (62 单) 余 $2.94.
+  - Source 3 (root cause): core/runtime/shadow_ops/live_fire_breaker.py `evaluate_drawdown` (FIX 前按 close.magic 过滤) + `is_breaker_open` (查从未被生产的 flag) + live_cycle.py 派发前置 (FIX 前仅单树 is_breaker_open).
+- **是否被推翻**: 否 (AR: "余 $2.94 有熔断守护 / 余 $18.90 无风险" 均被推翻 — 熔断器代码级从未触发, 无任何 fail-closed 保护; "$50 每品种" 被 IC 裁决为全局共享一个计划, 非各 $50; 反假设"该 flag 由某运行时写入" 被 grep 生产代码 0 命中推翻)
+- **关联 ReB Pattern**: ReB-20260826-MAGIC_IN_CLOSE_READ
+
 ### CCT-20260822-001
 - **Docket ID**: DQAF-20260822-001
 - **日期**: 2026-08-22
