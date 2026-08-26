@@ -36,6 +36,14 @@
 - **预防策略**: 消费端 PnL/盈亏聚合必须以业务实体 position_ticket 为原子幂等键 — 同一 ticket 只计一次, 重复行跳过 (首条/有效一条为准); 禁止依赖"账本端不会双写"隐性假设. 双写脏数据本身另立运维口径排查 (不占用 DQAF 诊断), 消费端永远免疫.
 - **检测方法**: 专项回归 `tests/test_live_fire.py::test_g5_evaluate_drawdown_twin_write_dedup` — 构造 T1 open + 2 条逐字相同 close (magic=0) 断言聚合 = -8.7 且 n_closed=1 (若逐行累加则 -17.4 → fail); 另 `test_g5_evaluate_drawdown_dedup_keeps_distinct_tickets` 断言 T1+T2 异 ticket 仍均计入 (-26.0/n_closed=2).
 
+### ReB-20260826-LEGACY_RETIRED_LINEAGE_STILL_WIRED_ZOMBIE
+- **Pattern Signature**: `LEGACY_RETIRED_LINEAGE_STILL_WIRED_ZOMBIE`
+- **描述**: 治理层 (L2 governance_state.json) 已将某策略线对应 brain 判为 retired, 但接线层 (L3 live_*.yaml strategy_line) 该线仍 `enabled: true` 或 `mode: live/probation` → 退休判决未在物理执行层真落停, 形成"丧尸"策略线. 一旦其底层脑注册被重新置 enabled (或 strategy_builder L225 `enabled` 默认 True 命中), 退休脑可被重新带电重开并继续漏血.
+- **关联 FIX IDs**: FIX-20260826-004
+- **关联 Docket IDs**: DQAF-20260826-004
+- **预防策略**: 清剿/对齐时必须显式 `enabled: false + mode: retired` 双字段对齐 (与 m15/h1 已退休样式一致), 禁止删块 (strategy_builder.py L225 `enabled` 默认 True → 删块=default-enabled 地雷). 治理退休判决与接线 enabled 应受同一 SSOT 校验 (Iron Law #14 约束), 定期扫描"接线通电 × 治理退休"交叉项.
+- **检测方法**: 专项审计 `scripts/_audit_zombie_purge_verify_20260826.py` — 遍历 strategy_lines × registry 脑 contract_group 交叉比对 L1/L2 status, 断言 wired-on but governance-retired = 0 (exit 0).
+
 ### ReB-20260822-METRIC_SATURATION_SESSION_BIAS
 - **Pattern Signature**: `METRIC_SATURATION_SESSION_BIAS`
 - **Date Cataloged**: 2026-08-22
