@@ -53,6 +53,10 @@ def evaluate_drawdown(
         仅当无匹配 open 时回退 close 自身 magic (兼容旧构造/外部 close).
       - action == "close" 且 (继承/回退) magic == 目标 magic 且 pnl 非空
         → 计入已实现 PnL.
+      - consumer-side 幂等去重 (FIX-20260826-003/DQAF-20260826-003): 同一
+        position_ticket 的双写重复平仓行 (桥接器重试/回调重复) 只计一次 —
+        以首条有效 pnl 为准, 防止同一笔已实现盈亏被重复累加 (XAU twin-write
+        曾把 -31.10 双记为 -62.20 → 全局假 -76.58 → 假熔断).
 
     Returns:
         {
@@ -90,7 +94,9 @@ def evaluate_drawdown(
                     open_magic[str(_ticket)] = int(rec.get(_MAGIC_KEY, 0) or 0)
 
             # ── PASS 2: 平仓归集. 真实 magic 优先取 open 继承 (position_ticket),
-            # 仅当无匹配 open 时回退 close 自身 magic.
+            # 仅当无匹配 open 时回退 close 自身 magic. consumer-side 幂等去重
+            # (FIX-20260826-003): 同一 position_ticket 只计一次平仓盈亏.
+            ticket_seen: set[str] = set()
             with open(path, encoding="utf-8") as fh:
                 for line in fh:
                     line = line.strip()
@@ -114,10 +120,16 @@ def evaluate_drawdown(
                     if pnl is None:
                         continue  # unknown_close / pending 确认 — 不计入已实现
                     try:
-                        realized += float(pnl)
-                        n_closed += 1
+                        _pnl = float(pnl)
                     except (TypeError, ValueError):
                         continue
+                    _key = str(_ticket) if _ticket is not None else None
+                    if _key is not None:
+                        if _key in ticket_seen:
+                            continue  # 双写重复行 → 幂等跳过
+                        ticket_seen.add(_key)
+                    realized += _pnl
+                    n_closed += 1
         except OSError:
             # journal 读失败 → 保守: 视为未击穿 (fail-open 语义, 熔断器自身
             # 故障不阻断敢死队开单 — 但下一 cycle 会重试, 且 watchdog 可审计)

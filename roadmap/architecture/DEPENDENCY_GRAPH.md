@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-26T03:03:19Z
+> **自动生成**: 2026-08-26T04:15:32Z
 
 ## Package-Level Dependencies
 
@@ -581,6 +581,7 @@
 - `_analyze_m15_swing_now.py` → (无内部依赖)
 - `_audit_20260806_07_losses.py` → (无内部依赖)
 - `_audit_asof_join_miss_20260821.py` → (无内部依赖)
+- `_audit_breaker_dedup_verify_20260826.py` → `core.runtime.shadow_ops.live_fire_breaker`
 - `_audit_breaker_fix_verify_20260826.py` → `core.runtime.shadow_ops.live_fire_breaker`
 - `_audit_btc_account_report_20260826.py` → (无内部依赖)
 - `_audit_btc_godseye_health_20260822.py` → (无内部依赖)

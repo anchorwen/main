@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-26T03:03:19Z
-> **扫描模块数**: 857
+> **自动生成**: 2026-08-26T04:15:32Z
+> **扫描模块数**: 858
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -578,7 +578,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `dispatch_filter.py` | ✅ active | — | 2 | 79 | — | |
-| `live_fire_breaker.py` | ✅ active | — | 7 | 257 | — | |
+| `live_fire_breaker.py` | ✅ active | — | 7 | 269 | — | |
 | `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 226 | — | |
 | `runtime.py` | ✅ active | ShadowOpsRuntime | 12 | 341 | — | |
 | `telemetry.py` | ✅ active | ShadowTelemetryLedger | 6 | 50 | — | |
@@ -669,6 +669,7 @@
 | `_analyze_m15_swing_now.py` | ✅ active | — | 3 | 323 | — | |
 | `_audit_20260806_07_losses.py` | ✅ active | — | 8 | 359 | — | |
 | `_audit_asof_join_miss_20260821.py` | ✅ active | — | 8 | 425 | — | |
+| `_audit_breaker_dedup_verify_20260826.py` | ✅ active | — | 1 | 61 | — | |
 | `_audit_breaker_fix_verify_20260826.py` | ✅ active | — | 3 | 172 | — | |
 | `_audit_btc_account_report_20260826.py` | ✅ active | — | 1 | 70 | — | |
 | `_audit_btc_godseye_health_20260822.py` | ✅ active | — | 8 | 440 | — | |

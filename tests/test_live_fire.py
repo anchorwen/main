@@ -88,6 +88,51 @@ def test_g5_evaluate_drawdown_filters(tmp_path):
     assert r["breached"] is True  # -51.5 <= -50 生死状击穿
 
 
+def test_g5_evaluate_drawdown_twin_write_dedup(tmp_path):
+    """FIX-20260826-003/DQAF-20260826-003: 双写重复平仓行只计一次 (consumer 幂等).
+
+    回归锁: 若未来有人移除 ticket 级去重, XAU twin-write 会把同一笔已实现盈亏
+    重复累加 → 假熔断. 同一 position_ticket 的重复 close 记录必须只计一次.
+    MT5 Deal IN/OUT close 顶层 magic=0 (magic 挂 open) → 经 FIX-001 ticket 反查继承.
+    """
+    from core.runtime.shadow_ops.live_fire_breaker import evaluate_drawdown
+
+    j = tmp_path / "live_trade_journal.jsonl"
+    _write_journal(
+        j,
+        [
+            # open 承载真实 magic (FIX-20260826-001: close.magic 可能为 0/None)
+            {"action": "open", "magic": 90601, "position_ticket": "T1", "pnl": None},
+            # twin-write: 同一 ticket 两条完全相同的 close (桥接器重试/回调重复)
+            {"action": "close", "magic": 0, "position_ticket": "T1", "pnl": -8.7},
+            {"action": "close", "magic": 0, "position_ticket": "T1", "pnl": -8.7},
+        ],
+    )
+    r = evaluate_drawdown(journal_path=j, magic=90601, max_drawdown_usd=50.0)
+    assert r["realized_pnl_usd"] == pytest.approx(-8.7)  # 只计一次, 非 -17.4
+    assert r["n_closed"] == 1
+    assert r["breached"] is False
+
+
+def test_g5_evaluate_drawdown_dedup_keeps_distinct_tickets(tmp_path):
+    """FIX-20260826-003: 不同 position_ticket 的平仓行互不干扰 (去重不误伤)."""
+    from core.runtime.shadow_ops.live_fire_breaker import evaluate_drawdown
+
+    j = tmp_path / "live_trade_journal.jsonl"
+    _write_journal(
+        j,
+        [
+            {"action": "open", "magic": 90601, "position_ticket": "T1", "pnl": None},
+            {"action": "open", "magic": 90601, "position_ticket": "T2", "pnl": None},
+            {"action": "close", "magic": 0, "position_ticket": "T1", "pnl": -20.0},
+            {"action": "close", "magic": 0, "position_ticket": "T2", "pnl": -6.0},
+        ],
+    )
+    r = evaluate_drawdown(journal_path=j, magic=90601, max_drawdown_usd=50.0)
+    assert r["realized_pnl_usd"] == pytest.approx(-26.0)  # 两票各计一次
+    assert r["n_closed"] == 2
+
+
 def test_g5_evaluate_drawdown_below_line_not_breached(tmp_path):
     from core.runtime.shadow_ops.live_fire_breaker import evaluate_drawdown
 
@@ -144,7 +189,7 @@ def test_g6_real_config_live_fire_enabled_guarded():
     (FIX-20260826-001 Sev-1). 本测试锁存点火状态下安全关键参数被正确读取:
       - 点火开关 = True (FIX-005)
       - 生死状 max_drawdown_usd = 50.0 (全局共享)
-      - 对称 1×ATR 括号 (sl_atr_mult/tp_atr_mult = 1.0, FIX-005)
+      - RR 1:2 非对称括号 (sl_atr_mult=1.0 / tp_atr_mult=2.0, FIX-20260826-002 P2)
     若 config 致 live_fire 畸形 → fail-closed 返回 disabled (由
     test_g6_runtime_live_fire_disabled_by_default 覆盖).
     """
@@ -158,7 +203,9 @@ def test_g6_real_config_live_fire_enabled_guarded():
     cfg = rt.live_fire_config
     assert cfg.get("magic") == 90601  # 敢死队专属 magic
     assert cfg.get("max_drawdown_usd") == 50.0  # 生死状 guard (全局共享)
-    assert cfg.get("sl_atr_mult") == 1.0 and cfg.get("tp_atr_mult") == 1.0  # 对称 1×ATR
+    assert (
+        cfg.get("sl_atr_mult") == 1.0 and cfg.get("tp_atr_mult") == 2.0
+    )  # RR 1:2 (FIX-20260826-002 P2)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -357,7 +404,9 @@ def test_g9_scorer_trigger_is_raw_pred_based(tmp_path):
     )
     if not (model_path.exists() and trigger_path.exists() and report_path.exists()):
         pytest.skip("model/trigger/report artifacts missing (无数据基线)")
-    vecs = _load_real_feature_vectors()
+    # P1 (FIX-20260826-002/DQAF-20260826-002) 阈值 re-pin 至 0.075% (触发率 ~0.25%)
+    # → 需放大样本池才覆盖阈值两侧, 否则 n_above=0 (高阈值尾部稀疏).
+    vecs = _load_real_feature_vectors(max_rows=6000)
     if not vecs:
         pytest.skip("no current-gen v9_40 feature rows")
 
