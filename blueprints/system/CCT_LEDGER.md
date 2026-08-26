@@ -42,6 +42,21 @@
 - **是否被推翻**: 否 (AR: "余 $2.94 有熔断守护 / 余 $18.90 无风险" 均被推翻 — 熔断器代码级从未触发, 无任何 fail-closed 保护; "$50 每品种" 被 IC 裁决为全局共享一个计划, 非各 $50; 反假设"该 flag 由某运行时写入" 被 grep 生产代码 0 命中推翻)
 - **关联 ReB Pattern**: ReB-20260826-MAGIC_IN_CLOSE_READ
 
+### CCT-20260826-003
+- **Docket ID**: DQAF-20260826-003
+- **日期**: 2026-08-26
+- **置信度**: confirmed (全层 — 19 ticket 双写逐字复算 + 0 非恒同 partial fill + 真实生产函数聚合 -45.48 断言 EXIT=0)
+- **因果链**:
+  - [Layer 1 — 症状]: 修复后敢死队 90601 仍被误熔断 (flag 被 live_cycle 派发前置自动重写); 聚合读数为假 -76.58 (余 $-26.58 击穿) 而真实应为 -45.48. 取证: scripts/_audit_breaker_dedup_verify_20260826.py stdout + XAU journal 19 ticket×2 close 行.
+  - [Layer 2 — 中间异常]: evaluate_drawdown PASS 2 对每条 close 行累加无去重 → XAU 19 单真实 -31.10 被双记为 -62.20 → 全局 -62.20 + BTC -14.38 = -76.58 假击穿.
+  - [Layer 3 — 根因]: **L2 逻辑缺陷 (消费端聚合未按业务实体 position_ticket 去重, RC-03 state-leak)** — journal 双写是生产常见脏数据 (桥接重试/网络延迟回调重复), 消费端聚合工具无天然幂等; 同 ticket 重复 close 行被重复计入.
+- **证据引用**:
+  - Source 1: data/live_trade_journal.jsonl (XAU) — 19 张 position_ticket 各 2 条逐字相同 close 记录 (同 ticket/pnl/label, 0 非恒同 partial fill); 去重后 -31.10 (19 单).
+  - Source 2: data_btc/live_trade_journal.jsonl (BTC) — -14.38 (44 单, 无双写); 两树全局 -45.48 (63 单).
+  - Source 3 (root cause): core/runtime/shadow_ops/live_fire_breaker.py `evaluate_drawdown` PASS 2 (FIX 前逐行累加无 ticket_seen).
+- **是否被推翻**: 否 (AR: "XAU 双写是记账缺陷需根修" 被 IC 战术妥协裁决驳回 — 消费端幂等是正解, 生产端底因另行运维; "PASS 2 去重会掩盖脏数据" 被驳回 — 消费端天生须免疫脏数据)
+- **关联 ReB Pattern**: ReB-20260826-DUPLICATE_ROW_DOUBLE_COUNT_CONSUMER_NO_DEDUP
+
 ### CCT-20260822-001
 - **Docket ID**: DQAF-20260822-001
 - **日期**: 2026-08-22

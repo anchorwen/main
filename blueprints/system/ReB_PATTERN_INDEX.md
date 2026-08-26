@@ -28,6 +28,14 @@
 - **预防策略**: 对账/熔断聚合必须以 append-only journal 的 position_ticket (open 恒早于 close) 反查 open.magic 继承真实 magic 作为归属键; 禁止直接读 close.magic 作归属 (MT5 Deal 关闭记录该字段不可靠). 跨树聚合集中单点扩展 (LIVE_FIRE_BASE_DIRS), 隔离测试走单树池避免读到生产 state.
 - **检测方法**: 专项回归 `scripts/_audit_breaker_fix_verify_20260826.py` — 构造 close(magic=0)+open(magic=X) 同名 position_ticket 断言聚合正确 (若读 close.magic 则算 0 → fail); 另断言全局聚合 = 双树 ground-truth 求和未击穿.
 
+### ReB-20260826-DUPLICATE_ROW_DOUBLE_COUNT_CONSUMER_NO_DEDUP
+- **Pattern Signature**: `DUPLICATE_ROW_DOUBLE_COUNT_CONSUMER_NO_DEDUP`
+- **描述**: append-only 账本含双写重复行 (同一 position_ticket 多条逐字相同平仓记录, 源自桥接重试/网络延迟回调重复) 时, 消费端聚合工具 (熔断器/对账/PnL 汇总) 若按逻辑行逐行累加而无业务实体级 (position_ticket) 去重 → 该 ticket 平仓盈亏被重复计入 → 聚合 PnL 被双倍放大 → 触发假熔断/假对账失败. 消费端若要求账本端绝对干净即失去幂等免疫力.
+- **关联 FIX IDs**: FIX-20260826-003
+- **关联 Docket IDs**: DQAF-20260826-003
+- **预防策略**: 消费端 PnL/盈亏聚合必须以业务实体 position_ticket 为原子幂等键 — 同一 ticket 只计一次, 重复行跳过 (首条/有效一条为准); 禁止依赖"账本端不会双写"隐性假设. 双写脏数据本身另立运维口径排查 (不占用 DQAF 诊断), 消费端永远免疫.
+- **检测方法**: 专项回归 `tests/test_live_fire.py::test_g5_evaluate_drawdown_twin_write_dedup` — 构造 T1 open + 2 条逐字相同 close (magic=0) 断言聚合 = -8.7 且 n_closed=1 (若逐行累加则 -17.4 → fail); 另 `test_g5_evaluate_drawdown_dedup_keeps_distinct_tickets` 断言 T1+T2 异 ticket 仍均计入 (-26.0/n_closed=2).
+
 ### ReB-20260822-METRIC_SATURATION_SESSION_BIAS
 - **Pattern Signature**: `METRIC_SATURATION_SESSION_BIAS`
 - **Date Cataloged**: 2026-08-22
