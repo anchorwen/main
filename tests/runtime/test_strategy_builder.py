@@ -319,3 +319,30 @@ def test_narrow_gate_fail_closed_on_degraded_rho(mock_get_asset: MagicMock) -> N
     brains = [_er_brain("BTC_Expected_R_V4_SHORT", 0.0400)]  # ρ < 0.05 → 拒绝 → 无幸存 → 不构建
     result = build_strategy_lines(brains, config)
     assert _ER_CG not in result, "degraded rho must fail-closed (no line built)"
+
+
+@patch("core.runtime.strategy_builder.get_asset")
+def test_narrow_gate_fail_closed_on_absent_training_metrics(mock_get_asset: MagicMock) -> None:
+    """特区 zone: b_info 缺 training_metrics (spearman_rho=None) → fail-closed, 不构建.
+
+    DQAF-20260826-007 / FIX-20260826-007 回归锁: 此前 live_intent_loop 投影丢 training_metrics,
+    运行时 b_info.spearman_rho=None → 窄门把 V4_SHORT 判为 rho_below_threshold → fail-closed.
+    设计语义: 字段缺失即失败关闭 (绝不放行未验证质量的脑); 透传修复后字段存在 ⇒ 正常准入.
+    """
+    from core.runtime.strategy_builder import build_strategy_lines
+
+    mock_get_asset.return_value = SimpleNamespace(contract_size=100)
+    config = _make_config(
+        strategy_configs={
+            _ER_CG: {
+                "enabled": True,
+                "base_volume": 0.01,
+                "execution_zone": "live_fire_vanguard",
+                "allowed_brain_ids": ["BTC_Expected_R_V4_SHORT"],
+                "min_zone_rho": 0.05,
+            }
+        },
+    )
+    brains = [_er_brain("BTC_Expected_R_V4_SHORT", None)]  # training_metrics.spearman_rho=None
+    result = build_strategy_lines(brains, config)
+    assert _ER_CG not in result, "absent rho must fail-closed (no line built)"

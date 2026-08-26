@@ -1058,6 +1058,9 @@ def main(argv: list[str] | None = None) -> int:
                         "magic": entry.get("magic", 90001),
                         "feature_schema_id": entry.get("feature_schema_id", ""),
                         "training_contract": entry.get("training_contract", ""),
+                        # DQAF-20260826-007 / FIX-20260826-007: 窄门读 _b["training_metrics"]["spearman_rho"],
+                        # 投影必须透传, 否则运行时 b_info.spearman_rho=None → 特区 fail-closed (SERVE_SKEW).
+                        "training_metrics": entry.get("training_metrics"),
                         "hmre_layer": entry.get("hmre_layer"),
                         "contract_group": entry.get("contract_group", ""),
                         "training_horizon": entry.get("training_horizon", 12),
