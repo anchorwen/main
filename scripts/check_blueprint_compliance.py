@@ -418,6 +418,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/ci_prepare_v9_shadow_fixtures.py",  # FIX-20260819-006: CI shadow fixture prep (stub-declared)
         "scripts/_shadow_ops_watchdog.py",  # FIX-20260824-003: Phase 4 Shadow Ops Layer-3 每日巡检
         "scripts/_audit_shadow_ops_liveness_probe.py",  # FIX-20260824-003: Phase 4 Shadow Ops 实证锁探针
+        "scripts/_audit_zombie_purge_verify_20260826.py",  # DQAF-20260826-004: 清剿丧尸归零法证审计
     ],
     "runtime_state": [
         "core/state/",

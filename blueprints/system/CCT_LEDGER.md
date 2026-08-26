@@ -2091,3 +2091,15 @@
   - Source 7: 回归锁 46 新测试 + runtime 456 + 全量 5225 passed
 - **是否被推翻**: 否 (AR: "label 只是遥测不影响训练" 被推翻 — training label_contract 消费 close label, 污染传播; "bridge 标签会被 dedup 覆写无需修" 被推翻 — 未覆写的孤儿桥条目保留错误格式)
 - **关联 ReB Pattern**: CLOSE_LABEL_MULTI_PRODUCER_DIVERGENCE
+
+### CCT-20260826-001 — BTC 举步维艰三病根定论 (STRATEGIC_OBSERVATION / NOT a code-defect)
+- **Docket ID**: DQAF-20260826-004 motivation (清剿丧尸) | **性质**: 战略诊断 (非代码缺陷, 铁律 #11 脚本定格)
+- **日期**: 2026-08-26 | **Severity**: Sev 2 (运行质量下降 + 执行层泥潭) | **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 用户"BTC 举步维艰前途黯淡" — BTC 全量 1184 闭仓 **-279.60 / 胜率 32.2%**; 近30天自有策略仍亏 ~89 (sv 30.77 + h1_v2 23.87 + h4 35.66 + m30 0.07); 唯一流动新引擎是借来的 XAU 敢死队 (magic 90601, -14.38). [confirmed, 脚本定格]
+  - [Layer 2 — 中间异常]: (a) 方向偏置: LONG 753 单 **-270.50 / 29%WR** vs SHORT 382 单 +3.49 / 36%WR → 亏损结构性集中在 LONG; (b) 治理↔接线分裂: governance (data_btc/governance_state.json) 判 M30/H1_V2/H4 全 retired, 但 live_btc.yaml strategy_line `btc_swing_m30`(90430)/`h1_v2`(90460)/`h4`(904240) 仍 `enabled:true, mode:probation` (丧尸), `btc_swing`(90410) `mode:live` 但 `enabled:false` (mode 矛盾); (c) 训练门禁死锁: 所有 ML 脑 OOS ρ 过不了 0.05 硬门槛 (Flow46 LONG 0.0266 硬否决 / SHORT -0.0881 FAIL; V4 LONG 0.0445 禁 p-hacking; 仅 V4_SHORT 0.0596 堪堪过线), 而重训需 ≥200 实盘 (Path B) → 鸡生蛋. [confirmed]
+  - [Layer 3 — 根因]: **L3 双重架构缺陷** — (i) 训练信噪比 OOS ρ 门禁 ↔ 实盘数据死锁 (无真实校验闭环, expected_r 全卡 candidate, 一个都无法晋升); (ii) Iron Law #14 L2 governance 未在物理接线层 (L3) 真落停退休判决 → 已退休 swing 仍带电备重开. -279.60/32% 系**已退休老 swing 历史遗留**, 非当前门禁下新策略产物. [confirmed]
+- **证据引用**: `scripts/_audit_btc_status_snapshot_20260826.py` (去重: 1184闭仓/-279.60/32.2%WR; 方向 LONG 753/-270.50/29% vs SHORT 382/+3.49/36%; 近30天105单) | `data_btc/governance_state.json` (M30/H1_V2/H4 all retired) | `configs/live_btc.yaml:434-556` (btc_swing_m30/h1_v2/h4 enabled:true+mode:probation zombie) | `core/runtime/strategy_builder.py:223-238` (enabled 默认 True, 删块=地雷) | `scripts/live_intent_loop.py:333,373` (strategy_configs = strategy_lines dict, 容忍缺块)
+- **是否被推翻**: 否 (AR: "BTC 是没救了/系统坏了" 被推翻 — 亏损是已退休遗留, 新策略方向修正是对的; "多拍几个新策略就行" 被推翻 — 方案早躺路线图, 卡点是同一道门禁/死锁, 缺结构性杠杆)
+- **关联 ReB Pattern**: LEGACY_RETIRED_LINEAGE_STILL_WIRED_ZOMBIE / OOS_GATE_VS_LIVEDATA_DEADLOCK / DIRECTION_BIAS_LONG_STructural
+- **路由结论**: 破局序 = ①清剿丧尸 (L2↔L3 对齐) → ②实盘特区 (省下风险预算给 ρ 过线种子). 详见 DQAF-20260826-004.

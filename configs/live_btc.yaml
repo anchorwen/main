@@ -376,7 +376,7 @@ strategy_lines:
     max_volume: 0.1
     min_p_win: 0.45
     min_valid_brains: 1
-    mode: live
+    mode: retired
     sl:
       base_atr_mult: 1.5
       dynamic: true
@@ -432,8 +432,8 @@ strategy_lines:
       base_atr_mult: 2.0
       partial_tp_enabled: false
   btc_swing_m30:
-    enabled: true
-    mode: probation
+    enabled: false
+    mode: retired
     base_volume: 0.01
     min_economic_volume: 0.01
     brain_types:
@@ -473,8 +473,8 @@ strategy_lines:
       base_atr_mult: 2.5
       partial_tp_enabled: false
   btc_swing_h1_v2:
-    enabled: true
-    mode: probation
+    enabled: false
+    mode: retired
     base_volume: 0.01
     min_economic_volume: 0.01
     brain_types:
@@ -514,8 +514,8 @@ strategy_lines:
       base_atr_mult: 2.5
       partial_tp_enabled: false
   btc_swing_h4:
-    enabled: true
-    mode: probation
+    enabled: false
+    mode: retired
     base_volume: 0.01
     min_economic_volume: 0.01
     brain_types:

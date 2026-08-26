@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-26T04:15:32Z
+> **自动生成**: 2026-08-26T11:01:08Z
 
 ## Package-Level Dependencies
 
@@ -587,6 +587,7 @@
 - `_audit_btc_godseye_health_20260822.py` → (无内部依赖)
 - `_audit_btc_legacy_lineage_pnl_20260805.py` → (无内部依赖)
 - `_audit_btc_modify_misroute_exposure_20260819.py` → (无内部依赖)
+- `_audit_btc_status_snapshot_20260826.py` → (无内部依赖)
 - `_audit_circuit_breaker_scope_20260826.py` → `core.runtime.shadow_ops.live_fire_breaker`
 - `_audit_close_label_divergence_20260821.py` → (无内部依赖)
 - `_audit_dupe_category_20260805.py` → (无内部依赖)
@@ -633,6 +634,7 @@
 - `_audit_xau_tp_shrink_20260817.py` → (无内部依赖)
 - `_audit_xau_two_longs_20260805.py` → (无内部依赖)
 - `_audit_xau_votes_pnl_20260805.py` → (无内部依赖)
+- `_audit_zombie_purge_verify_20260826.py` → (无内部依赖)
 - `_evaluate_probation_m30_h1v2.py` → (无内部依赖)
 - `_merge_aligned_multitf_data.py` → (无内部依赖)
 - `_monitor_direction_concentration.py` → `core.deployment.brain_alert`, `core.deployment.scheduled_task_registry`

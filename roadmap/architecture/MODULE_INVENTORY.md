@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-26T04:15:32Z
-> **扫描模块数**: 858
+> **自动生成**: 2026-08-26T11:01:08Z
+> **扫描模块数**: 860
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -675,6 +675,7 @@
 | `_audit_btc_godseye_health_20260822.py` | ✅ active | — | 8 | 440 | — | |
 | `_audit_btc_legacy_lineage_pnl_20260805.py` | ✅ active | — | 2 | 91 | — | |
 | `_audit_btc_modify_misroute_exposure_20260819.py` | ✅ active | — | 3 | 222 | — | |
+| `_audit_btc_status_snapshot_20260826.py` | ✅ active | — | 6 | 168 | — | |
 | `_audit_circuit_breaker_scope_20260826.py` | ✅ active | — | 2 | 102 | — | |
 | `_audit_close_label_divergence_20260821.py` | ✅ active | — | 4 | 176 | — | |
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
@@ -721,6 +722,7 @@
 | `_audit_xau_tp_shrink_20260817.py` | ✅ active | — | 2 | 162 | — | |
 | `_audit_xau_two_longs_20260805.py` | ✅ active | — | 1 | 38 | — | |
 | `_audit_xau_votes_pnl_20260805.py` | ✅ active | — | 4 | 173 | — | |
+| `_audit_zombie_purge_verify_20260826.py` | ✅ active | — | 4 | 134 | — | |
 | `_evaluate_probation_m30_h1v2.py` | ✅ active | — | 4 | 172 | — | |
 | `_merge_aligned_multitf_data.py` | ✅ active | — | 5 | 351 | — | |
 | `_monitor_direction_concentration.py` | ✅ active | — | 7 | 366 | — | |
@@ -795,7 +797,7 @@
 | `build_micro_cost_model.py` | ✅ active | FeatureRow | 12 | 717 | — | |
 | `build_regime_snapshots.py` | ✅ active | — | 2 | 131 | — | |
 | `calibrate_binary_threshold.py` | ✅ active | — | 4 | 394 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 768 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 769 | — | |
 | `check_data_health_contract.py` | ✅ active | Severity | 13 | 732 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation, _ExceptionEntry | 3 | 239 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 234 | — | |

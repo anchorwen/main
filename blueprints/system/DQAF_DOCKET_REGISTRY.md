@@ -365,3 +365,16 @@
 - **Fix**: FIX-20260820-001 — **The Resilient Pulse** (IC 雷霆裁决批准): ① heartbeat_refresh pulse 注入 BarSyncPoller 轮询 4 点 (session gate / poll loop / MT5-unavailable / persistent-error) → 合法等待期间保活; ② timeout inversion: bar_sync_timeout 360→240 + degraded deadline 结构性对齐 (有 pulse=bar_boundary 310s / 无 pulse=270s 硬帽 <300s); ③ pre_trade_guards caution tier **零语义漂移**. 双路配置 live.yaml + live_btc.yaml bar_sync_timeout 同步对齐 (IC 指令). 回归锁 tests/unit/test_event_bar_sync_heartbeat.py 8 测试 (休市阻塞期无硬杀 + **BTC 24/7 对照**)
 - **ReB**: MARKET_CLOSED_BLOCK_MISCLASSIFIED_AS_DEADLOCK
 - **Status**: **CLOSED** — FIX-20260820-001 (34 针对性回归全绿, mypy/ruff PASS, 全量 pytest 通过)
+
+---
+
+- **Docket ID**: DQAF-20260826-004
+- **Date**: 2026-08-26
+- **Severity**: Sev 2 (运行质量下降 + 执行层泥潭 — 已退休 swing 仍带电, 违反 Iron Law #14 L2↔L3 接线纪律)
+- **Title**: 清剿丧尸策略 — 治理(L2)↔接线(L3)对齐 (The Zombie Purge) — **CLOSED**
+- **Trigger**: IC 2026-08-26 最高战术指令; 动机来源 CCT-20260826-001 (BTC 三病根之二: 治理↔接线不同步)
+- **Evidence**: 交叉比对 `data_btc/governance_state.json` (M30/H1_V2/H4/V4 retired) vs `configs/live_btc.yaml:434-556` — `btc_swing_m30`(90430)/`btc_swing_h1_v2`(90460)/`btc_swing_h4`(904240) 仍 `enabled:true, mode:probation` (丧尸), `btc_swing`(90410) `mode:live` 且 `enabled:false` (矛盾). registry_entries 退休 brains 已 `enabled:false` 对齐. 近30天自有策略仍亏 ~89.
+- **Root Cause**: **L3 双重** — Iron Law #14 L2 governance 退休判决未在 L3 物理接线层真落停 + strategy_builder L225 `enabled` 默认 True (删块=地雷, 须显式 false).
+- **Fix (方案)**: 见 `references/DQAF_PLAN_20260826_004_ZOMBIE_PURGE.md` — 4 处 strategy_line `enabled:false + mode:retired` (btc_swing 仅 mode live→retired); registry_entries 不改; 不删块; 副产物独立低优先级项 V4_LGB wiring:false vs governance probation.
+- **ReB**: LEGACY_RETIRED_LINEAGE_STILL_WIRED_ZOMBIE
+- **Status**: **CLOSED** (2026-08-26, IC 最高开火令后执行). 清剿落地: `configs/live_btc.yaml` L379 btc_swing mode live→retired; L435/436 m30 / L476/477 h1_v2 / L517/518 h4 均 `enabled:true→false` + `mode:probation→retired`. **验证**: verify --full FIX_REGISTRY PASS (pytest 300s 预存超时 exit 0); `run_consistency_check` valid=True (魔术号零碰撞/跨终端零/14 脑); **`_audit_zombie_purge_verify_20260826.py` → wired-on but governance-retired = 0 → RESULT PASS exit 0** (守卫非空证: 4 退休脑 contract_group=btc_swing_m30/h1_v2/h4/swing 精确对应). 预存警告 V4_SHORT label_contract.aligned_with=null 非本次引入, 不在范围.
