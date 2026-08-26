@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-25T18:16:50Z
-> **扫描模块数**: 855
+> **自动生成**: 2026-08-26T03:03:19Z
+> **扫描模块数**: 857
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -682,11 +682,13 @@
 | `_audit_export_m5_20260817.py` | ✅ active | — | 3 | 153 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_journal_universe_20260821.py` | ✅ active | — | 2 | 197 | — | |
+| `_audit_live_fire_2p94_protocol_20260826.py` | ✅ active | — | 5 | 185 | — | |
 | `_audit_live_fire_status_20260825.py` | ✅ active | — | 2 | 134 | — | |
 | `_audit_live_health_20260814.py` | ✅ active | — | 16 | 475 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_audit_metaexit_gate_20260821.py` | ✅ active | — | 7 | 295 | — | |
+| `_audit_p1_threshold_probe_20260826.py` | ✅ active | — | 2 | 98 | — | |
 | `_audit_shadow_ops_liveness_probe.py` | ✅ active | — | 4 | 205 | — | |
 | `_audit_shadow_pnl_august_20260812.py` | ✅ active | — | 3 | 139 | — | |
 | `_audit_shadow_pnl_replay_20260812.py` | ✅ active | — | 5 | 248 | — | |

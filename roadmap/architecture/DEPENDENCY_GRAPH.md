@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-25T18:16:50Z
+> **自动生成**: 2026-08-26T03:03:19Z
 
 ## Package-Level Dependencies
 
@@ -594,11 +594,13 @@
 - `_audit_export_m5_20260817.py` → (无内部依赖)
 - `_audit_idempotent_key_20260805.py` → (无内部依赖)
 - `_audit_journal_universe_20260821.py` → (无内部依赖)
+- `_audit_live_fire_2p94_protocol_20260826.py` → (无内部依赖)
 - `_audit_live_fire_status_20260825.py` → (无内部依赖)
 - `_audit_live_health_20260814.py` → (无内部依赖)
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
 - `_audit_metaexit_gate_20260821.py` → (无内部依赖)
+- `_audit_p1_threshold_probe_20260826.py` → `core.features.schemas.v9_institutional_schema`, `scripts.build_micro_cost_model`, `scripts.training.emit_micro_scaler_v2_raw_trigger`
 - `_audit_shadow_ops_liveness_probe.py` → `core.runtime.shadow_ops.micro_scaler_scorer`, `core.runtime.shadow_ops.runtime`, `scripts._shadow_ops_watchdog`
 - `_audit_shadow_pnl_august_20260812.py` → (无内部依赖)
 - `_audit_shadow_pnl_replay_20260812.py` → (无内部依赖)

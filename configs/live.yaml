@@ -45,8 +45,11 @@ shadow_ops:
       # 原结构 TP=pred 1.0× (~$1.41) vs SL=2×ATR (~$13.19) → RR=0.107, 盈亏平衡
       # WR 90.3% >> OOS D10 59.46% → EV=-$4.51/单, 打穿生死状仅需 4 连亏 (被证伪).
       # 对称 1×ATR → RR=1.0, 盈亏平衡 WR=50%, 模型 59.46% 具正期望.
+      # FIX-20260826-002 (IC 开火令 P2): RR 不对称重构 — 对称 1:1 括号在
+      # 微观结构摩擦 (滑点/点差) 下是自杀; 1:2 赔率吸收交易摩擦, 把盈亏平衡
+      # 硬性拉低到 33.3%. TP 2×ATR / SL 1×ATR.
       sl_atr_mult: 1.0
-      tp_atr_mult: 1.0
+      tp_atr_mult: 2.0
       min_sl_pct: 0.05
       min_tp_pct: 0.03
       block_when_positions: true
