@@ -91,6 +91,11 @@ def _warn_contract_mismatch(
         )
 
 
+def _emit_narrow_gate_event(event: str, **fields: Any) -> None:
+    """DQAF-20260826-005 敢死队特区窄门诊断事件 — 结构化 print 落 launcher intent log."""
+    print(json.dumps({"event": event, **fields}, ensure_ascii=False), flush=True)
+
+
 def build_strategy_lines(
     brains: list[dict[str, Any]],
     config: Any,  # LiveCycleConfig
@@ -182,6 +187,7 @@ def build_strategy_lines(
     btc_swing_h1_v2_brains = _known_groups.get("btc_swing_h1_v2", [])
     btc_swing_h4_brains = _known_groups.get("btc_swing_h4", [])
     btc_expected_r_m15_brains = _known_groups.get("btc_expected_r_m15", [])
+
     h1_directional_brains = _known_groups.get("h1_directional", [])
 
     # ── FIX-20260628-169: Per-asset reference ATR for dynamic SL/TP scaling ──
@@ -1022,6 +1028,68 @@ def build_strategy_lines(
                 cooldown_minutes=_cfg("btc_swing_h4", "budget", {}).get("cooldown_minutes", 0),
             ),
         )
+
+    # ── DQAF-20260826-005 / FIX-20260826-005: 敢死队特区窄门 (The Narrow Gate) ──
+    # IC 2026-08-26 裁决 Q1 (最小特权原则): 特区线 btc_expected_r_m15 声明
+    # execution_zone=="live_fire_vanguard" 时, 只放 白名单 ∩ {candidate,shadow} ∩
+    # spearman_rho>=min_zone_rho 的脑; 硬断言恰 1 脑 (V4_SHORT) 通过, 否则清空 →
+    # 特区线不构建 (fail-closed, 特权通道编译期焊死 — 其他垃圾脑绝无可能混出).
+    # 非特区线 (execution_zone 空) → 原格, 零影响.
+    if _cfg("btc_expected_r_m15", "execution_zone", None) == "live_fire_vanguard":
+        _allowed = set(_cfg("btc_expected_r_m15", "allowed_brain_ids", []) or [])
+        _min_rho = float(_cfg("btc_expected_r_m15", "min_zone_rho", 0.05))
+        _survivors: list[dict[str, Any]] = []
+        for _b in btc_expected_r_m15_brains:
+            _bid = _b.get("brain_id", "")
+            _status = _b.get("status", "")
+            _rho = (_b.get("training_metrics") or {}).get("spearman_rho")
+            if _bid not in _allowed:
+                _emit_narrow_gate_event(
+                    "vanguard_narrow_gate_reject",
+                    brain_id=_bid,
+                    reason="not_in_allowlist",
+                    detail=f"allowed={sorted(_allowed)}",
+                )
+                continue
+            if _status not in ("candidate", "shadow"):
+                _emit_narrow_gate_event(
+                    "vanguard_narrow_gate_reject",
+                    brain_id=_bid,
+                    reason="bad_status",
+                    detail=_status,
+                )
+                continue
+            if _rho is None or float(_rho) < _min_rho:
+                _emit_narrow_gate_event(
+                    "vanguard_narrow_gate_reject",
+                    brain_id=_bid,
+                    reason="rho_below_threshold",
+                    detail=str(_rho),
+                )
+                continue
+            _survivors.append(_b)
+        if len(_survivors) > 1:
+            _emit_narrow_gate_event(
+                "vanguard_narrow_gate_reject",
+                brain_id=",".join(sorted(_b.get("brain_id", "") for _b in _survivors)),
+                reason="more_than_one",
+                detail="narrow gate must admit exactly one brain — fail-closed",
+            )
+            _survivors = []
+        if not _survivors:
+            _emit_narrow_gate_event(
+                "vanguard_narrow_gate_failclosed",
+                strategy="btc_expected_r_m15",
+                reason="no_surviving_brain_or_gate_compromised",
+                admitted=[],
+            )
+        else:
+            _emit_narrow_gate_event(
+                "vanguard_narrow_gate_pass",
+                strategy="btc_expected_r_m15",
+                admitted=[_b.get("brain_id", "") for _b in _survivors],
+            )
+        btc_expected_r_m15_brains = _survivors
 
     # ── BTC Expected R V4 M15 Two-Tower (DQAF-20260731-004) ──
     if btc_expected_r_m15_brains:

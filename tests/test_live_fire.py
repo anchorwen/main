@@ -434,3 +434,102 @@ def test_g9_scorer_trigger_is_raw_pred_based(tmp_path):
         else:
             n_below += 1
     assert n_above > 0 and n_below > 0, "特征池未覆盖阈值两侧 (触发率异常)"
+
+
+# ────────────────────────────────────────────────────────────────────
+# G10 — 全局生死状跨树聚合 (FIX-20260826-005/DQAF-20260826-005)
+# IC 2026-08-26 裁决 Q2 (一荣俱荣一损俱损): 敢死队家族同池, 非单 magic.
+# 90601 XAU Micro Scaler + 90452 BTC V4_SHORT 特区 → 同 $50 血槽.
+# ────────────────────────────────────────────────────────────────────
+def test_g10_aggregate_multi_magic_cross_tree(tmp_path):
+    """magics=(90601,90452) → 跨树聚合同池 (各树×各magic 独立求 e_DD 后求和)."""
+    from core.runtime.shadow_ops.live_fire_breaker import aggregate_live_fire_drawdown
+
+    tree_a = tmp_path / "data"  # XAU
+    tree_b = tmp_path / "data_btc"  # BTC
+    tree_a.mkdir()
+    tree_b.mkdir()
+    _write_journal(
+        tree_a / "live_trade_journal.jsonl",
+        [
+            {"action": "close", "magic": 90601, "pnl": -20.0},  # XAU 敢死队
+            {"action": "close", "magic": 99997, "pnl": -100.0},  # 非家族 → 不计
+        ],
+    )
+    _write_journal(
+        tree_b / "live_trade_journal.jsonl",
+        [
+            {"action": "close", "magic": 90452, "pnl": -15.0},  # BTC V4_SHORT 特区
+        ],
+    )
+    agg = aggregate_live_fire_drawdown(
+        magics=(90601, 90452),
+        max_drawdown_usd=50.0,
+        base_dirs=[tree_a, tree_b],
+    )
+    assert agg["realized_pnl_usd"] == pytest.approx(-35.0)  # -20 + -15 同池
+    assert agg["n_closed"] == 2
+    assert agg["breached"] is False
+    assert agg["per_tree"][str(tree_a)]["by_magic"]["90601"]["realized_pnl_usd"] == pytest.approx(
+        -20.0
+    )
+    assert agg["per_tree"][str(tree_b)]["by_magic"]["90452"]["realized_pnl_usd"] == pytest.approx(
+        -15.0
+    )
+
+
+def test_g10_aggregate_backward_compat_single_magic(tmp_path):
+    """旧调用 (magic=90601 单值) 向后兼容: 只聚合该 magic, 不透传家族兄弟."""
+    from core.runtime.shadow_ops.live_fire_breaker import aggregate_live_fire_drawdown
+
+    tree_a = tmp_path / "data"
+    tree_b = tmp_path / "data_btc"
+    tree_a.mkdir()
+    tree_b.mkdir()
+    _write_journal(
+        tree_a / "live_trade_journal.jsonl",
+        [
+            {"action": "close", "magic": 90601, "pnl": -20.0},
+        ],
+    )
+    _write_journal(
+        tree_b / "live_trade_journal.jsonl",
+        [
+            {"action": "close", "magic": 90452, "pnl": -15.0},
+        ],
+    )
+    agg = aggregate_live_fire_drawdown(
+        magic=90601, max_drawdown_usd=50.0, base_dirs=[tree_a, tree_b]
+    )
+    assert agg["realized_pnl_usd"] == pytest.approx(-20.0)  # 90452 不计 (单 magic 口径)
+    assert agg["n_closed"] == 1
+    assert "90452" not in agg["per_tree"][str(tree_b)]["by_magic"]
+
+
+def test_g10_aggregate_defaults_to_tracked_family(tmp_path):
+    """未传 magic/magics → 缺省聚合 LIVE_FIRE_TRACKED_MAGICS (单点扩展)."""
+    from core.runtime.shadow_ops.live_fire_breaker import (
+        LIVE_FIRE_TRACKED_MAGICS,
+        aggregate_live_fire_drawdown,
+    )
+
+    assert LIVE_FIRE_TRACKED_MAGICS == (90601, 90452)  # 家族血槽注册
+    tree_a = tmp_path / "data"
+    tree_b = tmp_path / "data_btc"
+    tree_a.mkdir()
+    tree_b.mkdir()
+    _write_journal(
+        tree_a / "live_trade_journal.jsonl",
+        [
+            {"action": "close", "magic": 90601, "pnl": -20.0},
+        ],
+    )
+    _write_journal(
+        tree_b / "live_trade_journal.jsonl",
+        [
+            {"action": "close", "magic": 90452, "pnl": -15.0},
+        ],
+    )
+    agg = aggregate_live_fire_drawdown(max_drawdown_usd=50.0, base_dirs=[tree_a, tree_b])
+    assert agg["realized_pnl_usd"] == pytest.approx(-35.0)  # 全家族同池
+    assert agg["n_closed"] == 2

@@ -378,3 +378,12 @@
 - **Fix (方案)**: 见 `references/DQAF_PLAN_20260826_004_ZOMBIE_PURGE.md` — 4 处 strategy_line `enabled:false + mode:retired` (btc_swing 仅 mode live→retired); registry_entries 不改; 不删块; 副产物独立低优先级项 V4_LGB wiring:false vs governance probation.
 - **ReB**: LEGACY_RETIRED_LINEAGE_STILL_WIRED_ZOMBIE
 - **Status**: **CLOSED** (2026-08-26, IC 最高开火令后执行). 清剿落地: `configs/live_btc.yaml` L379 btc_swing mode live→retired; L435/436 m30 / L476/477 h1_v2 / L517/518 h4 均 `enabled:true→false` + `mode:probation→retired`. **验证**: verify --full FIX_REGISTRY PASS (pytest 300s 预存超时 exit 0); `run_consistency_check` valid=True (魔术号零碰撞/跨终端零/14 脑); **`_audit_zombie_purge_verify_20260826.py` → wired-on but governance-retired = 0 → RESULT PASS exit 0** (守卫非空证: 4 退休脑 contract_group=btc_swing_m30/h1_v2/h4/swing 精确对应). 预存警告 V4_SHORT label_contract.aligned_with=null 非本次引入, 不在范围.
+
+---
+
+- **Docket ID**: DQAF-20260826-005
+- **Date**: 2026-08-26
+- **Severity**: Sev 2 (实盘特区风控门禁 — candidate 脑过不了正常门禁, 需窄门破局)
+- **Title**: V4_SHORT 破局特区蓝图 (Live-Fire Special Zone) — **PENDING**
+- **Trigger**: IC 2026-08-26 最高开火令 (Mandate #3); 动机源 CCT-20260826-001 (病根三: OOS门禁↔实盘数据死锁 — 高风险脑迟迟拿不到真实闭环标签)
+- **Status**: **CLOSED** (2026-08-26, IC 最高开火令 Mandate #3 后实施落地 FIX-20260826-005). 特效 4 处: ①`strategy_builder.py` vanguard 窄门块 (放于 `_cfg` 闭包定义后/`btc_expected_r_m15` build 前 — 原插 L191 引 `_cfg` 会 NameError, 已移正) + `_emit_narrow_gate_event` 诊断事件; ②`live_fire_breaker.py` `LIVE_FIRE_TRACKED_MAGICS=(90601,90452)` + `aggregate_live_fire_drawdown(magic/magics)` 参数化; ③`live_cycle.py` 生产调用 `magics=LIVE_FIRE_TRACKED_MAGICS` (聚合口径改全家族); ④`configs/live_btc.yaml` `btc_expected_r_m15` 加 `execution_zone: live_fire_vanguard` + `allowed_brain_ids: [BTC_Expected_R_V4_SHORT]` + `min_zone_rho: 0.05`. **验证**: verify --full PASS (mypy/ruff 全绿, pytest 300s 预存超时 exit 0); 两测试文件 30 passed (新增 4 narrow_gate + 3 g10); 法证 `_audit_narrow_gate_real_config_20260826.py` → 真实 config+真实 4 脑, V4_SHORT(0.0596,shadow) 唯一 admitted, V4_LONG(0.0445)/V5_LONG(ρ=null)/V5_SHORT(ρ=null) 全 reject not_in_allowlist → 特区线构建成功 **EXIT=0**. **⚠️ 诚实 gap (另立案卷)**: "一损俱损" 仅完成计数侧 (magic 入池), 停止侧未接线 — V4_SHORT 走常规 `_evaluate_strategy_lines`(live_cycle.py:4602) 不经 `is_breaker_open` 门禁 (仅敢死队旁路 `_dispatch_live_fire_micro_scaler` 门禁) → 击穿后常规派发仍放行. 需单独 docket. **激活前提**: 当前运行引擎 14864 采用无 `execution_zone` 的旧 config (zombie-purge 冷重启时窄门键未写), 窄门在**下次重启**才焊死当前态, 此次重启未获 IC 授权 → 未执行.

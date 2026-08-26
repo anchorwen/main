@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-26T11:01:08Z
-> **扫描模块数**: 860
+> **自动生成**: 2026-08-26T13:33:46Z
+> **扫描模块数**: 861
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -535,7 +535,7 @@
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `legacy_dispatch_reference.py` | ⬜ empty | — | 0 | 84 | — | |
 | `live_bootstrap.py` | ✅ active | — | 1 | 177 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 5541 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 5545 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 369 | — | |
 | `management_phase.py` | ✅ active | — | 18 | 2674 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 383 | — | |
@@ -562,7 +562,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 6 | 1313 | — | |
+| `strategy_builder.py` | ✅ active | — | 7 | 1381 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 48 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 6 | 1450 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
@@ -578,7 +578,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `dispatch_filter.py` | ✅ active | — | 2 | 79 | — | |
-| `live_fire_breaker.py` | ✅ active | — | 7 | 269 | — | |
+| `live_fire_breaker.py` | ✅ active | — | 7 | 302 | — | |
 | `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 226 | — | |
 | `runtime.py` | ✅ active | ShadowOpsRuntime | 12 | 341 | — | |
 | `telemetry.py` | ✅ active | ShadowTelemetryLedger | 6 | 50 | — | |
@@ -690,6 +690,7 @@
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_audit_metaexit_gate_20260821.py` | ✅ active | — | 7 | 295 | — | |
+| `_audit_narrow_gate_real_config_20260826.py` | ✅ active | — | 2 | 116 | — | |
 | `_audit_p1_threshold_probe_20260826.py` | ✅ active | — | 2 | 98 | — | |
 | `_audit_shadow_ops_liveness_probe.py` | ✅ active | — | 4 | 205 | — | |
 | `_audit_shadow_pnl_august_20260812.py` | ✅ active | — | 3 | 139 | — | |

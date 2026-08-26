@@ -208,3 +208,114 @@ def test_rule_engine_strategy_created(mock_get_asset: MagicMock) -> None:
     assert strategy.engine is not None
     assert strategy.engine.sl_mult == 3.0
     assert strategy.engine.tp_mult == 1.5
+
+
+# ============================================================================
+# Test: 敢死队特区窄门 (DQAF-20260826-005 / FIX-20260826-005)
+# IC 2026-08-26 裁决 Q1 (最小特权原则): 特区线只放白名单 ∩ {candidate,shadow} ∩
+# ρ≥min_zone_rho 的脑, 硬断言恰 1 脑, 否则 fail-closed 清空不构建.
+# ============================================================================
+_ER_CG = "btc_expected_r_m15"
+
+
+def _er_brain(brain_id: str, rho: float | None, status: str = "candidate") -> dict:
+    """Minimal btc_expected_r_m15 brain info for the narrow-gate tests."""
+    return {
+        "brain_id": brain_id,
+        "contract_group": _ER_CG,
+        "status": status,
+        "brain_type": "expected_r_short",
+        "vote_weight": 1.0,
+        "training_contract": "btc_expected_r",
+        "training_metrics": {"spearman_rho": rho},
+    }
+
+
+@patch("core.runtime.strategy_builder.get_asset")
+def test_narrow_gate_non_vanguard_regression(mock_get_asset: MagicMock) -> None:
+    """无 execution_zone → 原格: 特区线用全部脑构建 (回归锁)."""
+    from core.runtime.strategy_builder import build_strategy_lines
+
+    mock_get_asset.return_value = SimpleNamespace(contract_size=100)
+    config = _make_config(
+        strategy_configs={_ER_CG: {"enabled": True, "base_volume": 0.01}},
+    )
+    brains = [_er_brain("V4_SHORT", 0.0596), _er_brain("V4_LONG", 0.0445)]
+    result = build_strategy_lines(brains, config)
+    assert _ER_CG in result
+    brain_ids = [b["brain_id"] for b in result[_ER_CG].brains]
+    assert set(brain_ids) == {"V4_SHORT", "V4_LONG"}
+
+
+@patch("core.runtime.strategy_builder.get_asset")
+def test_narrow_gate_admits_exactly_vanguard_brain(mock_get_asset: MagicMock) -> None:
+    """特区 zone: 白名单 ∩ ρ≥0.05 ∩ candidate → 恰 1 脑 (V4_SHORT) 通过, LONG 被拒."""
+    from core.runtime.strategy_builder import build_strategy_lines
+
+    mock_get_asset.return_value = SimpleNamespace(contract_size=100)
+    config = _make_config(
+        strategy_configs={
+            _ER_CG: {
+                "enabled": True,
+                "base_volume": 0.01,
+                "execution_zone": "live_fire_vanguard",
+                "allowed_brain_ids": ["BTC_Expected_R_V4_SHORT"],
+                "min_zone_rho": 0.05,
+            }
+        },
+    )
+    brains = [
+        _er_brain("BTC_Expected_R_V4_SHORT", 0.0596),
+        _er_brain("BTC_Expected_R_V4_LONG", 0.0445),
+    ]
+    result = build_strategy_lines(brains, config)
+    assert _ER_CG in result
+    brain_ids = [b["brain_id"] for b in result[_ER_CG].brains]
+    assert brain_ids == ["BTC_Expected_R_V4_SHORT"]
+
+
+@patch("core.runtime.strategy_builder.get_asset")
+def test_narrow_gate_fail_closed_on_ambiguous(mock_get_asset: MagicMock) -> None:
+    """特区 zone 允许 2 脑都过 → fail-closed: 特区线不构建 (编译期焊死)."""
+    from core.runtime.strategy_builder import build_strategy_lines
+
+    mock_get_asset.return_value = SimpleNamespace(contract_size=100)
+    config = _make_config(
+        strategy_configs={
+            _ER_CG: {
+                "enabled": True,
+                "base_volume": 0.01,
+                "execution_zone": "live_fire_vanguard",
+                "allowed_brain_ids": ["BTC_Expected_R_V4_SHORT", "BTC_Expected_R_V4_LONG"],
+                "min_zone_rho": 0.01,
+            }
+        },
+    )
+    brains = [
+        _er_brain("BTC_Expected_R_V4_SHORT", 0.0596),
+        _er_brain("BTC_Expected_R_V4_LONG", 0.0445),
+    ]
+    result = build_strategy_lines(brains, config)
+    assert _ER_CG not in result, "ambiguous gate must fail-closed (no line built)"
+
+
+@patch("core.runtime.strategy_builder.get_asset")
+def test_narrow_gate_fail_closed_on_degraded_rho(mock_get_asset: MagicMock) -> None:
+    """特区 zone: 白名单脑 ρ 跌破 min_zone_rho → fail-closed, 允许脑也不放行."""
+    from core.runtime.strategy_builder import build_strategy_lines
+
+    mock_get_asset.return_value = SimpleNamespace(contract_size=100)
+    config = _make_config(
+        strategy_configs={
+            _ER_CG: {
+                "enabled": True,
+                "base_volume": 0.01,
+                "execution_zone": "live_fire_vanguard",
+                "allowed_brain_ids": ["BTC_Expected_R_V4_SHORT"],
+                "min_zone_rho": 0.05,
+            }
+        },
+    )
+    brains = [_er_brain("BTC_Expected_R_V4_SHORT", 0.0400)]  # ρ < 0.05 → 拒绝 → 无幸存 → 不构建
+    result = build_strategy_lines(brains, config)
+    assert _ER_CG not in result, "degraded rho must fail-closed (no line built)"

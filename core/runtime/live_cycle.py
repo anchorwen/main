@@ -1135,6 +1135,7 @@ def _dispatch_live_fire_micro_scaler(
     # FIX-20260826-001 (IC Sev-1 裁决): 生死状全局共享 — 跨 XAU(data)+BTC(data_btc)
     # 动态汇总 90601 累计已实现 PnL; 全局击穿 → 双树双写 flag → fail-closed 拦截派发.
     from core.runtime.shadow_ops.live_fire_breaker import (
+        LIVE_FIRE_TRACKED_MAGICS,
         aggregate_live_fire_drawdown,
         is_breaker_open,
         live_fire_pool_for,
@@ -1154,10 +1155,13 @@ def _dispatch_live_fire_micro_scaler(
         return
 
     # 全局生死状实时汇总 (append-only ledger 重算, 跨进程天然一致).
-    # config.base_dir 属全局树集 → _lf_pool 即完整跨树池 (XAU+BTC 单 $50);
+    # config.base_dir 属全局树集 → _lf_pool 即完整跨树池 (XAU+BTC 单 $50).
     # 隔离/测试 → 单树池, 同时杜绝测试误读全局生产账本.
+    # FIX-20260826-005: 聚合 magics=LIVE_FIRE_TRACKED_MAGICS (90601 XAU Micro
+    # Scaler + 90452 BTC V4_SHORT 特区) — 家族同池一损俱损. _lf_magic 仅作当前
+    # 派发事件的上下文标记, 不代表聚合口径.
     _agg = aggregate_live_fire_drawdown(
-        magic=_lf_magic, max_drawdown_usd=_lf_max_dd, base_dirs=_lf_pool
+        magics=LIVE_FIRE_TRACKED_MAGICS, max_drawdown_usd=_lf_max_dd, base_dirs=_lf_pool
     )
     if _agg["breached"]:
         # 击穿 → 在全局生死状池双写 flag (幂等, 保留首次熔断时间).

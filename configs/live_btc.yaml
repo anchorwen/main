@@ -557,6 +557,13 @@ strategy_lines:
   btc_expected_r_m15:
     enabled: true
     mode: shadow
+    # ── DQAF-20260826-005 / FIX-20260826-005: 敢死队特区窄门 (The Narrow Gate) ──
+    # IC 2026-08-26 裁决 Q1: 只放允许脑 (V4_SHORT) 中唯一 ρ≥0.05 且 candidate/shadow
+    # 的通过; 其余垃圾脑 (V4_LONG/V5 等) 在 build 期即被焊接关死 (fail-closed).
+    execution_zone: live_fire_vanguard
+    allowed_brain_ids:
+    - BTC_Expected_R_V4_SHORT
+    min_zone_rho: 0.05
     base_volume: 0.01
     brain_types:
     - expected_r_long
