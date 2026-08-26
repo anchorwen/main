@@ -202,6 +202,12 @@ class StrategyLineConfig:
     # still allowed candidate/archived brains to trade real capital).
     mode: str = "live"
 
+    # ── DQAF-20260826-005/006 (FIX-20260826-005): 执行特区 ──
+    # "live_fire_vanguard" = 敢死队特区: 派发真实订单前强制经 check_vanguard_breaker
+    # (is_breaker_open) 校验, 击穿即物理 Bypass. 空串 = 非特区 (正常 live 策略,
+    # 熔断器绝不误杀 — Iron Law #0 边界控制). 语义性域标记 (magic 是低层实现细节).
+    execution_zone: str = ""
+
     # Dynamic SL/TP
     base_sl_atr_mult: float = 2.0
     base_tp_atr_mult: float = 3.5

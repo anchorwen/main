@@ -211,6 +211,12 @@ LIVE_FIRE_BASE_DIRS: tuple[str, ...] = ("data", "data_btc")
 # 两 magic 同池聚合 → 一荣俱荣一损俱损. 单点扩展点: 新增家族成员在此登记.
 LIVE_FIRE_TRACKED_MAGICS: tuple[int, ...] = (90601, 90452)
 
+# ── DQAF-20260826-006 / FIX-20260826-006 (IC 最高阻断令) ────────────────
+# 敢死队生死状 $50 硬阈值. 本模块是生死状单点定义处; 拦截侧自探测击穿时
+# 用此常量为聚合基准 (与 micro_scaler config 默认 50.0 一致, 不随 yaml 漂移).
+# 单点扩展点: 改生死状额度只改此处.
+LIVE_FIRE_MAX_DRAWDOWN_USD: float = 50.0
+
 
 def live_fire_tree_base_dirs() -> list[Path]:
     """全局生死状覆盖的树集 (XAU=data/, BTC=data_btc/) — 单点扩展点."""
@@ -300,3 +306,45 @@ def aggregate_live_fire_drawdown(
         "breached": total <= -float(max_drawdown_usd),
         "per_tree": per_tree,
     }
+
+
+def check_vanguard_breaker(execution_zone: str, base_dir: str | Path) -> bool:
+    """敢死队特区熔断拦截判定 (IC 2026-08-26 最高阻断令, DQAF-20260826-006).
+
+    **边界控制 (绝不误杀)**: 仅当 `execution_zone == "live_fire_vanguard"` 时强制
+    校验 `is_breaker_open`; 非特区 (execution_zone 空/其他值) → 恒 False — 熔断器
+    只针对敢死队 (live_fire / vanguard), 严禁拦正常 live 策略.
+
+    **闭环语义 (STOP 半侧)**: 此前敢死队 PnL 只并入生死状**记账侧** (aggregate),
+    常规派发 `_evaluate_strategy_lines` 不经 `is_breaker_open` → 击穿仍会下单.
+    本函数把熔断真正挂载到枪管: 派发真实订单前判定,
+      (1) 生死状 flag 已存在 (熔断已触发) → True (fail-closed);
+      (2) flag 未写但全局聚合已击穿 → 自探测 + 幂等双写 flag (保留首次熔断时间),
+          再 True — 确保 XAU 静默时 BTC 特区击穿也被拦 (STOP 半侧彻底闭环).
+    base_dir 单树隔离: 非全局树 → 仅查自身树 flag/账本 (防测试误读全局生产账本).
+
+    Returns: True = 应物理 Bypass (跳过派发); False = 放行.
+    """
+    if execution_zone != "live_fire_vanguard":
+        return False
+    _pool = live_fire_pool_for(base_dir)
+    # (1) flag 已存在 (熔断已触发) → 直接停.
+    if any(is_breaker_open(_d) for _d in _pool):
+        return True
+    # (2) 自探测: 聚合未击穿则放行, 击穿则写 flag 后停 (自感知闭环).
+    _agg = aggregate_live_fire_drawdown(
+        magics=LIVE_FIRE_TRACKED_MAGICS,
+        max_drawdown_usd=LIVE_FIRE_MAX_DRAWDOWN_USD,
+        base_dirs=_pool,
+    )
+    if _agg.get("breached"):
+        for _d in _pool:
+            write_breaker_flag(
+                base_dir=_d,
+                net_pnl_usd=_agg["realized_pnl_usd"],
+                n_closed=_agg["n_closed"],
+                max_drawdown_usd=LIVE_FIRE_MAX_DRAWDOWN_USD,
+                detail="vanguard interceptor — live_fire global drawdown breached (fail-closed)",
+            )
+        return True
+    return False

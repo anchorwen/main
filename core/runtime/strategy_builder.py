@@ -1130,6 +1130,8 @@ def build_strategy_lines(
                 # raised TypeError at build time (latent since DQAF-20260731-004,
                 # masked by the brain-dropout that kept this block unreachable).
                 mode=_cfg("btc_expected_r_m15", "mode", "shadow"),
+                # DQAF-20260826-005/006: 特区语义标记 → 派发前强制熔断校验.
+                execution_zone=_cfg("btc_expected_r_m15", "execution_zone", ""),
             ),
             btc_expected_r_m15_brains,
             budget=StrategyBudget(

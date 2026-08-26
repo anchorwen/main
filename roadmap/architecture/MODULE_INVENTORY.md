@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-26T13:33:46Z
+> **自动生成**: 2026-08-26T14:30:15Z
 > **扫描模块数**: 861
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -279,7 +279,7 @@
 | `strategy_budget.py` | ✅ active | StrategyBudget | 14 | 410 | — | |
 | `strategy_context.py` | ✅ active | StrategyEvaluationContext | 0 | 85 | — | |
 | `strategy_decision.py` | ✅ active | StrategyDecision | 2 | 89 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 19 | 2159 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyLineConfig, StrategyLine | 19 | 2165 | — | |
 | `strategy_protocol.py` | ✅ active | StrategyEvaluateProtocol | 1 | 44 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 137 | — | |
@@ -562,9 +562,9 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `signal_settlement.py` | ✅ active | — | 1 | 97 | — | |
-| `strategy_builder.py` | ✅ active | — | 7 | 1381 | — | |
+| `strategy_builder.py` | ✅ active | — | 7 | 1383 | — | |
 | `strategy_config_validator.py` | ✅ active | — | 1 | 48 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 6 | 1450 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 6 | 1478 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `supervised_scheduler.py` | ✅ active | TaskStatus, TaskKind, SchedulerConfig, ThreadTask, ProcessTask, SupervisedScheduler | 17 | 458 | — | |
 | `time_utils.py` | ✅ active | — | 1 | 18 | — | |
@@ -578,7 +578,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `dispatch_filter.py` | ✅ active | — | 2 | 79 | — | |
-| `live_fire_breaker.py` | ✅ active | — | 7 | 302 | — | |
+| `live_fire_breaker.py` | ✅ active | — | 8 | 350 | — | |
 | `micro_scaler_scorer.py` | ✅ active | ShadowOpsSignal, MicroScalerScorer | 7 | 226 | — | |
 | `runtime.py` | ✅ active | ShadowOpsRuntime | 12 | 341 | — | |
 | `telemetry.py` | ✅ active | ShadowTelemetryLedger | 6 | 50 | — | |

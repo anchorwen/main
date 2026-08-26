@@ -521,3 +521,121 @@ class TestGodsEyeHardVeto:
         sr = self._run(health=0.875, chop=False, mode="normal", conf=0.877, volume=0.04)
         assert sr["should_trade"] is True
         assert "blocked_by_gods_eye" not in sr["reason"]
+
+
+# ---------------------------------------------------------------------------
+# FIX-20260826-006 — Vanguard Interceptor (IC 最高阻断令)
+# 熔断器挂载特区枪管: 派发真实订单前强制经 check_vanguard_breaker 校验.
+# 边界控制 (Iron Law #0): 熔断器只针对 live_fire_vanguard, 非特区绝不误杀.
+# ---------------------------------------------------------------------------
+class TestVanguardInterceptor:
+    @staticmethod
+    def _approved_portfolio_risk(volume: float = 0.02) -> MagicMock:
+        pr = _mock_portfolio_risk()
+        pr.check.return_value = SimpleNamespace(
+            verdict=SimpleNamespace(value="approved"),
+            adjusted_volume=volume,
+            reason="",
+        )
+        return pr
+
+    @staticmethod
+    def _line_strategy(execution_zone: str, magic: int, name: str) -> MagicMock:
+        from core.execution.strategy_decision import StrategyDecision
+        from core.execution.strategy_line import StrategyLineConfig
+
+        cfg = StrategyLineConfig(
+            name=name,
+            strategy_family="expected_r",
+            magic=magic,
+            brain_types={"expected_r_short"},
+            base_dir="",
+            mode="live",
+            execution_zone=execution_zone,
+            min_valid_brains=1,
+        )
+        strategy = MagicMock()
+        strategy.config = cfg
+        strategy.evaluate.return_value = StrategyDecision(
+            strategy_name=name,
+            magic=magic,
+            should_trade=True,
+            direction="long",
+            confidence=0.6,
+            volume=0.02,
+            sl=0.5,
+            tp=1.5,
+            hard_sl=1.0,
+        )
+        return strategy
+
+    def _run(self, strategy: MagicMock, base_dir: str, eq: MagicMock) -> dict:
+        import core.runtime.strategy_evaluator as se
+
+        gods_eye = SimpleNamespace(
+            health_score=0.875,
+            confidence_modifier=1.1,
+            recommended_mode="normal",
+            chop_detected=False,
+            anomaly_score=0.1,
+            macro_bias="up",
+        )
+        _original_ood = se._get_ood_gateway
+        se._get_ood_gateway = lambda: SimpleNamespace(
+            check=lambda *a, **k: SimpleNamespace(status="ok", reason="ok")
+        )
+        try:
+            return evaluate_strategy_lines(
+                strategy_lines={strategy.config.name: strategy},
+                feature_vector=np.ones(40, dtype=np.float32),
+                micro_feature_vector=np.ones(9, dtype=np.float32),
+                mid_price=2000.0,
+                bid=1999.5,
+                ask=2000.5,
+                current_atr=5.0,
+                regime_info=_minimal_regime_info(),
+                regime_gate=None,
+                portfolio_risk=self._approved_portfolio_risk(volume=0.02),
+                execution_queue=eq,
+                tracker=MagicMock(),
+                pnl_ledger=MagicMock(),
+                current_positions={},
+                gods_eye_verdict=gods_eye,
+                base_dir=base_dir,
+            )
+        finally:
+            se._get_ood_gateway = _original_ood
+
+    def test_vanguard_line_blocked_when_breaker_open(self, tmp_path):
+        """特区 (execution_zone="live_fire_vanguard") + 生死状 flag OPEN
+        → 物理 Bypass: enqueue 不调用 + reason="vanguard_breaker_blocked"."""
+        from core.runtime.shadow_ops.live_fire_breaker import write_breaker_flag
+
+        write_breaker_flag(base_dir=tmp_path, net_pnl_usd=-70.0, n_closed=6, max_drawdown_usd=50.0)
+        strategy = self._line_strategy("live_fire_vanguard", 90452, "vanguard_line")
+        eq = _mock_execution_queue()
+        eq.is_pending_open.return_value = False
+        eq.is_unattributed_blocked.return_value = False
+
+        result = self._run(strategy, str(tmp_path), eq)
+        sr = result["strategy_results"][0]
+        assert sr["should_trade"] is False
+        assert sr["reason"] == "vanguard_breaker_blocked"
+        eq.enqueue.assert_not_called()
+
+    def test_non_vanguard_line_not_killed_by_breaker(self, tmp_path):
+        """边界控制: 非特区 (execution_zone="") + 生死状 flag OPEN
+        → 熔断器绝不误杀 — enqueue 正常调用 (正常 live 策略不受影响)."""
+        from core.runtime.shadow_ops.live_fire_breaker import write_breaker_flag
+
+        write_breaker_flag(base_dir=tmp_path, net_pnl_usd=-70.0, n_closed=6, max_drawdown_usd=50.0)
+        strategy = self._line_strategy("", 123456, "normal_line")
+        eq = _mock_execution_queue()
+        eq.is_pending_open.return_value = False
+        eq.is_unattributed_blocked.return_value = False
+
+        result = self._run(strategy, str(tmp_path), eq)
+        sr = result["strategy_results"][0]
+        assert sr["should_trade"] is True
+        assert "vanguard_breaker_blocked" not in sr["reason"]
+        eq.enqueue.assert_called_once()

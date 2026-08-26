@@ -533,3 +533,59 @@ def test_g10_aggregate_defaults_to_tracked_family(tmp_path):
     agg = aggregate_live_fire_drawdown(max_drawdown_usd=50.0, base_dirs=[tree_a, tree_b])
     assert agg["realized_pnl_usd"] == pytest.approx(-35.0)  # 全家族同池
     assert agg["n_closed"] == 2
+
+
+# ────────────────────────────────────────────────────────────────────
+# FIX-20260826-006 — Vanguard Interceptor: check_vanguard_breaker
+# (IC 最高阻断令: 把熔断器挂载到特区枪管; 非特区绝不误杀)
+# ────────────────────────────────────────────────────────────────────
+def test_check_vanguard_breaker_non_vanguard_never_blocks(tmp_path):
+    """边界控制: 非特区 (execution_zone 空/其他) 恒 False — 熔断器只针对敢死队."""
+    from core.runtime.shadow_ops.live_fire_breaker import (
+        check_vanguard_breaker,
+        write_breaker_flag,
+    )
+
+    # 即使 flag 已存在, 非特区也放行 (绝不误杀正常 live 策略).
+    write_breaker_flag(base_dir=tmp_path, net_pnl_usd=-70.0, n_closed=6, max_drawdown_usd=50.0)
+    assert check_vanguard_breaker("", str(tmp_path)) is False
+    assert check_vanguard_breaker("other_zone", str(tmp_path)) is False
+    assert check_vanguard_breaker("normal", str(tmp_path)) is False
+
+
+def test_check_vanguard_breaker_vanguard_flag_blocks(tmp_path):
+    """特区 + 生死状 flag 已存在 → True (fail-closed)."""
+    from core.runtime.shadow_ops.live_fire_breaker import (
+        check_vanguard_breaker,
+        write_breaker_flag,
+    )
+
+    write_breaker_flag(base_dir=tmp_path, net_pnl_usd=-70.0, n_closed=6, max_drawdown_usd=50.0)
+    assert check_vanguard_breaker("live_fire_vanguard", str(tmp_path)) is True
+
+
+def test_check_vanguard_breaker_breach_writes_flag_and_blocks(tmp_path):
+    """自感知闭环: flag 未写但聚合击穿 → 幂等写 flag + True (XAU 静默时 BTC 也拦)."""
+    from core.runtime.shadow_ops.live_fire_breaker import (
+        check_vanguard_breaker,
+        is_breaker_open,
+    )
+
+    _write_journal(
+        tmp_path / "live_trade_journal.jsonl",
+        [{"action": "close", "magic": 90452, "pnl": -55.0}],
+    )
+    assert is_breaker_open(tmp_path) is False  # 初始无 flag
+    assert check_vanguard_breaker("live_fire_vanguard", str(tmp_path)) is True
+    assert is_breaker_open(tmp_path) is True  # 击穿 → flag 已幂等写入
+
+
+def test_check_vanguard_breaker_vanguard_under_threshold_passes(tmp_path):
+    """特区 + 未击穿 → 放行 (False)."""
+    from core.runtime.shadow_ops.live_fire_breaker import check_vanguard_breaker
+
+    _write_journal(
+        tmp_path / "live_trade_journal.jsonl",
+        [{"action": "close", "magic": 90452, "pnl": -20.0}],
+    )
+    assert check_vanguard_breaker("live_fire_vanguard", str(tmp_path)) is False

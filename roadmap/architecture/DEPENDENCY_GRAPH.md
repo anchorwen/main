@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-26T13:33:46Z
+> **自动生成**: 2026-08-26T14:30:15Z
 
 ## Package-Level Dependencies
 
@@ -496,7 +496,7 @@
 - `signal_settlement.py` → `core.contracts.events`, `core.data.event_writer`, `core.runtime.reconciliation`
 - `strategy_builder.py` → `core.config.asset_registry`, `core.execution.barrier_strategy`, `core.execution.meta_pipeline`, `core.execution.micro_strategy`, `core.execution.rule_engine_strategy`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.parliament.contract_groups`, `core.runtime.time_utils`, `core.strategies.structural_swing_v1`
 - `strategy_config_validator.py` → (无内部依赖)
-- `strategy_evaluator.py` → `core.execution.correlation_sizer`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.ood_gateway`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_direction_gate`, `core.execution.regime_gate`, `core.execution.strategy_context`, `core.observability.degradation`, `core.runtime.gate_audit_recorder`, `core.runtime.time_utils`
+- `strategy_evaluator.py` → `core.execution.correlation_sizer`, `core.execution.cross_strategy_coordinator`, `core.execution.execution_queue`, `core.execution.ood_gateway`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_direction_gate`, `core.execution.regime_gate`, `core.execution.strategy_context`, `core.observability.degradation`, `core.runtime.gate_audit_recorder`, `core.runtime.shadow_ops.live_fire_breaker`, `core.runtime.time_utils`
 - `summary_service.py` → `core.runtime.evidence_reader`, `core.runtime.schema_versions`
 - `supervised_scheduler.py` → (无内部依赖)
 - `time_utils.py` → (无内部依赖)

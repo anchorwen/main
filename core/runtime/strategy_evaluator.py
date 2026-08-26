@@ -1377,6 +1377,34 @@ def evaluate_strategy_lines(
                 )
                 continue
 
+        # ── Cut 3: Vanguard breaker interceptor (IC 2026-08-26 最高阻断令) ──
+        # DQAF-20260826-006: 敢死队特区派发真实订单前, 强制经 check_vanguard_breaker
+        # (is_breaker_open) 校验. 击穿 → 物理 Bypass + vanguard_breaker_blocked 遥测.
+        # 边界控制 (Iron Law #0): 熔断器只针对 live_fire_vanguard (敢死队); 非特区
+        # strategy 的 execution_zone 为空 → check_vanguard_breaker 恒 False, 绝误杀.
+        # 此前 V4_SHORT 常规派发不经 is_breaker_open → 生死状击穿仍会下单 (STOP 半侧缺口).
+        from core.runtime.shadow_ops.live_fire_breaker import check_vanguard_breaker
+
+        if check_vanguard_breaker(getattr(strategy.config, "execution_zone", ""), base_dir):
+            strategy_results[-1]["should_trade"] = False
+            strategy_results[-1]["reason"] = "vanguard_breaker_blocked"
+            print(
+                json.dumps(
+                    {
+                        "event": "vanguard_breaker_blocked",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "direction": getattr(decision, "direction", None),
+                        "magic": getattr(decision, "magic", None),
+                        "reason": "live_fire_breaker_open_vanguard_interceptor",
+                        "base_dir": base_dir,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            continue
+
         # Queue for execution
         execution_queue.enqueue(sname, decision, risk_result)
         decisions.append(decision)
