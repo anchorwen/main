@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-26T14:55:17Z
+> **自动生成**: 2026-08-27T05:31:16Z
 
 ## Package-Level Dependencies
 
@@ -590,10 +590,12 @@
 - `_audit_btc_status_snapshot_20260826.py` → (无内部依赖)
 - `_audit_circuit_breaker_scope_20260826.py` → `core.runtime.shadow_ops.live_fire_breaker`
 - `_audit_close_label_divergence_20260821.py` → (无内部依赖)
+- `_audit_covariate_shift_20260827.py` → `core.brains.services.brain_factory`
 - `_audit_dupe_category_20260805.py` → (无内部依赖)
 - `_audit_entry_regime_20260807.py` → (无内部依赖)
 - `_audit_entry_timing_20260807.py` → (无内部依赖)
 - `_audit_export_m5_20260817.py` → (无内部依赖)
+- `_audit_feature_scale_train_vs_live_20260827.py` → (无内部依赖)
 - `_audit_idempotent_key_20260805.py` → (无内部依赖)
 - `_audit_journal_universe_20260821.py` → (无内部依赖)
 - `_audit_live_fire_2p94_protocol_20260826.py` → (无内部依赖)
@@ -614,6 +616,8 @@
 - `_audit_two_longs_20260805.py` → (无内部依赖)
 - `_audit_two_symbol_live_progress_20260826.py` → (无内部依赖)
 - `_audit_two_symbol_real_system_20260826.py` → (无内部依赖)
+- `_audit_v4short_rawscore_20260827.py` → `core.brains.services.brain_factory`
+- `_audit_vanguard_shadow_state_20260827.py` → (无内部依赖)
 - `_audit_watchdog_bg_kill_20260820.py` → (无内部依赖)
 - `_audit_xau_band_extremes_20260805.py` → (无内部依赖)
 - `_audit_xau_entry_quality_20260810.py` → (无内部依赖)

@@ -1866,3 +1866,11 @@
 - **定义**: 同一逻辑事实 (deal_reason, deal_comment, trail_active) 被多个生产者在**无单一决策点**的情况下各自解析为 label/归因 → 同一 deal 在不同写入路径得到不同标签. 具象: (1) watchdog shortcode 分段数漂移 (2 段 vs 3 段); (2) None/unknown reason 被伪造为特定 broker 归因 (孤儿平仓谎标 client_close); (3) 新生产者 (settlement_queue) 接入时抄写旧逻辑 (sl_hit_first 硬编码) 复活已被修复的语义盲点 (trail 无感知); (4) 携带更高 supersede 优先级的 writer 覆写低优先级的正确标签. 衍生危害: 出场归因/策略评估/p_win 校准/训练标签链全污染 (审计取证 XAU div-A 176 + div-B 8 / BTC div-A 199 + div-B 17).
 - **预防**: (1) **单源叶子函数 (SSOT mouth)** — 标签决策收敛于一个纯 stdlib leaf (resolve_close_label), 所有 deal-informed 生产者强制消费, 新路径无第四套逻辑可写; (2) **honest unknown** — 无 deal reason 时输出 `unknown_close` (诚实缺失), 永不伪造 broker 归因; (3) **跨生产者 byte-identical 回归锁** — 参数化矩阵断言每个生产者对相同输入产出逐字节一致 label; (4) **supersede 链审查** — 新 writer 的 `_source` 优先级必须与标签正确性一致 (settlement_queue 带 mt5_reconciliation source 覆写 bridge 标签 = 高优先级 writer 用低质量标签覆写高质量).
 - **检测**: 全量 journal 扫 `label` 与 `detail.reason` 交叉 (deal-attributed 却落 PnL label = 未消费 deal_reason); `sl_hit_first` 且 trail_contribution.trail_advances>0 (trail 盲点); watchdog label 分段数漂移 (2 段 vs 3 段). 回归锁 `tests/runtime/test_close_label_convergence.py` 每次 CI 断言 4 生产者矩阵收敛 + `tests/runtime/test_close_label.py` 断言 SSOT 全优先序.
+
+### ReB-20260827-MICRO_TICK_FIELD_INDEX_SWAP_NEG_SPREAD
+- **Pattern Signature**: `MICRO_TICK_FIELD_INDEX_SWAP_NEG_SPREAD`
+- **描述**: 按 MT5 COPY_TICKS_ALL 8字段契约 (time,bid,ask,last,volume,time_msc,flags,volume_real) 解析 tick 时, 若字段索引写反 (bids=t[2]/asks=t[1]) → spreads=asks−bids 实际算成 bid−ask → avg_spread 恒负 (实盘 -3939). 量纲与口径混淆邻接: bar 级特征 tick_return 用 (close-prev)/prev*100 而训练侧 RAW → train/serve scale 分叉.
+- **关联 FIX IDs**: FIX-20260827-001
+- **关联 Docket IDs**: DQAF-20260827-001
+- **预防策略**: 解析外部数据源多字段元组 (MT5 tick/deal) 时, 索引必须以源文档契约常量命名 (BID_IDX/ASK_IDX) + 单元测试构造已知 8字段样本断言 avg_spread>0; 所有 bar 级 rate/ratio 口径统一 RAW FRACTION (无 ×100) 并模块级注释 canonical口径; cross-return 失败用 NaN sentinel 反映真实缺失 (绝不 0.0 伪造) 让下游 dispatcher/风险熔断.
+- **检测方法**: 回归锁 `test_bid_ask_not_swapped_avg_spread_positive` (bid=100/ask=100.5 → avg_spread≈0.5>0) + 已知 8字段样本逐字段断言 + pytest 全量 scale 数值回归.

@@ -50,6 +50,15 @@ def _safe_div(numerator: float, denominator: float, fallback: float = 0.0) -> fl
     return numerator / denominator
 
 
+# ── FIX-20260827-001: Canonical return口径 (single source of truth) ───────
+# Per-bar returns (tick_return, XAG/EUR/USDJPY cross returns) are computed as
+# RAW FRACTIONS — (curr - prev) / prev — WITHOUT the ×100 percent scaling.
+# This matches the training builder (build_btc_expected_r_dataset.py:399
+# tick_return `(c - o) / o`) and the sibling raw ratios hl_ratio / co_ratio.
+# A bare `* 100.0` was previously applied here, inflating tick_return 100×
+# (911× in the train/live covariate-shift audit) and diverging every downstream
+# model.  Absent/invalid data is returned as NaN (not a forged 0.0) so the
+# consumer (V9MicroComputer.last_micro_ok / _sanitize_41 NaN-log) can see it.
 CROSS_SYMBOLS = ["XAGUSDc", "EURUSDc", "USDJPYc"]
 CROSS_FEATURE_NAMES = ["XAGUSDc_return", "EURUSDc_return", "USDJPYc_return"]
 FEATURE_NAMES = [
@@ -265,9 +274,13 @@ class MicrostructureFeatureComputer:
                 if rates is not None and len(rates) >= 2:
                     raw[sym] = np.array([float(r[4]) for r in rates], dtype=np.float64)
                 else:
-                    raw[sym] = np.array([0.0], dtype=np.float64)
+                    raw[sym] = np.array(
+                        [float("nan")], dtype=np.float64
+                    )  # FIX-20260827-001: absent → NaN
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                raw[sym] = np.array([0.0], dtype=np.float64)
+                raw[sym] = np.array(
+                    [float("nan")], dtype=np.float64
+                )  # FIX-20260827-001: absent → NaN
         return raw
 
     def _resample_and_build_sequence(
@@ -293,7 +306,7 @@ class MicrostructureFeatureComputer:
         for _i, (sym, name) in enumerate(zip(CROSS_SYMBOLS, CROSS_FEATURE_NAMES, strict=False)):
             raw = cross_raw.get(sym)
             if raw is None or len(raw) < ratio + 1:
-                cross_returns[name] = [0.0] * usable
+                cross_returns[name] = [float("nan")] * usable  # FIX-20260827-001: absent → NaN
                 continue
             c_resampled = self._resample_closes(raw, ratio)
             cross_returns[name] = self._compute_returns(c_resampled, usable)
@@ -346,7 +359,7 @@ class MicrostructureFeatureComputer:
             if idx > -len(closes):
                 prev = closes[idx - 1]
                 curr = closes[idx]
-                ret.append(_safe_div(curr - prev, prev, 0.0) * 100.0)
+                ret.append(_safe_div(curr - prev, prev, 0.0))  # FIX-20260827-001: raw fraction
             else:
                 ret.append(0.0)
         return ret
@@ -386,9 +399,10 @@ class MicrostructureFeatureComputer:
         """Compute 9 features for a single bar."""
         row = np.zeros(9, dtype=np.float32)
 
-        # OHLC-derived
+        # OHLC-derived.  FIX-20260827-001: per-bar returns are RAW FRACTIONS
+        # (no ×100) — the canonical口径 matching training + hl_ratio/co_ratio.
         close = bar["close"]
-        row[0] = _safe_div(close - prev_close, prev_close, 0.0) * 100.0
+        row[0] = _safe_div(close - prev_close, prev_close, 0.0)
         row[1] = _safe_div(bar["high"] - bar["low"], close, 0.0)
         row[2] = _safe_div(close, bar["open"], 1.0)
 
@@ -411,7 +425,9 @@ class MicrostructureFeatureComputer:
         open_v = float(bar_row[1])
         high = float(bar_row[2])
         low = float(bar_row[3])
-        result["tick_return"] = _safe_div(close - prev_close, prev_close, 0.0) * 100.0
+        result["tick_return"] = _safe_div(
+            close - prev_close, prev_close, 0.0
+        )  # FIX-20260827-001: raw fraction
         result["hl_ratio"] = _safe_div(high - low, close, 0.0)
         result["co_ratio"] = _safe_div(close, open_v, 1.0)
 
@@ -445,8 +461,14 @@ class MicrostructureFeatureComputer:
             result.update({"avg_spread": 0.0, "OIM": 0.0, "tick_velocity": 0.0})
             return
 
-        bids = np.array([float(t[2]) for t in ticks], dtype=np.float64)
-        asks = np.array([float(t[1]) for t in ticks], dtype=np.float64)
+        # FIX-20260827-001: bid/ask index swap.  COPY_TICKS_ALL returns
+        # (time, bid, ask, last, ...) per the contract below (line ~486) →
+        # index 1 = BID, index 2 = ASK.  Pre-fix code read bids=t[2](ASK) and
+        # asks=t[1](BID), so `spreads = asks - bids` computed bid - ask →
+        # avg_spread NEGATIVE (-3939), poisoning every consumer (BTC + XAU,
+        # shared computer).  Fixed to read the tuple correctly.
+        bids = np.array([float(t[1]) for t in ticks], dtype=np.float64)  # index1 = bid
+        asks = np.array([float(t[2]) for t in ticks], dtype=np.float64)  # index2 = ask
         spreads = asks - bids
         mid = (asks + bids) / 2.0
         mid_mean = float(np.mean(mid))
@@ -603,14 +625,14 @@ class MicrostructureFeatureComputer:
             try:
                 rates = self._copy_rates(sym, MT5_TIMEFRAME_M5, 0, 2)
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                result[name] = 0.0
+                result[name] = float("nan")  # FIX-20260827-001: absent → NaN (not forged 0.0)
                 continue
             if rates is not None and len(rates) >= 2:
                 c0 = float(rates[-2][4])
                 c1 = float(rates[-1][4])
-                result[name] = _safe_div(c1 - c0, c0, 0.0) * 100.0
+                result[name] = _safe_div(c1 - c0, c0, 0.0)  # FIX-20260827-001: raw fraction
             else:
-                result[name] = 0.0
+                result[name] = float("nan")  # FIX-20260827-001: absent → NaN
 
     def _compute_cross_sequence(self, n_bars: int, ratio: int) -> dict[str, list[float]]:
         """Compute per-bar cross-asset returns for n_bars."""
@@ -620,10 +642,10 @@ class MicrostructureFeatureComputer:
             try:
                 rates = self._copy_rates(sym, MT5_TIMEFRAME_M5, 0, m5_needed)
             except (RuntimeError, ValueError, KeyError, TypeError, OSError):  # BLE001:FOG
-                cross[name] = [0.0] * n_bars
+                cross[name] = [float("nan")] * n_bars  # FIX-20260827-001: absent → NaN
                 continue
             if rates is None or len(rates) < ratio + 1:
-                cross[name] = [0.0] * n_bars
+                cross[name] = [float("nan")] * n_bars  # FIX-20260827-001: absent → NaN
                 continue
             closes = np.array([float(r[4]) for r in rates], dtype=np.float64)
             if ratio > 1:
@@ -638,7 +660,9 @@ class MicrostructureFeatureComputer:
                 if idx > -len(closes):
                     prev = closes[idx - 1]
                     curr = closes[idx]
-                    returns.append(_safe_div(curr - prev, prev, 0.0) * 100.0)
+                    returns.append(
+                        _safe_div(curr - prev, prev, 0.0)
+                    )  # FIX-20260827-001: raw fraction
                 else:
                     returns.append(0.0)
             cross[name] = returns

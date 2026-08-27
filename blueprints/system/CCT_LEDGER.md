@@ -2103,3 +2103,18 @@
 - **是否被推翻**: 否 (AR: "BTC 是没救了/系统坏了" 被推翻 — 亏损是已退休遗留, 新策略方向修正是对的; "多拍几个新策略就行" 被推翻 — 方案早躺路线图, 卡点是同一道门禁/死锁, 缺结构性杠杆)
 - **关联 ReB Pattern**: LEGACY_RETIRED_LINEAGE_STILL_WIRED_ZOMBIE / OOS_GATE_VS_LIVEDATA_DEADLOCK / DIRECTION_BIAS_LONG_STructural
 - **路由结论**: 破局序 = ①清剿丧尸 (L2↔L3 对齐) → ②实盘特区 (省下风险预算给 ρ 过线种子). 详见 DQAF-20260826-004.
+
+### CCT-20260827-001
+- **Docket ID**: DQAF-20260827-001
+- **日期**: 2026-08-27
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 实盘 avg_spread 均值 -3939 (负值荒谬) + V4_SHORT 特征量纲分级错乱 (tick_return 比训练侧大 100×). 证据: 特征引擎均值负值; 训练测 vs 实盘测 scale 审计 (_audit_feature_scale_train_vs_live_20260827.py).
+  - [Layer 2 — 中间异常]: MicrostructureFeatureComputer._compute_tick_features 读 bids=t[2](ASK)/asks=t[1](BID) → spreads=bid−ask 恒负; tick_return=(close-prev)/prev*100 (量纲 ×100); cross-return 缺失 return 0.0 静默伪造.
+  - [Layer 3 — 根因]: RC-02 type-confusion — MT5 COPY_TICKS_ALL 8字段契约 (index1=bid, index2=ask) 被索引反写 + 口径混淆 (bar 级 ×100 与 RAW 混合) + 静默 0.0 伪造 (contract-violation 兄弟).
+- **证据引用**:
+  - Source 1: [microstructure_computer.py] — _compute_tick_features bids=t[2]/asks=t[1] + 5 处 ×100 + cross return 0.0
+  - Source 2: [build_btc_expected_r_dataset.py:399] — 训练侧 tick_return=(c-o)/o RAW 无 ×100 (对照训练口径)
+  - Source 3 (cross-symbol): [v9_micro_computer.py:47,77] — XAU Micro Scaler v2 经 V9MicroComputer 包装受同损 + last_micro_ok 熔断机制
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: MICRO_TICK_FIELD_INDEX_SWAP_NEG_SPREAD

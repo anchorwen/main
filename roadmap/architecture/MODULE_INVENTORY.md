@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-26T14:55:17Z
-> **扫描模块数**: 861
+> **自动生成**: 2026-08-27T05:31:16Z
+> **扫描模块数**: 865
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -319,7 +319,7 @@
 | `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 14 | 686 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 9 | 262 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 687 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 711 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 339 | — | |
 | `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 110 | — | |
 
@@ -678,10 +678,12 @@
 | `_audit_btc_status_snapshot_20260826.py` | ✅ active | — | 6 | 168 | — | |
 | `_audit_circuit_breaker_scope_20260826.py` | ✅ active | — | 2 | 102 | — | |
 | `_audit_close_label_divergence_20260821.py` | ✅ active | — | 4 | 176 | — | |
+| `_audit_covariate_shift_20260827.py` | ✅ active | — | 3 | 201 | — | |
 | `_audit_dupe_category_20260805.py` | ✅ active | — | 2 | 144 | — | |
 | `_audit_entry_regime_20260807.py` | 📄 config | — | 0 | 72 | — | |
 | `_audit_entry_timing_20260807.py` | ✅ active | — | 5 | 301 | — | |
 | `_audit_export_m5_20260817.py` | ✅ active | — | 3 | 153 | — | |
+| `_audit_feature_scale_train_vs_live_20260827.py` | ✅ active | — | 2 | 135 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_journal_universe_20260821.py` | ✅ active | — | 2 | 197 | — | |
 | `_audit_live_fire_2p94_protocol_20260826.py` | ✅ active | — | 5 | 185 | — | |
@@ -702,6 +704,8 @@
 | `_audit_two_longs_20260805.py` | ✅ active | — | 2 | 57 | — | |
 | `_audit_two_symbol_live_progress_20260826.py` | ✅ active | — | 2 | 131 | — | |
 | `_audit_two_symbol_real_system_20260826.py` | ✅ active | — | 4 | 89 | — | |
+| `_audit_v4short_rawscore_20260827.py` | ✅ active | — | 1 | 96 | — | |
+| `_audit_vanguard_shadow_state_20260827.py` | ✅ active | — | 2 | 107 | — | |
 | `_audit_watchdog_bg_kill_20260820.py` | ✅ active | — | 6 | 261 | — | |
 | `_audit_xau_band_extremes_20260805.py` | ✅ active | — | 5 | 236 | — | |
 | `_audit_xau_entry_quality_20260810.py` | ✅ active | — | 7 | 285 | — | |

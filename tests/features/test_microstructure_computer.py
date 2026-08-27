@@ -24,6 +24,31 @@ from core.features.computers.microstructure_computer import (
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
+# _compute_tick_features — bid/ask index regression lock (FIX-20260827-001)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_bid_ask_not_swapped_avg_spread_positive() -> None:
+    """FIX-20260827-001: bids=t[1], asks=t[2] → avg_spread must be positive.
+
+    Pre-fix the computer read bids=t[2](ASK) and asks=t[1](BID), so
+    ``spreads = asks - bids`` computed bid - ask → a NEGATIVE avg_spread
+    (live mean -3939).  Regression lock: with bid consistently below ask,
+    avg_spread is positive and exposes the tuple indices correctly.
+    """
+    c = MicrostructureFeatureComputer(MagicMock(), "XAUUSDc")
+    base = 100.0
+    ticks = [
+        (float(i), base, base + 0.5, base + 0.2, 10, 1700000000000 + i, 2, 10.0) for i in range(3)
+    ]  # (time, bid, ask, last, volume, time_msc, flags, volume_real)
+    c._mt5.copy_ticks_from.return_value = ticks
+    result: dict[str, float] = {}
+    c._compute_tick_features(result)
+    assert result["avg_spread"] == pytest.approx(0.5)  # ask - bid = 0.5, positive
+    assert result["avg_spread"] > 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # _safe_div
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -185,10 +210,10 @@ class TestComputeReturns:
     def test_returns_values(self) -> None:
         closes = np.array([100.0, 101.0, 102.0, 103.0])
         returns = MicrostructureFeatureComputer._compute_returns(closes, 2)
-        # (102-101)/101 * 100 = 0.9900990099009901
-        assert returns[0] == pytest.approx(0.9901, abs=0.001)
-        # (103-102)/102 * 100 = 0.9803921568627451
-        assert returns[1] == pytest.approx(0.9804, abs=0.001)
+        # FIX-20260827-001: raw fraction, no ×100. (102-101)/101 = 0.0099009...
+        assert returns[0] == pytest.approx(0.0099, abs=0.0001)
+        # (103-102)/102 = 0.0098039...
+        assert returns[1] == pytest.approx(0.0098, abs=0.0001)
 
     def test_returns_zero_on_zero_prev_close(self) -> None:
         closes = np.array([0.0, 100.0])
@@ -232,8 +257,8 @@ class TestBarToFeatures:
         }
         row = c._bar_to_features(bar, prev_close, tick_features, cross_returns, 0)
         assert len(row) == 9
-        # tick_return = (103-100)/100 * 100 = 3.0
-        assert row[0] == pytest.approx(3.0)
+        # FIX-20260827-001: tick_return = (103-100)/100 = 0.03 (raw fraction, no ×100)
+        assert row[0] == pytest.approx(0.03)
         # hl_ratio = (105-99)/103 = 0.05825...
         assert row[1] == pytest.approx(0.05825, abs=0.001)
         # co_ratio = 103/100 = 1.03
@@ -290,8 +315,8 @@ class TestComputeOHLCFeaturesFromRow:
         bar_row = (None, 100.0, 105.0, 99.0, 103.0, None, None, None)
         result: dict[str, float] = {}
         c._compute_ohlc_features_from_row(bar_row, 100.0, result)
-        # tick_return = (103-100)/100 * 100 = 3.0
-        assert result["tick_return"] == pytest.approx(3.0)
+        # FIX-20260827-001: tick_return = (103-100)/100 = 0.03 (raw fraction, no ×100)
+        assert result["tick_return"] == pytest.approx(0.03)
         # hl_ratio = (105-99)/103 = 0.05825...
         assert result["hl_ratio"] == pytest.approx(0.05825, abs=0.001)
         # co_ratio = 103/100 = 1.03
