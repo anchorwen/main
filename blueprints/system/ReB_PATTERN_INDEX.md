@@ -1874,3 +1874,11 @@
 - **关联 Docket IDs**: DQAF-20260827-001
 - **预防策略**: 解析外部数据源多字段元组 (MT5 tick/deal) 时, 索引必须以源文档契约常量命名 (BID_IDX/ASK_IDX) + 单元测试构造已知 8字段样本断言 avg_spread>0; 所有 bar 级 rate/ratio 口径统一 RAW FRACTION (无 ×100) 并模块级注释 canonical口径; cross-return 失败用 NaN sentinel 反映真实缺失 (绝不 0.0 伪造) 让下游 dispatcher/风险熔断.
 - **检测方法**: 回归锁 `test_bid_ask_not_swapped_avg_spread_positive` (bid=100/ask=100.5 → avg_spread≈0.5>0) + 已知 8字段样本逐字段断言 + pytest 全量 scale 数值回归.
+
+### ReB-20260827-TRAIN_SERVE_MICRO_FORMULA_TRIFURCATION
+- **Pattern Signature**: `TRAIN_SERVE_MICRO_FORMULA_TRIFURCATION`
+- **描述**: 同一微特征语义 (tick_return/hl_ratio/co_ratio) 在 live `_bar_to_features` / 训练内联构建器 / `feature_replay` 三处各写一套公式 (三向分叉), 训练侧用 `(c-o)/o`/`(h-l)/prev_c`/`|c-o|/(h-l)`, live 用 `(c-prev)/prev`/`(h-l)/close`/`close/open` → train/serve skew, 模型吃到的特征与实盘喂入不逐值一致. 姊妹签名: SCALE_UNIT_CONFUSION_TRAIN_SERVE (量纲分叉), MICRO_TICK_FIELD_INDEX_SWAP_NEG_SPREAD (上游 tick →bar 污染, DQAF-20260827-001). 修复范式 = 将 live 公式抽为**共享纯函数** (pure_ohlc_micro), live 端点委派 + 训练侧调用, 单一 canonical 口径集中一处 (不散布多文件 — Iron Law #1.1).
+- **关联 FIX IDs**: FIX-20260827-002
+- **关联 Docket IDs**: DQAF-20260827-002
+- **预防策略**: 任何 OHLC/rate/ratio 派生特征, 口径只允许存在于**一个纯函数** (live 与训练共享); 新增微特征先问"live 是否有此计算", 有则抽纯函数收拢, 无则训练侧不得擅自定义; 回归长城强制 replay==live 逐值相等 (rel=1e-6). 周期拼装 (tf_minutes>5) 必须复用 live `_resample_ohlc`, 严禁训练侧另造重抽样.
+- **检测方法**: `test_feature_bit_identical.py::TestPhase2ReplayLiveBitIdentical` 3 用例 — replay micro OHLC == live `_bar_to_features` 逐值; M15 重抽样 == live `_resample_ohlc`; 37-dim 微槽位按 NAME 定位 + build_btc_dataset_from_ssot.py micro_zeros_frac / NaN=0 纯洁性.

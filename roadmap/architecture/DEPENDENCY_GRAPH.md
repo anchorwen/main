@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-08-27T05:31:16Z
+> **自动生成**: 2026-08-27T11:16:05Z
 
 ## Package-Level Dependencies
 
@@ -564,7 +564,7 @@
 - `dataset.py` → (无内部依赖)
 - `evaluation_report.py` → (无内部依赖)
 - `experiment_tracker.py` → (无内部依赖)
-- `feature_replay.py` → `core.features.computers.btc_feature_augmenter`, `core.features.schemas.registry`
+- `feature_replay.py` → `core.features.computers.btc_feature_augmenter`, `core.features.computers.microstructure_computer`, `core.features.schemas.registry`
 - `model_card.py` → (无内部依赖)
 - `model_hashing.py` → (无内部依赖)
 - `profitability_calibrator.py` → `core.contracts.training.label_contract`
@@ -598,12 +598,14 @@
 - `_audit_feature_scale_train_vs_live_20260827.py` → (无内部依赖)
 - `_audit_idempotent_key_20260805.py` → (无内部依赖)
 - `_audit_journal_universe_20260821.py` → (无内部依赖)
+- `_audit_live_baseline_20260827.py` → (无内部依赖)
 - `_audit_live_fire_2p94_protocol_20260826.py` → (无内部依赖)
 - `_audit_live_fire_status_20260825.py` → (无内部依赖)
 - `_audit_live_health_20260814.py` → (无内部依赖)
 - `_audit_live_shadow_inventory_20260805.py` → (无内部依赖)
 - `_audit_magic_alignment_safety.py` → (无内部依赖)
 - `_audit_metaexit_gate_20260821.py` → (无内部依赖)
+- `_audit_micro_fix_verify_20260827.py` → `core.features.computers.microstructure_computer`
 - `_audit_narrow_gate_real_config_20260826.py` → `core.runtime.strategy_builder`
 - `_audit_p1_threshold_probe_20260826.py` → `core.features.schemas.v9_institutional_schema`, `scripts.build_micro_cost_model`, `scripts.training.emit_micro_scaler_v2_raw_trigger`
 - `_audit_shadow_ops_liveness_probe.py` → `core.runtime.shadow_ops.micro_scaler_scorer`, `core.runtime.shadow_ops.runtime`, `scripts._shadow_ops_watchdog`
@@ -936,8 +938,8 @@
 - `batch_train_skeleton.py` → `scripts.training.crt_manifest`
 - `brain_leaderboard.py` → (无内部依赖)
 - `brain_promotion_runner.py` → `core.brains.services.brain_promotion`, `core.feedback.live_journal_metrics`, `core.governance.governance_service`
-- `build_btc_dataset_from_ssot.py` → `core.contracts.training.label_contract`, `core.contracts.training.label_from_live_yaml`, `core.training.feature_replay`, `scripts.training.validate_label_vs_live`
-- `build_btc_expected_r_dataset.py` → (无内部依赖)
+- `build_btc_dataset_from_ssot.py` → `core.contracts.training.label_contract`, `core.contracts.training.label_from_live_yaml`, `core.features.schemas.registry`, `core.training.feature_replay`, `scripts.training.validate_label_vs_live`
+- `build_btc_expected_r_dataset.py` → `core.training.feature_replay`
 - `build_btc_flow46_dataset.py` → `core.features.schemas.registry`, `core.training.model_hashing`, `scripts.inspect_ofi_history`
 - `build_calibrated_dataset.py` → `core.features.schemas.v9_institutional_schema`
 - `build_live_labeled_dataset.py` → (无内部依赖)

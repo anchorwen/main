@@ -50,6 +50,38 @@ def _safe_div(numerator: float, denominator: float, fallback: float = 0.0) -> fl
     return numerator / denominator
 
 
+# ── DQAF-20260827-002 (Phase 2): Shared OHLC-derived microstructure triplet ──
+def pure_ohlc_micro(
+    open_: float,
+    high: float,
+    low: float,
+    close: float,
+    prev_close: float,
+) -> tuple[float, float, float]:
+    """Compute the three OHLC-derived micro features — the SINGLE definition.
+
+    This is the one canonical口径 for ``tick_return`` / ``hl_ratio`` /
+    ``co_ratio`` shared by BOTH live inference and historical replay:
+
+      * live ``MicrostructureFeatureComputer._bar_to_features`` delegates here
+        (behaviour unchanged — same formulas, same \_safe_div guards).
+      * training ``core/training/feature_replay.py`` imports this so the
+        train/serve slot semantics are mathematically identical (the Phase 2
+        goal: kill the Train/Serve Skew ghost at the component definition).
+
+    CANONICAL口径 (FIX-20260827-001): per-bar returns are RAW FRACTIONS,
+    never ×100.  Order matches the micro_9 slot order ``[0,1,2]``:
+
+      - tick_return = (close - prev_close) / prev_close
+      - hl_ratio    = (high - low) / close
+      - co_ratio    = close / open
+    """
+    tick_return = _safe_div(close - prev_close, prev_close, 0.0)
+    hl_ratio = _safe_div(high - low, close, 0.0)
+    co_ratio = _safe_div(close, open_, 1.0)
+    return tick_return, hl_ratio, co_ratio
+
+
 # ── FIX-20260827-001: Canonical return口径 (single source of truth) ───────
 # Per-bar returns (tick_return, XAG/EUR/USDJPY cross returns) are computed as
 # RAW FRACTIONS — (curr - prev) / prev — WITHOUT the ×100 percent scaling.
@@ -401,10 +433,12 @@ class MicrostructureFeatureComputer:
 
         # OHLC-derived.  FIX-20260827-001: per-bar returns are RAW FRACTIONS
         # (no ×100) — the canonical口径 matching training + hl_ratio/co_ratio.
+        # DQAF-20260827-002: delegates to the SHARED pure function so historical
+        # replay (feature_replay.py) and live inference are bit-identical.
         close = bar["close"]
-        row[0] = _safe_div(close - prev_close, prev_close, 0.0)
-        row[1] = _safe_div(bar["high"] - bar["low"], close, 0.0)
-        row[2] = _safe_div(close, bar["open"], 1.0)
+        row[0], row[1], row[2] = pure_ohlc_micro(
+            bar["open"], bar["high"], bar["low"], close, prev_close
+        )
 
         # Tick-derived (snapshot, same for all bars)
         row[3] = tick_features.get("avg_spread", 0.0)
@@ -425,11 +459,10 @@ class MicrostructureFeatureComputer:
         open_v = float(bar_row[1])
         high = float(bar_row[2])
         low = float(bar_row[3])
-        result["tick_return"] = _safe_div(
-            close - prev_close, prev_close, 0.0
-        )  # FIX-20260827-001: raw fraction
-        result["hl_ratio"] = _safe_div(high - low, close, 0.0)
-        result["co_ratio"] = _safe_div(close, open_v, 1.0)
+        # DQAF-20260827-002: shared pure function — same单帧口径 as _bar_to_features.
+        result["tick_return"], result["hl_ratio"], result["co_ratio"] = pure_ohlc_micro(
+            open_v, high, low, close, prev_close
+        )
 
     @staticmethod
     def _fill_ohlc_defaults(result: dict) -> None:

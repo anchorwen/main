@@ -35,6 +35,10 @@ import numpy as np
 import pandas as pd
 
 from core.features.computers.btc_feature_augmenter import assemble_41_series
+from core.features.computers.microstructure_computer import (
+    MicrostructureFeatureComputer,
+    pure_ohlc_micro,
+)
 from core.features.schemas.registry import get_schema_feature_names
 
 _log = logging.getLogger(__name__)
@@ -82,6 +86,15 @@ class ReplayComponents:
     audjpy_return: np.ndarray = field(default_factory=lambda: np.zeros(0))
     btc_xau_ratio: np.ndarray = field(default_factory=lambda: np.zeros(0))
     btc_xau_ratio_roc: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    # DQAF-20260827-002 (Phase 2): the RAW OHLC/spread used to build features,
+    # resampled to the target TF when tf_minutes > 5.  Exposed so dataset
+    # builders compute LABELS on the SAME resampled bars as the features —
+    # closing the M15-vs-M5 train/serve skew at the slice level (A3).
+    o: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    h: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    l: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    c: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    spreads: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
     @property
     def n_bars(self) -> int:
@@ -104,6 +117,36 @@ class ReplayComponents:
 # ═══════════════════════════════════════════════════════════════════════════
 # Replay provider — historical OHLC → per-bar components
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+# ── DQAF-20260827-002 (A3): slice-aligned cross-asset resample helper ────────
+def _extract_times(df: pd.DataFrame) -> np.ndarray:
+    """Return the bar datetime grid as a numpy ``datetime64[ns]`` array.
+
+    The aligned CSVs set ``time`` as the index; synthetic frames (tests) carry a
+    ``time`` column.  Callers downstream (calendar helpers) rebuild from this grid
+    so calendar features stay row-aligned after TF resampling.
+    """
+    if "time" in df.columns:
+        return pd.to_datetime(df["time"]).values
+    return pd.to_datetime(df.index).values
+
+
+def _resample_last(arr: np.ndarray, ratio: int, n: int) -> np.ndarray:
+    """Take the last M5 value within each target-TF bar (cross-asset return proxy).
+
+    Used only when tf_minutes > 5 (M15/H1/H4 slices).  Mirrors the live
+    ``_resample_closes`` *last-close* semantics for the already-aligned cross
+    return series, so slot [12]/[30]/[31]/[32] align to the target bar rather
+    than stranding M5 granularity inside an M15 slice.  ``ratio == 1`` is a no-op.
+    """
+    if ratio <= 1 or len(arr) == 0:
+        return arr
+    out = np.zeros(n, dtype=np.float64)
+    for k in range(n):
+        s, e = k * ratio, (k + 1) * ratio
+        out[k] = arr[e - 1] if e > 0 else arr[s]
+    return out
 
 
 def _ou_theta(price: np.ndarray, max_n: int = 200) -> float:
@@ -163,19 +206,58 @@ def compute_replay_components(
             Cross-asset columns missing or empty → zero-fill (graceful
             degradation, mirrors live augmenter with unavailable sources).
         tf_minutes: Bar timeframe in minutes (5=M5, 15=M15, 30=M30, 60=H1).
+            When ``tf_minutes > 5`` the M5 bars are FIRST resampled to the
+            target TF via the live ``MicrostructureFeatureComputer._resample_ohlc``
+            (first-open / max-high / min-low / last-close) so the slice is
+            mathematically identical to what the live ``_mtf_price_service``
+            reconstructs (DQAF-20260827-002 A3).  ``tf_minutes == 5`` is a no-op.
 
     Returns:
-        ReplayComponents with row-aligned arrays.
+        ReplayComponents with row-aligned arrays.  ``o/h/l/c/spreads`` are the
+        resampled bars the features were computed on — dataset builders use them
+        to compute LABELS so features and labels share the same slice.
     """
-    n = len(df)
+    n_raw = len(df)
+    times = _extract_times(df)  # DQAF-20260827-002: datetime grid (M5 source)
     o = df["open"].values.astype(np.float64)
     h = df["high"].values.astype(np.float64)
     l = df["low"].values.astype(np.float64)
     c = df["close"].values.astype(np.float64)
-    v = df.get("tick_volume", pd.Series(np.zeros(n))).values.astype(np.float64)
-    spreads_raw = df.get("spread", pd.Series([200] * n)).values.astype(np.float64)
+    v = df.get("tick_volume", pd.Series(np.zeros(n_raw))).values.astype(np.float64)
+    spreads_raw = df.get("spread", pd.Series([200] * n_raw)).values.astype(np.float64)
     # MT5 raw points → price dollars (same lineage as train_btc_swing_v9.py:693)
-    spreads = np.nan_to_num(spreads_raw) / 100.0
+    spreads_full = np.nan_to_num(spreads_raw) / 100.0
+
+    # ── DQAF-20260827-002 (A3): Timeframe alignment to live _resample_ohlc ──
+    # The live MT5 computer NEVER reads a higher-TF bar directly — it resamples
+    # M5 bars via first-open / max-high / min-low / last-close
+    # (MicrostructureFeatureComputer._resample_ohlc) and computes features on THOSE
+    # bars.  If historical replay instead runs features on raw M5 bars while only
+    # scaling bars_per_day, the M15 slices diverge from what _mtf_price_service
+    # reconstructs.  Here the same resample is applied FIRST so the training slice
+    # is physically identical to the live one.  ratio==1 (M5) is a no-op.
+    ratio = max(1, int(round(tf_minutes / 5.0)))
+    if ratio > 1:
+        c, o, h, l = MicrostructureFeatureComputer._resample_ohlc(c, o, h, l, ratio)
+        n = len(c)
+        v_agg = np.zeros(n)
+        v_agg[:] = [float(v[k * ratio : (k + 1) * ratio].sum()) for k in range(n)]
+        v = v_agg
+        spreads = np.array(
+            [spreads_full[min((k + 1) * ratio - 1, n_raw - 1)] for k in range(n)],
+            dtype=np.float64,
+        )
+        # DQAF-20260827-002 (A3): calendar features must sit on the RESAMPLED bar
+        # grid, so rebuild the datetime axis to the target (each bar ends at the
+        # last M5 timestamp in its window).  Without this, the calendar helpers
+        # would return raw-M5-length arrays and fail to broadcast into ``daily``.
+        times = np.array(
+            [times[min((k + 1) * ratio - 1, n_raw - 1)] for k in range(n)],
+            dtype="datetime64[ns]",
+        )
+    else:
+        n = n_raw
+        spreads = spreads_full
 
     bars_per_day = max(1, int(24 * 60 / tf_minutes))
     lookback_5d = bars_per_day * 5
@@ -197,6 +279,20 @@ def compute_replay_components(
     # degradation in _compute_btc_xau_ratio; the old training code's ones-fill
     # produced fake ratio ≈ BTC price for ~31% of bars — corrected for SSOT).
     xau_close = _col("XAUUSDc_close", default=0.0)
+
+    # ── DQAF-20260827-002 (A3): resample cross-asset series to target TF ──
+    # Live _resample_and_build_sequence resamples each cross close via
+    # _resample_closes (last-close) and computes the per-bar return from the
+    # resampled closes.  Here the aligned return series (already per-M5-bar)
+    # take the last M5 value within each target bar; the XAU close that feeds
+    # the BTC/XAU ratio is resampled with the live _resample_closes semantics
+    # so slots [39-40] align to the target TF.  ratio==1 (M5) is a no-op.
+    if ratio > 1:
+        xau_return = _resample_last(xau_return, ratio, n)
+        audjpy_return = _resample_last(audjpy_return, ratio, n)
+        eur_return = _resample_last(eur_return, ratio, n)
+        usdjpy_return = _resample_last(usdjpy_return, ratio, n)
+        xau_close = MicrostructureFeatureComputer._resample_closes(xau_close, ratio)
 
     # ── daily_swing_24 layout (24) ──
     daily = np.zeros((n, 24), dtype=np.float64)
@@ -220,24 +316,37 @@ def compute_replay_components(
     daily[:, 13] = -eur_return  # Cross_DXY_Return ≈ -EUR (DXY not on retail MT5)
     daily[:, 14] = eur_return  # Cross_EURUSD_Return
     daily[:, 15] = _cross_risk_on_off(c, xau_close, lookback_5d)  # Cross_Risk_On_Off
-    daily[:, 16], daily[:, 17] = _weekday_sin_cos(df)
-    daily[:, 18], daily[:, 19] = _month_end_features(df)
-    daily[:, 20] = _weekend_gap(df)
+    daily[:, 16], daily[:, 17] = _weekday_sin_cos(times)
+    daily[:, 18], daily[:, 19] = _month_end_features(times)
+    daily[:, 20] = _weekend_gap(times)
     atr_5d = pd.Series(tr).rolling(lookback_5d, min_periods=1).mean().values
     daily[:, 21] = np.divide(atr_series, atr_5d, out=np.ones(n), where=atr_5d > 0)
     daily[:, 22] = _momentum(c, lookback_5d)
     daily[:, 23] = _momentum(c, lookback_20d)
 
     # ── microstructure_9 layout (9) ──
+    # DQAF-20260827-002 (A2): the three OHLC-derived features (tick_return /
+    # hl_ratio / co_ratio) come from the SHARED live pure function, so they are
+    # bit-identical to MicrostructureFeatureComputer._bar_to_features.  This is
+    # the Train/Serve Skew fix — the training formulas that used (c-o)/o,
+    # (h-l)/prev_c and |c-o|/(h-l) are REPLACED by the live (c-prev)/prev,
+    # (h-l)/close and close/open definitions.
+    #
+    # avg_spread / OIM / tick_velocity are NOT recoverable from OHLC history
+    # (they need live tick snapshots).  Replay uses the bar's spread column and
+    # OHLC / volume proxies, documented as soft approximations — NOT asserted
+    # bit-identical in the regression长城.
     micro = np.zeros((n, 9), dtype=np.float64)
-    micro[:, 0] = (c - o) / np.maximum(o, 1e-9)  # tick_return
-    micro[:, 1] = (h - l) / np.maximum(prev_c, 1e-9)  # hl_ratio
-    micro[:, 2] = np.abs(c - o) / np.maximum(h - l, 1e-9)  # co_ratio
-    micro[:, 3] = spreads  # avg_spread
-    micro[:, 4] = (c - o) / np.maximum(h - l, 1e-9)  # OIM
+    for j in range(n):
+        prev_c_j = float(c[j - 1]) if j > 0 else float(c[j])
+        micro[j, 0], micro[j, 1], micro[j, 2] = pure_ohlc_micro(
+            float(o[j]), float(h[j]), float(l[j]), float(c[j]), prev_c_j
+        )
+    micro[:, 3] = spreads  # avg_spread (spread column — soft proxy)
+    micro[:, 4] = (c - o) / np.maximum(h - l, 1e-9)  # OIM (OHLC proxy — soft)
     vol_mean_20 = pd.Series(v).rolling(20, min_periods=1).mean().values
-    micro[:, 5] = v / np.maximum(vol_mean_20, 1e-8)  # tick_velocity
-    micro[:, 6] = audjpy_return  # AUDJPYc_return (overridden by live at assembly)
+    micro[:, 5] = v / np.maximum(vol_mean_20, 1e-8)  # tick_velocity (volume proxy — soft)
+    micro[:, 6] = audjpy_return  # AUDJPYc_return (dropped by live assembly slot[30])
     micro[:, 7] = eur_return  # EURUSDc_return
     micro[:, 8] = usdjpy_return  # USDJPYc_return
 
@@ -273,6 +382,11 @@ def compute_replay_components(
         audjpy_return=audjpy_return,
         btc_xau_ratio=btc_gold_ratio,
         btc_xau_ratio_roc=ratio_roc,
+        o=o,
+        h=h,
+        l=l,
+        c=c,
+        spreads=spreads,
     )
 
 
@@ -358,23 +472,24 @@ def _momentum(c: np.ndarray, lookback: int) -> np.ndarray:
     )
 
 
-def _weekday_sin_cos(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    if "time" not in df.columns:
-        return np.zeros(len(df)), np.zeros(len(df))
+def _weekday_sin_cos(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    n = len(times)
+    if n == 0:
+        return np.zeros(0), np.zeros(0)
     try:
-        ts = pd.to_datetime(df["time"])
+        ts = pd.to_datetime(times)
         weekdays = np.array([t.weekday() for t in ts])
     except (ValueError, TypeError):
-        return np.zeros(len(df)), np.zeros(len(df))
+        return np.zeros(n), np.zeros(n)
     return np.sin(2 * np.pi * weekdays / 7.0), np.cos(2 * np.pi * weekdays / 7.0)
 
 
-def _month_end_features(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    n = len(df)
-    if "time" not in df.columns:
-        return np.zeros(n), np.zeros(n)
+def _month_end_features(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    n = len(times)
+    if n == 0:
+        return np.zeros(0), np.zeros(0)
     try:
-        ts = pd.to_datetime(df["time"])
+        ts = pd.to_datetime(times)
         month_ends = np.array([t.days_in_month - t.day for t in ts])
     except (ValueError, TypeError, AttributeError):
         return np.zeros(n), np.zeros(n)
@@ -383,12 +498,12 @@ def _month_end_features(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     return days_to_month_end, is_month_end_week
 
 
-def _weekend_gap(df: pd.DataFrame) -> np.ndarray:
-    n = len(df)
-    if "time" not in df.columns:
-        return np.zeros(n)
+def _weekend_gap(times: np.ndarray) -> np.ndarray:
+    n = len(times)
+    if n == 0:
+        return np.zeros(0)
     try:
-        ts = pd.to_datetime(df["time"])
+        ts = pd.to_datetime(times)
         weekdays = np.array([t.weekday() for t in ts])
     except (ValueError, TypeError):
         return np.zeros(n)

@@ -38,7 +38,13 @@ THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.training.feature_replay import MIN_WARMUP, replay_features  # noqa: E402
+from core.features.schemas.registry import get_schema_feature_names  # noqa: E402
+from core.training.feature_replay import (  # noqa: E402
+    MIN_WARMUP,
+    compute_replay_components,
+    extract_schema_subset,
+    replay_features_41,
+)
 
 
 def main() -> None:
@@ -90,10 +96,38 @@ def main() -> None:
     print(f"    {len(df):,} bars: {df.index[0]} → {df.index[-1]}")
 
     # ── Replay features via SHARED assembly (SSOT) ──
+    # DQAF-20260827-002 (A3): the same resampled components that build the
+    # features drive the LABELS, so feature+label share one slice.  When
+    # tf_minutes > 5 the OHLC is resampled to the target TF via the live
+    # _resample_ohlc (first-open/max-high/min-low/last-close) — the slice is
+    # physically identical to what _mtf_price_service reconstructs live.
     print(f"\n[2] Replay features (shared pure assembly, schema={args.schema})...")
-    X, replay_meta = replay_features(df, tf_minutes=args.tf_minutes, schema_name=args.schema)
-    timestamps = df.index.astype(np.int64).values // 10**9  # ns → unix seconds
-    timestamps = timestamps.astype(np.float64)
+    comp = compute_replay_components(df, tf_minutes=args.tf_minutes)
+    x41 = replay_features_41(comp)
+    X = extract_schema_subset(x41, args.schema)
+    feature_names = list(get_schema_feature_names(args.schema))
+    replay_meta = {
+        "schema_id": args.schema,
+        "feature_names": feature_names,
+        "n_features": X.shape[1],
+        "n_bars": comp.n_bars,
+        "micro_zeros_frac": round(comp.micro_zeros_frac(), 6),
+        "min_warmup": MIN_WARMUP,
+        "assembly": "shared_pure_assemble_41_series",
+    }
+    timestamps_raw = df.index.astype(np.int64).values // 10**9  # ns → unix seconds
+    timestamps_raw = timestamps_raw.astype(np.float64)
+    # DQAF-20260827-002 (A3): timestamps must sit on the RESAMPLED bar grid
+    # (each target bar ends at the last M5 timestamp in its window) so the
+    # warmup-drop and split slices stay row-aligned with X and the labels.
+    ratio = max(1, int(round(args.tf_minutes / 5.0)))
+    if ratio > 1 and len(timestamps_raw) >= comp.n_bars:
+        timestamps = np.zeros(comp.n_bars, dtype=np.float64)
+        for k in range(comp.n_bars):
+            s, e = k * ratio, (k + 1) * ratio
+            timestamps[k] = timestamps_raw[e - 1] if e > 0 else timestamps_raw[s]
+    else:
+        timestamps = timestamps_raw
     print(f"    Feature matrix: {X.shape}  (NaN: {int(np.isnan(X).sum())})")
     print(f"    micro_zeros_frac: {replay_meta['micro_zeros_frac']}")
 
@@ -116,11 +150,11 @@ def main() -> None:
         f"spread={live.spread_points}"
     )
 
-    o = df["open"].values.astype(np.float64)
-    h = df["high"].values.astype(np.float64)
-    l = df["low"].values.astype(np.float64)
-    c = df["close"].values.astype(np.float64)
-    n_all = len(df)
+    o = comp.o
+    h = comp.h
+    l = comp.l
+    c = comp.c
+    n_all = len(c)
     y_long = np.full(n_all, np.nan, dtype=np.float64)
     y_short = np.full(n_all, np.nan, dtype=np.float64)
     for i in range(args.warmup_bars, n_all - contract.horizon_bars - 1):

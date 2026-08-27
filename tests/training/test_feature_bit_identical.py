@@ -30,6 +30,10 @@ from core.features.computers.btc_feature_augmenter import (
     assemble_41_series,
     assemble_41_vector,
 )
+from core.features.computers.microstructure_computer import (
+    MicrostructureFeatureComputer,
+    pure_ohlc_micro,
+)
 from core.features.schemas.registry import get_schema_feature_names
 from core.training.feature_replay import (
     compute_replay_components,
@@ -330,3 +334,88 @@ class TestSchemaSubset:
         for j, name in enumerate(want):
             k = canonical.index(name)
             np.testing.assert_array_equal(x37[:, j], x41[:, k])
+
+
+# ── 6. DQAF-20260827-002 (Phase 2): replay == live OHLC micro bit-identical ───
+
+
+class TestPhase2ReplayLiveBitIdentical:
+    """Regress长城: the three OHLC-derived micro features (tick_return /
+    hl_ratio / co_ratio) must be computed EXACTLY the same in historical replay
+    and live ``MicrostructureFeatureComputer._bar_to_features``.
+
+    This is the Train/Serve Skew fix: the training formulas previously used
+    ``(c-o)/o``, ``(h-l)/prev_c``, ``|c-o|/(h-l)`` — all diverging from live
+    ``(c-prev)/prev``, ``(h-l)/close``, ``close/open``.  Both sides now flow
+    through the shared ``pure_ohlc_micro``.  avg_spread/OIM/tick_velocity are
+    documented soft proxies (see feature_replay), NOT asserted here.
+    """
+
+    def test_replay_micro_ohlc_equals_live_bar_to_features(self) -> None:
+        """Replay micro[:,0:3] == live _bar_to_features row[0:3] for the same OHLC."""
+        df = _synth_ohlc(n=200)
+        comp = compute_replay_components(df, tf_minutes=5.0)
+        o = df["open"].values.astype(np.float64)
+        h = df["high"].values.astype(np.float64)
+        l = df["low"].values.astype(np.float64)
+        close = df["close"].values.astype(np.float64)
+        computer = MicrostructureFeatureComputer(MagicMock(), "BTCUSDc")
+        tick = {"avg_spread": 0.0, "OIM": 0.0, "tick_velocity": 0.0}
+        cross = {
+            "XAGUSDc_return": [0.0] * len(df),
+            "EURUSDc_return": [0.0] * len(df),
+            "USDJPYc_return": [0.0] * len(df),
+        }
+        for j in range(1, len(df)):
+            bar = {"open": o[j], "high": h[j], "low": l[j], "close": close[j]}
+            row = computer._bar_to_features(bar, float(close[j - 1]), tick, cross, 0)
+            # float32 (live row) vs float64 (replay): approx at float32 precision
+            assert comp.micro[j, 0] == pytest.approx(row[0], rel=1e-6, abs=1e-6)
+            assert comp.micro[j, 1] == pytest.approx(row[1], rel=1e-6, abs=1e-6)
+            assert comp.micro[j, 2] == pytest.approx(row[2], rel=1e-6, abs=1e-6)
+
+    def test_m15_replay_resamples_via_live_ohlc(self) -> None:
+        """tf_minutes=15 must resample M5→M15 EXACTLY as the live _resample_ohlc;
+        micro OHLC then equals pure_ohlc_micro on the resampled bars."""
+        df = _synth_ohlc(n=210)
+        comp = compute_replay_components(df, tf_minutes=15.0)
+        t_c, t_o, t_h, t_l = MicrostructureFeatureComputer._resample_ohlc(
+            df["close"].values.astype(np.float64),
+            df["open"].values.astype(np.float64),
+            df["high"].values.astype(np.float64),
+            df["low"].values.astype(np.float64),
+            3,
+        )
+        assert comp.n_bars == len(t_c)
+        # the exposed o/h/l/c must be the live-resampled grid
+        np.testing.assert_allclose(comp.c, t_c)
+        np.testing.assert_allclose(comp.o, t_o)
+        np.testing.assert_allclose(comp.h, t_h)
+        np.testing.assert_allclose(comp.l, t_l)
+        for k in range(1, len(t_c)):
+            tr, hlr, cor = pure_ohlc_micro(t_o[k], t_h[k], t_l[k], t_c[k], t_c[k - 1])
+            assert comp.micro[k, 0] == pytest.approx(tr, rel=1e-12)
+            assert comp.micro[k, 1] == pytest.approx(hlr, rel=1e-12)
+            assert comp.micro[k, 2] == pytest.approx(cor, rel=1e-12)
+
+    def test_expected_r_37_micro_slots_from_live_definition(self) -> None:
+        """The 37-dim Expected-R schema's micro OHLC slots come from
+        pure_ohlc_micro — located by NAME, not by hardcoded index (schema order
+        is position-independent: the 37-dim schema drops 4 H4 placeholders so
+        tick_return sits at 20, not 24)."""
+        df = _synth_ohlc(n=150)
+        X, meta = replay_features(df, tf_minutes=5.0, schema_name="btc_expected_r_37")
+        assert meta["n_features"] == 37
+        names = list(meta["feature_names"])
+        i_tr = names.index("tick_return")
+        i_hl = names.index("hl_ratio")
+        i_co = names.index("co_ratio")
+        o = df["open"].values.astype(np.float64)
+        h = df["high"].values.astype(np.float64)
+        l = df["low"].values.astype(np.float64)
+        c = df["close"].values.astype(np.float64)
+        for j in range(1, len(df)):
+            tr, hlr, cor = pure_ohlc_micro(o[j], h[j], l[j], c[j], c[j - 1])
+            assert X[j, i_tr] == pytest.approx(tr, rel=1e-6)
+            assert X[j, i_hl] == pytest.approx(hlr, rel=1e-6)
+            assert X[j, i_co] == pytest.approx(cor, rel=1e-6)

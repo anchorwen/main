@@ -348,199 +348,37 @@ def compute_two_tower_labels(
 # ═══════════════════════════════════════════════════════════════════
 
 
-def compute_features_vectorized(df, tf_minutes=5.0):
+def compute_features_vectorized(df, tf_minutes=5.0, schema_name="btc_expected_r_37"):
     """
-    Compute 41-dim btc_macro_enhanced features — VECTORIZED version.
-    Uses rolling windows instead of per-bar loops for O(n) performance.
+    Compute the feature matrix via the SHARED pure assembly (SSOT path).
 
-    tf_minutes: timeframe in minutes (5=M5, 15=M15, 30=M30).
-                Used to compute bars_per_day for D1/Momentum/Vol_Regime lookbacks.
+    DQAF-20260827-002 / Phase 2 (The Great Unification): the inline hand-rolled
+    41-dim builder (a THIRD divergent implementation with its own slot mapping,
+    OU/Hurst and regime-delta logic) is REMOVED.  Features now flow through
+    ``core/training/feature_replay`` → ``assemble_41_series`` — the exact code
+    path live inference uses.
+
+    ``tf_minutes`` is the bar timeframe (5=M5, 15=M15, 30=M30, 60=H1).  When
+    ``tf_minutes > 5`` the M5 bars are resampled to the target TF via the live
+    ``MicrostructureFeatureComputer._resample_ohlc`` before feature computation
+    (A3: the training slice is mathematically identical to what
+    ``_mtf_price_service`` reconstructs for live).
+
+    Returns:
+        (X, o, h, l, c, spreads) where X is (n, dim) float32 and ``o/h/l/c`` /
+        ``spreads`` are the (resampled, when tf_minutes > 5) bars used to build
+        the features — so the caller computes LABELS on the SAME slice.
     """
-    n = len(df)
-    o = df["open"].values.astype(np.float64)
-    h = df["high"].values.astype(np.float64)
-    l = df["low"].values.astype(np.float64)
-    c = df["close"].values.astype(np.float64)
-    v = df.get("tick_volume", pd.Series(np.zeros(n))).values.astype(np.float64)
-    spreads_raw = df.get("spread", pd.Series([200] * n)).values.astype(np.float64)
-    # FIX: MT5 raw points → price dollars (same as train_btc_swing_v9.py:693)
-    spreads = spreads_raw / 100.0
-
-    # Dynamic bars-per-day based on timeframe
-    bars_per_day = max(1, int(24 * 60 / tf_minutes))
-
-    X = np.zeros((n, 41), dtype=np.float32)
-
-    # Cross-asset return columns (pre-computed in alignment)
-    xau_return = df.get("XAUUSDc_return", pd.Series(np.zeros(n))).values
-    eur_return = df.get("EURUSDc_return", pd.Series(np.zeros(n))).values
-    audjpy_return = df.get("AUDJPYc_return", pd.Series(np.zeros(n))).values
-    usdjpy_return = df.get("USDJPYc_return", pd.Series(np.zeros(n))).values
-
-    # BTC-Gold ratio
-    xau_close = df.get("XAUUSDc_close", pd.Series(np.ones(n))).values
-    btc_gold_ratio = np.where(xau_close > 0, c / xau_close, 0.0)
-    btc_gold_ratio_roc = np.zeros(n)
-    valid_ratio = btc_gold_ratio[:-1] > 0
-    btc_gold_ratio_roc[1:][valid_ratio] = (
-        btc_gold_ratio[1:][valid_ratio] - btc_gold_ratio[:-1][valid_ratio]
-    ) / btc_gold_ratio[:-1][valid_ratio]
-
-    # ── Calendar features (vectorized) ──
-    weekdays = np.array([ts.weekday() if hasattr(ts, "weekday") else 0 for ts in df.index])
-    X[:, 16] = np.sin(2 * np.pi * weekdays / 7.0)
-    X[:, 17] = np.cos(2 * np.pi * weekdays / 7.0)
-    X[:, 20] = np.where(weekdays >= 4, 1.0, 0.0)  # Weekend_Gap
-    X[:, 18] = 0.0  # Days_To_MonthEnd
-    X[:, 19] = 0.0  # Is_MonthEnd_Week
-
-    # ── Micro features (vectorized) ──
-    X[:, 1] = np.abs(c - o) / np.maximum(h - l, 1e-9)  # Body_Ratio
-    X[:, 24] = (c - o) / np.maximum(o, 1e-9)  # tick_return
-    prev_c = np.roll(c, 1)
-    prev_c[0] = c[0]
-    X[:, 25] = (h - l) / np.maximum(prev_c, 1e-9)  # hl_ratio
-    X[:, 26] = np.abs(c - o) / np.maximum(h - l, 1e-9)  # co_ratio
-    X[:, 27] = spreads  # avg_spread
-    X[:, 28] = (c - o) / np.maximum(h - l, 1e-9)  # OIM
-
-    # tick_velocity: volume / mean(volume[-20:])
-    vol_mean_20 = pd.Series(v).rolling(20, min_periods=1).mean().values
-    X[:, 29] = v / np.maximum(vol_mean_20, 1e-8)
-
-    # ── Cross-asset (direct mapping) ──
-    X[:, 12] = xau_return  # XAUUSDc_return
-    X[:, 14] = eur_return  # Cross_EURUSD_Return
-    X[:, 30] = audjpy_return  # AUDJPYc_return
-    X[:, 31] = eur_return  # EURUSDc_return
-    X[:, 32] = usdjpy_return  # USDJPYc_return
-
-    # ── Rolling technicals (vectorized via pandas) ──
-    # True Range
-    tr = np.maximum(h - l, np.maximum(np.abs(h - prev_c), np.abs(l - prev_c)))
-    atr_series = pd.Series(tr).rolling(14, min_periods=1).mean()
-    X[:, 2] = atr_series.values  # ATR_14
-
-    # RSI (simplified rolling implementation)
-    delta = np.diff(c, prepend=c[0])
-    gain = np.maximum(delta, 0)
-    loss = np.maximum(-delta, 0)
-    avg_gain = pd.Series(gain).rolling(14, min_periods=1).mean().values
-    avg_loss = pd.Series(loss).rolling(14, min_periods=1).mean().values
-    rs = np.divide(avg_gain, avg_loss, out=np.ones_like(avg_gain) * 100, where=avg_loss > 0)
-    X[:, 3] = 100.0 - 100.0 / (1.0 + rs)  # RSI_14
-
-    # MACD
-    ema12 = pd.Series(c).ewm(span=12, adjust=False).mean().values
-    ema26 = pd.Series(c).ewm(span=26, adjust=False).mean().values
-    X[:, 4] = ema12 - ema26  # MACD
-
-    # Bollinger Width
-    bb_ma = pd.Series(c).rolling(20, min_periods=1).mean().values
-    bb_std = pd.Series(c).rolling(20, min_periods=1).std().fillna(0).values
-    X[:, 6] = np.divide(2 * bb_std, bb_ma, out=np.zeros_like(bb_ma), where=bb_ma > 0)
-
-    # ADX (simplified)
-    plus_dm = np.where((h - prev_c > prev_c - l) & (h - prev_c > 0), h - prev_c, 0.0)
-    minus_dm = np.where((prev_c - l > h - prev_c) & (prev_c - l > 0), prev_c - l, 0.0)
-    tr_smooth = pd.Series(tr).rolling(14, min_periods=1).sum().values
-    plus_smooth = pd.Series(plus_dm).rolling(14, min_periods=1).sum().values
-    minus_smooth = pd.Series(minus_dm).rolling(14, min_periods=1).sum().values
-    plus_di = 100.0 * plus_smooth / np.maximum(tr_smooth, 1e-8)
-    minus_di = 100.0 * minus_smooth / np.maximum(tr_smooth, 1e-8)
-    di_sum = plus_di + minus_di
-    X[:, 7] = np.where(di_sum > 0, 100.0 * np.abs(plus_di - minus_di) / di_sum, 25.0)
-
-    # Vol ZScore
-    returns = np.diff(np.log(np.maximum(c, 1e-12)), prepend=0)
-    ret_mean_20 = pd.Series(returns).rolling(20, min_periods=1).mean().values
-    ret_std_20 = pd.Series(returns).rolling(20, min_periods=1).std().fillna(1e-8).values
-    X[:, 5] = (returns - ret_mean_20) / np.maximum(ret_std_20, 1e-8)
-
-    # D1_Ret_1: 1-day return (bars_per_day bars)
-    d1_ago = np.roll(c, bars_per_day)
-    d1_ago[:bars_per_day] = c[0]
-    X[:, 0] = (c - d1_ago) / np.maximum(d1_ago, 1e-9)
-
-    # Vol Regime: ATR / ATR_5d
-    atr_5d = pd.Series(tr).rolling(bars_per_day * 5, min_periods=1).mean().values
-    X[:, 21] = np.divide(atr_series.values, atr_5d, out=np.ones(n), where=atr_5d > 0)
-
-    # Momentum 5D, 20D
-    lookback_5d = bars_per_day * 5
-    lookback_20d = bars_per_day * 20
-    c_5d_ago = np.roll(c, lookback_5d)
-    c_5d_ago[:lookback_5d] = c[0]
-    c_20d_ago = np.roll(c, lookback_20d)
-    c_20d_ago[:lookback_20d] = c[0]
-    X[:, 22] = np.divide(
-        c - c_5d_ago, np.maximum(c_5d_ago, 1e-9), out=np.zeros(n), where=c_5d_ago > 0
-    )
-    X[:, 23] = np.divide(
-        c - c_20d_ago, np.maximum(c_20d_ago, 1e-9), out=np.zeros(n), where=c_20d_ago > 0
+    from core.training.feature_replay import (
+        compute_replay_components,
+        extract_schema_subset,
+        replay_features_41,
     )
 
-    # ── TF-specific (OU Theta + Hurst) — every 50th bar, interpolate ──
-    ou_vals = np.zeros(n)
-    hurst_vals = np.zeros(n)
-    last_ou, last_hurst = 0.0, 0.5
-    for i in range(0, n, 50):  # Every 50 bars
-        end = max(i + 1, 20)
-        price_slice = c[max(0, i - 200) : end]
-        ou_vals[i] = _ou_theta(price_slice)
-        hurst_vals[i] = _hurst(price_slice)
-    # Forward fill
-    for i in range(1, n):
-        if ou_vals[i] == 0.0:
-            ou_vals[i] = ou_vals[i - 1]
-        if hurst_vals[i] == 0.0:
-            hurst_vals[i] = hurst_vals[i - 1]
-    X[:, 33] = ou_vals
-    X[:, 34] = hurst_vals
-
-    # Regime derivatives
-    X[0, 35] = 0.0
-    X[0, 36] = 0.0
-    X[1:, 35] = X[1:, 33] - X[:-1, 33]  # TF_delta_OU
-    X[1:, 36] = X[1:, 34] - X[:-1, 34]  # TF_delta_Hurst
-    X[:, 37] = X[:, 33] * X[:, 34]  # TF_OU_x_Hurst
-    X[:, 38] = np.divide(X[:, 33], X[:, 7] + 1e-8)  # TF_OU_div_ADX
-
-    # ── BTC-specific ──
-    X[:, 39] = btc_gold_ratio
-    X[:, 40] = btc_gold_ratio_roc
-
-    # V4: Fix Cross_DXY_Return — DXY ≈ -EURUSD (DXY not directly available on MT5 retail)
-    X[:, 13] = -eur_return  # Cross_DXY_Return (was placeholder zero-fill)
-
-    # V4: Fix Cross_Risk_On_Off — XAU 5d momentum vs BTC 5d momentum (risk appetite proxy)
-    xau_close_raw = df.get("XAUUSDc_close", pd.Series(np.ones(n))).values
-    xau_5d_ago = np.roll(xau_close_raw, lookback_5d)
-    xau_5d_ago[:lookback_5d] = xau_close_raw[0]
-    xau_5d_mom = np.divide(
-        xau_close_raw - xau_5d_ago,
-        np.maximum(xau_5d_ago, 1e-9),
-        out=np.zeros(n),
-        where=xau_5d_ago > 0,
-    )
-    X[:, 15] = xau_5d_mom - X[:, 22]  # Cross_Risk_On_Off = XAU_5d_mom - BTC_5d_mom
-
-    # V4: Fix calendar features (were zero-fill)
-    # Days_To_MonthEnd
-    month_ends = pd.Series(df.index).apply(lambda ts: ts.days_in_month - ts.day).values
-    X[:, 18] = month_ends.astype(np.float32) / 31.0  # normalize to [0, 1]
-    # Is_MonthEnd_Week: 1.0 if last 5 trading days of month
-    X[:, 19] = np.where(month_ends <= 5, 1.0, 0.0).astype(np.float32)
-
-    # V4: Physically delete 4 H4 placeholder features (indices 8-11).
-    # These require multi-TF H4 alignment infrastructure not yet built.
-    # Keep indices 0-7, 12-40 → 37 features.
-    X = X[:, list(range(8)) + list(range(12, 41))]
-
-    # NaN safety
-    X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-
-    return X, o, h, l, c, spreads
+    comp = compute_replay_components(df, tf_minutes=tf_minutes)
+    x41 = replay_features_41(comp)
+    X = extract_schema_subset(x41, schema_name).astype(np.float32)
+    return X, comp.o, comp.h, comp.l, comp.c, comp.spreads
 
 
 # ═══════════════════════════════════════════════════════════════════

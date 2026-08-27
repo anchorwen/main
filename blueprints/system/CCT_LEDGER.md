@@ -2118,3 +2118,19 @@
   - Source 3 (cross-symbol): [v9_micro_computer.py:47,77] — XAU Micro Scaler v2 经 V9MicroComputer 包装受同损 + last_micro_ok 熔断机制
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: MICRO_TICK_FIELD_INDEX_SWAP_NEG_SPREAD
+
+### CCT-20260827-002
+- **Docket ID**: DQAF-20260827-002
+- **日期**: 2026-08-27
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: BTC Expected R 训练管线与实盘推理在微特征上数值分叉 (train/serve skew) — 同一 M15 切片, 训练侧 tick_return/hl_ratio/co_ratio 与 live `_bar_to_features` 不相等; 且 M15 重抽样后特征切片与 live `_mtf_price_service` 物理不一致.
+  - [Layer 2 — 中间异常]: `build_btc_expected_r_dataset.py` 内联 41-dim 构建器 `compute_features_vectorized` 用旧公式 `(c-o)/o`/`(h-l)/prev_c`/`|c-o|/(h-l)` 产 micro_9 (与 live `(c-prev)/prev`/`(h-l)/close`/`close/open` 三向分叉); `feature_replay` 在 `tf_minutes>5` 时仅改 `bars_per_day` 不做重抽样.
+  - [Layer 3 — 根因]: RC-03 RC-03 — 第三套内联实现绕过共享纯装配 + 口径未向 live 定义收拢 (三向分叉) + replay 未复用 live `_resample_ohlc` 做周期拼装 (A3 gap). 修复口径 = 将 live 公式抽为纯函数 `pure_ohlc_micro` (红线: live 零改动) 供训练侧调用, 并让 train/serve 走同一装配.
+- **证据引用**:
+  - Source 1: [microstructure_computer.py] — `_bar_to_features` tick_return=(close-prev)/prev, hl_ratio=(high-low)/close, co_ratio=close/open (live 权威口径)
+  - Source 2: [feature_replay.py] — 新 micro_9 块, `pure_ohlc_micro` 委派 + `tf_minutes>5` 重抽样块
+  - Source 3: [build_btc_expected_r_dataset.py] — 内联构建器拆除, 改走 `compute_replay_components`+`replay_features_41`+`extract_schema_subset`
+  - Source 4 (证伪): [test_feature_bit_identical.py] TestPhase2ReplayLiveBitIdentical 3 用例 — replay==live 逐值相等证明分叉已闭合
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: TRAIN_SERVE_MICRO_FORMULA_TRIFURCATION

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-08-27T05:31:16Z
-> **扫描模块数**: 865
+> **自动生成**: 2026-08-27T11:16:05Z
+> **扫描模块数**: 867
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -319,7 +319,7 @@
 | `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 14 | 686 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 9 | 262 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 21 | 711 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 22 | 744 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 339 | — | |
 | `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 110 | — | |
 
@@ -650,7 +650,7 @@
 | `dataset.py` | ✅ active | TrainingDataset | 17 | 429 | — | |
 | `evaluation_report.py` | ✅ active | SHAPReport, TrainingEvalReport | 11 | 454 | — | |
 | `experiment_tracker.py` | ✅ active | RunInfo, ExperimentTracker | 13 | 265 | — | |
-| `feature_replay.py` | ✅ active | ReplayComponents | 19 | 468 | — | |
+| `feature_replay.py` | ✅ active | ReplayComponents | 21 | 583 | — | |
 | `model_card.py` | ✅ active | ModelCard, ModelCardGenerator | 6 | 225 | — | |
 | `model_hashing.py` | ✅ active | — | 4 | 59 | — | |
 | `profitability_calibrator.py` | ✅ active | BarrierConfig, ProfitabilityPoint, ProfitabilitySurface | 8 | 413 | — | |
@@ -686,12 +686,14 @@
 | `_audit_feature_scale_train_vs_live_20260827.py` | ✅ active | — | 2 | 135 | — | |
 | `_audit_idempotent_key_20260805.py` | ✅ active | — | 1 | 94 | — | |
 | `_audit_journal_universe_20260821.py` | ✅ active | — | 2 | 197 | — | |
+| `_audit_live_baseline_20260827.py` | ✅ active | — | 2 | 88 | — | |
 | `_audit_live_fire_2p94_protocol_20260826.py` | ✅ active | — | 5 | 185 | — | |
 | `_audit_live_fire_status_20260825.py` | ✅ active | — | 2 | 134 | — | |
 | `_audit_live_health_20260814.py` | ✅ active | — | 16 | 475 | — | |
 | `_audit_live_shadow_inventory_20260805.py` | ✅ active | — | 3 | 181 | — | |
 | `_audit_magic_alignment_safety.py` | ✅ active | — | 3 | 115 | — | |
 | `_audit_metaexit_gate_20260821.py` | ✅ active | — | 7 | 295 | — | |
+| `_audit_micro_fix_verify_20260827.py` | ✅ active | — | 1 | 54 | — | |
 | `_audit_narrow_gate_real_config_20260826.py` | ✅ active | — | 2 | 116 | — | |
 | `_audit_p1_threshold_probe_20260826.py` | ✅ active | — | 2 | 98 | — | |
 | `_audit_shadow_ops_liveness_probe.py` | ✅ active | — | 4 | 205 | — | |
@@ -1042,8 +1044,8 @@
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
 | `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 7 | 258 | — | |
-| `build_btc_dataset_from_ssot.py` | ✅ active | — | 1 | 221 | — | |
-| `build_btc_expected_r_dataset.py` | ✅ active | — | 12 | 799 | — | |
+| `build_btc_dataset_from_ssot.py` | ✅ active | — | 1 | 255 | — | |
+| `build_btc_expected_r_dataset.py` | ✅ active | — | 12 | 637 | — | |
 | `build_btc_flow46_dataset.py` | ✅ active | — | 6 | 301 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 771 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 251 | — | |
